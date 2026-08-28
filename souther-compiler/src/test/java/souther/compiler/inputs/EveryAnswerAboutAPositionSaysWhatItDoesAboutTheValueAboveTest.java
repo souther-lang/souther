@@ -153,8 +153,16 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
         return out;
     }
 
-    /** What the record is made of, which is not an answer about a position. */
+    /**
+     * What the record is made of, which is not an answer about a position.
+     *
+     * <p>{@code sets} is here because it answers nothing: it is what this reading is allowed to
+     * build while working its answers out, and the question it settles is about this compiler
+     * rather than about the value a case was narrowed out of. Every answer that does reach the
+     * value above spends from it, and what each of those decides is the line written for that
+     * answer above.
+     */
     private static final java.util.Set<String> COMPONENTS =
-            java.util.Set.of("root", "value", "rules", "alsoReaching",
+            java.util.Set.of("root", "value", "rules", "alsoReaching", "sets",
                     "equals", "hashCode", "toString");
 }

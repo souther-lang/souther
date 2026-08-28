@@ -26,6 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * that widened it, so which of two rules is nearer does turn on which is written first. Beside
  * those, whether the reading admits anything and whether its promise is one about whole values,
  * since a conjunction written after the choice reads both and would answer differently past it.
+ *
+ * <p>One composer for the whole of a test, since a reading is one answer being built. Every set
+ * here is finitely many values written out, so nothing is ever built and no allowance is spent —
+ * what the composer is doing is being the one place a composition happens.
  */
 class AChoiceIsOneConnectiveAndNotATreeTest {
 
@@ -33,7 +37,9 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
     private static final Value A = Value.text("A");
     private static final Value B = Value.text("B");
 
-    private static Map<String, AdmissibleValues<String>> readings() {
+    private final Sets<String> sets = Sets.ofAdmittedValues();
+
+    private Map<String, AdmissibleValues<String>> readings() {
         Map<String, AdmissibleValues<String>> out = new LinkedHashMap<>();
         out.put("top", AdmissibleValues.top());
         out.put("value == A", AdmissibleValues.at("value", ValueSet.just(A)));
@@ -41,9 +47,9 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
         out.put("value /= A", AdmissibleValues.at("value", ValueSet.allBut(A)));
         out.put("other == A", AdmissibleValues.at("other", ValueSet.just(A)));
         out.put("value == A && other == A", AdmissibleValues.at("value", ValueSet.just(A))
-                .meet(AdmissibleValues.at("other", ValueSet.just(A))));
+                .meet(AdmissibleValues.at("other", ValueSet.just(A)), sets));
         out.put("value == B && other == B", AdmissibleValues.at("value", ValueSet.just(B))
-                .meet(AdmissibleValues.at("other", ValueSet.just(B))));
+                .meet(AdmissibleValues.at("other", ValueSet.just(B)), sets));
         out.put("unread about value",
                 AdmissibleValues.unreadable(Set.of("value"), UnreadReason.FORM_NOT_READ));
         out.put("unread about nothing",
@@ -51,7 +57,7 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
         out.put("unread about both", AdmissibleValues.unreadable(Set.of("value", "other"),
                 UnreadReason.RELATES_TWO_POSITIONS));
         out.put("two rules leaving nothing", AdmissibleValues.at("value", ValueSet.just(A))
-                .meet(AdmissibleValues.at("value", ValueSet.just(B))));
+                .meet(AdmissibleValues.at("value", ValueSet.just(B)), sets));
         out.put("shown impossible from outside",
                 AdmissibleValues.at("value", ValueSet.just(A)).leavingNothing());
         return out;
@@ -93,8 +99,8 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
         Map<String, AdmissibleValues<String>> readings = readings();
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle).join(right)),
-                        answers(left.join(middle.join(right))),
+                        answers(left.join(middle, sets).join(right, sets)),
+                        answers(left.join(middle.join(right, sets), sets)),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   against   " + leftName + " || (" + middleName + " || "
                                 + rightName + ")"))));
@@ -105,7 +111,7 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
     void twoAlternativesLeaveTheSameHoweverTheyAreOrdered() {
         Map<String, AdmissibleValues<String>> readings = readings();
         readings.forEach((leftName, left) -> readings.forEach((rightName, right) ->
-                assertEquals(answers(left.join(right)), answers(right.join(left)),
+                assertEquals(answers(left.join(right, sets)), answers(right.join(left, sets)),
                         () -> leftName + " || " + rightName + "   against   "
                                 + rightName + " || " + leftName)));
     }
@@ -117,8 +123,8 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
         AdmissibleValues<String> beside = AdmissibleValues.at("other", ValueSet.allBut(B));
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle).join(right).meet(beside)),
-                        answers(left.join(middle.join(right)).meet(beside)),
+                        answers(left.join(middle, sets).join(right, sets).meet(beside, sets)),
+                        answers(left.join(middle.join(right, sets), sets).meet(beside, sets)),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   met with other /= B, against the other bracketing"))));
     }
@@ -139,8 +145,10 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
                 AdmissibleValues.unreadable(Set.of("value"), UnreadReason.FORM_NOT_READ);
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle).join(right).meet(beside).join(after)),
-                        answers(left.join(middle.join(right)).meet(beside).join(after)),
+                        answers(left.join(middle, sets).join(right, sets).meet(beside, sets)
+                                .join(after, sets)),
+                        answers(left.join(middle.join(right, sets), sets).meet(beside, sets)
+                                .join(after, sets)),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   met with other /= B and joined with an unread rule about"
                                 + " value, against the other bracketing"))));

@@ -29,6 +29,10 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
     private static final String OTHER = "other";
     private static final Value FIVE = Value.text("5");
 
+    /** What puts the sets of one reading together. Every set here is written out, so nothing is
+     *  built and no allowance is spent. */
+    private final Sets<String> sets = Sets.ofAdmittedValues();
+
     /** {@code value == 5}. */
     private static AdmissibleValues<String> is5() {
         return AdmissibleValues.at(VALUE, ValueSet.just(FIVE));
@@ -47,7 +51,7 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
     /** Two alternatives that cover the position between them leave nothing to widen. */
     @Test
     void twoAlternativesCoveringThePositionLeaveNothingForAnUnreadOneToWiden() {
-        AdmissibleValues<String> either = is5().join(not5()).join(unread());
+        AdmissibleValues<String> either = is5().join(not5(), sets).join(unread(), sets);
 
         assertEquals(ValueSet.ANY, either.at(VALUE));
         assertTrue(either.speaksFor(VALUE),
@@ -57,7 +61,7 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
     /** And the same however the alternatives are bracketed. */
     @Test
     void theSameHoweverTheAlternativesAreBracketed() {
-        AdmissibleValues<String> either = is5().join(not5().join(unread()));
+        AdmissibleValues<String> either = is5().join(not5().join(unread(), sets), sets);
 
         assertEquals(ValueSet.ANY, either.at(VALUE));
         assertTrue(either.speaksFor(VALUE),
@@ -75,8 +79,8 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
      */
     @Test
     void aConjunctionKeepsItsOwnAccountOfWhatWentUnread() {
-        AdmissibleValues<String> both =
-                is5().meet(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
+        AdmissibleValues<String> both = is5().meet(
+                AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets);
 
         assertEquals(ValueSet.NONE, both.guaranteedAt(VALUE),
                 "an unread conjunct may exclude anything, so nothing is guaranteed under it");
@@ -97,10 +101,9 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
      */
     @Test
     void anAlternativeThatMayAdmitNothingSettlesNothing() {
-        AdmissibleValues<String> either =
-                is5().meet(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ))
-                        .join(AdmissibleValues.unreadable(Set.of(OTHER),
-                                UnreadReason.FORM_NOT_READ));
+        AdmissibleValues<String> either = is5()
+                .meet(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets)
+                .join(AdmissibleValues.unreadable(Set.of(OTHER), UnreadReason.FORM_NOT_READ), sets);
 
         assertEquals(List.of(UnreadReason.FORM_NOT_READ), either.whyUnread(OTHER),
                 "the alternative beside the unread one may admit nothing, so it vouches for nothing");
@@ -117,13 +120,13 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
      */
     @Test
     void aPositionTheChoiceHasSettledStaysSettledUnderAFurtherAlternative() {
-        AdmissibleValues<String> covered = is5().join(not5()).join(unread());
+        AdmissibleValues<String> covered = is5().join(not5(), sets).join(unread(), sets);
         AdmissibleValues<String> beside = AdmissibleValues.at(OTHER, ValueSet.just(Value.text("A")));
 
         assertTrue(covered.dropped(), "a rule of it did go unread, and that is not taken back");
-        assertTrue(covered.join(beside).speaksFor(VALUE));
-        assertTrue(beside.join(covered).speaksFor(VALUE), "and either way round");
-        assertTrue(covered.join(beside).speaksFor(OTHER),
+        assertTrue(covered.join(beside, sets).speaksFor(VALUE));
+        assertTrue(beside.join(covered, sets).speaksFor(VALUE), "and either way round");
+        assertTrue(covered.join(beside, sets).speaksFor(OTHER),
                 "and the position the further alternative names is covered by the settled one");
     }
 
@@ -131,7 +134,7 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
      *  the choice is still short of. */
     @Test
     void anAlternativeNothingCouldReadCoversNothing() {
-        AdmissibleValues<String> either = is5().join(unread());
+        AdmissibleValues<String> either = is5().join(unread(), sets);
 
         assertEquals(ValueSet.ANY, either.at(VALUE));
         assertEquals(List.of(UnreadReason.FORM_NOT_READ), either.whyUnread(VALUE),

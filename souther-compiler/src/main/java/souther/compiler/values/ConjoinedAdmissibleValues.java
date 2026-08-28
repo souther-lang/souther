@@ -67,8 +67,23 @@ public final class ConjoinedAdmissibleValues<A> {
      */
     private final Map<A, AdmissibleValues<A>> naming;
 
-    private ConjoinedAdmissibleValues(List<AdmissibleValues<A>> factors) {
+    /**
+     * What put these readings together, and what will put them together with the next one.
+     *
+     * <p>Carried rather than passed in, because the allowance it holds belongs to the answer being
+     * built and not to whoever is asking for the next meet. A conjunction is the one place two
+     * readings of one declaration come together, so the composer that paid for the sets in it is
+     * the composer the next conjunction has to spend from — handed a fresh one, two patterns at a
+     * position would each be affordable and their product would be bought twice.
+     *
+     * <p>Null where nothing has been read, which is a conjunction with no factors and nothing to
+     * put together.
+     */
+    private final Sets<A> sets;
+
+    private ConjoinedAdmissibleValues(List<AdmissibleValues<A>> factors, Sets<A> sets) {
         this.factors = List.copyOf(factors);
+        this.sets = sets;
         Map<A, AdmissibleValues<A>> named = new LinkedHashMap<>();
         for (AdmissibleValues<A> each : this.factors) {
             for (A subject : each.subjects()) {
@@ -81,14 +96,39 @@ public final class ConjoinedAdmissibleValues<A> {
         this.naming = Collections.unmodifiableMap(named);
     }
 
-    /** Nothing read, so every position holds every value. */
-    public static <A> ConjoinedAdmissibleValues<A> top() {
-        return new ConjoinedAdmissibleValues<>(List.of());
+    /**
+     * What put these sets together, for a reader that has to put one of them together with another.
+     *
+     * <p>Null where nothing was read. A reader holding that is holding every value at every
+     * position, which is what it would have composed its way to anyway.
+     */
+    public Sets<A> sets() {
+        return sets;
     }
 
-    /** One reading, which is a conjunction of one. */
-    public static <A> ConjoinedAdmissibleValues<A> of(AdmissibleValues<A> read) {
-        return new ConjoinedAdmissibleValues<>(List.of(read));
+    /**
+     * The same readings, spending what {@code sets} allows.
+     *
+     * <p>What an answer built out of other answers does with them. The readings below were put
+     * together where each was read, each spending its own declaration's allowance; met into one
+     * they are a different admitted set, over positions this caller names, and it is that set the
+     * allowance has to be about. So the composer comes from whoever is building the answer, and the
+     * readings are taken under it rather than each bringing its own.
+     *
+     * <p>Nothing already read is undone. What is being said is where the next machine is charged.
+     */
+    public ConjoinedAdmissibleValues<A> under(Sets<A> sets) {
+        return this.sets == sets ? this : new ConjoinedAdmissibleValues<>(factors, sets);
+    }
+
+    /** Nothing read, so every position holds every value — and nothing to put together. */
+    public static <A> ConjoinedAdmissibleValues<A> top() {
+        return new ConjoinedAdmissibleValues<>(List.of(), null);
+    }
+
+    /** One reading, which is a conjunction of one, beside what put its sets together. */
+    public static <A> ConjoinedAdmissibleValues<A> of(AdmissibleValues<A> read, Sets<A> sets) {
+        return new ConjoinedAdmissibleValues<>(List.of(read), sets);
     }
 
     /**
@@ -195,9 +235,16 @@ public final class ConjoinedAdmissibleValues<A> {
         if (factors.isEmpty()) {
             return other;
         }
+        // One answer is being built, so one composer is spending for it. Two readings that were put
+        // together by different composers are two answers, and meeting them would charge a position
+        // of one against the allowance of the other. An assertion because it is a fact about how
+        // this compiler reads a declaration rather than about any model — see
+        // `ConstraintState.takingValuesRead`, which holds the same kind of thing the same way.
+        assert sets == other.sets
+                : "two readings put together by different composers are two answers";
         List<AdmissibleValues<A>> both = new ArrayList<>(factors);
         both.addAll(other.factors);
-        return new ConjoinedAdmissibleValues<>(byComponent(both));
+        return new ConjoinedAdmissibleValues<>(byComponent(both, sets), sets);
     }
 
     /**
@@ -210,7 +257,9 @@ public final class ConjoinedAdmissibleValues<A> {
     public <B> ConjoinedAdmissibleValues<B> renamed(Function<A, B> naming) {
         List<AdmissibleValues<B>> out = new ArrayList<>(factors.size());
         factors.forEach(each -> out.add(each.renamed(naming)));
-        return new ConjoinedAdmissibleValues<>(out);
+        // The allowances go with the names. It is the same answer being built, so what a position
+        // has spent is what it has spent whichever vocabulary it is filed under.
+        return new ConjoinedAdmissibleValues<>(out, sets == null ? null : sets.renamed(naming));
     }
 
     /**
@@ -228,7 +277,8 @@ public final class ConjoinedAdmissibleValues<A> {
      * <p>So the members are collected, and then the readings are folded in the order they arrived.
      * Connectivity decides who is met with whom; arrival decides in what order.
      */
-    private static <A> List<AdmissibleValues<A>> byComponent(List<AdmissibleValues<A>> of) {
+    private static <A> List<AdmissibleValues<A>> byComponent(List<AdmissibleValues<A>> of,
+                                                             Sets<A> sets) {
         List<Set<A>> vocabularies = new ArrayList<>(of.size());
         of.forEach(each -> vocabularies.add(each.subjects()));
         // Which factors name each subject, which is what says two of them are in one component
@@ -265,7 +315,7 @@ public final class ConjoinedAdmissibleValues<A> {
             // And then met in the order they arrived, which is the order they are held in.
             AdmissibleValues<A> component = null;
             for (int each : members) {
-                component = component == null ? of.get(each) : component.meet(of.get(each));
+                component = component == null ? of.get(each) : component.meet(of.get(each), sets);
             }
             out.add(component);
         }

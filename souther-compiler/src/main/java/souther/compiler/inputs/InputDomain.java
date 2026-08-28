@@ -1279,7 +1279,12 @@ public final class InputDomain {
                 placed.leftAt(path, bySize ? answeredBy(taken) : ITS_OWN_VALUE), nothingExists,
                 placed.projection(path), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
-                admitted.whyPartial() == null ? null : Crossing.stopped(admitted.whyPartial()),
+                // What stopped the reading of which values stand here. A rule that went unread is
+                // said before the cost of the set they leave between them: both are true where both
+                // happened, and the first names something an author can rewrite while the second
+                // names no rule at all. Neither may be dropped in silence, which is why the second
+                // is asked here rather than left to `whyPartial`, whose answer is about rules.
+                valuesUnreadAt(admitted),
                 withoutALine,
                 // What the rules of this position raise that nothing answered. Asked of the
                 // accounting rather than read off the completeness beside it: one reading being
@@ -1298,6 +1303,26 @@ public final class InputDomain {
                 placed.everyRuleReachedAt(path) ? java.util.Set.of()
                         : java.util.Set.of(new RulesLeftUnread.ClauseOfThisReadingWasUnread()),
                 structure);
+    }
+
+    /**
+     * What stopped the reading of which values a position holds, or null where nothing did.
+     *
+     * <p>Two ways of being short and one answer, because a position carries one. A rule this
+     * reading could not use is said first: it names something written, and what a reader does about
+     * it is look at that rule. The cost of the set the rules leave between them is said where no
+     * rule went unread, and it names none — two rules cheap on their own can have an answer that is
+     * not, so there is nothing here to send anybody to.
+     *
+     * <p>Asked here rather than left to {@link AdmissibleSet#whyPartial}, which answers about
+     * rules. A widening that reached this by no arm of that question would be one a position was
+     * given in silence, and every reader downstream would read the set as what the rules leave.
+     */
+    private static BlockReason.ReadingStopReason valuesUnreadAt(AdmissibleSet admitted) {
+        if (admitted.whyPartial() != null) {
+            return Crossing.stopped(admitted.whyPartial());
+        }
+        return admitted.exactValuesTooCostly() ? new BlockReason.ExactValuesTooCostly() : null;
     }
 
     /**

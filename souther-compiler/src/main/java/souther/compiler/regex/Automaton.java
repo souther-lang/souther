@@ -250,6 +250,175 @@ final class Automaton {
         return new Automaton(steps, free, accepting);
     }
 
+    /**
+     * The one machine of its kind that accepts what this accepts, or null past {@code mostStates}.
+     *
+     * <p>Two patterns accepting the same strings come to this same machine, state for state and
+     * step for step. Which is what lets everything a reader asks of a language afterwards be a look
+     * at what is in front of it: whether two languages are one is a walk over two tables of the same
+     * shape, and nothing about the answer is left for the asking to work out.
+     *
+     * <p>Three things make it the one machine. It is deterministic and complete, so which state a
+     * string ends in is a fact about the string; it is smallest, so no two states are told apart by
+     * nothing, which is what makes the shape the language's rather than the pattern's; and its
+     * states are numbered by walking it from the start over the symbols in order, so the one shape
+     * is written down one way.
+     *
+     * <p>The steps out of a state are over as few runs of symbols as say where they go. What the
+     * subsets were cut over is the labels the pattern happened to carry, and two ways of writing one
+     * language cut it differently — gathered by where they lead, the runs are the language's own.
+     */
+    Automaton canonical(int mostStates) {
+        Subsets subsets = new Subsets();
+        List<CodePoints> alphabet = subsets.alphabet();
+        List<int[]> table = new ArrayList<>();
+        BitSet accepting = new BitSet();
+        for (int at = 0; at < subsets.count(); at++) {
+            if (subsets.count() > mostStates) {
+                return null;
+            }
+            if (subsets.acceptingAt(at)) {
+                accepting.set(at);
+            }
+            int[] row = new int[alphabet.size()];
+            List<Subsets.Move> out = subsets.movesFrom(at);
+            for (int over = 0; over < row.length; over++) {
+                row[over] = out.get(over).to();
+            }
+            table.add(row);
+        }
+        if (subsets.count() > mostStates) {
+            return null;
+        }
+        return numbered(table, smallest(table, accepting), accepting, alphabet);
+    }
+
+    /**
+     * Which states of a complete machine no string tells apart, as a block per state.
+     *
+     * <p>Told apart to begin with by whether a walk may stop there, and after that by where the
+     * symbols lead: two states in one block that step into different blocks are two states, and
+     * asking that over and over until nothing moves is what leaves the blocks a string could tell
+     * apart and no others.
+     */
+    private static int[] smallest(List<int[]> table, BitSet accepting) {
+        int[] block = new int[table.size()];
+        for (int state = 0; state < block.length; state++) {
+            block[state] = accepting.get(state) ? 1 : 0;
+        }
+        for (int blocks = 2, was = 0; blocks != was;) {
+            was = blocks;
+            java.util.Map<List<Integer>, Integer> found = new java.util.LinkedHashMap<>();
+            int[] next = new int[block.length];
+            for (int state = 0; state < block.length; state++) {
+                List<Integer> tells = new ArrayList<>();
+                tells.add(block[state]);
+                for (int to : table.get(state)) {
+                    tells.add(block[to]);
+                }
+                Integer had = found.get(tells);
+                if (had == null) {
+                    had = found.size();
+                    found.put(tells, had);
+                }
+                next[state] = had;
+            }
+            block = next;
+            blocks = found.size();
+        }
+        return block;
+    }
+
+    /**
+     * The blocks as a machine, numbered by walking it from the start.
+     *
+     * <p>The order a walk finds them in and not the order they were made in. What refining the
+     * blocks leaves is the right partition however it is labelled, and a labelling that came out of
+     * the order the subsets happened to be built in would make one language two machines.
+     */
+    private static Automaton numbered(List<int[]> table, int[] block, BitSet accepting,
+                                      List<CodePoints> alphabet) {
+        int[] renamed = new int[block.length];
+        java.util.Arrays.fill(renamed, -1);
+        int[] first = new int[block.length];
+        java.util.Arrays.fill(first, -1);
+        List<Integer> order = new ArrayList<>();
+        order.add(block[START]);
+        renamed[block[START]] = 0;
+        first[block[START]] = START;
+        for (int at = 0; at < order.size(); at++) {
+            for (int to : table.get(first[order.get(at)])) {
+                if (renamed[block[to]] < 0) {
+                    renamed[block[to]] = order.size();
+                    first[block[to]] = to;
+                    order.add(block[to]);
+                }
+            }
+        }
+        List<List<Step>> steps = new ArrayList<>();
+        List<int[]> free = new ArrayList<>();
+        BitSet stops = new BitSet();
+        for (int at = 0; at < order.size(); at++) {
+            int[] row = table.get(first[order.get(at)]);
+            if (accepting.get(first[order.get(at)])) {
+                stops.set(at);
+            }
+            // Gathered by where they lead, so that what a step is over is as wide as it can be.
+            java.util.Map<Integer, CodePoints> leading = new java.util.LinkedHashMap<>();
+            for (int over = 0; over < row.length; over++) {
+                leading.merge(renamed[block[row[over]]], alphabet.get(over), CodePoints::or);
+            }
+            List<Step> out = new ArrayList<>();
+            new java.util.TreeMap<>(leading).forEach((to, over) -> out.add(new Step(over, to)));
+            steps.add(out);
+            free.add(new int[0]);
+        }
+        return new Automaton(steps, free, stops);
+    }
+
+    /**
+     * Whether two canonical machines are the same machine.
+     *
+     * <p>A walk over two tables of the same shape and nothing more, which is what {@link #canonical}
+     * is for. Asked of machines that are not canonical it is a question about how they were written.
+     */
+    boolean sameAs(Automaton other) {
+        if (size() != other.size() || !accepting.equals(other.accepting)) {
+            return false;
+        }
+        for (int at = 0; at < steps.size(); at++) {
+            if (!steps.get(at).equals(other.steps.get(at))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether a canonical machine accepts nothing, and whether it accepts everything.
+     *
+     * <p>One state either way. What tells a language apart from another is a string one of them
+     * stops on and the other does not, and neither of these two has one — so the smallest machine
+     * for each is a single state that every symbol leads back to, accepting or not.
+     */
+    boolean holdsNothing() {
+        return size() == 1 && !accepting.get(START);
+    }
+
+    /** The other of the two — see {@link #holdsNothing}. */
+    boolean holdsEverything() {
+        return size() == 1 && accepting.get(START);
+    }
+
+    /** A number that agrees with {@link #sameAs}, read off the same table. */
+    int shape() {
+        int out = accepting.hashCode();
+        for (List<Step> each : steps) {
+            out = out * 31 + each.hashCode();
+        }
+        return out;
+    }
+
     /** Whether it accepts nothing at all. */
     boolean isEmpty() {
         BitSet seen = closure(only(START));
@@ -483,6 +652,12 @@ final class Automaton {
 
         int count() {
             return subsets.size();
+        }
+
+        /** The runs of symbols this machine tells apart, in the order a step out of a state
+         *  answers for them. */
+        List<CodePoints> alphabet() {
+            return alphabet;
         }
 
         boolean acceptingAt(int state) {

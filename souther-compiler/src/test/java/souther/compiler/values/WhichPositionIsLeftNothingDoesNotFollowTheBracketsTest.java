@@ -43,25 +43,29 @@ class WhichPositionIsLeftNothingDoesNotFollowTheBracketsTest {
         return AdmissibleValues.at(atom, ValueSet.just(value));
     }
 
-    private static AdmissibleValues<String> pair(Value a, Value b) {
-        return at(A, a).meet(at(B, b));
+    /** What puts the sets of one reading together. Every set here is written out, so nothing is
+     *  built and no allowance is spent. */
+    private final Sets<String> sets = Sets.ofAdmittedValues();
+
+    private AdmissibleValues<String> pair(Value a, Value b) {
+        return at(A, a).meet(at(B, b), sets);
     }
 
     /** The three above, in the orders a conjunction of them can be written in. */
-    private static List<AdmissibleValues<String>> everyOrder() {
+    private List<AdmissibleValues<String>> everyOrder() {
         AdmissibleValues<String> x = pair(ZERO, ZERO);
         AdmissibleValues<String> y = at(A, ZERO);
-        AdmissibleValues<String> z = pair(ONE, ZERO).joinApart(pair(ZERO, ONE));
+        AdmissibleValues<String> z = pair(ONE, ZERO).joinApart(pair(ZERO, ONE), sets);
         List<AdmissibleValues<String>> out = new ArrayList<>();
-        out.add(x.meet(y).meet(z));
-        out.add(x.meet(z).meet(y));
-        out.add(y.meet(z).meet(x));
-        out.add(y.meet(x).meet(z));
-        out.add(z.meet(x).meet(y));
-        out.add(z.meet(y).meet(x));
-        out.add(x.meet(y.meet(z)));
-        out.add(y.meet(x.meet(z)));
-        out.add(z.meet(x.meet(y)));
+        out.add(x.meet(y, sets).meet(z, sets));
+        out.add(x.meet(z, sets).meet(y, sets));
+        out.add(y.meet(z, sets).meet(x, sets));
+        out.add(y.meet(x, sets).meet(z, sets));
+        out.add(z.meet(x, sets).meet(y, sets));
+        out.add(z.meet(y, sets).meet(x, sets));
+        out.add(x.meet(y.meet(z, sets), sets));
+        out.add(y.meet(x.meet(z, sets), sets));
+        out.add(z.meet(x.meet(y, sets), sets));
         return out;
     }
 
@@ -94,10 +98,11 @@ class WhichPositionIsLeftNothingDoesNotFollowTheBracketsTest {
      */
     @Test
     void andWhereAPositionIsLeftNothingItIsSaid() {
-        AdmissibleValues<String> here = at(A, ZERO).meet(at(A, ONE));
+        AdmissibleValues<String> here = at(A, ZERO).meet(at(A, ONE), sets);
         AdmissibleValues<String> beside = at(B, ZERO);
 
-        for (AdmissibleValues<String> each : List.of(here.meet(beside), beside.meet(here))) {
+        for (AdmissibleValues<String> each
+                : List.of(here.meet(beside, sets), beside.meet(here, sets))) {
             assertTrue(each.isBottom());
             assertEquals(ValueSet.NONE, each.at(A), "the rules leave a nothing: " + each);
             assertEquals(ValueSet.just(ZERO), each.at(B), "and b is left where its rule put it");

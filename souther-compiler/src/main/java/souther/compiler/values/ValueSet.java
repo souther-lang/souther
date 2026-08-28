@@ -23,6 +23,12 @@ import java.util.Set;
  * is not "unread": whether a reading could take in the rules about a position is a separate answer
  * and is held separately ({@link AdmissibleValues}), because a position the model says nothing about
  * and a position this could not read say the same thing here and mean opposite things to a reader.
+ *
+ * <p><b>A set, and nothing about what it cost.</b> Two of these are put together by {@link Sets},
+ * which is where the allowance for building a machine lives — so a set is a value wherever it came
+ * from, and two equal sets are equal. Written here, a meet would be an operation with no answer for
+ * the case where the exact one is too much work, and the only thing left to do would be to fail in
+ * the middle of a method that is supposed to be total.
  */
 public sealed interface ValueSet {
 
@@ -118,6 +124,9 @@ public sealed interface ValueSet {
      * not a pattern with no strings; one that accepts everything is every value and not a pattern
      * that happens to leave nothing out. Held otherwise, {@link #isEmpty} would be a question about
      * which shape a set is written in, and the answer would turn on how a rule was spelled.
+     *
+     * <p>Reached through {@link Sets}, which has paid for the machine being asked those two
+     * questions. What comes back from here is a set every later reader may observe for nothing.
      */
     static ValueSet matching(souther.compiler.regex.Language language) {
         if (language.isEmpty()) {
@@ -146,6 +155,32 @@ public sealed interface ValueSet {
         };
     }
 
+    /**
+     * Whether some value is in both, so far as that can be said without building anything.
+     *
+     * <p>A question a reader asks about a distinction it is deciding whether to keep, and not a
+     * meet. What is wanted there is whether the position can still reach the case, and the set the
+     * two come to is never looked at — so answering it by composing them would pay for a machine to
+     * throw away, and would put a caller with no allowance in front of an operation that needs one.
+     *
+     * <p><b>One-sided where neither side can be counted out.</b> Two languages share a value only if
+     * their product does, and that product is the expensive thing this exists to avoid. So the
+     * answer there is that they may, which is what a reader with no proof does anyway: a case stays
+     * unless something showed the position cannot reach it, and a case taken away on less than a
+     * proof is a distinction the model states going missing.
+     */
+    default boolean sharesAnythingWith(ValueSet other) {
+        if (this instanceof Finite it) {
+            return it.values().stream().anyMatch(other::has);
+        }
+        if (other instanceof Finite) {
+            return other.sharesAnythingWith(this);
+        }
+        // Neither is finite, so each admits values without end and no finite thing either of them
+        // holds out can be the whole of what the other has.
+        return true;
+    }
+
     /** Whether no value is admitted, which is what refuses a declaration. */
     default boolean isEmpty() {
         return this instanceof Finite it && it.values().isEmpty();
@@ -154,93 +189,5 @@ public sealed interface ValueSet {
     /** Whether every value is admitted, so that nothing has been said. */
     default boolean isAny() {
         return this instanceof Cofinite it && it.excluded().isEmpty();
-    }
-
-    /** The values both admit — what two rules stated together leave. */
-    default ValueSet meet(ValueSet other) {
-        return switch (this) {
-            case Finite here -> switch (other) {
-                case Finite there -> new Finite(kept(here.values(), there.values()::contains));
-                case Cofinite there -> new Finite(kept(here.values(),
-                        each -> !there.excluded().contains(each)));
-                // Which of finitely many the language holds, asked of each. Exact and cheap: what
-                // comes out is a subset of what was already written down, so no language is built.
-                case Matching there -> new Finite(kept(here.values(), there::has));
-            };
-            case Cofinite here -> switch (other) {
-                case Finite _ -> other.meet(this);
-                case Cofinite there -> new Cofinite(both(here.excluded(), there.excluded()));
-                case Matching _ -> other.meet(this);
-            };
-            case Matching here -> switch (other) {
-                case Finite there -> new Finite(kept(there.values(), here::has));
-                // The language less what is excluded, which is a language: a value written out is a
-                // string the machine can be told to refuse, and the rest is untouched.
-                case Cofinite there ->
-                        matching(here.language().without(textsIn(there.excluded())));
-                case Matching there -> matching(here.language().and(there.language()));
-            };
-        };
-    }
-
-    /** The strings among {@code values}, which are the only ones a language has anything to say
-     *  about. */
-    private static Set<String> textsIn(Set<Value> values) {
-        Set<String> out = new LinkedHashSet<>();
-        values.forEach(each -> {
-            if (each instanceof Value.Text text) {
-                out.add(text.value());
-            }
-        });
-        return out;
-    }
-
-    /** The values either admits — what a rule stated as one of two alternatives leaves. */
-    default ValueSet join(ValueSet other) {
-        return switch (this) {
-            case Finite here -> switch (other) {
-                case Finite there -> new Finite(both(here.values(), there.values()));
-                // Everything the other admits, less what it excludes and this does not have: a value
-                // it excludes is admitted here where this names it, so it is no longer excluded from
-                // the two of them together.
-                case Cofinite there -> new Cofinite(kept(there.excluded(),
-                        each -> !here.values().contains(each)));
-                case Matching _ -> other.join(this);
-            };
-            case Cofinite here -> switch (other) {
-                case Finite _ -> other.join(this);
-                case Cofinite there -> new Cofinite(kept(here.excluded(),
-                        there.excluded()::contains));
-                case Matching _ -> other.join(this);
-            };
-            case Matching here -> switch (other) {
-                // The language and the values written beside it, which is a language: what a set of
-                // words costs to add is the words.
-                case Finite there -> matching(here.language().with(textsIn(there.values())));
-                // Everything except what is excluded and the language does not hold. A value
-                // excluded there is admitted here where the language holds it, so it is excluded
-                // from the two of them together only where neither has it — which is asked of each
-                // of finitely many and builds nothing.
-                case Cofinite there -> new Cofinite(kept(there.excluded(),
-                        each -> !here.has(each)));
-                case Matching there -> matching(here.language().or(there.language()));
-            };
-        };
-    }
-
-    private static Set<Value> kept(Set<Value> these, java.util.function.Predicate<Value> keep) {
-        Set<Value> out = new LinkedHashSet<>();
-        these.forEach(each -> {
-            if (keep.test(each)) {
-                out.add(each);
-            }
-        });
-        return out;
-    }
-
-    private static Set<Value> both(Set<Value> these, Set<Value> those) {
-        Set<Value> out = new LinkedHashSet<>(these);
-        out.addAll(those);
-        return out;
     }
 }

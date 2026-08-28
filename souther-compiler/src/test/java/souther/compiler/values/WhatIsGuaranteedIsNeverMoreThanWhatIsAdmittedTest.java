@@ -33,6 +33,15 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
     private static final Value A = Value.text("A");
     private static final Value B = Value.text("B");
 
+    /**
+     * What puts the sets of these readings together.
+     *
+     * <p>One for the file, since the states are made where a parameter source can reach them. Every
+     * set here is values written out, so nothing is built and no allowance is spent — a composer
+     * shared between two of these is spending nothing either of them would have wanted.
+     */
+    private static final Sets<String> SETS = Sets.ofAdmittedValues();
+
     private static AdmissibleValues<String> says(String atom, Value value) {
         return AdmissibleValues.at(atom, ValueSet.just(value));
     }
@@ -52,28 +61,30 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                 made("unreadable naming a position", unreadable(Set.of(VALUE))),
                 made("unreadable naming none", unreadable(Set.of())),
                 made("leavingNothing", says(VALUE, A).leavingNothing()),
-                made("meet of two read", says(VALUE, A).meet(says(OTHER, B))),
-                made("meet with an unread", says(VALUE, A).meet(unreadable(Set.of(OTHER)))),
-                made("meet leaving nothing", says(VALUE, A).meet(says(VALUE, B))),
-                made("join of two read", says(VALUE, A).join(says(VALUE, B))),
-                made("join with an unread", says(VALUE, A).join(unreadable(Set.of(VALUE)))),
+                made("meet of two read", says(VALUE, A).meet(says(OTHER, B), SETS)),
+                made("meet with an unread", says(VALUE, A).meet(unreadable(Set.of(OTHER)), SETS)),
+                made("meet leaving nothing", says(VALUE, A).meet(says(VALUE, B), SETS)),
+                made("join of two read", says(VALUE, A).join(says(VALUE, B), SETS)),
+                made("join with an unread", says(VALUE, A).join(unreadable(Set.of(VALUE)), SETS)),
                 made("join covering the position",
                         AdmissibleValues.at(VALUE, ValueSet.just(A))
-                                .join(AdmissibleValues.at(VALUE, ValueSet.allBut(A)))),
+                                .join(AdmissibleValues.at(VALUE, ValueSet.allBut(A)), SETS)),
                 made("join of two that leave nothing",
-                        says(VALUE, A).meet(says(VALUE, B))
-                                .join(says(OTHER, A).meet(says(OTHER, B)))),
+                        says(VALUE, A).meet(says(VALUE, B), SETS)
+                                .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS)),
                 made("join of a meet and an unread",
-                        says(VALUE, A).meet(unreadable(Set.of())).join(says(VALUE, B))),
+                        says(VALUE, A).meet(unreadable(Set.of()), SETS)
+                                .join(says(VALUE, B), SETS)),
                 made("choice over two positions",
-                        says(VALUE, A).meet(says(OTHER, A))
-                                .join(says(VALUE, B).meet(says(OTHER, B)))),
+                        says(VALUE, A).meet(says(OTHER, A), SETS)
+                                .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS)),
                 made("choice over two positions, met",
-                        says(VALUE, A).meet(says(OTHER, A))
-                                .join(says(VALUE, B).meet(says(OTHER, B)))
-                                .meet(says(VALUE, A))),
+                        says(VALUE, A).meet(says(OTHER, A), SETS)
+                                .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS)
+                                .meet(says(VALUE, A), SETS)),
                 made("join nested under a join",
-                        says(VALUE, A).join(says(VALUE, B).join(unreadable(Set.of(VALUE))))));
+                        says(VALUE, A).join(
+                                says(VALUE, B).join(unreadable(Set.of(VALUE)), SETS), SETS)));
     }
 
     /**
@@ -97,13 +108,13 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
     static Stream<Arguments> admittingNothing() {
         return Stream.of(
                 made("a position left no value", AdmissibleValues.at(VALUE, ValueSet.NONE)),
-                made("two rules leaving nothing", says(VALUE, A).meet(says(VALUE, B))),
+                made("two rules leaving nothing", says(VALUE, A).meet(says(VALUE, B), SETS)),
                 made("shown impossible from outside", says(VALUE, A).leavingNothing()),
                 made("a meet under a wider one",
-                        says(OTHER, A).meet(says(VALUE, A)).meet(says(VALUE, B))),
+                        says(OTHER, A).meet(says(VALUE, A), SETS).meet(says(VALUE, B), SETS)),
                 made("two alternatives neither of which can be taken",
-                        says(VALUE, A).meet(says(VALUE, B))
-                                .join(says(OTHER, A).meet(says(OTHER, B)))));
+                        says(VALUE, A).meet(says(VALUE, B), SETS)
+                                .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS)));
     }
 
     /**
@@ -122,13 +133,13 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
      */
     @Test
     void aChoiceOverTwoPositionsLeavesNoGuaranteeForAConjunctionToRestOn() {
-        AdmissibleValues<String> together = says(VALUE, A).meet(says(OTHER, A));
-        AdmissibleValues<String> apart = says(VALUE, B).meet(says(OTHER, B));
-        AdmissibleValues<String> otherB = says(VALUE, B).meet(says(OTHER, A));
+        AdmissibleValues<String> together = says(VALUE, A).meet(says(OTHER, A), SETS);
+        AdmissibleValues<String> apart = says(VALUE, B).meet(says(OTHER, B), SETS);
+        AdmissibleValues<String> otherB = says(VALUE, B).meet(says(OTHER, A), SETS);
 
-        AdmissibleValues<String> one = together.join(apart);
-        AdmissibleValues<String> two = together.join(otherB);
-        AdmissibleValues<String> both = one.meet(two);
+        AdmissibleValues<String> one = together.join(apart, SETS);
+        AdmissibleValues<String> two = together.join(otherB, SETS);
+        AdmissibleValues<String> both = one.meet(two, SETS);
 
         assertEquals(ValueSet.oneOf(Set.of(A, B)), both.at(VALUE),
                 "read one position at a time, both choices leave value open to either");
@@ -148,11 +159,11 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("states")
     void aConjunctionAlwaysLeavesAPromiseAboutWholeValues(AdmissibleValues<String> state) {
-        assertTrue(state.meet(says(OTHER, B)).guaranteedTogether(),
+        assertTrue(state.meet(says(OTHER, B), SETS).guaranteedTogether(),
                 "met with a rule about one position");
-        assertTrue(state.meet(state).guaranteedTogether(), "and met with itself");
+        assertTrue(state.meet(state, SETS).guaranteedTogether(), "and met with itself");
         assertTrue(state.meet(AdmissibleValues.<String>unreadable(Set.of(VALUE),
-                UnreadReason.FORM_NOT_READ)).guaranteedTogether(),
+                UnreadReason.FORM_NOT_READ), SETS).guaranteedTogether(),
                 "and met with a rule nothing could read");
     }
 
@@ -162,7 +173,7 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
     void whatIsGuaranteedIsAdmitted(AdmissibleValues<String> state) {
         for (String atom : List.of(VALUE, OTHER, NEITHER)) {
             ValueSet guaranteed = state.guaranteedAt(atom);
-            assertEquals(guaranteed, guaranteed.meet(state.at(atom)),
+            assertEquals(guaranteed, SETS.meet(atom, guaranteed, state.at(atom)).set(),
                     () -> "at " + atom + ": guaranteed " + guaranteed
                             + " is not within admitted " + state.at(atom));
         }

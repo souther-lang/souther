@@ -55,14 +55,18 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
                 AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
     }
 
+    /** What puts the sets of one reading together. Every set here is written out, so nothing is
+     *  built and no allowance is spent. */
+    private final Sets<String> sets = Sets.ofAdmittedValues();
+
     /** The same, and everything one connective reaches from them. */
-    private static List<AdmissibleValues<String>> readings() {
+    private List<AdmissibleValues<String>> readings() {
         List<AdmissibleValues<String>> out = new ArrayList<>(leaves());
         for (AdmissibleValues<String> one : leaves()) {
             for (AdmissibleValues<String> other : leaves()) {
-                out.add(one.meet(other));
-                out.add(one.joinApart(other));
-                out.add(one.join(other));
+                out.add(one.meet(other, sets));
+                out.add(one.joinApart(other, sets));
+                out.add(one.join(other, sets));
             }
         }
         return out;
@@ -84,9 +88,9 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
     void aChoiceHoldsAtMostTheSum() {
         for (AdmissibleValues<String> one : readings()) {
             for (AdmissibleValues<String> other : readings()) {
-                assertTrue(held(one.joinApart(other)) <= held(one) + held(other),
+                assertTrue(held(one.joinApart(other, sets)) <= held(one) + held(other),
                         one + " || " + other);
-                assertTrue(held(one.join(other)) <= held(one) + held(other),
+                assertTrue(held(one.join(other, sets)) <= held(one) + held(other),
                         "and merged it holds no more than that: " + one + " || " + other);
             }
         }
@@ -97,7 +101,7 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
     void aConjunctionHoldsAtMostTheProduct() {
         for (AdmissibleValues<String> one : readings()) {
             for (AdmissibleValues<String> other : readings()) {
-                assertTrue(held(one.meet(other)) <= held(one) * held(other),
+                assertTrue(held(one.meet(other, sets)) <= held(one) * held(other),
                         one + " && " + other);
             }
         }
@@ -111,12 +115,12 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
     @Test
     void andBothBoundsAreReached() {
         AdmissibleValues<String> here = AdmissibleValues.at(A, ValueSet.just(FIVE))
-                .joinApart(AdmissibleValues.at(A, ValueSet.just(SIX)));
+                .joinApart(AdmissibleValues.at(A, ValueSet.just(SIX)), sets);
         AdmissibleValues<String> there = AdmissibleValues.at(B, ValueSet.just(ZERO))
-                .joinApart(AdmissibleValues.at(B, ValueSet.just(ONE)));
+                .joinApart(AdmissibleValues.at(B, ValueSet.just(ONE)), sets);
 
         assertEquals(2, held(here), "a choice of two, and the sum of one and one is two");
-        assertEquals(4, held(here.meet(there)),
+        assertEquals(4, held(here.meet(there, sets)),
                 "and a conjunction of two by two, none of whose pairs is empty, is four");
     }
 }

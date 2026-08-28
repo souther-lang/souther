@@ -147,6 +147,23 @@ public record UndividedPosition(TermPath at, Why why) {
          * standing, and that nothing answered it.
          */
         RULE_NOT_INTERPRETED_HERE,
+
+        /**
+         * The compiler followed the rules about this position, and building the exact set of values
+         * they leave between them cost more than it allows itself.
+         *
+         * <p>Its own word because nothing else here says it. {@link #UNSUPPORTED_SYNTAX} promises a
+         * rule was read and could not be used, which sends an author after the form it is written
+         * in; {@link #RULE_NOT_INTERPRETED_HERE} promises nothing established an interpretation.
+         * Here every rule was interpreted and the interpretation is what turned out to be too
+         * large, so both of those would send a reader after something that is not the matter.
+         *
+         * <p><b>About the answer and not about a rule.</b> Two rules each cheap on their own can
+         * have an answer between them that is not, so nothing here names a rule to go and change.
+         * What a reader may do about it is state the position's values in a way that composes to
+         * less — or take the answer as the upper bound it is.
+         */
+        EXACT_VALUES_TOO_COSTLY,
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
         /**

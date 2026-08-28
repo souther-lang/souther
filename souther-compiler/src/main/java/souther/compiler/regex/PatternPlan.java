@@ -43,7 +43,11 @@ public final class PatternPlan {
         }
 
         /**
-         * What a rule of a declaration is allowed.
+         * What the values one position finally admits are allowed to cost.
+         *
+         * <p>The whole of that and not one rule of it. Every rule about a position pays into the
+         * same machine — two patterns of one clause meet, and so do two written in separate rules of
+         * one declaration — so an allowance per rule would be one nobody could hold the product to.
          *
          * <p>Large enough for the formats a model writes — the longest of them is a couple of dozen
          * characters of classes and counts, which is a few hundred states — and small enough that a
@@ -51,7 +55,7 @@ public final class PatternPlan {
          * measurement of anything: it is the size past which this compiler would rather say it did
          * not answer.
          */
-        public static final Budget OF_A_RULE = new Budget(50_000, 200_000);
+        public static final Budget OF_ADMITTED_VALUES = new Budget(50_000, 200_000);
     }
 
     /** What one step of a plan does. */
@@ -112,7 +116,13 @@ public final class PatternPlan {
      */
     public Language compile(Budget budget) {
         try {
-            return new Language(built(step, budget, new int[] {budget.mostBuilt()}));
+            int[] left = new int[] {budget.mostBuilt()};
+            // Made canonical here and not by whoever holds it. A language is the one machine that
+            // accepts its strings, and turning a machine into that one is the largest thing this
+            // does — left to the reader, it would happen inside whichever question was asked first,
+            // where there is no allowance and nobody counting.
+            return new Language(charged(
+                    built(step, budget, left).canonical(budget.mostStates()), budget, left));
         } catch (TooMuch _) {
             return null;
         }

@@ -3,51 +3,89 @@ package souther.compiler.regex;
 /**
  * A set of strings this compiler can answer about exactly.
  *
- * <p>Every operation here is total. What a meet of two of these holds is the strings both hold, and
- * it is always a language — there is no answer saying the meet was too much work, and that is what
- * makes this a value rather than an attempt. A caller holding one may ask it anything.
+ * <p><b>Asking is free and composing is not.</b> Everything a caller may ask one of these — whether
+ * it holds a string, whether it holds nothing, whether it holds everything, whether it is the same
+ * set as another — is read off the machine in front of it. What is not free is making a new
+ * language out of two: a meet is the product of two machines and may be larger than this compiler
+ * will build, so every way to a language takes what it is allowed and answers null past it.
  *
- * <p><b>Which is why one is not made from a pattern.</b> Whether the work of answering exactly is
+ * <p>Which is the one thing a caller has to hold: a language is a set and may be asked anything,
+ * and putting two of them together is an operation that can decline. Written the other way round —
+ * composition total, questions doing the work — the work would happen inside whichever question was
+ * asked first, where there is no allowance and nobody counting.
+ *
+ * <p><b>And it is why one is not made from a pattern.</b> Whether the work of answering exactly is
  * worth doing is a question about the answer being built, not about any one pattern in it: a
  * pattern read on its own and admitted on its own is one that may still be met with another, and
  * the meet is where the cost is. So a language is compiled from the whole of what a question needs
- * at once ({@link PatternPlan}), and what comes back is either a language every operation on which
- * is affordable or nothing at all.
+ * at once ({@link PatternPlan}), and what a reading spends putting them together is held beside the
+ * reading ({@code souther.compiler.values.Sets}).
  *
  * <p>Nothing here is about how a language was written. Two patterns that accept the same strings are
  * the same language, and a reader asking what one holds is answered by the strings.
  */
 public final class Language {
 
+    /**
+     * The one machine that accepts these strings, which is what everything here is read off.
+     *
+     * <p>Canonical, and that is the type's invariant rather than a thing a caller arranges. Every
+     * way to a language ends in {@link Automaton#canonical}, so two of these hold the same table
+     * exactly when they hold the same strings — and the questions below are a look at what is in
+     * front of them rather than a search nobody counted.
+     */
     private final Automaton machine;
 
-    Language(Automaton machine) {
-        this.machine = machine;
+    Language(Automaton canonical) {
+        if (canonical == null) {
+            throw new IllegalArgumentException("a language is some machine");
+        }
+        this.machine = canonical;
     }
 
-    /** Whether the whole of {@code value} is in it. */
+    /**
+     * The same language, where the work of making it canonical is within {@code mostStates}.
+     *
+     * <p>Null and never a machine short of canonical. What is being decided is whether this
+     * compiler can afford to answer exactly, and a half-made answer handed out is one whose next
+     * question does the rest of the work somewhere nobody is counting.
+     */
+    private static Language canonical(Automaton made, int mostStates) {
+        if (made == null) {
+            return null;
+        }
+        Automaton one = made.canonical(mostStates);
+        return one == null ? null : new Language(one);
+    }
+
+    /** Whether the whole of {@code value} is in it. A walk over the value, which builds nothing. */
     public boolean has(String value) {
         return machine.accepts(value);
     }
 
-    /** The strings both hold. */
-    public Language and(Language other) {
-        return new Language(machine.and(other.machine));
+    /** The strings both hold, or null where saying so exactly costs more than {@code mostStates}. */
+    public Language and(Language other, int mostStates) {
+        return canonical(machine.and(other.machine), mostStates);
     }
 
-    /** The strings either holds. */
-    public Language or(Language other) {
-        return new Language(machine.or(other.machine));
+    /** The strings either holds, on the same terms. */
+    public Language or(Language other, int mostStates) {
+        return canonical(machine.or(other.machine), mostStates);
     }
 
-    /** The strings this does not hold. */
-    public Language not() {
-        return new Language(machine.not());
+    /** The strings this does not hold, on the same terms. */
+    public Language not(int mostStates) {
+        return canonical(machine.not(), mostStates);
     }
 
-    /** Whether it holds nothing at all. */
+    /**
+     * Whether it holds nothing at all.
+     *
+     * <p>Read off the canonical machine: one that holds nothing is one state nothing stops at. An
+     * observation, as everything below is — the walking was done where it was paid for.
+     */
     public boolean isEmpty() {
-        return machine.isEmpty();
+        return machine.holdsNothing();
     }
 
     /**
@@ -55,10 +93,11 @@ public final class Language {
      *
      * <p>Asked of the strings and not of how it was written. {@code .*} is not everything — the
      * five line terminators are outside it — and a reader answering from the shape of a pattern
-     * would say it was.
+     * would say it was. Read off the canonical machine, which for that language is the one state
+     * every string stops at.
      */
     public boolean isEverything() {
-        return machine.isEverything();
+        return machine.holdsEverything();
     }
 
     /**
@@ -77,21 +116,22 @@ public final class Language {
     }
 
     /**
-     * The same strings and these others.
+     * The same strings and these others, or null past {@code mostStates}.
      *
-     * <p>Takes the words themselves rather than a plan, and needs no allowance to do it. What it
-     * costs is the words: a set of them is a machine as big as their letters, and joining one to
-     * this is the cheap operation. So a caller holding a language and a handful of values it must
-     * also admit is answered without going back for anything.
+     * <p>Takes the words themselves rather than a plan. What joining them costs is the words — a
+     * set of them is a machine as big as their letters — but what the answer costs is what making
+     * it canonical costs, and that is a question about the two together. So this is bounded like
+     * every other way to a language.
      */
-    public Language with(java.util.Collection<String> words) {
-        return words.isEmpty() ? this : new Language(machine.or(Automaton.ofWords(words)));
+    public Language with(java.util.Collection<String> words, int mostStates) {
+        return words.isEmpty() ? this
+                : canonical(machine.or(Automaton.ofWords(words)), mostStates);
     }
 
     /** The same strings less these, on the same terms. */
-    public Language without(java.util.Collection<String> words) {
+    public Language without(java.util.Collection<String> words, int mostStates) {
         return words.isEmpty() ? this
-                : new Language(machine.and(Automaton.ofWords(words).not()));
+                : canonical(machine.and(Automaton.ofWords(words).not()), mostStates);
     }
 
     /** How many states hold it, which is what a caller answering for its work counts. */
@@ -106,34 +146,31 @@ public final class Language {
      * strings are one — so a reading run twice over one model has to come to values that are equal,
      * whatever shape the machines took on the way.
      *
-     * <p>Asked as neither holding anything the other does not, which is what sameness is and what it
-     * costs. Cheap where the two are the same object, which is what a reading comparing what it just
-     * built with what it had usually has.
+     * <p><b>A comparison of two tables and not a proof about two languages.</b> Every language holds
+     * the one machine that accepts its strings ({@link Automaton#canonical}), so two that hold the
+     * same strings hold the same table, state for state. Which matters because of who calls this: a
+     * set adding a member calls it, and a map looking one up calls it, and neither of them is a
+     * place where an answer may go and build automata. The work that settles what a language is was
+     * done where it was paid for.
      */
     @Override
     public boolean equals(Object other) {
         if (this == other) {
             return true;
         }
-        if (!(other instanceof Language it)) {
-            return false;
-        }
-        return machine.and(it.machine.not()).isEmpty()
-                && it.machine.and(machine.not()).isEmpty();
+        return other instanceof Language it && machine.sameAs(it.machine);
     }
 
     /**
-     * The same for every language, which is what a set with no cheap canonical form has.
+     * Read off the same table, so that two equal languages hash alike.
      *
-     * <p>A value's hash has to agree with its equality, and what makes two languages equal is a
-     * question about their strings — there is no small thing to read off a machine that two equal
-     * languages are bound to share. So they all hash alike and a table holding several of them
-     * compares them; a table holding one, which is what a position's rules come to, does not
-     * notice.
+     * <p>The strings are what makes two of these equal, and the canonical machine is what makes the
+     * strings something a hash can be read off: one language is one table, so hashing the table
+     * hashes the language.
      */
     @Override
     public int hashCode() {
-        return Language.class.hashCode();
+        return machine.shape();
     }
 
     @Override

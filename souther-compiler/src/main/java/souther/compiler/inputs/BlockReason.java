@@ -126,14 +126,18 @@ public sealed interface BlockReason {
             return switch (measure) {
                 // A comparison in a form no reader takes apart may have divided the position or
                 // bounded it, and nothing knows which — so both.
+                // And a set that was not built exactly is every value, which is what a position no
+                // rule reached holds — so a division the rules imply is not made and an end they
+                // state is not found. Short of both for the same reason and not by analogy with
+                // the neighbours: what is missing is the set the two measures are read off.
                 case PARTITION -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, ValueRuleRelatingTwoPositions _,
+                         UnreadValueRule _, ValueRuleRelatingTwoPositions _, ExactValuesTooCostly _,
                          CompetingCoordinates _, CasePairingNotDetermined _ -> true;
                 };
                 case BOUNDARY -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, ValueRuleRelatingTwoPositions _,
+                         UnreadValueRule _, ValueRuleRelatingTwoPositions _, ExactValuesTooCostly _,
                          CompetingCoordinates _, CasePairingNotDetermined _ -> true;
                 };
             };
@@ -210,6 +214,7 @@ public sealed interface BlockReason {
         return switch (why) {
             case RELATES_TWO_POSITIONS -> new ValueRuleRelatingTwoPositions();
             case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new UnreadValueRule();
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
             case NOT_REACHED -> throw new IllegalArgumentException(
                     "a reading that did not reach the rules of a position holds no rule to say"
                             + " this of");
@@ -316,6 +321,24 @@ public sealed interface BlockReason {
      * values that follows a rule into a shape it does not enter today.
      */
     record UnreadValueRule() implements RuleReadingStopped {}
+
+    /**
+     * The rules about this position were followed, and the values they leave between them are more
+     * than this compiler will build.
+     *
+     * <p>Its own case beside {@link UnreadValueRule}, and the difference is what an author can do
+     * about it. That one says a rule is written in a shape no reader here enters, and what lifts it
+     * is a wider reading. This says every rule was entered and the set they come to was not built —
+     * so there is no shape to widen, and an author told the other would go looking for a syntax
+     * that was never the difficulty.
+     *
+     * <p><b>About the answer and not about a rule.</b> Two patterns each small on its own have a
+     * meet the size of their product, and two rules of one declaration meet at a position as surely
+     * as two halves of one clause do. So what ran out is the allowance for what the position finally
+     * admits, and naming one of the rules would say that rule is why — which for a product of two
+     * is false of each of them.
+     */
+    record ExactValuesTooCostly() implements RuleReadingStopped {}
 
     /**
      * Every reading was asked about the rule at this position and none of them took it in, and none

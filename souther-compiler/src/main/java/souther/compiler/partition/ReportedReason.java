@@ -38,6 +38,13 @@ public final class ReportedReason {
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
             case BlockReason.UnreadValueRule _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            // Its own word, and not the one above. That one promises a rule is written in a form
+            // nothing here takes apart, and what a reader does about it is rewrite the rule. Here
+            // every rule was taken apart and what they leave between them was not built, so there
+            // is no form to rewrite — and the answer may be too large because of a product neither
+            // rule is on its own.
+            case BlockReason.ExactValuesTooCostly _ ->
+                    UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
             // Its own word, and not the one above. That one promises a rule was read and could not
             // be used, which is a reader having engaged with it and given up; here none did, and an
             // author sent after the form their clause is written in would be looking for a

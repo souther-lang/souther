@@ -53,7 +53,7 @@ public sealed interface Case {
     default boolean leftAnythingBy(ValueSet admitted) {
         ValueSet held = denotes();
         if (held != null) {
-            return !held.meet(admitted).isEmpty();
+            return held.sharesAnythingWith(admitted);
         }
         return !(admitted instanceof ValueSet.Finite finite)
                 || finite.values().stream().anyMatch(this::holds);

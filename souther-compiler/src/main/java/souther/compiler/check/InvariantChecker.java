@@ -687,6 +687,14 @@ public final class InvariantChecker {
             long expansion = policy.expansionOf(written.stream().map(Written::clause).toList());
             Alternatives alternatives = policy.holdsApart(expansion)
                     ? Alternatives.APART : Alternatives.MERGED;
+            // What puts two sets of values together, and what it is allowed to build doing it. One
+            // for the whole of this value and not one per clause: what a position finally admits is
+            // met from every rule that reached it, so a pattern in one clause and a pattern in
+            // another pay into the same machine. Made per position inside — a complicated rule at
+            // one position may not spend what a plain one at another was going to need, or which of
+            // the two went unanswered would turn on the order they were written in.
+            souther.compiler.values.Sets<FactSubject> sets =
+                    souther.compiler.values.Sets.ofAdmittedValues();
             Map<RuleRef, Map<Core, Set<FactSubject>>> adoptedBy = new LinkedHashMap<>();
             for (Written each : written) {
                 // A reading of its own per clause, so what it says it adopted is this clause's and not
@@ -694,7 +702,7 @@ public final class InvariantChecker {
                 // has: a clause the readings took in whole sat beside one they could not, and the
                 // position-wide account said both had gone unread.
                 StatedByClauses one = StatedByClauses
-                        .readingOf(c.terms, at, positions, symbols, alternatives)
+                        .readingOf(c.terms, at, positions, symbols, alternatives, sets)
                         .read(each.clause(), true,
                                 (part, said) -> adoptedBy
                                         .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>())
@@ -705,7 +713,7 @@ public final class InvariantChecker {
                 // position and hearing whichever clause reached it.
                 one.adopted().forEach(position -> took.record(each.from(), position));
                 took.stoppedBy(each.from(), one.values());
-                stated = stated.meet(one);
+                stated = stated.meet(one, sets);
             }
             // What was counted bounds what was built, which is the whole of why counting before
             // reading is enough. It is an induction and its steps are held where they are taken —
@@ -726,7 +734,7 @@ public final class InvariantChecker {
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
                     new PartsRead(readBy, adoptedBy));
             ConstraintState<FactSubject> constraints = k.constraints()
-                    .takingValuesRead(stated.values())
+                    .takingValuesRead(stated.values(), sets)
                     .taking(stated.ordered());
             // How each atom's values are spaced, kept so that settling one afterwards states the
             // equality the same way this does. A count is a whole number of things whatever the

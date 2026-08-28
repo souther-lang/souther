@@ -1315,6 +1315,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The three a rule reaches, written about the rule: the line these appear on names it,
             // so a sentence saying "a rule about it" would name the rule and then not say so.
             case UNSUPPORTED_SYNTAX -> "written in a form this compiler does not read";
+            // Written about the rules together and not about this one. What ran out is the
+            // allowance for the values they leave between them, and two rules cheap on their own
+            // can have an answer that is not — so a sentence naming this rule would be telling a
+            // reader to change something that may not be why.
+            case EXACT_VALUES_TOO_COSTLY -> "read to the end, and the values the rules about this"
+                    + " position leave between them are more than this compiler will work out";
             case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
             case UNRESOLVED_CASE_PAIRING -> "it reaches case-specific positions on both sides, and "
                     + "how those positions pair up is not worked out";

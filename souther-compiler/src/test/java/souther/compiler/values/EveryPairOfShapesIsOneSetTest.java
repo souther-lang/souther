@@ -28,13 +28,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Which is what a shape added has to be held to. A shape whose operations are exact against the
  * two that were here already and guessed at against itself is one whose meet is not a meet, and the
  * answer is a set either way — so nothing downstream would find out.
+ *
+ * <p>Asked of {@link Sets}, since that is where two of these are put together. Every pair below is
+ * within what one answer is allowed, so nothing here is given up on and what is read is the
+ * algebra.
  */
 class EveryPairOfShapesIsOneSetTest {
+
+    private static final String POSITION = "value";
+
+    /** What puts the sets together, and what it is allowed to build doing it. */
+    private final Sets<String> sets = Sets.ofAdmittedValues();
 
     private static Language language(String regex) {
         PatternRead read = PatternParser.read(regex);
         Language made = PatternPlan.of(assertInstanceOf(PatternRead.Read.class, read, regex)
-                .syntax()).compile(PatternPlan.Budget.OF_A_RULE);
+                .syntax()).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
         assertNotNull(made, regex);
         return made;
     }
@@ -67,13 +76,27 @@ class EveryPairOfShapesIsOneSetTest {
         return set.has(text(value));
     }
 
+    /** What both hold, which is always built here: every pair is within the allowance. */
+    private ValueSet met(ValueSet one, ValueSet two) {
+        Sets.Composed made = sets.meet(POSITION, one, two);
+        assertFalse(made.gaveUp(), () -> one + " meet " + two + " is within what one answer holds");
+        return made.set();
+    }
+
+    /** And what either holds, on the same terms. */
+    private ValueSet joined(ValueSet one, ValueSet two) {
+        Sets.Composed made = sets.join(POSITION, one, two);
+        assertFalse(made.gaveUp(), () -> one + " join " + two + " is within what one answer holds");
+        return made.set();
+    }
+
     /** A meet holds what both hold, whichever shapes they are. */
     @Test
     void aMeetHoldsWhatBothHold() {
         List<String> apart = new ArrayList<>();
         for (ValueSet one : shapes()) {
             for (ValueSet two : shapes()) {
-                ValueSet met = one.meet(two);
+                ValueSet met = met(one, two);
                 for (String value : VALUES) {
                     boolean said = holds(met, value);
                     boolean both = holds(one, value) && holds(two, value);
@@ -93,9 +116,9 @@ class EveryPairOfShapesIsOneSetTest {
         List<String> apart = new ArrayList<>();
         for (ValueSet one : shapes()) {
             for (ValueSet two : shapes()) {
-                ValueSet joined = one.join(two);
+                ValueSet made = joined(one, two);
                 for (String value : VALUES) {
-                    boolean said = holds(joined, value);
+                    boolean said = holds(made, value);
                     boolean either = holds(one, value) || holds(two, value);
                     if (said != either) {
                         apart.add(one + " join " + two + " over \"" + value + "\": "
@@ -116,7 +139,7 @@ class EveryPairOfShapesIsOneSetTest {
      */
     @Test
     void aLanguageHoldingNothingIsTheEmptySet() {
-        ValueSet nothing = ValueSet.matching(language("[a-z]")).meet(ValueSet.just(text("0")));
+        ValueSet nothing = met(ValueSet.matching(language("[a-z]")), ValueSet.just(text("0")));
 
         assertEquals(ValueSet.NONE, nothing);
         assertTrue(nothing.isEmpty());
@@ -157,8 +180,8 @@ class EveryPairOfShapesIsOneSetTest {
     /** A value that is not a string is not one of a language's, whatever the language. */
     @Test
     void whatIsNotAStringIsNotOneOfThem() {
-        ValueSet met = ValueSet.matching(language("[0-9]+"))
-                .meet(ValueSet.oneOf(Set.of(text("1"), Value.number(new java.math.BigDecimal(1)))));
+        ValueSet met = met(ValueSet.matching(language("[0-9]+")),
+                ValueSet.oneOf(Set.of(text("1"), Value.number(new java.math.BigDecimal(1)))));
 
         assertEquals(ValueSet.just(text("1")), met);
     }

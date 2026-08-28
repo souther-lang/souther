@@ -69,8 +69,9 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
     /** The reading of one value's positions, made once and used over however many clauses reach it.
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
     static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                             Symbols symbols, Alternatives alternatives) {
-        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, alternatives),
+                             Symbols symbols, Alternatives alternatives,
+                             souther.compiler.values.Sets<FactSubject> sets) {
+        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, alternatives, sets),
                 OrderedReading.of(terms, at, byName, symbols), terms, at, byName);
     }
 
@@ -88,8 +89,9 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
         return values.isBottom() || ordered.isBottom();
     }
 
-    StatedByClauses meet(StatedByClauses other) {
-        return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered),
+    /** Both holding at once, {@code sets} being what the answer's allowance is spent from. */
+    StatedByClauses meet(StatedByClauses other, souther.compiler.values.Sets<FactSubject> sets) {
+        return new StatedByClauses(values.meet(other.values, sets), ordered.meet(other.ordered),
                 byValues.both(other.byValues), byOrder.both(other.byOrder));
     }
 
@@ -157,7 +159,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
 
         @Override
         public StatedByClauses both(StatedByClauses one, StatedByClauses other) {
-            return one.meet(other);
+            return one.meet(other, values.sets());
         }
 
         /**

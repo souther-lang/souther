@@ -222,8 +222,14 @@ final class ReadQuantities implements Quantities {
         }
         souther.compiler.check.ConstraintState<InputAtom> made =
                 souther.compiler.check.ConstraintState.top();
+        // What the values of this space cost to work out. One for the space and not one per
+        // parameter: what each parameter was read under is the allowance of its own declaration,
+        // and the set a position finally admits here is met out of all of them — so this is the
+        // answer being built and this is where building it is charged.
+        souther.compiler.values.Sets<InputAtom> sets =
+                souther.compiler.values.Sets.ofAdmittedValues();
         for (FieldDomains.Carried<InputAtom> each : conditioned().values()) {
-            made = made.meet(each.constraints());
+            made = made.meet(each.constraints().under(sets));
         }
         // And what the caller took in, onto the same rules rather than met against the answer
         // afterwards. A condition relating two positions says nothing about either of them alone,

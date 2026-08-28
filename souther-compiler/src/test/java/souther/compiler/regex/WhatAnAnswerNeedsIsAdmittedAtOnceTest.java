@@ -29,7 +29,7 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     }
 
     private static Language language(String regex) {
-        Language said = plan(regex).compile(PatternPlan.Budget.OF_A_RULE);
+        Language said = plan(regex).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
         assertNotNull(said, regex + " is one a rule may be answered about");
         return said;
     }
@@ -50,21 +50,21 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     @Test
     void aPlanOfSeveralIsWhatTheyComeTo() {
         Language both = plan("[0-9]+").and(plan("[0-4]{2}"))
-                .compile(PatternPlan.Budget.OF_A_RULE);
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
         assertNotNull(both);
         assertTrue(both.has("00"));
         assertTrue(both.has("44"));
         assertFalse(both.has("55"));
         assertFalse(both.has("0"));
 
-        Language either = plan("a+").or(plan("b+")).compile(PatternPlan.Budget.OF_A_RULE);
+        Language either = plan("a+").or(plan("b+")).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
         assertNotNull(either);
         assertTrue(either.has("aa"));
         assertTrue(either.has("bb"));
         assertFalse(either.has("ab"));
 
         Language less = plan("[0-9]{2}").less(plan("00"))
-                .compile(PatternPlan.Budget.OF_A_RULE);
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
         assertNotNull(less);
         assertTrue(less.has("01"));
         assertFalse(less.has("00"));
@@ -82,7 +82,7 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
         PatternPlan big = plan("[0-9]{5000}");
 
         assertNull(big.compile(new PatternPlan.Budget(100, 100)));
-        assertNotNull(big.compile(PatternPlan.Budget.OF_A_RULE), "and is built where there is room");
+        assertNotNull(big.compile(PatternPlan.Budget.OF_ADMITTED_VALUES), "and is built where there is room");
     }
 
     /**
@@ -106,23 +106,26 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     }
 
     /**
-     * What comes back can be asked anything.
+     * What comes back can be asked anything, and putting two of them together is what is allowed.
      *
-     * <p>The whole of what admitting a plan is for. A language that had to refuse an operation
-     * afterwards would be one whose meet is not a set, and a reader would have to hold an answer
-     * that might not have one.
+     * <p>The two halves of what a language is. Asking is free — a compiled language holds the one
+     * machine that accepts its strings, so every question below is read off what is in front of it.
+     * Composing is charged, so each of these says what it is allowed and would answer null past it;
+     * here there is room, and what the answers are is the point.
      */
     @Test
     void whatComesBackAnswersEverythingAskedOfIt() {
         Language one = language("[0-9]{2}");
         Language two = language("[0-4][0-9]");
 
-        assertFalse(one.and(two).isEmpty());
-        assertFalse(one.or(two).isEmpty());
-        assertTrue(one.and(one.not()).isEmpty());
-        assertTrue(one.or(one.not()).isEverything());
-        assertEquals("00", one.and(two).some());
-        assertTrue(one.and(two).has("40"));
+        int allowed = PatternPlan.Budget.OF_ADMITTED_VALUES.mostStates();
+
+        assertFalse(one.and(two, allowed).isEmpty());
+        assertFalse(one.or(two, allowed).isEmpty());
+        assertTrue(one.and(one.not(allowed), allowed).isEmpty());
+        assertTrue(one.or(one.not(allowed), allowed).isEverything());
+        assertEquals("00", one.and(two, allowed).some());
+        assertTrue(one.and(two, allowed).has("40"));
     }
 
     /** A pattern outside the subset never reaches a plan, since a plan is made of what was read. */

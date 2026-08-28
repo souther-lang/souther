@@ -46,6 +46,21 @@ public enum UnreadReason {
     ALTERNATIVE_NOT_READ,
 
     /**
+     * The rules about this position were read, and the values they leave are more than this
+     * compiler will build.
+     *
+     * <p>Not a form it has no word for. Every rule that reached here was understood — a pattern was
+     * parsed, an equality was recognised — and what ran out was the allowance for the set they come
+     * to between them ({@link Sets}). Two patterns each small on its own have a meet the size of
+     * their product, so this is a fact about the answer and not about any one of the rules: naming
+     * one of them would tell an author to go and change a rule that is not why.
+     *
+     * <p>Widens like the rest. What is left at the position is every value, which is true and is
+     * short of what the rules say.
+     */
+    EXACT_VALUES_TOO_COSTLY,
+
+    /**
      * The reading never reached the rules about this position.
      *
      * <p>A different thing from a rule it read and could not use. The walk that gathers clauses

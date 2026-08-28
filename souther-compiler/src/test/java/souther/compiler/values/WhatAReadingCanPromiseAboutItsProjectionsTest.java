@@ -41,9 +41,13 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
         return AdmissibleValues.at(atom, ValueSet.just(value));
     }
 
+    /** What puts the sets of these readings together. Every set here is values written out, so
+     *  nothing is built and no allowance is spent. */
+    private static final Sets<String> SETS = Sets.ofAdmittedValues();
+
     /** Both positions of one alternative, which is a product and is held as one. */
     private static AdmissibleValues<String> pair(Value a, Value b) {
-        return says(A, a).meet(says(B, b));
+        return says(A, a).meet(says(B, b), SETS);
     }
 
     /** A reading with nothing read is exact about everything it says, which is nothing. */
@@ -59,7 +63,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      *  union of two of them is one and nothing is lost. */
     @Test
     void aChoiceAtOnePositionPromisesItsRelation() {
-        AdmissibleValues<String> either = says(A, FIVE).join(says(A, SIX));
+        AdmissibleValues<String> either = says(A, FIVE).join(says(A, SIX), SETS);
 
         assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), either.at(A));
         assertTrue(either.relationExact(), "two values of one position are a product");
@@ -75,7 +79,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void aChoiceAcrossTwoPositionsKeepsItsProjectionsAndLosesItsRelation() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE));
+        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
 
         assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), one.at(A));
         assertEquals(ValueSet.oneOf(java.util.Set.of(ZERO, ONE)), one.at(B));
@@ -93,10 +97,10 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void twoChoicesAcrossTwoPositionsMetTogetherPromiseNeither() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE));
-        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO));
+        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
+        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS);
 
-        AdmissibleValues<String> both = one.meet(two);
+        AdmissibleValues<String> both = one.meet(two, SETS);
 
         assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), both.at(A), "which is wider than the rules leave it");
         assertFalse(both.projectionExactAt(A), "so the reading may not say this is what a holds");
@@ -106,7 +110,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
     /** A conjunction of readings that are each a product is a product, and says so. */
     @Test
     void aConjunctionOfProductsPromisesBoth() {
-        AdmissibleValues<String> both = pair(FIVE, ZERO).meet(says(A, FIVE));
+        AdmissibleValues<String> both = pair(FIVE, ZERO).meet(says(A, FIVE), SETS);
 
         assertTrue(both.relationExact(), "the intersection of two products is a product");
         assertTrue(both.projectionExactAt(A));
@@ -126,11 +130,11 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void aPositionNoLostCorrelationReachesKeepsItsPromise() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE));
-        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO));
+        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
+        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS);
         AdmissibleValues<String> apart = AdmissibleValues.at(C, ValueSet.just(ZERO));
 
-        AdmissibleValues<String> all = one.meet(two).meet(apart);
+        AdmissibleValues<String> all = one.meet(two, SETS).meet(apart, SETS);
 
         assertFalse(all.projectionExactAt(A), "a and b are what the choice reached across");
         assertFalse(all.projectionExactAt(B));
@@ -144,9 +148,10 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
         for (AdmissibleValues<String> each : java.util.List.<AdmissibleValues<String>>of(
                 AdmissibleValues.top(),
                 says(A, FIVE),
-                says(A, FIVE).join(says(A, SIX)),
-                pair(FIVE, ZERO).join(pair(SIX, ONE)),
-                pair(FIVE, ZERO).join(pair(SIX, ONE)).meet(pair(FIVE, ZERO).join(pair(SIX, ZERO))))) {
+                says(A, FIVE).join(says(A, SIX), SETS),
+                pair(FIVE, ZERO).join(pair(SIX, ONE), SETS),
+                pair(FIVE, ZERO).join(pair(SIX, ONE), SETS)
+                        .meet(pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS), SETS))) {
             assertTrue(!each.relationExact() || each.projectionExactAt(A),
                     each + " promises its relation and not its projections");
         }

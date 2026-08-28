@@ -51,6 +51,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("UnreadComparisonDomain", "short/short/UNSUPPORTED_DOMAIN");
         table.put("RuleAboutADerivedValue", "short/short/RULE_ABOUT_A_DERIVED_VALUE");
         table.put("UnreadValueRule", "short/short/UNSUPPORTED_SYNTAX");
+        // Read to the end, every one of them, and the set they leave between them not built. Both
+        // measures are short because both are read off that set: a class is a part of it and an end
+        // is where it stops, so neither knows what it is missing. Its own word and not the one
+        // above — that one sends an author after the form a rule is written in, and here there is
+        // no form to change, since two rules cheap on their own can have an answer that is not.
+        table.put("ExactValuesTooCostly", "short/short/EXACT_VALUES_TOO_COSTLY");
         // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
@@ -237,6 +243,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.UnreadValueRule(),
+                new BlockReason.ExactValuesTooCostly(),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.CompetingCoordinates(),
                 new BlockReason.CasePairingNotDetermined(),

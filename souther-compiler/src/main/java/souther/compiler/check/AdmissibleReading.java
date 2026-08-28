@@ -4,6 +4,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.Sets;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -45,20 +46,35 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
     private final Symbols symbols;
     /** How a choice holds what it leaves, settled for the whole declaration before it was read. */
     private final Alternatives alternatives;
+    /**
+     * What puts two sets together, and what it is allowed to build doing it.
+     *
+     * <p>One of these for the whole of what is read into one answer, because that is what the
+     * allowance is about: every rule reaching a position pays into the machine that position finally
+     * admits. It is the reading's and not a leaf's, so a clause read here and a rule met with it
+     * afterwards ({@code InvariantChecker}) spend from the same purse.
+     */
+    private final Sets<FactSubject> sets;
 
     private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                              Symbols symbols, Alternatives alternatives) {
+                              Symbols symbols, Alternatives alternatives, Sets<FactSubject> sets) {
         this.terms = terms;
         this.at = at;
         this.byName = byName;
         this.symbols = symbols;
         this.alternatives = alternatives;
+        this.sets = sets;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
     static AdmissibleReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                                Symbols symbols, Alternatives alternatives) {
-        return new AdmissibleReading(terms, at, byName, symbols, alternatives);
+                                Symbols symbols, Alternatives alternatives, Sets<FactSubject> sets) {
+        return new AdmissibleReading(terms, at, byName, symbols, alternatives, sets);
+    }
+
+    /** What this reading is spending, for whoever meets its answer with the next rule's. */
+    Sets<FactSubject> sets() {
+        return sets;
     }
 
     @Override
@@ -68,7 +84,7 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
 
     @Override
     public AdmissibleValues<FactSubject> both(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
-        return one.meet(other);
+        return one.meet(other, sets);
     }
 
     /**
@@ -80,7 +96,8 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      */
     @Override
     public AdmissibleValues<FactSubject> either(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
-        return alternatives == Alternatives.APART ? one.joinApart(other) : one.join(other);
+        return alternatives == Alternatives.APART
+                ? one.joinApart(other, sets) : one.join(other, sets);
     }
 
     /** An equality names a value and a denial leaves the rest; nothing else here is read. */
