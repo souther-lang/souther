@@ -149,6 +149,24 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                 "every shape is built here, so that what each carries is checked as it is built");
     }
 
+    /**
+     * Two sets holding the same things are one hash, whichever order they hand them over in.
+     *
+     * <p>What a set's equality reads is what it holds and not the order it walks it, so a hash
+     * taken by folding the elements up in the order they arrive gives two equal values two hashes —
+     * and a term carrying either is then two terms to the table and one term to the comparison.
+     */
+    @Test
+    void twoSetsHoldingAlikeAreOneHashWhateverOrderTheyWalkIn() {
+        TypeSymbol one = TypeSymbols.declared(new TypeKey("m", "A"));
+        TypeSymbol other = TypeSymbols.declared(new TypeKey("m", "B"));
+        Type forwards = new Type.Union(new LinkedHashSet<>(List.of(one, other)));
+        Type backwards = new Type.Union(new LinkedHashSet<>(List.of(other, one)));
+
+        assertEquals(forwards, backwards, "the two are one value");
+        assertEquals(Term.hashOf(forwards), Term.hashOf(backwards), "so they are one hash");
+    }
+
     private void walkPayload(Term.Payload payload, Path path) {
         switch (payload) {
             case Term.Payload.Nothing ignored -> { }
@@ -163,10 +181,20 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
             return;
         }
         switch (type) {
+            // The container is asked about before what it holds. A walk that went straight to the
+            // arguments would prove the elements of a collection nothing says how to hash, which is
+            // what a set of type symbols was: its elements were walked and the set itself fell
+            // through to its own hash, which is the sum of theirs.
             case ParameterizedType parameterized -> {
-                for (java.lang.reflect.Type argument : parameterized.getActualTypeArguments()) {
-                    walkType(argument, path.then("each " + shown(parameterized.getRawType())));
+                Class<?> raw = (Class<?>) parameterized.getRawType();
+                Term.Rule holds = Term.ruleFor(raw);
+                if (holds != Term.Rule.ITS_ELEMENTS && holds != Term.Rule.ITS_UNORDERED_ELEMENTS) {
+                    findings.add(shown(raw) + " holds what a term is hashed from and nothing says"
+                            + " how it is taken (" + holds + "), under\n       " + path);
+                    return;
                 }
+                walkType(parameterized.getActualTypeArguments()[0],
+                        path.then("each " + shown(raw)));
             }
             case Class<?> raw -> walkClass(raw, path);
             default -> findings.add("no rule reaches " + shown(type) + ", under\n       " + path);
@@ -210,8 +238,15 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                     walkComponents(type, path);
                 }
             }
-            case ITS_ELEMENTS -> findings.add(shown(type)
-                    + " is taken by its elements, which a class does not say, under\n       " + path);
+            case THE_PARTS_IT_NAMES -> {
+                for (java.lang.reflect.Method part : Term.readersOf(type)) {
+                    walkType(part.getGenericReturnType(),
+                            path.then(shown(type) + " stands for its " + part.getName()));
+                }
+            }
+            case ITS_ELEMENTS, ITS_UNORDERED_ELEMENTS -> findings.add(shown(type)
+                    + " is taken by its elements, and what it holds is not written down here,"
+                    + " under\n       " + path);
             case NONE_HERE -> findings.add("nothing takes " + shown(type) + ", under\n       " + path);
         }
     }

@@ -18,18 +18,17 @@ import souther.compiler.diag.SourcePos;
  *
  * <p>The position it carries is for a reader and takes no part in telling two apart.
  *
- * <p>Hashed by what it is and not by which object it is, which is a different question from
- * equality. A hash has to agree with equality one way only — two that are one hash alike — so a
- * subject told apart by identity may still be hashed by something a reading can say, and it has to
- * be: {@code Object}'s hash is drawn afresh each run, and a term carrying one of these is filed
- * under it.
+ * <p>What a term carrying one of these is hashed from is not which object it is. {@code Object}'s
+ * hash is drawn afresh each run, and a term filed under one would be filed somewhere else the next
+ * time — so the term algebra reads what was written and which occurrence of the reading this is
+ * ({@code Term.STANDS_FOR}), which agrees with equality the one way a hash has to: two that are one
+ * hash alike.
  *
- * <p>What it is taken from is a string and a number, and nothing that holds anything further. A hash
- * a type states for itself is taken at its word by the walk that proves a term is hashed from values
- * ({@link Term#ruleFor}), so what such a hash reads is exactly what nothing else checks — which is a
- * reason to read as little as possible. The position is not among it: it is what a reader is shown
- * and it stands on a {@link souther.compiler.diag.Placement}, whose own hash reads a tree this has
- * no way to answer for.
+ * <p>Named there rather than answered here. A type answering with a hash of its own is where the
+ * walk that proves a term is hashed from values has to stop, and what that hash reads is then the
+ * one thing nothing checks; a type naming what stands for it is walked through like everything
+ * else. Which is why the position is not among what is named: it stands on a {@link
+ * souther.compiler.diag.Placement}, and what that reads is a tree, not a value this can answer for.
  */
 final class EvaluationId {
 
@@ -45,9 +44,14 @@ final class EvaluationId {
         this.occurrence = occurrence;
     }
 
-    @Override
-    public int hashCode() {
-        return what.hashCode() * 31 + occurrence;
+    /** What was written where this stands. */
+    String what() {
+        return what;
+    }
+
+    /** Which one this is of the evaluations its reading has named. */
+    int occurrence() {
+        return occurrence;
     }
 
     SourcePos where() {

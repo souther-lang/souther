@@ -244,7 +244,8 @@ final class Term {
      * place a test cannot ask is a rule a test can only copy.
      */
     enum Rule {
-        /** Its own hash, which for such a class is a function of the value. */
+        /** Its own hash. The platform's own scalars and nothing else: every other class is taken
+         *  apart, so that what a hash of it reads is walked rather than trusted. */
         ITS_OWN_HASH,
         /** Its name: an enum constant's own hash is its identity and is drawn afresh each run. */
         AN_ENUM_BY_NAME,
@@ -252,6 +253,10 @@ final class Term {
         ITS_COMPONENTS,
         /** Each of its elements, in order. */
         ITS_ELEMENTS,
+        /** Each of its elements, in no order — what a set's own equality reads. */
+        ITS_UNORDERED_ELEMENTS,
+        /** The parts it says stand for it ({@link #STANDS_FOR}). */
+        THE_PARTS_IT_NAMES,
         /** Nothing here takes a value of this class. */
         NONE_HERE
     }
@@ -274,6 +279,24 @@ final class Term {
         return RULES.get(type);
     }
 
+    /**
+     * What stands for a value of a class that is neither a scalar nor a record given its equality.
+     *
+     * <p>Named parts and not a hash. A class answering "here is my hash" is a place the walk that
+     * proves a term is hashed from values has to stop, and what such a hash reads is then the one
+     * thing nothing checks — which is how a set of type symbols came to be hashed by the identity of
+     * an enum two levels under it. A class answering "here is what stands for me" is one the walk
+     * goes through, so what it reads is proved like everything else.
+     *
+     * <p>Both of these are told apart by less than what they hold. A type symbol is its address, and
+     * an evaluation is told apart from every other by which object it is — so what is named here is
+     * what may be hashed without giving two equal values two hashes, which for the second is
+     * anything that is a function of the value.
+     */
+    private static final Map<Class<?>, List<String>> STANDS_FOR = Map.of(
+            TypeSymbol.AtModule.class, List.of("key"),
+            EvaluationId.class, List.of("what", "occurrence"));
+
     private static Rule ruleOf(Class<?> type) {
         if (Enum.class.isAssignableFrom(type)) {
             return Rule.AN_ENUM_BY_NAME;
@@ -284,13 +307,20 @@ final class Term {
         if (List.class.isAssignableFrom(type)) {
             return Rule.ITS_ELEMENTS;
         }
-        if (type.isRecord()) {
-            // A record given its equality holds it over everything it carries, so its components are
-            // what it is. One stating an equality of its own holds it over some of what it carries,
-            // and taking the rest in would give two equal values two hashes.
-            return statesAHashOfItsOwn(type) ? Rule.ITS_OWN_HASH : Rule.ITS_COMPONENTS;
+        if (java.util.Set.class.isAssignableFrom(type)) {
+            return Rule.ITS_UNORDERED_ELEMENTS;
         }
-        return statesAHashOfItsOwn(type) ? Rule.ITS_OWN_HASH : Rule.NONE_HERE;
+        if (STANDS_FOR.containsKey(type)) {
+            return Rule.THE_PARTS_IT_NAMES;
+        }
+        // A record given its equality holds it over everything it carries, so its components are
+        // what it is. One stating an equality of its own holds it over some of what it carries, and
+        // taking the rest in would give two equal values two hashes — so it says which parts stand
+        // for it or nothing here takes it.
+        if (type.isRecord() && !statesAHashOfItsOwn(type)) {
+            return Rule.ITS_COMPONENTS;
+        }
+        return Rule.NONE_HERE;
     }
 
     /**
@@ -321,12 +351,12 @@ final class Term {
 
         @Override
         protected java.lang.invoke.MethodHandle[] computeValue(Class<?> type) {
-            java.lang.reflect.RecordComponent[] components = type.getRecordComponents();
+            List<java.lang.reflect.Method> read = readersOf(type);
             java.lang.invoke.MethodHandle[] accessors =
-                    new java.lang.invoke.MethodHandle[components.length];
+                    new java.lang.invoke.MethodHandle[read.size()];
             java.lang.invoke.MethodHandles.Lookup lookup = java.lang.invoke.MethodHandles.lookup();
-            for (int i = 0; i < components.length; i++) {
-                java.lang.reflect.Method accessor = components[i].getAccessor();
+            for (int i = 0; i < read.size(); i++) {
+                java.lang.reflect.Method accessor = read.get(i);
                 accessor.setAccessible(true);
                 try {
                     accessors[i] = lookup.unreflect(accessor)
@@ -340,6 +370,28 @@ final class Term {
             return accessors;
         }
     };
+
+    /** How each of what stands for a value of {@code type} is read: the parts it names, or its
+     *  record components where it names none. */
+    static List<java.lang.reflect.Method> readersOf(Class<?> type) {
+        List<String> named = STANDS_FOR.get(type);
+        List<java.lang.reflect.Method> read = new ArrayList<>();
+        try {
+            if (named != null) {
+                for (String part : named) {
+                    read.add(type.getDeclaredMethod(part));
+                }
+                return read;
+            }
+            for (java.lang.reflect.RecordComponent component : type.getRecordComponents()) {
+                read.add(component.getAccessor());
+            }
+            return read;
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(type.getName() + " does not answer what it says stands"
+                    + " for it", e);
+        }
+    }
 
     /**
      * The hash of a value a shape carries, which is a function of that value and of nothing else.
@@ -363,11 +415,24 @@ final class Term {
         return switch (ruleFor(type)) {
             case ITS_OWN_HASH -> value.hashCode();
             case AN_ENUM_BY_NAME -> ((Enum<?>) value).name().hashCode();
-            case ITS_COMPONENTS -> componentsOf(value, type);
+            case ITS_COMPONENTS, THE_PARTS_IT_NAMES -> componentsOf(value, type);
             case ITS_ELEMENTS -> elementsOf((List<?>) value);
+            case ITS_UNORDERED_ELEMENTS -> unorderedOf((java.util.Set<?>) value);
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term hashed from a " + type.getName() + " is hashed from");
         };
+    }
+
+    /** What a set holds, taken so that the answer does not depend on the order it hands them over
+     *  in — which is what its own equality reads, and a hash that read more would give two equal
+     *  sets two hashes. */
+    private static int unorderedOf(java.util.Set<?> values) {
+        int h = values.size();
+        for (Object value : values) {
+            int each = hashOf(value);
+            h += each ^ (each >>> 16);
+        }
+        return h;
     }
 
     /** Which record it is and what it holds. The class is taken in because two records holding alike
