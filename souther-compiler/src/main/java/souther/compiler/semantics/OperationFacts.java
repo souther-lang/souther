@@ -459,22 +459,21 @@ public final class OperationFacts {
         out.addAll(saysNothing(OperationSubject.READING, op("String", "toInt"),
                 op("String", "toDecimal")));
 
-        // And the walks whose answer is what their container holds, where nothing reads that answer
-        // as a number. A join of strings answers no number at any call. A product answers one at
-        // every call its elements are numbers at, and what reads a number is one account at a time:
-        // the account for a walk that adds is read off that walk, and a walk that multiplies would
-        // need its own — how a total is read off a row and what containers come to a given one are
-        // not the sum's answers with the step changed.
+        // And the walk that multiplies what its container holds. It answers a number at every call
+        // its elements are numbers at, and what reads a number is one account at a time: the
+        // account for a walk that adds is read off that walk, and a walk that multiplies would need
+        // its own — how a total is read off a row and what containers come to a given one are not
+        // the sum's answers with the step changed.
         //
-        // `List.concat` is not here. The language writes its body out, and a body is one of the
-        // representations — so it is answered already, and a silence beside that answer would deny
-        // it.
+        // The joins are not here, and are not in range either. What `String.concat` answers is
+        // declared to be a string, so there is no number for a representation to read and nothing
+        // to be silent about; `List.concat` answers a list and is read by the body the language
+        // writes out, which is about that list.
         //
-        // Said rather than left out. These are in range by the shape of their declaration, so an
+        // Said rather than left out. This is in range by the shape of its declaration, so an
         // absence here is an operation nobody has answered for, which is what the range exists to
         // find.
-        out.addAll(saysNothing(OperationSubject.READING, op("List", "product"),
-                op("String", "concat")));
+        out.addAll(saysNothing(OperationSubject.READING, op("List", "product")));
         return List.copyOf(out);
     }
 

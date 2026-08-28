@@ -101,7 +101,7 @@ public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Co
         Map<BindingId, Core> answered = new LinkedHashMap<>();
         walk(body, found, held, provenance, answered);
         Map<BindingId, souther.compiler.inputs.ElementProjection> projected =
-                projections(answered, held, symbols);
+                projections(answered, found, held, provenance, symbols);
         return found.isEmpty() && provenance.isEmpty() ? NONE
                 : new ElementBindings(found, held, provenance, projected);
     }
@@ -117,13 +117,26 @@ public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Co
      * hand. A closure whose answer is no place of its element leaves nothing here — a branch
      * between two of them, arithmetic over one, something built — and that absence is what says a
      * rule about the answer is not a rule about any position.
+     *
+     * <p><b>Onto the element of the container the licence names, and onto no other.</b> The licence
+     * says which container the walk it was proved of walks, and that is the whole of what makes one
+     * element the right one to hang it on. Asked only whether a licence exists, this would put the
+     * projection on whichever binding the parameter happened to be bound to — and where two walks
+     * are in one body, a wiring that crossed them would state of one run what was proved of the
+     * other. That is not a reading lost but a rule attributed to a sequence it was not written
+     * about, so the source is read and agreed with rather than discarded.
      */
     private static Map<BindingId, souther.compiler.inputs.ElementProjection> projections(
-            Map<BindingId, Core> answered, Map<BindingId, Core> held, Symbols symbols) {
+            Map<BindingId, Core> answered, Map<BindingId, Core> containers,
+            Map<BindingId, Core> held, ElementProvenance provenance, Symbols symbols) {
         Map<BindingId, souther.compiler.inputs.ElementProjection> out = new LinkedHashMap<>();
         answered.forEach((parameter, body) -> {
             // The element the closure was applied to, which is what the parameter was bound to.
             if (!(held.get(parameter) instanceof Core.Read read) || read.binding() == null) {
+                return;
+            }
+            if (!readsWhatIsHeldBy(containers.get(read.binding()),
+                    provenance.projectedFrom(parameter), held)) {
                 return;
             }
             java.util.List<String> steps =
@@ -134,6 +147,45 @@ public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Co
             }
         });
         return out;
+    }
+
+    /**
+     * Whether {@code e} reads the value {@code binding} holds, through however many names stand
+     * between them.
+     *
+     * <p>A name in the middle is a name and not another value: a container bound once and read
+     * under a second name is the same container, and the two ends of a licence meet through it. So
+     * the hops are walked and each is compared, rather than the two expressions being matched
+     * against each other — which would make the agreement a question of how a body was spelled.
+     *
+     * <p>By the bindings met, which is what makes it stop: each tells itself from every other, so a
+     * name that came round to itself is one already answered for.
+     *
+     * <p>Reachable to be held to on its own. What it refuses — a licence proved of one walk landing
+     * on the element of another — is a wiring no expansion produces today, so there is no model
+     * that puts a run at the wrong sequence and nothing a compiled body could show. The invariant is
+     * held where it is decided instead, which is here.
+     */
+    static boolean readsWhatIsHeldBy(Core e, BindingId binding,
+                                     Map<BindingId, Core> held) {
+        if (binding == null) {
+            return false;
+        }
+        java.util.Set<BindingId> met = new java.util.HashSet<>();
+        Core at = e;
+        while (at != null) {
+            if (at instanceof Core.LetIn let) {
+                at = let.body();
+            } else if (at instanceof Core.Read read) {
+                if (binding.equals(read.binding())) {
+                    return true;
+                }
+                at = met.add(read.binding()) ? held.get(read.binding()) : null;
+            } else {
+                return false;
+            }
+        }
+        return false;
     }
 
     private static void walk(Core e, Map<BindingId, Core> found, Map<BindingId, Core> held,

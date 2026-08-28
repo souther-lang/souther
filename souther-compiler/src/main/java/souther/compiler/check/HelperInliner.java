@@ -1515,7 +1515,7 @@ public final class HelperInliner {
                 // it does was proved where the operation handing it out still stood. What is
                 // recorded is the pair and no expression: what the closure answers is read off the
                 // tree afterwards, under the licence this gives.
-                if (walked != null && helper.params().size() == 1) {
+                if (walked != null) {
                     provenance.projectsEachElementOf(f.id(), walked);
                 }
                 if (mapsEach != null

@@ -9,6 +9,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -178,6 +179,38 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
         assertNotNull(handed, "the emitted walk says which binding an element arrives under");
         assertEquals(checked.elements().projected().keySet().iterator().next(), handed,
                 "and it is the one the closure's answer was recorded against");
+    }
+
+    /**
+     * The projection is hung on the element of the container the licence names, and on no other.
+     *
+     * <p>The third of the three that have to agree, and the one that is not a reading but an
+     * identity: the licence was proved of one walk, and the element it is put on has to be an
+     * element of that walk's container. Asked only whether a licence exists, a body with two walks
+     * in it would take whichever binding the parameter happened to be bound to — and a rule about
+     * one sequence's total would be measured against another sequence. That is not a reading lost
+     * but a false one.
+     *
+     * <p>Held here rather than through a model, because no model reaches it: every expansion wires
+     * the two ends of a licence together, so there is no source text that crosses them. What can be
+     * asked of a real body is the agreement itself, over the bindings that body really has.
+     */
+    @Test
+    void theProjectionGoesOnlyOnAnElementOfTheContainerTheLicenceNames() {
+        ElementBindings elements = elements("projected");
+        BindingId parameter = elements.provenance().projectedFrom().keySet().iterator().next();
+        BindingId source = elements.provenance().projectedFrom(parameter);
+        BindingId element = elements.projected().keySet().iterator().next();
+        Core container = elements.containers().get(element);
+
+        assertTrue(ElementBindings.readsWhatIsHeldBy(container, source, elements.held()),
+                "the element the projection was hung on is an element of the container the licence"
+                        + " names, through however many names stand between them");
+        assertFalse(ElementBindings.readsWhatIsHeldBy(container, element, elements.held()),
+                "and a licence naming some other binding is not that agreement: an element is no"
+                        + " container of itself, and a walk is not licensed by another's proof");
+        assertFalse(ElementBindings.readsWhatIsHeldBy(container, null, elements.held()),
+                "no licence, no agreement — a run needs the source to be named, not merely absent");
     }
 
     /** A walk nothing proved anything about answers no projection, however it is shaped. */

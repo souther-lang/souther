@@ -65,6 +65,12 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
             let throughAHelper (lines) =
                 if total(lines) >= 100000 then Needed else NotNeeded
 
+            behavior throughALocalName : (lines: List<Item>) -> Verdict
+            let throughALocalName (lines) = {
+                let amounts = List.map(line -> line.amount.value, lines)
+                if List.sum(amounts) >= 100000 then Needed else NotNeeded
+            }
+
             data TooSmall
             behavior underAGuard : (lines: List<Item>) -> Needed | TooSmall
             let underAGuard (lines) = {
@@ -96,12 +102,33 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
     }
 
     /**
+     * A name in the middle is a name, and the rule either side of it is one rule.
+     *
+     * <p>The mapped list bound before it is totalled, which is how a model of any size writes this
+     * and how the model that started all of it does. What a name stands for is the reading of the
+     * input's answer, so the walk is met through it — read off the expression as written instead,
+     * this shape and the one above are two different rules, and which one an author wrote is
+     * whether they gave the list a name.
+     */
+    @Test
+    void aNameBetweenTheWalkAndTheTotalChangesNothing() {
+        String report = report();
+        for (String point : List.of("ON", "OFF", "IN", "OUT")) {
+            assertTrue(report.contains("the " + point + " point throughALocalName/"
+                            + "List.sum(lines[*].amount)"),
+                    () -> "the same " + point + " point is owed whether or not the mapped list was"
+                            + " given a name: " + report);
+        }
+    }
+
+    /**
      * A total of what a walk answered is measured at the number, and the place its values are read
      * from keeps no class.
      */
     @Test
     void aTotalOfAProjectionIsMeasuredAndTheElementKeepsNoClass() {
-        for (String behavior : List.of("overAProjection", "throughAHelper", "underAGuard")) {
+        for (String behavior : List.of("overAProjection", "throughAHelper", "underAGuard",
+                "throughALocalName")) {
             // The place the values are read from and not every place: a `Bool` beside them is
             // divided by its own type, which no rule about a total has anything to do with. What
             // must not be here is a class of the numbers the total was added up from.

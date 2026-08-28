@@ -68,23 +68,45 @@ public final class InputNumber {
      * ones that rewrite happens to recognise, and a walk an author wrote by hand would be read as
      * a {@code map}.
      *
+     * <p>The walk is met under whatever name is in scope, and what a name stands for is asked of
+     * the reading that owns the question ({@link InputReads#meaningOf}) rather than read off the
+     * tree. A model of any size binds the mapped list before totalling it, and a route that walked
+     * only the expression as written would answer one thing for
+     * {@code List.sum(List.map(f, xs))} and another for the same rule with a name in the middle —
+     * which is a `let` changing what a model means. The environment the value was given in comes
+     * with it, so what is read of the walk afterwards is read where the walk stands.
+     *
      * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
      * rather than a rule the model does not state — and is reported as one.
      */
     private static NumericTerm overARun(NumericMeasures.Measured measured, InputReads reads,
                                         Symbols symbols) {
+        Core walk = measured.of();
+        InputReads where = reads;
+        // By the bindings met, so a name that came round to itself stops rather than being followed
+        // again. Bindings are added on the way down and each tells itself from every other, so this
+        // is the shape of the tree saying so and not a depth somebody chose.
+        java.util.Set<souther.compiler.types.BindingId> met = new java.util.HashSet<>();
+        while (walk instanceof Core.Read read) {
+            if (!met.add(read.binding())
+                    || !(where.meaningOf(read, symbols) instanceof ReadMeaning.Through through)) {
+                return null;
+            }
+            walk = through.value();
+            where = through.at();
+        }
         souther.compiler.types.BindingId element =
-                souther.compiler.core.GrowingFold.elementBindingOf(measured.of());
+                souther.compiler.core.GrowingFold.elementBindingOf(walk);
         if (element == null) {
             return null;
         }
-        ElementProjection answered = reads.elements().projectionAt(element);
-        TermPath at = reads.elementAt(element, symbols);
+        ElementProjection answered = where.elements().projectionAt(element);
+        TermPath at = where.elementAt(element, symbols);
         if (answered == null || at == null) {
             return null;
         }
         TermPath under = answered.from(at);
-        Type stands = reads.read().typeAt(under, symbols);
+        Type stands = where.read().typeAt(under, symbols);
         return stands == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(),
                         new RunSource.ProjectedOccurrences(under), stands, symbols);

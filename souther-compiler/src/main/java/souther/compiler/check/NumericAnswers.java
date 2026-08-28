@@ -139,16 +139,47 @@ public final class NumericAnswers {
     }
 
     /**
+     * Whether an operation declaring {@code result} leaves to the call what number, if any, it
+     * answers.
+     *
+     * <p>{@code List.sum} is declared {@code (List<'a>) -> 'a} and answers an {@code Int} at one
+     * call and a {@code Decimal} at the next; {@code String.concat} is declared to answer a
+     * {@code String} and answers one at every call there is. The first is a question the
+     * declaration does not settle and the second is one it does, and the difference is whether the
+     * answer's type is still open.
+     *
+     * <p>Both halves of the two-stage reading turn on it, so it is read once. Left out, an
+     * operation whose answer is a container or a string is asked which representation reads the
+     * number it answers — and the only answer it can be given is that nothing does, which is a
+     * denial about a number that is not there.
+     */
+    static boolean answerIsLeftToTheCall(Type result) {
+        return result instanceof Type.Open;
+    }
+
+    /**
      * Whether {@code operation} answers a number for some value it could be given.
      *
      * <p>The question a reader of declarations can ask, where {@link #typeOf} is the one a reader of
      * a call can. What it may not do is decide the second: a sum over a list of text answers no
      * number and is the same operation as a sum over a list of whole numbers, so an operation
      * refused here would be refused for every call including the ones that do answer one.
+     *
+     * <p>Accumulating is not on its own enough. A join of strings walks a container from an
+     * identity through a step exactly as a sum does, and what it answers is declared: no call of it
+     * answers a number, and the walk says nothing about that either way.
      */
     static boolean mayAnswerANumber(ValueName operation, Stdlib library) {
-        return OperationFacts.accumulatedContainer(operation) != null
-                || typeOf(operation, library) != null;
+        if (typeOf(operation, library) != null) {
+            return true;
+        }
+        if (OperationFacts.accumulatedContainer(operation) == null
+                || !(operation instanceof ValueName.Stdlib.Operation named)) {
+            return false;
+        }
+        Stdlib.Entry entry = library.entry(named);
+        return entry != null && entry.signature() != null
+                && answerIsLeftToTheCall(entry.signature().result());
     }
 
     private NumericAnswers() {}
