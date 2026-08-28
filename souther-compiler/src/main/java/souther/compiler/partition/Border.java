@@ -186,7 +186,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
     /** Where the line is, as a report names it. Not what any one of its points asks for: that is
      *  {@link #label(PointRole)}, and the two differ at three of the four. */
     public String label() {
-        return cut.left() + " = " + cut.right();
+        return cut.label();
     }
 
     /**
