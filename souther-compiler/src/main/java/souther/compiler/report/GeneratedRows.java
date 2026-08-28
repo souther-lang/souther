@@ -639,10 +639,11 @@ public final class GeneratedRows {
             case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
             case About.ACaseNoRowAppliesItTo(var input, var missing) -> missing.name();
             case About.ACaseNoRowExpects(var missing) -> missing.name();
-            // The class and the position it is a class of, which a class name alone does not say:
-            // two parameters of one type divide into classes of the same names.
+            // The class and the measure it is a class of, which a class name alone does not say:
+            // two parameters of one type divide into classes of the same names, and one location is
+            // measured at more than one number.
             case About.AClassNoRowIsIn(var missing) ->
-                    missing.name() + " at " + missing.axis().path();
+                    missing.name() + " at " + missing.axis().name();
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is
             // asked to name. Listed rather than defaulted so that a shape added later has to be
             // given words here.

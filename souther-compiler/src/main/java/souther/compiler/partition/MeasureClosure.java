@@ -159,7 +159,7 @@ public final class MeasureClosure {
      * afterwards, the two would be built from whatever their caller had in hand at the time, which
      * is the second bookkeeping this type exists to prevent.
      *
-     * @param axes    every position the reading kept, measured or not
+     * @param positions every position the reading kept, measured or not
      * @param lines   what the line reading of this behavior found and what it made of each, from
      *                both of the producers there are. Here so that a conclusion about the reading is
      *                drawn from what it produced beside what it found, and not from the gaps alone
@@ -170,7 +170,8 @@ public final class MeasureClosure {
      *                and it is the rule's own reason that answers
      *                ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort})
      */
-    static Both of(List<Axis> axes, List<souther.compiler.inputs.StandingQuestion> asked,
+    static Both of(List<PositionAccount> positions,
+                   List<souther.compiler.inputs.StandingQuestion> asked,
                    List<souther.compiler.inputs.RuleWithoutALine> refused, LinesRead lines) {
         lines.everyLineFoundWasDrawn();
         Set<ClosureGap> partition = new LinkedHashSet<>();
@@ -183,22 +184,27 @@ public final class MeasureClosure {
                 border.add(new ClosureGap.RuleUnread(rule));
             }
         }
-        for (Axis axis : axes) {
-            // Read off what the reading settled and never off what the axis is still waiting on. A
-            // position a body's rule divides keeps no continuation, and was still never entered:
-            // asked of the continuation, the one model where the two come apart said nothing at all
-            // about the position it could not read (issue #1084).
-            BlockedDescent blocked = axis.residue().blockedDescent();
+        // Over the positions and not over the measures made of them. What a reading of a position
+        // came to is the position's, and a location is measured at as many numbers as the rules
+        // name of it: read off the measures, one stop at one location is one entry per number, which
+        // is a compiler's own state counted several times.
+        for (PositionAccount at : positions) {
+            // Read off what the reading settled and never off what the position is still waiting
+            // on. A position a body's rule divides keeps no continuation, and was still never
+            // entered: asked of the continuation, the one model where the two come apart said
+            // nothing at all about the position it could not read (issue #1084).
+            BlockedDescent blocked = at.residue().blockedDescent();
             if (blocked != null) {
-                ClosureGap gap = new ClosureGap.PositionNotReachedInto(axis.id(), blocked.why());
+                ClosureGap gap = new ClosureGap.PositionNotReachedInto(at.behavior(), at.id(),
+                        blocked.why());
                 partition.add(gap);
                 border.add(gap);
             }
-            for (RulesLeftUnread unread : axis.residue().rulesLeftUnread()) {
+            for (RulesLeftUnread unread : at.residue().rulesLeftUnread()) {
                 if (derived(unread)) {
                     continue;
                 }
-                ClosureGap gap = new ClosureGap.RulesNotReached(axis.id());
+                ClosureGap gap = new ClosureGap.RulesNotReached(at.behavior(), at.id());
                 partition.add(gap);
                 border.add(gap);
             }

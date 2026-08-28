@@ -471,6 +471,18 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                Measurement<Reached> reached) {
 
         /**
+         * What a document calls this measure, which is the number it is of.
+         *
+         * <p>Not the location. A location is measured at as many numbers as the rules name of it —
+         * which hour of a time and which minute are two — and named by the location a reader is
+         * given two lines that say the same thing about different measures. The path is still here
+         * and is what a fact about the location is said of.
+         */
+        public String name() {
+            return at.term();
+        }
+
+        /**
          * What the rows reached at one position.
          *
          * @param unclassifiedRows rows whose value at this position could not be read. Above zero,

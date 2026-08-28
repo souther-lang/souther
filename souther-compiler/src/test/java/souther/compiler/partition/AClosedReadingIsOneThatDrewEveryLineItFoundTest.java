@@ -45,7 +45,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.returning(List.of(read.drew(aBorder("cap"))));
 
         MeasureClosure.Both closed =
-                MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read);
+                MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read);
 
         assertInstanceOf(MeasureClosure.OfTheBorder.Closed.class, closed.border(),
                 "every question this measure answers was answered");
@@ -65,7 +65,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.found(aLine(), bound("cap"));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith("a line this reading found and did not draw"),
                 refused.getMessage());
@@ -87,7 +87,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.drew(aBorder("cap"));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith("a line drawn more than once"),
                 refused.getMessage());
@@ -102,7 +102,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.drew(aBorder("floor"));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith("a border this reading cannot account for"),
                 refused.getMessage());
@@ -124,7 +124,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.returning(List.of(aBorder("cap"), aBorder("floor")));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith(
                         "a border returned by a reading that did not write it down"),
@@ -142,11 +142,17 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.returning(List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(anAxis()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith(
                         "a border this reading drew and did not return"),
                 refused.getMessage());
+    }
+
+    /** The position the lines here are of. This measure's closure is about what the reading of a
+     *  position came to, and the axis on it is not what that is asked of. */
+    private static PositionAccount aPosition() {
+        return PositionAccount.at("f", TermPath.of("h").then("a"), Type.INT);
     }
 
     private static Axis anAxis() {

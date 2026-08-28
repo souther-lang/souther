@@ -66,4 +66,36 @@ public sealed interface BodyCutInspection {
             }
         }
     }
+
+    /**
+     * What this phase came to about one position, where it answered once per number the position is
+     * measured at.
+     *
+     * <p>A location is measured at as many numbers as the rules name of it, and this phase answers
+     * about each of those. What a report says about the location is one sentence, so the answers are
+     * put together here rather than printed one apiece — a position is not divided no way twice
+     * over.
+     *
+     * <p>A line anywhere outranks everything: the position is divided, whichever of its numbers the
+     * line is on. Then a rule that came to nothing outranks the rules having been exhausted, for the
+     * reason the arms are three and not two — a rule is written here, and saying the reading ran out
+     * would be the opposite of what that rule says. Between two of those, whichever
+     * {@link LeftAtThePosition#outranking} puts first.
+     */
+    static BodyCutInspection outranking(BodyCutInspection first, BodyCutInspection second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        if (first instanceof Evidence || second instanceof Evidence) {
+            return new Evidence();
+        }
+        if (first instanceof NoLine(LeftAtThePosition one)
+                && second instanceof NoLine(LeftAtThePosition other)) {
+            return new NoLine(LeftAtThePosition.outranking(one, other));
+        }
+        return first instanceof NoLine ? first : second;
+    }
 }

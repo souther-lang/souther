@@ -72,9 +72,15 @@ public sealed interface ClosureGap {
      * not all reached, which is what this says. The reason stays inside
      * ({@link souther.compiler.inputs.RulesLeftUnread}) because a document naming it would make a
      * change to how this compiler traverses a model into a change to what its documents carry. Two
-     * of these at one axis are one entry, which is that sentence said once.
+     * of these at one position are one entry, which is that sentence said once.
+     *
+     * <p><b>And whose position it is.</b> An account of one behavior is put together with another's
+     * — a module's is the union of them — and a union keeps one of two equal facts. Two behaviors
+     * taking one type have positions spelled alike, so without the behavior the second of them
+     * would be the first said again.
      */
-    record RulesNotReached(AxisId at) implements ClosureGap {}
+    record RulesNotReached(String behavior, souther.compiler.inputs.PositionId at)
+            implements ClosureGap {}
 
     /**
      * A position the walk could not reach into, with what the structural reading found instead.
@@ -86,17 +92,20 @@ public sealed interface ClosureGap {
      * an arm taken from a second representation of a fact, which is the mistake #953 is about, in
      * miniature.
      *
-     * <p><b>{@code at} names the axis carrying the fact, and the position is that axis's path.</b>
-     * The two come apart: a {@code Map} nothing can be read into, under a rule about its size, is
-     * measured at the size and the axis is named for that term. So this is not "the identity of the
-     * position that was blocked" — it is the axis a reader holding these numbers is being told
-     * something about, which is the one thing a gap beside a measurement is for. Keyed by the
-     * position instead, this arm and {@link RulesNotReached} would name a behavior's findings in two
-     * vocabularies.
+     * <p><b>{@code at} names the position, and not a number measured of it.</b> A location is
+     * measured at as many numbers as the rules name of it, and one stop under the location is one
+     * thing that went wrong however many of those there are. Named for a measure, it is one entry
+     * per number and no reader can tell that from several stops. What weakens one measurement is
+     * said per measurement elsewhere; these are one behavior's account of what its reading of the
+     * model came to, and a reader holding a measure reaches its position by the path it reads from.
+     *
+     * <p>{@link RulesNotReached} is keyed the same way, so the two are one vocabulary, and both
+     * carry whose position it is for the reason given there.
      *
      * <p>Written from {@link souther.compiler.inputs.BlockedDescent} and never from what the axis is
      * still waiting on. A position something answered for keeps no continuation, and was still never
      * entered.
      */
-    record PositionNotReachedInto(AxisId at, BlockReason.AboutThePosition why) implements ClosureGap {}
+    record PositionNotReachedInto(String behavior, souther.compiler.inputs.PositionId at,
+                                  BlockReason.AboutThePosition why) implements ClosureGap {}
 }

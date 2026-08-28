@@ -52,49 +52,62 @@ public final class LinesWhereTheyFall {
      * place nobody meant and a reason nobody established. So it comes back as a finding naming the
      * rule, and a reader is told what actually happened to it.
      */
-    public record Filed(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                        List<LineDrawn> between, List<RuleWithoutALine> notPlaced) {
+    public record Filed(List<LineEvidence> evidence, List<LineDrawn> between,
+                        List<RuleWithoutALine> notPlaced) {
 
         public Filed {
-            thresholds = List.copyOf(thresholds);
-            singled = List.copyOf(singled);
+            evidence = List.copyOf(evidence);
             between = List.copyOf(between);
             notPlaced = List.copyOf(notPlaced);
+        }
+
+        /** The lines, for a reader that wants only those. Read off the one list and not kept
+         *  beside it. */
+        public List<Threshold> thresholds() {
+            return LineEvidence.linesIn(evidence);
+        }
+
+        /** The values singled out, likewise. */
+        public List<GuardThresholds.Guards.Singled> singled() {
+            return LineEvidence.pointsIn(evidence);
         }
     }
 
     /** Every measurement where its name was filed, and the lines this had nowhere to put. */
-    public static Filed of(InputDomain inputs, List<Threshold> thresholds,
-                           List<GuardThresholds.Guards.Singled> singled, List<LineDrawn> between,
+    public static Filed of(InputDomain inputs, List<LineEvidence> evidence,
+                           List<LineDrawn> between,
                            souther.compiler.inputs.Quantities quantities, Symbols symbols) {
-        List<Threshold> outThresholds = new ArrayList<>();
-        List<GuardThresholds.Guards.Singled> outSingled = new ArrayList<>();
+        List<LineEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
         List<RuleWithoutALine> notPlaced = new ArrayList<>();
-        for (Threshold each : thresholds) {
-            switch (standingOf(inputs, each.term(), symbols, each.origin())) {
-                case WhereTheNameStands.AsWritten(NumericTerm at) ->
-                        outThresholds.add(thresholdAt(each, at));
-                case WhereTheNameStands.FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
-                    outThresholds.add(thresholdAt(each, first));
-                    rest.forEach(at -> outThresholds.add(thresholdAt(each, at)));
-                }
-            }
-        }
-        for (GuardThresholds.Guards.Singled each : singled) {
-            switch (standingOf(inputs, each.term(), symbols, each.origin())) {
-                case WhereTheNameStands.AsWritten(NumericTerm at) ->
-                        outSingled.add(singledAt(each, at));
-                case WhereTheNameStands.FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
-                    outSingled.add(singledAt(each, first));
-                    rest.forEach(at -> outSingled.add(singledAt(each, at)));
-                }
-            }
+        // One pass in the order the rules were read, so what comes out is in that order too. A pass
+        // per kind of thing a rule can say puts every range before every equality, whatever order a
+        // body wrote them in, and every reader downstream takes the numbers in that order.
+        for (LineEvidence each : evidence) {
+            // Every number the name stands at, filed together. Filing is one rule to as many
+            // positions as its name reaches, so a piece put out one part at a time can leave the
+            // others behind — and the account that runs after this begins with what comes out of
+            // here, so it has nothing to say those others were ever expected. There is no partial
+            // filing to write: what a name stands at is one list and this maps it.
+            List<NumericTerm> destinations =
+                    standingOf(inputs, each.at(), symbols, each.by()).all();
+            destinations.forEach(at -> out.add(measuredAt(each, at)));
         }
         for (LineDrawn each : between) {
             place(inputs, each, quantities, symbols, outBetween, notPlaced);
         }
-        return new Filed(outThresholds, outSingled, outBetween, notPlaced);
+        return new Filed(out, outBetween, notPlaced);
+    }
+
+
+    /** The same piece of evidence, measured at {@code at}. */
+    private static LineEvidence measuredAt(LineEvidence evidence, NumericTerm at) {
+        return switch (evidence) {
+            case LineEvidence.Divides(Threshold line) ->
+                    new LineEvidence.Divides(thresholdAt(line, at));
+            case LineEvidence.Singles(GuardThresholds.Guards.Singled point) ->
+                    new LineEvidence.Singles(singledAt(point, at));
+        };
     }
 
     /** The same threshold, measured at {@code at}. */
@@ -256,6 +269,26 @@ public final class LinesWhereTheyFall {
      * these two, so a reader asking whether the name moved never reads it off a length.
      */
     private sealed interface WhereTheNameStands {
+
+        /**
+         * Every number the name stands at, never none.
+         *
+         * <p>Asked as the whole list so that filing a piece of evidence is one step. Taken apart by
+         * the caller — the first here, the rest there — the walk has as many places to add as the
+         * shape has parts, and a piece filed at three positions can leave two behind while the
+         * account beside it, which starts after this stage, has no way of knowing there were three.
+         */
+        default List<NumericTerm> all() {
+            return switch (this) {
+                case AsWritten(NumericTerm term) -> List.of(term);
+                case FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
+                    List<NumericTerm> every = new ArrayList<>();
+                    every.add(first);
+                    every.addAll(rest);
+                    yield List.copyOf(every);
+                }
+            };
+        }
 
         /**
          * Nothing was filed for this name, so the line stays where the model wrote it.

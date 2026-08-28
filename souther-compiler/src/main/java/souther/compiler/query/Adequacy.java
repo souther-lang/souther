@@ -4466,18 +4466,19 @@ public final class Adequacy {
             }
             // A position the axes did measure, whose rules this reading is short of. A different
             // thing to act on from one nothing divided: the classes beside it are what the model
-            // was read to say, and what was left unread may yet refuse one of them. What says how
-            // much was read is what the axis carries — asked here rather than worked out a second
-            // time from the lists above, which answer about rules and not about positions.
-            for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-                // A position the axes measure whose rules nothing looked at. Said apart from the
-                // rules below: there is no rule to name, and there is no rule to name because
-                // nothing was seen rather than because everything was accounted for.
-                if (axis.read().reach()
-                        == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
+            // was read to say, and what was left unread may yet refuse one of them.
+            //
+            // Read off what the reading of the model recorded, and not off the measures it
+            // weakened. A location is measured at as many numbers as the rules name of it and one
+            // stop under the location weakens every one of them, so a finding per measure is one
+            // thing that went wrong said as many times as the location has numbers. Which measures
+            // it weakened is each measure's own to carry beside its classes.
+            for (Weakening each : partition.partitioned().weakening().causes()) {
+                if (each instanceof Weakening.ModelReadingIncomplete(
+                        souther.compiler.partition.ClosureGap.RulesNotReached gap)) {
                     out.add(Finding.noticed(behavior.name(),
                             Citation.of(behavior.pos()),
-                            new About.APositionWhoseRulesWereNotReached(axis)));
+                            new About.APositionWhoseRulesWereNotReached(gap)));
                 }
             }
             // One per question a rule raised and nothing answered, whether or not the position it
@@ -4669,7 +4670,7 @@ public final class Adequacy {
                         // words — which are the words the report writes for the same finding.
                         case About.AClassNoRowIsIn(var missing) ->
                                 new ExampleMessage.NoRowIsInThatClass(missing.name(),
-                                        missing.axis().path(), finding.named());
+                                        missing.axis().name(), finding.named());
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.

@@ -2176,6 +2176,7 @@ public final class Generator {
             return null;
         }
         Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
+        LocationWrites writing = new LocationWrites();
         for (int i : moved) {
             Axis axis = axes.get(i);
             if (axis.path().steps().size() != 1
@@ -2195,7 +2196,16 @@ public final class Generator {
                     instanceof RepresentativeSource.Evaluation.Values values)) {
                 return null;
             }
-            fields.put(field.name(), values.written().get(0));
+            // A field two of the moved axes are of. The baseline can be written for one of them or
+            // for the other and this walk writes fields, so it writes neither and says the
+            // parameter cannot be written — which is what every other thing it cannot do here
+            // answers with.
+            FixtureTemplate written = values.written().get(0);
+            if (writing.write(axis.path(), List.of(written))
+                    == LocationWrites.Written.CONFLICTING) {
+                return null;
+            }
+            fields.put(field.name(), written);
         }
         if (fields.isEmpty()) {
             return null;
@@ -2340,7 +2350,7 @@ public final class Generator {
                                               java.util.function.Function<NumericTerm, Carrier> on,
                                               Map<NumericTerm, Place> fixing,
                                               Reachability.Reaching reaching, CandidateCheck check) {
-        Map<TermPath, List<FixtureTemplate>> decided = new LinkedHashMap<>();
+        LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
         // and taking the bottom of the type's range instead is how a boundary that can be written
@@ -2385,12 +2395,18 @@ public final class Generator {
             // length and the string itself — and what a row writes at a location is one value. The
             // fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
             // rather than writing whichever came last and offering half the point as the whole.
-            if (decided.containsKey(at)) {
+            //
+            // Refused whatever the second edge offers, and not only where it offers something else.
+            // What is recorded beside the value here — where the row settles and what the edge held
+            // back — is the edge's own answer, and two edges have two of those however alike their
+            // values are. Written as one, the row would carry one edge's account of a place both
+            // were asked about.
+            if (decided.holds(at)) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
                         where.unrepresented());
             }
-            decided.put(at, edge.values());
+            decided.write(at, edge.values());
             // The orders the value was built against, kept so that reading it back asks the
             // question building it asked rather than a second reading of the same position.
             builtOn.put(each.getKey(), edge.on());
@@ -2420,7 +2436,7 @@ public final class Generator {
                 // refuse.
                 if (term.path().head().equals(head)
                         && reaching.requirements().at(term.path()) == null) {
-                    here.put(term.path(), decided.get(term.path()));
+                    here.put(term.path(), decided.at(term.path()));
                 }
             }
             Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(), certified);
@@ -3196,7 +3212,7 @@ public final class Generator {
      */
     private static Attempt build(Subject subject, List<Axis> axes, int[] where,
                                  CandidateCheck check, Map<String, FixtureTemplate> given) {
-        Map<TermPath, List<FixtureTemplate>> decided = new LinkedHashMap<>();
+        LocationWrites decided = new LocationWrites();
         // What every position of this row has to be for the classes it sits in to exist. Read off
         // the paths and off the classes together, because both state one: a position under a
         // refinement requires it by being there at all, and a class of the position above states
@@ -3237,8 +3253,15 @@ public final class Generator {
                 // location decided twice, under two names. The plan reads the first of them and the
                 // class fixed at the narrowed position is never looked at.
                 case RepresentativeSource.Evaluation.Values values -> {
-                    if (cls.selects() == null) {
-                        decided.put(path, values.written());
+                    if (cls.selects() == null
+                            && decided.write(path, values.written())
+                                    == LocationWrites.Written.CONFLICTING) {
+                        // Two of this row's classes are of one location and offer different values
+                        // for it. Taking either leaves the other's class unanswered while the row
+                        // is offered as covering it, so neither is taken.
+                        return new Attempt(null,
+                                UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
+                                Optional.of("`" + path + "` would have to hold two values at once"));
                     }
                 }
                 // Not a value but how one is arrived at: the walk below builds one at this position,
@@ -3294,14 +3317,13 @@ public final class Generator {
      * parameters of eight either-or fields are two searches of 256, not one of 65,536.
      */
     private static Outcome valueFor(Subject subject, int p, List<Axis> axes,
-                                    Map<TermPath, List<FixtureTemplate>> decided,
+                                    LocationWrites decided,
                                     Requirements required, CandidateCheck check) {
         TermPath at = TermPath.of(subject.parameters().get(p));
         Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
         for (Axis axis : axes) {
-            if (axis.path().head().equals(at.head())
-                    && decided.containsKey(axis.path())) {
-                here.put(axis.path(), decided.get(axis.path()));
+            if (axis.path().head().equals(at.head()) && decided.holds(axis.path())) {
+                here.put(axis.path(), decided.at(axis.path()));
             }
         }
         return valueAt(subject, p, here, settledIn(here), required, check);

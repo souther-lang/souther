@@ -2,6 +2,7 @@ package souther.compiler.reading;
 
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.ForkOccurrence;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
 /**
@@ -30,13 +31,19 @@ public sealed interface Condition {
     /**
      * A comparison in the body coming out one way.
      *
+     * <p><b>Said of the number it compares and not of the location that number is read from.</b>
+     * Two numbers taken of one location — which hour of a time it is and which minute — are two
+     * things to steer a row by and one path, so a reader given the path has to pick between them
+     * and has nothing to pick with.
+     *
+     * @param at         which number, which is a location's own content or something taken of it
      * @param comparison which comparison, which is what tells one reading of one rule from another:
      *                   a comparison inside a non-recursive helper is read once per call of that
      *                   helper. The occurrence and not the number it is instrumented under — the
      *                   number is how a run is recorded and is no part of what this decision is
      * @param held       the way it came out
      */
-    record Side(TermPath at, ComparisonOccurrence comparison, boolean held) implements Condition {
+    record Side(NumericTerm at, ComparisonOccurrence comparison, boolean held) implements Condition {
 
         @Override
         public String toString() {

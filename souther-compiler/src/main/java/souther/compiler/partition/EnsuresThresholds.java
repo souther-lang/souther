@@ -72,17 +72,26 @@ public final class EnsuresThresholds {
      *                lines alone would have that said of it — which is a sentence about the model,
      *                and the model says otherwise in its own declaration
      */
-    public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
+    public record Clauses(List<LineEvidence> evidence,
                           List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {
 
-        public static final Clauses NONE =
-                new Clauses(List.of(), List.of(), List.of(), List.of());
+        public static final Clauses NONE = new Clauses(List.of(), List.of(), List.of());
 
         public Clauses {
-            thresholds = List.copyOf(thresholds);
-            singled = List.copyOf(singled);
+            evidence = List.copyOf(evidence);
             between = List.copyOf(between);
             rulesWithoutALine = List.copyOf(rulesWithoutALine);
+        }
+
+        /** The lines, read off what the walk said. Not a list of their own, for the reason
+         *  {@link GuardThresholds.Guards#thresholds} is not one. */
+        public List<Threshold> thresholds() {
+            return LineEvidence.linesIn(evidence);
+        }
+
+        /** The values singled out, likewise. */
+        public List<GuardThresholds.Guards.Singled> singled() {
+            return LineEvidence.pointsIn(evidence);
         }
     }
 
@@ -117,7 +126,7 @@ public final class EnsuresThresholds {
         }
         InputReads reads = InputReads.ofWhatIsDeclared(inputs, rootsOf(stated.params()));
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new ArrayList<>(), new ArrayList<>());
+                new ArrayList<>());
         for (StatedContract.StatedRule rule : stated.rules()) {
             String clause = labelOf(rule);
             // Which line of the clause each one is, counted over every comparison the clause states
@@ -134,13 +143,12 @@ public final class EnsuresThresholds {
                                 quantities, drawn);
             }
         }
-        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.rulesWithoutALine());
+        return new Clauses(drawn.evidence(), drawn.between(), drawn.rulesWithoutALine());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
-    private record Drawn(String behavior, List<Threshold> thresholds,
-                         List<GuardThresholds.Guards.Singled> singled,
+    private record Drawn(String behavior, List<LineEvidence> evidence,
                          List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {}
 
     /**
@@ -215,12 +223,13 @@ public final class EnsuresThresholds {
                     // The value the rule names, for the reason a body's rule gets: where its line
                     // falls and not the value beside it.
                     if (at.value() != null) {
-                        out.singled().add(new GuardThresholds.Guards.Singled(
-                                at.position(), at.value(), origin));
+                        out.evidence().add(new LineEvidence.Singles(
+                                new GuardThresholds.Guards.Singled(
+                                        at.position(), at.value(), origin)));
                     }
                 } else {
-                    out.thresholds().add(new Threshold(at.position(), at.cutting().seam(),
-                            at.cutting().valueBelongsBelow(), origin));
+                    out.evidence().add(new LineEvidence.Divides(new Threshold(at.position(),
+                            at.cutting().seam(), at.cutting().valueBelongsBelow(), origin)));
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at: the classes either side are what the model tells apart, and the border is

@@ -1,12 +1,12 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
@@ -49,7 +49,7 @@ import java.util.List;
  * <p>Three readers are kept apart and are easy to run together. Which comparisons exist is
  * {@link souther.compiler.coverage.ComparisonCatalog}'s answer and which of them a line may be drawn
  * on is {@link BoundaryPolicy}'s; which positions a comparison names at all is
- * {@link #mentioned}; which number a line can be drawn on is {@link #termOf}. The last is the
+ * {@link #mentioned}; which number a line can be drawn on is {@link InputNumber}'s. The last is the
  * narrowest, and asking it the first two questions is how a position a body compares became a
  * position nothing compares.
  */
@@ -63,13 +63,30 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
-    public record Guards(List<Threshold> thresholds,
-                         List<RuleWithoutALine> rulesWithoutALine, List<Singled> singled,
+    public record Guards(List<LineEvidence> evidence,
+                         List<RuleWithoutALine> rulesWithoutALine,
                          List<LineDrawn> between,
                          ReachingCuts reaching) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of(), ReachingCuts.NONE);
+                new Guards(List.of(), List.of(), List.of(), ReachingCuts.NONE);
+
+        public Guards {
+            evidence = List.copyOf(evidence);
+            rulesWithoutALine = List.copyOf(rulesWithoutALine);
+            between = List.copyOf(between);
+        }
+
+        /** The lines, read off what the walk said. Not a list of their own: the walk met these and
+         *  the values it singled out in one order, and holding two lists loses it. */
+        public List<Threshold> thresholds() {
+            return LineEvidence.linesIn(evidence);
+        }
+
+        /** The values singled out, likewise. */
+        public List<Singled> singled() {
+            return LineEvidence.pointsIn(evidence);
+        }
 
         /**
          * A value a body singles out rather than orders.
@@ -95,12 +112,6 @@ public final class GuardThresholds {
             }
         }
 
-        public Guards {
-            thresholds = List.copyOf(thresholds);
-            rulesWithoutALine = List.copyOf(rulesWithoutALine);
-            singled = List.copyOf(singled);
-            between = List.copyOf(between);
-        }
     }
 
 
@@ -124,9 +135,8 @@ public final class GuardThresholds {
                             InputDomain inputs, souther.compiler.inputs.Quantities quantities,
                             Symbols symbols,
                             souther.compiler.check.ElementBindings elements) {
-        List<Threshold> found = new ArrayList<>();
+        List<LineEvidence> found = new ArrayList<>();
         List<RuleWithoutALine> withoutALine = new ArrayList<>();
-        List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
         // The comparisons this reader assessed, and not the positions they were about. A position
         // carries more than one statement and reading one of them settles nothing about the others.
@@ -144,11 +154,11 @@ public final class GuardThresholds {
         ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs, elements), symbols);
         for (ComparisonReadings.Reading each : read.drawn()) {
             lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
-                    singled, between, assessed, withoutALine);
+                    between, assessed, withoutALine);
         }
         // And every comparison the model states something by that this reader never saw.
         noticed(behavior, read, assessed, plan, symbols, withoutALine);
-        return new Guards(found, withoutALine, singled, between, read.reaching(plan));
+        return new Guards(found, withoutALine, between, read.reaching(plan));
     }
 
     /**
@@ -280,9 +290,9 @@ public final class GuardThresholds {
     /**
      * Every position an expression names, however it is written.
      *
-     * <p>Weaker than {@link #termOf} on purpose, and asked instead of it. That one answers whether a
-     * line can be drawn — it wants a number the terms name — and this one answers whether the model
-     * says anything about a position at all. Sharing a reader between the two turns an expression
+     * <p>Weaker than {@link InputNumber#of} on purpose, and asked instead of it. That one answers
+     * whether a line can be drawn — it wants a number the terms name — and this one answers whether
+     * the model says anything about a position at all. Sharing a reader between the two turns an expression
      * the derivation does not model into a position nothing compares: {@code p.x + 1 < 10} named no
      * position, and came back as one the model divides no way two tokens from a comparison about it.
      *
@@ -442,7 +452,7 @@ public final class GuardThresholds {
      * What one side of a comparison came to here.
      *
      * <p>Which positions it names is {@link #mentioned}'s recursive question and which number a
-     * line could be drawn on is {@link #termOf}'s narrower one, and the two are what tell a
+     * line could be drawn on is {@link InputNumber}'s narrower one, and the two are what tell a
      * position inside an expression from a position. Asked the narrow question alone,
      * {@code y + 1} named nothing and a comparison of two positions came back as a form nobody
      * could read.
@@ -518,7 +528,7 @@ public final class GuardThresholds {
     private static void lineAt(String behavior, Core.Binary each, CoverageSites.Plan plan,
                                InputReads reads, Symbols symbols,
                                souther.compiler.inputs.Quantities quantities,
-                               List<Threshold> out, List<Guards.Singled> singled,
+                               List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<Core> assessed, List<RuleWithoutALine> withoutALine) {
         // The plan numbered every comparison of an instrumented condition before anything read a
@@ -546,11 +556,12 @@ public final class GuardThresholds {
                     // beside it. A rule that names no value of the position singles nothing out
                     // here — the position is divided all the same, and what divides it is the line.
                     if (at.value() != null) {
-                        singled.add(new Guards.Singled(at.position(), at.value(), origin));
+                        out.add(new LineEvidence.Singles(
+                                new Guards.Singled(at.position(), at.value(), origin)));
                     }
                 } else {
-                    out.add(new Threshold(at.position(), at.cutting().seam(),
-                            at.cutting().valueBelongsBelow(), origin));
+                    out.add(new LineEvidence.Divides(new Threshold(at.position(),
+                            at.cutting().seam(), at.cutting().valueBelongsBelow(), origin)));
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at. It divides the position — the classes either side are what the model
@@ -642,12 +653,6 @@ public final class GuardThresholds {
                 cutting.valueBelongsBelow(), cutting.holdsAtTheValue(), cutting.singles());
     }
 
-    /** The number a comparison is about, from whichever side names one. */
-    static NumericTerm comparedTerm(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        NumericTerm left = termOf(comparison.left(), reads, symbols);
-        return left != null ? left : termOf(comparison.right(), reads, symbols);
-    }
-
     /**
      * How a reader finds a comparison, which is where it is written.
      *
@@ -669,29 +674,6 @@ public final class GuardThresholds {
                         "a rule was cited at a comparison this catalog does not hold, at "
                                 + comparison.pos())).at());
     }
-
-    /**
-     * The number a comparison names, which is a location's content or something taken of it.
-     *
-     * <p>Which of the standard library's calls count is asked of {@link NumericMeasures} rather than
-     * decided here, and asked of the operation the call resolved to rather than of its spelling. The
-     * argument has to be a location: {@code List.length(List.map(f, xs))} counts something no path
-     * names, and a boundary on it could not be looked for in a row.
-     */
-    static NumericTerm termOf(Core e, InputReads reads, Symbols symbols) {
-        NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
-        if (measured != null) {
-            TermPath of = reads.pathOf(measured.of(), symbols);
-            // Null where the call names a location the operation is not taken of, which a guard can
-            // write and the type checker has already refused elsewhere. Answered here as "no term",
-            // which is what every reader of one is ready for.
-            return of == null ? null : NumericTerm.TakenOf.of(measured.operation(), of,
-                    reads.read().typeAt(of, symbols), symbols);
-        }
-        TermPath path = reads.pathOf(e, symbols);
-        return path == null ? null : new NumericTerm.ValueOf(path);
-    }
-
 
     /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */
     static boolean orderable(Type type, Symbols symbols) {
@@ -717,7 +699,7 @@ public final class GuardThresholds {
      *
      * <p>The two together because no reader of a line wants one without the other, and both readings
      * of a comparison want them the same way round. Neither answer is made here: which position an
-     * expression names is {@link #termOf}'s and which order that position is counted on is the
+     * expression names is {@link InputNumber}'s and which order that position is counted on is the
      * reading of the declarations' ({@link InputDomain#carrierOf}).
      *
      * <p>In particular the expression's own type is not read, here or anywhere a line is drawn. It
@@ -728,7 +710,7 @@ public final class GuardThresholds {
      * border nothing could meet (#1018).
      */
     static Named namedBy(Core e, InputReads reads, Symbols symbols) {
-        NumericTerm term = termOf(e, reads, symbols);
+        NumericTerm term = InputNumber.of(e, reads, symbols);
         if (term == null) {
             return null;
         }
