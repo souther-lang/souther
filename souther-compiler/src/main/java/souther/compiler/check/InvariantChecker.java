@@ -732,7 +732,7 @@ public final class InvariantChecker {
             for (Written each : inOrder) {
                 ReadByClauses one = reader.resolve(byClause.get(each), allowed);
                 one.adopted().forEach(position -> took.record(each.from(), position));
-                took.stoppedBy(each.from(), one.values());
+                took.stoppedBy(each.from(), one.aboutARule());
                 Map<Core, Set<FactSubject>> parts = adoptedBy
                         .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>());
                 byPart.get(each).forEach((part, was) ->

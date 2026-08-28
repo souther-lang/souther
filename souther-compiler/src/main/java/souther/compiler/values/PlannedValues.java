@@ -429,14 +429,19 @@ public sealed interface PlannedValues<A> {
      *
      * <p>So a reading that has arrived has no decision left in it. Nothing downstream builds a
      * machine, and nothing downstream is holding a description of an answer as though it were one.
+     *
+     * <p><b>And what could not be built comes back beside it.</b> Whether the reading admits
+     * anything, and which limit stopped this compiler, are settled by the same work — and a caller
+     * given the values alone has to guess them from a set widened to everything, where every guess
+     * is the wrong one. See {@link Realized}.
      */
-    default AdmissibleValues<A> resolve(Allowance<A> by) {
+    default Realized<A> resolve(Allowance<A> by) {
         return switch (this) {
             case Settled<A> it -> resolved(it, by);
         };
     }
 
-    private static <A> AdmissibleValues<A> resolved(Settled<A> of, Allowance<A> by) {
+    private static <A> Realized<A> resolved(Settled<A> of, Allowance<A> by) {
         Unbuilt<A> gaveUp = new Unbuilt<>();
         Map<A, ValueSet> perPosition = realized(of.perPosition(), by, gaveUp);
         Map<A, ValueSet> guaranteed = promised(of.guaranteed(), by);
@@ -444,11 +449,40 @@ public sealed interface PlannedValues<A> {
             case PlannedHeld.Nothing<A> _ -> new AdmissibleValues.Held.Nothing<A>();
             case PlannedHeld.Alternatives<A> boxes -> alternatives(boxes, by, gaveUp);
         };
-        return new AdmissibleValues<>(held, perPosition,
+        return new Realized<>(new AdmissibleValues<>(held, perPosition,
                 gaveUp.beside(of.standing()), of.dropped(),
                 guaranteed, promised(of.defaultGuaranteed(), by.elsewhere()),
                 of.guaranteedTogether(),
-                of.tangled(), PlannedValues.both(of.widened(), gaveUp.names()));
+                of.tangled(), PlannedValues.both(of.widened(), gaveUp.names())),
+                gaveUp.aboutARule(), gaveUp.aboutTheAnswer());
+    }
+
+    /**
+     * The same reading with more said about what stopped it.
+     *
+     * <p>For a caller that worked a branch out to decide something and has to keep what it learned.
+     * A branch probed and not built is one this compiler could not show empty, and where it is kept
+     * as a branch anybody might be in, the reason nobody knows has to be kept with it — dropped,
+     * the reading says a position is open where what is true is that nothing looked.
+     */
+    default PlannedValues<A> alsoStanding(Map<A, List<UnreadReason>> why) {
+        if (why.isEmpty()) {
+            return this;
+        }
+        Settled<A> it = settled();
+        Map<A, List<UnreadReason>> out = new LinkedHashMap<>(it.standing());
+        why.forEach((atom, mine) -> {
+            List<UnreadReason> all = new ArrayList<>(out.getOrDefault(atom, List.of()));
+            mine.forEach(each -> {
+                if (!all.contains(each)) {
+                    all.add(each);
+                }
+            });
+            out.put(atom, all);
+        });
+        return new Settled<>(it.held(), it.perPosition(), out, it.dropped(), it.guaranteed(),
+                it.defaultGuaranteed(), it.guaranteedTogether(), it.tangled(),
+                both(it.widened(), why.keySet()));
     }
 
     /**

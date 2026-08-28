@@ -1,23 +1,21 @@
 package souther.compiler.regex;
 
 /**
- * Everything one answer needs of the patterns that reach it, compiled at once or not at all.
+ * What would be built out of some patterns, said before anything is made of it.
  *
- * <p>The whole of a question and never one pattern of it. What a pattern costs to answer about is
- * not a property of the pattern: two that are small on their own have a meet the size of their
- * product, and a bound put on each of them says nothing about the two together. Admitted one at a
- * time, a language enters an answer and the work that turns out to be unaffordable happens later —
- * where the only thing left to do is fail in the middle of an operation that is supposed to be
- * total.
+ * <p>A machine as it would be written and not the machine: the patterns it names, met and joined
+ * and complemented the way it says. Which is what lets a caller hold what a rule comes to without
+ * paying for it — a rule stating a pattern is one of these, and whether a machine is ever made of it
+ * is settled by what the position it is about finally admits.
  *
- * <p>So this is where the resource question lives, and it is asked once. What comes back is either
- * a {@link Language} every operation on which is within the envelope, or nothing — and the caller
- * has an answer it can act on before anything has been built into evidence.
+ * <p>Compared as what it says. Two of these are the same plan where they name the same patterns
+ * under the same steps, and never by what they accept: telling two spellings of one language apart
+ * means building both, which is the work a plan exists to arrange rather than to do.
  *
- * <p><b>Not a promise about every language.</b> What is admitted is this plan: the patterns it
- * names, met and joined the way it says. A language of this plan met with one from another answer is
- * work nobody has counted, which is why a plan is per answer and an answer holds the one language
- * that came out of it.
+ * <p>Built under a meter and not under a promise. What comes back is either a {@link Language} that
+ * was made within what the meter allowed, or nothing — and which of the meter's two limits refused
+ * it is the meter's to say ({@link Meter#stoppedBy}), because a machine larger than a machine may be
+ * is a fact about the pattern and an allowance run down is not.
  */
 public final class PatternPlan {
 

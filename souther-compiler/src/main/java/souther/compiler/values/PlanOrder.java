@@ -131,11 +131,41 @@ final class PlanOrder {
     static String of(AdmissibleValues<?> reading) {
         StringBuilder out = new StringBuilder();
         out.append("%012d;".formatted(states(reading.perPosition().values())));
+        written(reading.held(), out);
         written(reading.perPosition(), out);
         written(reading.guaranteed(), out);
         write(reading.defaultGuaranteed(), out);
         out.append(reading.dropped()).append(';').append(reading.guaranteedTogether()).append(';');
         return out.toString();
+    }
+
+    /**
+     * The alternatives, which are most of what a meet of two readings costs.
+     *
+     * <p>What a pairwise meet builds is a set composition for every pair of alternatives, so one
+     * box against one is one composition and two against two are four. Left out, two readings whose
+     * positions hold the same sets and whose alternatives relate them differently were the same
+     * thing here — and a sort that keeps equal things where it found them put them back in the
+     * order they arrived.
+     *
+     * <p>A set of boxes and not a sequence: the alternatives are a union, so each is written out and
+     * the writings are sorted. What each box holds is written by position, for the same reason.
+     */
+    private static void written(AdmissibleValues.Held<?> held, StringBuilder out) {
+        switch (held) {
+            case AdmissibleValues.Held.Nothing<?> _ -> out.append("0;");
+            case AdmissibleValues.Held.Alternatives<?> it -> {
+                out.append("1;").append(it.boxes().size()).append(';');
+                it.boxes().stream()
+                        .map(box -> {
+                            StringBuilder one = new StringBuilder();
+                            written(box.at(), one);
+                            return one.toString();
+                        })
+                        .sorted()
+                        .forEach(each -> out.append(each).append(';'));
+            }
+        }
     }
 
     private static long states(java.util.Collection<ValueSet> sets) {
@@ -147,10 +177,27 @@ final class PlanOrder {
         return out;
     }
 
-    /** Every position and what it holds, taken by name so that two readings are compared over the
-     *  same positions however either of them happens to be filed. */
+    /**
+     * Every position and what it holds, taken by name so that two readings are compared over the
+     * same positions however either of them happens to be filed.
+     *
+     * <p><b>By name, and the name has to tell them apart.</b> A position is an identity and its
+     * whole content is what it is called, so there is nothing else to write it as — but if two
+     * positions were written alike, two readings that differ would come out equal here, and a sort
+     * that keeps equal things where it found them would put them back in the order they arrived.
+     * The order would be the arrival order again, at the one place that exists to stop that.
+     *
+     * <p>So it is asserted rather than assumed. Every compile this test suite runs goes through
+     * here, so a position type whose name does not tell its positions apart is found by the corpus
+     * rather than by a reader of this comment. An assertion because it is about this compiler and
+     * not about any model.
+     */
     private static void written(java.util.Map<?, ValueSet> at, StringBuilder out) {
         out.append(at.size()).append(';');
+        java.util.List<String> named = at.keySet().stream().map(String::valueOf).toList();
+        assert java.util.Set.copyOf(named).size() == at.size()
+                : "two positions of one reading are written alike, so an order over readings is not"
+                        + " one: " + named;
         at.entrySet().stream()
                 .map(each -> {
                     StringBuilder one = new StringBuilder(String.valueOf(each.getKey()));

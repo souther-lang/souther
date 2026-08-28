@@ -75,6 +75,37 @@ record Adoption<A>(Set<A> read, Set<A> settled, Set<A> missed, boolean dropped) 
     }
 
     /**
+     * The same account, with the positions this reading could not work out given up on.
+     *
+     * <p>What a leaf says it adopted is said before anything is built: a pattern is named there and
+     * the machine for it is made later, out of the position's allowance, once every rule that
+     * reaches the position has arrived. So a position can be one this reading recognised every rule
+     * of and still be one whose answer it did not build — and until this is applied, the account
+     * says the clause was taken in whole while the values beside it say the position holds every
+     * value because nobody worked it out.
+     *
+     * <p>Given up on and not merely unsaid. A reader asking what answered a rule at such a position
+     * has to be told nothing did, because what stands there is what stands at a position no reading
+     * reached: everything.
+     */
+    Adoption<A> unbuiltAt(Set<A> positions) {
+        if (positions.isEmpty() || mentions().stream().noneMatch(positions::contains)) {
+            return this;
+        }
+        Set<A> stillRead = new LinkedHashSet<>(read);
+        stillRead.removeAll(positions);
+        Set<A> stillSettled = new LinkedHashSet<>(settled);
+        stillSettled.removeAll(positions);
+        Set<A> lost = new LinkedHashSet<>(missed);
+        mentions().forEach(each -> {
+            if (positions.contains(each)) {
+                lost.add(each);
+            }
+        });
+        return new Adoption<>(stillRead, stillSettled, lost, dropped);
+    }
+
+    /**
      * One leaf: what it was about, what this reading produced of it, and whether it gave up on it.
      *
      * <p>{@code failed} is the reading's own, and not the emptiness of what it produced: a leaf

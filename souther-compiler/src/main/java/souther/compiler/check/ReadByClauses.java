@@ -20,9 +20,45 @@ import java.util.Set;
  * Held on the planned side as well, a reader could ask what a clause adopted before the branch it
  * was in was known to be dead, and the account would name a rule of a branch nothing satisfies —
  * sending an author to look at something that is not there.
+ *
+ * <p>Working the values out is also what settles which positions this compiler could not build, and
+ * that is a second thing the resolved side owes: the account of what a clause adopted is written
+ * before any machine is made, so a position whose answer was not built is one it still calls taken
+ * in. What arrives here has been given up on at those positions, and {@link #aboutARule} is what a
+ * rule may be filed under out of everything the reading wrote down.
  */
 record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
                      Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder) {
+
+    /**
+     * Everything this reading wrote down that a rule is answerable for, per position.
+     *
+     * <p>The split is here because it is one rule about the vocabulary, and a store that filed it
+     * under a rule is where getting it wrong shows. A form nothing reads, a rule relating two
+     * positions, a pattern larger than any machine this holds — each of those is a rule somebody
+     * wrote and can write differently. An allowance run down by everything a position admits is not:
+     * the same rules in another order would have been built, and there is no rule to name. A
+     * position nobody reached is not either — there is no rule in hand to be about.
+     *
+     * <p>What is left out still reaches a reader. It is a fact about the position, and the position
+     * says it ({@link AdmissibleValues#whyUnread}); what it is not is a fact about a rule.
+     */
+    java.util.Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> aboutARule() {
+        java.util.Map<FactSubject,
+                java.util.List<souther.compiler.values.UnreadReason>> out =
+                new java.util.LinkedHashMap<>();
+        values.standing().forEach((position, why) -> {
+            java.util.List<souther.compiler.values.UnreadReason> mine = why.stream()
+                    .filter(each -> each != souther.compiler.values.UnreadReason
+                            .EXACT_VALUES_TOO_COSTLY
+                            && each != souther.compiler.values.UnreadReason.NOT_REACHED)
+                    .toList();
+            if (!mine.isEmpty()) {
+                out.put(position, mine);
+            }
+        });
+        return out;
+    }
 
     /**
      * Whether nothing satisfies what has been read.

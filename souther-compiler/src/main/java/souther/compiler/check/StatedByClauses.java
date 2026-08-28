@@ -254,8 +254,14 @@ sealed interface StatedByClauses {
         ReadByClauses resolve(StatedByClauses read,
                               souther.compiler.values.Allowance<FactSubject> by) {
             Said said = settled(read, by);
-            return new ReadByClauses(said.values().resolve(by), said.ordered(),
-                    said.byValues(), said.byOrder());
+            souther.compiler.values.Realized<FactSubject> made = said.values().resolve(by);
+            // And what could not be built is given up on here too. What a leaf said it adopted was
+            // said before any machine was made, so a position whose answer this did not work out is
+            // one the account still calls taken in — while the values beside it say it holds every
+            // value because nobody worked it out.
+            return new ReadByClauses(made.values(), said.ordered(),
+                    said.byValues().unbuiltAt(made.unbuilt()),
+                    said.byOrder().unbuiltAt(made.unbuilt()));
         }
 
         /**
@@ -274,22 +280,55 @@ sealed interface StatedByClauses {
                 case Choice it -> {
                     Said one = settled(it.left(), by);
                     Said other = settled(it.right(), by);
-                    boolean oneDead = dead(one, by);
-                    boolean otherDead = dead(other, by);
-                    if (oneDead && otherDead) {
+                    souther.compiler.values.Emptiness here = emptinessOf(one, by);
+                    souther.compiler.values.Emptiness there = emptinessOf(other, by);
+                    if (here == Emptiness.EMPTY && there == Emptiness.EMPTY) {
                         yield bothDead(one, other);
                     }
-                    if (oneDead) {
-                        yield beside(other, one);
+                    // A branch this could not work out is one nothing showed empty, so it is kept
+                    // — which is sound and is not exact. What is not sound is keeping it and
+                    // dropping the reason: the branch beside it would be answered as though this
+                    // one had been read, and the account would say a position it names is open
+                    // where the truth is that nobody looked. So the shortfall goes with whichever
+                    // branch survives, and the plan built afterwards cannot lose it by coming out
+                    // a different shape.
+                    if (here == Emptiness.EMPTY) {
+                        yield beside(carrying(other, by), one);
                     }
-                    yield otherDead ? beside(one, other) : live(one, other);
+                    if (there == Emptiness.EMPTY) {
+                        yield beside(carrying(one, by), other);
+                    }
+                    yield live(carrying(one, by), carrying(other, by));
                 }
             };
         }
 
-        /** Whether nothing satisfies a branch, asked of the branch worked out. */
-        private boolean dead(Said read, souther.compiler.values.Allowance<FactSubject> by) {
-            return read.ordered().isBottom() || read.values().resolve(by).isBottom();
+        /**
+         * Whether anything satisfies a branch, asked of the branch worked out.
+         *
+         * <p>Three answers. A branch whose ordering admits nothing, or whose values came out
+         * empty, is one nobody can be in; a branch every position of which was worked out and which
+         * admits something is one somebody can be in; and a branch with a position this compiler
+         * could not build is neither, whatever the widened set it came back with says.
+         */
+        private Emptiness emptinessOf(Said read,
+                                      souther.compiler.values.Allowance<FactSubject> by) {
+            return read.ordered().isBottom() ? Emptiness.EMPTY : read.values().resolve(by)
+                    .emptiness();
+        }
+
+        /** The same branch, holding what working it out could not build. */
+        private Said carrying(Said read, souther.compiler.values.Allowance<FactSubject> by) {
+            souther.compiler.values.Realized<FactSubject> made = read.values().resolve(by);
+            if (made.unbuilt().isEmpty()) {
+                return read;
+            }
+            java.util.Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> why =
+                    new java.util.LinkedHashMap<>(made.aboutARule());
+            made.aboutTheAnswer().forEach(why::putIfAbsent);
+            return new Said(read.values().alsoStanding(why), read.ordered(),
+                    read.byValues().unbuiltAt(made.unbuilt()),
+                    read.byOrder().unbuiltAt(made.unbuilt()));
         }
 
         /**
