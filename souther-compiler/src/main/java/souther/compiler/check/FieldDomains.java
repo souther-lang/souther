@@ -737,6 +737,12 @@ public final class FieldDomains {
         // left its own line unanswered by the half that draws none, and asked of the ends alone,
         // `value >= 1 && value <= 10 * 2` reported the half nothing could read as answered by the
         // half beside it. The parts each say what they raised, and an end says which part placed it.
+        //
+        // And every conjunct that was stopped, not the first of them. One question is answered when
+        // every part that asked it has been read, so a part still standing behind another is a
+        // second thing an author has to lift — and stopping at the first said one of them while the
+        // rest went out under an answer that was true of their neighbour.
+        List<souther.compiler.inputs.BlockReason.RuleReadingStopped> stopped = new ArrayList<>();
         for (Map.Entry<Core, Required> part : raisedByPart
                 .getOrDefault(rule, Map.of()).entrySet()) {
             // One arm each, so that a question added later is decided about rather than answered
@@ -751,19 +757,26 @@ public final class FieldDomains {
             }
             if (directs.stream().noneMatch(d -> d.from().equals(rule) && d.part() == part.getKey()
                     && d.at().equals(where))) {
-                return unreadAnswerFor(rule, part.getKey(), where);
+                whatStopped(rule, part.getKey(), where).forEach(each -> {
+                    if (!stopped.contains(each)) {
+                        stopped.add(each);
+                    }
+                });
             }
         }
-        return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+        return stopped.isEmpty()
+                ? new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING)
+                : new RuleAccounting.Outcome.Unaccounted(
+                        new RuleAccounting.Why.TheEndReadingSays(stopped));
     }
 
     /**
-     * What the reading of ends said about the rule at this position, where it said anything.
+     * What the reading of ends was stopped by at this position, of one part of the rule.
      *
-     * <p>Unanswered only where that reading stopped. A rule it read from end to end and drew no
-     * line from has answered the question that reading answers: the rule places no line, so there
-     * is none to be owed at, and a reader sent after it would be looking for a limit of this
-     * compiler that is not there.
+     * <p>Empty where that reading was not stopped. A rule it read from end to end and drew no line
+     * from has answered the question that reading answers: the rule places no line, so there is
+     * none to be owed at, and a reader sent after it would be looking for a limit of this compiler
+     * that is not there.
      *
      * <p>Which is the second of two places that has to hold. A rule read to the end raises no such
      * question in the first place ({@link ClauseStates.NoRestriction},
@@ -771,17 +784,18 @@ public final class FieldDomains {
      * question being unaskable is what makes the answer unreachable rather than the other way
      * about. Both are written, because the day one of them slips the other is what is left.
      */
-    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part, Coordinate where) {
+    private List<souther.compiler.inputs.BlockReason.RuleReadingStopped> whatStopped(
+            RuleRef rule, Core part, Coordinate where) {
+        List<souther.compiler.inputs.BlockReason.RuleReadingStopped> out = new ArrayList<>();
         for (NoLine said : noLines) {
             if (said.from().equals(rule) && said.part() == part
                     && said.at().equals(where)
                     && said.why() instanceof souther.compiler.inputs.BlockReason
                             .RuleReadingStopped stopped) {
-                return new RuleAccounting.Outcome.Unaccounted(
-                        new RuleAccounting.Why.TheEndReadingSays(stopped));
+                out.add(stopped);
             }
         }
-        return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+        return out;
     }
 
     /**

@@ -64,6 +64,58 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
                 invariant either = a == "q" || String.matches("x+", b)
             """;
 
+    /**
+     * Two conjuncts drawing one line, each of them stopped.
+     *
+     * <p>Both are bounds on {@code x} whose other side is not a form a threshold is read out of, so
+     * both ask the one question about the line on {@code x} and the reading of ends was stopped on
+     * each of them. The two are recorded apart, at the conjunct each came from.
+     */
+    private static final String TWO_CONJUNCTS_ON_ONE_LINE = """
+            module demo
+
+            data N = { x: Int, y: Int }
+                invariant said = x <= 10 * 2 && x <= Int.abs(x)
+            """;
+
+    /** Everything the reading of ends was stopped by, per question it left standing. */
+    private static Map<String, List<String>> linesStanding(FieldDomains read) {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        read.accounting().values().forEach(accounting ->
+                accounting.answers().forEach((owed, outcome) -> {
+                    if (outcome instanceof RuleAccounting.Outcome.Unaccounted unaccounted
+                            && unaccounted.why()
+                                    instanceof RuleAccounting.Why.TheEndReadingSays says) {
+                        out.put(((RuleCitation.Named) accounting.cited()).name() + " at " + owed,
+                                says.why().stream()
+                                        .map(each -> each.getClass().getSimpleName()).toList());
+                    }
+                }));
+        return out;
+    }
+
+    /**
+     * A line stands on every conjunct that was stopped behind it, and says one limit once.
+     *
+     * <p>Both halves. The reading of ends was stopped on each of the two conjuncts and recorded
+     * each of them, which is what the first assertion reads: the question is answered when every
+     * conjunct that draws the line has been read, so a conjunct standing behind another is a second
+     * thing to lift and not something the first answers for.
+     *
+     * <p>And the answer names the limit once. What a reader is owed is what to lift, and two
+     * conjuncts a single limit stopped are one thing to lift — said twice, an author would be shown
+     * their own rule as two.
+     */
+    @Test
+    void aLineStandsOnEveryConjunctStoppedBehindIt() {
+        FieldDomains read = read(TWO_CONJUNCTS_ON_ONE_LINE);
+
+        assertEquals(2, read.noLineAt("x").size(),
+                "each conjunct was stopped, and each is recorded where it was written");
+        assertEquals(List.of("UnreadComparisonForm"),
+                linesStanding(read).get("invariant N (said) at x"));
+    }
+
     private static FieldDomains read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
