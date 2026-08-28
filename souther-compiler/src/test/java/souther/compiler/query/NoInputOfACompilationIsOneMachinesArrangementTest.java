@@ -1,21 +1,20 @@
 package souther.compiler.query;
 
+import souther.compiler.WhatWasCompiled;
+
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a compilation is told, and never how one machine carries it out.
@@ -33,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>Read from what each input answers with, not from what its key is called, and read as far as the
  * answer goes: a record's components and a sum's cases, so an input carrying the machine one type
- * further down is the same finding as one carrying it outright.
+ * further down is the same finding as one carrying it outright. The inputs themselves come from what
+ * was compiled rather than from a file saying {@code implements Input<}, so where one is declared and
+ * how the declaration is spelled are not part of the rule.
  *
  * <p>What a type cannot say, this does not say either. {@code WorkerStack} was an
  * {@code Input<Long>} — a number of bytes of a thread's stack, which is the machine's through and
@@ -49,12 +50,6 @@ class NoInputOfACompilationIsOneMachinesArrangementTest {
     private static final List<String> THE_MACHINES = List.of(
             "souther.compiler.execute.jvm.",
             "souther.compiler.examples.Deadline");
-
-    /** Where the inputs of a compilation are declared. Checked against the source below, so this
-     *  file cannot go on holding a set that has moved on without it. */
-    private static final List<Class<?>> DECLARING = List.of(Front.class, Adequacy.class);
-
-    private static final Path MAIN = Path.of("src/main/java");
 
     /**
      * Nothing an input answers with reaches the machine.
@@ -78,60 +73,82 @@ class NoInputOfACompilationIsOneMachinesArrangementTest {
                         + " Compilation.withJvmExampleDeadlines");
     }
 
-    /** And the inputs this reads are all of them. */
+    /**
+     * And the walk finds the inputs there are.
+     *
+     * <p>Pinned as what has to be among them rather than as all of them: an input added later is
+     * held by the rule above, and a list here would be a second place to say how many there are. A
+     * walk that had gone blind would find nothing and pass, which is what this refuses.
+     */
     @Test
-    void andEveryInputThereIsWasWalked() throws IOException {
-        Set<String> declaringInSource = new LinkedHashSet<>();
-        int writtenDown = 0;
-        try (Stream<Path> written = Files.walk(MAIN)) {
-            for (Path each : written.filter(p -> p.toString().endsWith(".java")).toList()) {
-                int here = declarationsIn(Files.readString(each));
-                if (here > 0) {
-                    String file = each.getFileName().toString();
-                    declaringInSource.add(file.substring(0, file.length() - ".java".length()));
-                    writtenDown += here;
-                }
-            }
-        }
+    void andTheWalkFindsTheInputsThereAre() {
+        List<String> found = inputs().stream().map(Class::getName).toList();
 
-        assertEquals(DECLARING.stream().map(Class::getSimpleName).collect(
-                        java.util.stream.Collectors.toCollection(LinkedHashSet::new)),
-                declaringInSource,
-                "every file declaring an input is one this walks; a new one has to be added here"
-                        + " with a reason, not left out of the walk");
-        assertEquals(writtenDown, inputs().size(),
-                () -> "as many inputs were walked as are written: " + inputs());
+        assertTrue(found.containsAll(List.of(
+                        "souther.compiler.query.Front$Text",
+                        "souther.compiler.query.Front$Policy",
+                        "souther.compiler.query.Adequacy$Requested")),
+                () -> "the inputs there are should be among what was walked: " + found);
     }
 
-    /** How many inputs {@code written} declares. Counted rather than compared against a number
-     *  kept here, which would be a second place to say how many there are. */
-    private static int declarationsIn(String written) {
-        return written.split("implements Input<", -1).length - 1;
-    }
-
-    /** Every input key declared in {@link #DECLARING}. */
+    /** Every input this module compiled. */
     private static List<Class<?>> inputs() {
         List<Class<?>> found = new ArrayList<>();
-        for (Class<?> where : DECLARING) {
-            for (Class<?> nested : where.getDeclaredClasses()) {
-                if (Input.class.isAssignableFrom(nested)) {
-                    found.add(nested);
-                }
+        for (String each : WhatWasCompiled.answering(Input.class)) {
+            Class<?> key = loaded(each);
+            if (Input.class.isAssignableFrom(key)) {
+                found.add(key);
             }
         }
         return found;
+    }
+
+    private static Class<?> loaded(String name) {
+        try {
+            return Class.forName(name);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(name + " was compiled and cannot be loaded", e);
+        }
+    }
+
+    /**
+     * What {@code at} says an input answers with, looked for through whatever is between it and
+     * {@link Input}.
+     *
+     * <p>A key may reach the interface through one of its own, and a walk reading only what the key
+     * itself declares would find nothing there and report nothing about it — a rule that passes by
+     * looking away. So this walks up, and where it arrives at an {@code Input} whose argument is a
+     * variable rather than a type, it says so: that shape is one this cannot read, and a walk that
+     * cannot read a key has not checked it.
+     */
+    private static Type whatItAnswers(Class<?> at, Class<?> key) {
+        for (Type each : at.getGenericInterfaces()) {
+            if (each instanceof ParameterizedType asked && asked.getRawType() == Input.class) {
+                Type carried = asked.getActualTypeArguments()[0];
+                assertTrue(carried instanceof Class<?> || carried instanceof ParameterizedType,
+                        () -> key.getName() + " answers with " + carried + ", which this walk cannot"
+                                + " read; a key whose answer is a variable needs the walk to resolve"
+                                + " it before this rule holds for it");
+                return carried;
+            }
+            if (each instanceof ParameterizedType asked
+                    && asked.getRawType() instanceof Class<?> between
+                    && Input.class.isAssignableFrom(between)) {
+                return whatItAnswers(between, key);
+            }
+            if (each instanceof Class<?> between && Input.class.isAssignableFrom(between)) {
+                return whatItAnswers(between, key);
+            }
+        }
+        throw new IllegalStateException(key.getName() + " is an input and this walk did not find"
+                + " what it answers with");
     }
 
     /** Everything the answer to {@code key} carries, as far as its own types go. */
     private static Set<Class<?>> whatItAnswersWith(Class<?> key) {
         Set<Class<?>> reached = new LinkedHashSet<>();
         Deque<Type> left = new ArrayDeque<>();
-        for (Type each : key.getGenericInterfaces()) {
-            if (each instanceof ParameterizedType asked
-                    && asked.getRawType() == Input.class) {
-                left.add(asked.getActualTypeArguments()[0]);
-            }
-        }
+        left.add(whatItAnswers(key, key));
         while (!left.isEmpty()) {
             switch (left.poll()) {
                 case ParameterizedType asked -> {

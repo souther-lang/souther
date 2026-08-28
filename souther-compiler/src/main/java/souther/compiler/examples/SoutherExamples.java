@@ -136,15 +136,17 @@ public final class SoutherExamples {
     }
 
     private static SoutherExamples settled(Compilation compiled) {
-        compiled.db().ask(new Output.All());
-        refuseIfItDoesNotCompile(compiled);
-        // A row runs on a worker of this compile's own, so what it spends is counted on one thread
-        // and how deep it may recurse is this compile's answer; what it hands outside runs on
-        // whoever called, because that is the world a supplied implementation answers out of. The
-        // worker is made with the stack this JVM's settings ask for, which is the one answer to that
-        // and is read where a build reads it.
+        // Before anything is asked, because it is how this compilation's rows are run and not a
+        // thing to change once some of them have been. A row runs on a worker of this compile's own,
+        // so what it spends is counted on one thread and how deep it may recurse is this compile's
+        // answer; what it hands outside runs on whoever called, because that is the world a supplied
+        // implementation answers out of. Said afterwards, the rows a compile runs to decide whether
+        // the model holds would have run under one arrangement and the rows a binding drives under
+        // another, and the second would not be reached by the answers already given.
         compiled.withJvmExampleDeadlines(
                 new CallerCrossingDeadlines(JvmDeadlines.workerStackFromSettings()));
+        compiled.db().ask(new Output.All());
+        refuseIfItDoesNotCompile(compiled);
         return new SoutherExamples(compiled);
     }
 

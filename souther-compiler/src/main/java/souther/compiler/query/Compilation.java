@@ -101,11 +101,17 @@ public final class Compilation {
         return jvmProgramImages;
     }
 
-    /** What the JVM runs this compilation's rows under, for the same caller. Reached the same way
-     *  and for the same reason: a binding that ran the rows under a deadline of its own making
-     *  would not be running them the way this compilation says. */
+    /**
+     * What the JVM runs this compilation's rows under, for the same caller. Reached the same way
+     * and for the same reason: a binding that ran the rows under a deadline of its own making would
+     * not be running them the way this compilation says.
+     *
+     * <p>Asking settles it. A caller reading this is about to run rows with it, and an arrangement
+     * named after rows have been run is one the answers already given were not worked out under —
+     * which is the same staleness {@link Db#running} refuses a second execution over.
+     */
     public JvmExampleDeadlines jvmExampleDeadlines() {
-        return jvmExampleDeadlines;
+        return jvmExampleDeadlines.inUse();
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
@@ -412,6 +418,14 @@ public final class Compilation {
      * arrangement under which the work it picks out does not come back — otherwise it has to write a
      * model that does not terminate and race a clock to see it reported, and a loaded host loses that
      * race in the direction that matters.
+     *
+     * <p>Said before any row is run, for the reason {@link Db#running} takes what runs a
+     * compilation's programs once: what runs one is beside the memos rather than in them, so a row
+     * already answered is not answered again because the arrangement changed, and the store would go
+     * on handing out what the first one said. A replacement after that is refused.
+     *
+     * @throws IllegalStateException where rows have already been run under the arrangement this
+     *     replaces
      */
     public Compilation withJvmExampleDeadlines(JvmExampleDeadlines arrangement) {
         jvmExampleDeadlines.chosen(arrangement);
