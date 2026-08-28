@@ -132,6 +132,22 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
                 "any two of them reach it and no one of them does");
     }
 
+    /**
+     * Where nothing stops the coordinate without them, that absence is the difference.
+     *
+     * <p>A reading with no end on the side is a wider one and not a missing answer, and the
+     * candidates are the whole of why the coordinate stops anywhere at all. Read as an end that
+     * could not be worked out, it would say they left it where it was.
+     */
+    @Test
+    void whereNothingStopsItWithoutThemThatAbsenceIsTheDifference() {
+        EndNarrowing.Answer answer = EndNarrowing.read(TWENTY, List.of(A, B),
+                removed -> removed.equals(Set.of(A, B)) ? null : TWENTY);
+
+        assertEquals(new EndNarrowing.Answer.AloneSufficient(List.of(A, B)), answer,
+                "with neither of them the coordinate stops nowhere, and it stops at twenty");
+    }
+
     /** The ends these readings come to, and an error for a reading nothing here states. */
     private static EndNarrowing.Ends reading(Map<Set<TypeSymbol.AtModule>, Endpoint> ends) {
         return removed -> {
