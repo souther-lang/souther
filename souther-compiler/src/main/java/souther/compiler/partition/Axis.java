@@ -44,8 +44,8 @@ import java.util.List;
  *                a value a row can be written against and a bound has one without parting
  *                anything; a rule that wrote a multiple of the position parts its values where the
  *                position may hold none, and has no cut. What every border on this position owes
- *                away from its line is a run of what these leave together, so a border built from
- *                the cuts alone read its two sides past the lines that have no value (issue #880)
+ *                away from its line is a run of what these leave together, and the cuts alone are
+ *                short of the lines that have no value
  */
 public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<PartitionClass> classes,
                    List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
@@ -97,10 +97,8 @@ public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<Partiti
      *
      * <p>A transition rather than a constructor at the call site. What a body's rules add is a term,
      * classes and cuts; what the position came to was settled by the reading that made this one,
-     * and a caller rebuilding an axis from its parts drops whatever it did not think to name. What
-     * went that way was the continuation: a position whose elements could not be reached came back
-     * out of the second phase with nothing to say it had ever stopped, and was reported as one the
-     * model divides no way. It is one field now, so a rebuild names it or does not compile.
+     * and a caller rebuilding an axis from its parts drops whatever it does not think to name. What
+     * the position came to is one field, so a rebuild names it or does not compile.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
         return new Axis(id, term, at, classes, cuts, parted, narrowed);

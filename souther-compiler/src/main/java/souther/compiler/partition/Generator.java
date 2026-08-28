@@ -3257,8 +3257,8 @@ public final class Generator {
                             && decided.write(path, values.written())
                                     == LocationWrites.Written.CONFLICTING) {
                         // Two of this row's classes are of one location and offer different values
-                        // for it. Whichever was reached last used to be written and the other's
-                        // class went unanswered while the row was offered as covering it.
+                        // for it. Taking either leaves the other's class unanswered while the row
+                        // is offered as covering it, so neither is taken.
                         return new Attempt(null,
                                 UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
                                 Optional.of("`" + path + "` would have to hold two values at once"));

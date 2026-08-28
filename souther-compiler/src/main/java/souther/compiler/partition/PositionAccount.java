@@ -14,16 +14,14 @@ import souther.compiler.types.Type;
  * is if nothing answers are facts about the location — true of it once, whether it is measured at
  * its own content, at how long it is, or at both.
  *
- * <p><b>What this replaces was the same facts stored on the measure.</b> That said nothing false
- * while there was one measure per position, and it made two questions look like one: whether a
- * position is still waiting on something was asked through the axis standing at it
- * ({@link PendingPosition}), which is an answer about the location arrived at through whichever
- * number it happened to be measured by.
+ * <p><b>Kept on the position and not on a measure of it.</b> Whether a position is still waiting on
+ * anything is a question about the location ({@link PendingPosition}), and a measure that could
+ * answer it lets any reader ask through whichever number it happens to hold. Which one that is
+ * decides nothing, so a reader that has to pick has been handed the wrong thing.
  *
  * <p>An axis holds one of these rather than a copy of what is in it. A copy per measure is a fact
- * with as many representations as the position has numbers, and the first of them to be rebuilt
- * without one of its parts is the one a report reads — which is what {@link ReadingResidue} was
- * written to catch one field at a time.
+ * with as many representations as the position has numbers, and any of them may be rebuilt without
+ * one of its parts — which is what {@link ReadingResidue} guards one field at a time.
  *
  * @param pending  where nothing has answered for this position yet, what the structural reading
  *                 found — and so what the position is left with if nothing else answers. Null where

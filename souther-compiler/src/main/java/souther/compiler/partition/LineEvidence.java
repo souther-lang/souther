@@ -7,10 +7,9 @@ import souther.compiler.inputs.NumericTerm;
  *
  * <p>Two variants of one kind and not two kinds. A rule either says where a run of values ends and
  * the next begins or puts one value in a class of its own, and both of them are the reading of the
- * rules arriving at something to divide a position by. Held as two lists, the reading's own order
- * across them is gone and every reader that wants all of what was said has to put the lists back
- * together — which the fan-out below and the account beside it both do, and which is where a
- * position measured at one of the two came to be measured at neither (issue #1140).
+ * rules arriving at something to divide a position by. A reader wanting all of what was said about a
+ * number wants both — which numbers a position is measured at is one such reader, and so is the
+ * account of what became of each thing the rules said — and one list is what they are given.
  *
  * <p>So the list of these is what a reading answers with, and the two lists are read off it.
  *

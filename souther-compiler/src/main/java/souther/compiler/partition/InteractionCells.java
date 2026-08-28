@@ -459,9 +459,8 @@ public final class InteractionCells {
      *
      * <p>The number and never the path it is read from. A location may be measured at more than one
      * number — which hour of a time it is and which minute — and those are one path: asked by path,
-     * a comparison about the second of them is answered by the first's axis, which carries no cut
-     * of that comparison and so narrows nothing. The condition then goes missing without a word
-     * (issue #1140).
+     * a comparison about the second of them is answered by the first's axis, which carries no cut of
+     * that comparison and so narrows nothing, with nothing saying the condition went unread.
      *
      * <p>Exact and not the nearest. The reading that named this condition and the reading that made
      * the axis ask {@link souther.compiler.inputs.InputNumber} for the number, so a name worn over

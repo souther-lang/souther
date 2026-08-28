@@ -86,14 +86,14 @@ public sealed interface ClosureGap {
      * an arm taken from a second representation of a fact, which is the mistake #953 is about, in
      * miniature.
      *
-     * <p><b>{@code at} names the position.</b> It was the axis carrying the fact, on the reading
-     * that a gap beside a measurement is about the measure a reader holds. That reading needs one
-     * measure per position to be a naming at all: a location is measured at as many numbers as the
-     * rules name of it, and one stop under it then came out once per number. What weakens a
-     * measurement is already said per measurement elsewhere; these are one behavior's account, and
-     * a reader holding a measure reaches its position by the path it reads from.
+     * <p><b>{@code at} names the position, and not a number measured of it.</b> A location is
+     * measured at as many numbers as the rules name of it, and one stop under the location is one
+     * thing that went wrong however many of those there are. Named for a measure, it is one entry
+     * per number and no reader can tell that from several stops. What weakens one measurement is
+     * said per measurement elsewhere; these are one behavior's account of what its reading of the
+     * model came to, and a reader holding a measure reaches its position by the path it reads from.
      *
-     * <p>{@link RulesNotReached} is keyed the same way, so the two are still one vocabulary.
+     * <p>{@link RulesNotReached} is keyed the same way, so the two are one vocabulary.
      *
      * <p>Written from {@link souther.compiler.inputs.BlockedDescent} and never from what the axis is
      * still waiting on. A position something answered for keeps no continuation, and was still never

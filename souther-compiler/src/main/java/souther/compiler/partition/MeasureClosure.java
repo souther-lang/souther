@@ -186,8 +186,8 @@ public final class MeasureClosure {
         }
         // Over the positions and not over the measures made of them. What a reading of a position
         // came to is the position's, and a location is measured at as many numbers as the rules
-        // name of it — read off the measures, one stop at one location came out once per number
-        // the location is measured by, which is a compiler's own state counted several times.
+        // name of it: read off the measures, one stop at one location is one entry per number, which
+        // is a compiler's own state counted several times.
         for (PositionAccount at : positions) {
             // Read off what the reading settled and never off what the position is still waiting
             // on. A position a body's rule divides keeps no continuation, and was still never

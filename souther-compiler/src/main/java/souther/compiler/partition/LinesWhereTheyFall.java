@@ -80,9 +80,9 @@ public final class LinesWhereTheyFall {
         List<LineEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
         List<RuleWithoutALine> notPlaced = new ArrayList<>();
-        // One pass in the order the rules were read, so what comes out is in that order too. Walked
-        // once per kind, a body writing an equality and then a range came out with the range first,
-        // and every reader taking the numbers in this order took them in one this reading never saw.
+        // One pass in the order the rules were read, so what comes out is in that order too. A pass
+        // per kind of thing a rule can say puts every range before every equality, whatever order a
+        // body wrote them in, and every reader downstream takes the numbers in that order.
         for (LineEvidence each : evidence) {
             int before = out.size();
             switch (standingOf(inputs, each.at(), symbols, each.by())) {

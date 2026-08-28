@@ -313,15 +313,14 @@ public final class Partitions {
      *
      * <p>A position no rule of its own divides, whose body measures numbers of it: a bare
      * {@code List<String>} nothing bounds, under a {@code guard List.length(t.names) > 0}. The line
-     * is on that number, so an axis about it is what there is to make — there was nothing else here
-     * for one to be about, and dropping the evidence would lose a line the body draws.
+     * is on that number, so an axis about it is what there is to make — there is nothing else here
+     * for one to be about, and dropping the evidence loses a line the body draws.
      *
      * <p><b>As many as the rules name.</b> {@code Time.hour(slot.at) >= 9 && Time.minute(slot.at)
-     * >= 30} draws two lines on two numbers of one location. Answered with the one number a body
-     * measures a position by, this said there were none — a model that draws two lines reported as
-     * one that draws none, which is the sentence a body with no comparison in it gets. Choosing one
-     * of them silently drops the other's lines, which is why choosing was refused; not choosing
-     * dropped both (issue #1140).
+     * >= 30} draws two lines on two numbers of one location, and both are measures. There is no
+     * answering such a location with one of its numbers: picking one drops the other's lines and
+     * picking neither drops both, and a location with two lines drawn on it then gets the sentence
+     * a body with no comparison in it gets.
      *
      * <p>In the order the rules were read, so that what a report lists and what a search enumerates
      * are in the order an author wrote them.
@@ -398,15 +397,15 @@ public final class Partitions {
                 account.measured(each, axis.id());
                 continue;
             }
-            // Asked of the place the line falls at, which the position need not hold a
-            // value at. Read off the value, a line between two of the position's values was
-            // dropped as one the rules leave nothing at.
+            // Asked of the place the line falls at, which the position need not hold a value at.
+            // Read off the value instead, a line between two of the position's values is one the
+            // rules leave nothing at.
+            //
             // No disposition, and that is the point: this is not a way evidence may leave this
-            // stage. The reader that produced it already refuses a line falling outside what the
-            // quantity it cuts ever holds, naming the rule — measured twice, once against a type's
-            // own range and once against the range the record it sits in leaves, and both times the
-            // line came back named rather than reaching here. So what gets past that reader and is
-            // dropped here is a line lost with nothing said, and the account below says so.
+            // stage. The reader that produces it already refuses a line falling outside what the
+            // quantity it cuts ever holds and names the rule, against a type's own range and
+            // against the range the record it sits in leaves. So a line that gets past that reader
+            // and is dropped here is a line lost with nothing said, and the account below says so.
             if (domain != null && !admits(domain, line.parts())) {
                 continue;
             }
@@ -650,10 +649,10 @@ public final class Partitions {
      *
      * <p>One list and not one per kind of thing a rule can say. What this stage does with a piece of
      * evidence — divide a position by it, leave it outside what the position holds, or not take it
-     * up at all — is the same question whichever kind it is, and the account below is over all of
-     * them ({@link EvidenceAccount}). Handed two lists, both the fan-out and the account put them
-     * back together, and a position measured at one kind came back measured at neither
-     * (issue #1140).
+     * up at all — is the same question whichever kind it is, and the account of what became of each
+     * is over all of them ({@link EvidenceAccount}). Handed one list per kind, both the numbers a
+     * position is measured at and that account have to put them back together, and a position
+     * measured at one kind alone is measured at neither.
      */
     public static Partitioning withEvidence(Partitioning base,
                                             souther.compiler.inputs.Quantities reading,

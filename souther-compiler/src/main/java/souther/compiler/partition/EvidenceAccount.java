@@ -7,12 +7,11 @@ import java.util.Map;
 /**
  * What became of each thing the rules said, across the stage that turns it into a measure.
  *
- * <p><b>The account starts where the loss is.</b> {@link LinesRead} holds the reading that draws
+ * <p><b>Anchored to what this stage is handed.</b> {@link LinesRead} holds the reading that draws
  * borders to what it produced, and it is written from the axes: a piece of evidence that never
- * reached an axis is not a line that reading ever found, so nothing there could say it went
- * missing. A position whose body drew two lines on it came back reported as one whose body draws
- * none, with the measurement called complete (issue #1140). An account is worth what it is anchored
- * to, and this one is anchored to what this stage was handed.
+ * reaches an axis is not a line that reading ever finds, so nothing there can say it went missing,
+ * and a measure short of every line a body drew on a position reads as complete. An account is
+ * worth what it is anchored to, and the two are anchored a stage apart for that reason.
  *
  * <p><b>One disposition each, and the same one however often it is said.</b> A piece of evidence
  * measured at one axis and left aside at another is this stage saying two things about one fact, and
