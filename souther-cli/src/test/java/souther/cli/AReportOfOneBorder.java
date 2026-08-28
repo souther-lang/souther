@@ -186,7 +186,7 @@ final class AReportOfOneBorder {
                 new Measurement.FailedToMeasure<>(
                         PartitionDerivation.TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT,
                         WeakeningSet.of(new Weakening.ModelReadingIncomplete(
-                                new souther.compiler.partition.ClosureGap.RulesNotReached(
+                                new souther.compiler.partition.ClosureGap.RulesNotReached("b",
                                         new souther.compiler.inputs.PositionId(
                                                 souther.compiler.inputs.TermPath.of("t")))))),
                 souther.compiler.query.OwedBoundaryPoint.accountOf(border),
@@ -205,7 +205,7 @@ final class AReportOfOneBorder {
     static Measurement<List<BorderAssessment>> shortOfSomething(BorderAssessment boundary) {
         return new Measurement.Partial<>(List.of(boundary),
                 WeakeningSet.of(new Weakening.ModelReadingIncomplete(
-                        new souther.compiler.partition.ClosureGap.RulesNotReached(
+                        new souther.compiler.partition.ClosureGap.RulesNotReached("b",
                                 new souther.compiler.inputs.PositionId(
                                         souther.compiler.inputs.TermPath.of("m"))))));
     }

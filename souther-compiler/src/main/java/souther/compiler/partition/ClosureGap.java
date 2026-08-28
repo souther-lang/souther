@@ -73,8 +73,14 @@ public sealed interface ClosureGap {
      * ({@link souther.compiler.inputs.RulesLeftUnread}) because a document naming it would make a
      * change to how this compiler traverses a model into a change to what its documents carry. Two
      * of these at one position are one entry, which is that sentence said once.
+     *
+     * <p><b>And whose position it is.</b> An account of one behavior is put together with another's
+     * — a module's is the union of them — and a union keeps one of two equal facts. Two behaviors
+     * taking one type have positions spelled alike, so without the behavior the second of them
+     * would be the first said again.
      */
-    record RulesNotReached(souther.compiler.inputs.PositionId at) implements ClosureGap {}
+    record RulesNotReached(String behavior, souther.compiler.inputs.PositionId at)
+            implements ClosureGap {}
 
     /**
      * A position the walk could not reach into, with what the structural reading found instead.
@@ -93,12 +99,13 @@ public sealed interface ClosureGap {
      * said per measurement elsewhere; these are one behavior's account of what its reading of the
      * model came to, and a reader holding a measure reaches its position by the path it reads from.
      *
-     * <p>{@link RulesNotReached} is keyed the same way, so the two are one vocabulary.
+     * <p>{@link RulesNotReached} is keyed the same way, so the two are one vocabulary, and both
+     * carry whose position it is for the reason given there.
      *
      * <p>Written from {@link souther.compiler.inputs.BlockedDescent} and never from what the axis is
      * still waiting on. A position something answered for keeps no continuation, and was still never
      * entered.
      */
-    record PositionNotReachedInto(souther.compiler.inputs.PositionId at,
+    record PositionNotReachedInto(String behavior, souther.compiler.inputs.PositionId at,
                                   BlockReason.AboutThePosition why) implements ClosureGap {}
 }

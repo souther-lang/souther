@@ -81,7 +81,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
      */
     @Test
     void oneStopUnderOneLocationIsOneEntryHoweverManyMeasuresStandOnIt() {
-        PositionAccount at = new PositionAccount(TermPath.of("r").then("cost"), Type.BOOL,
+        PositionAccount at = new PositionAccount("f", TermPath.of("r").then("cost"), Type.BOOL,
                 new ReadingResidue(new BlockedDescent(new BlockReason.ValueRulesNotReached()),
                         java.util.Set.of()),
                 null, null);
@@ -89,10 +89,39 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), List.of(),
                 new LinesRead());
 
-        assertEquals(List.of(new ClosureGap.PositionNotReachedInto(at.id(),
+        assertEquals(List.of(new ClosureGap.PositionNotReachedInto("f", at.id(),
                         new BlockReason.ValueRulesNotReached())),
                 List.copyOf(((MeasureClosure.OfThePartition.Open) closed.partition()).by()),
                 "the position, once");
+    }
+
+    /**
+     * And two behaviors measuring positions spelled alike leave two entries.
+     *
+     * <p>An account of one behavior is put together with another's, and a union keeps one of two
+     * equal facts. Told apart by where the position is and nothing else, the second behavior's stop
+     * is the first said again — so a module short of two readings reports one.
+     */
+    @Test
+    void oneStopInEachOfTwoBehaviorsIsTwoEntries() {
+        souther.compiler.query.WeakeningSet both =
+                weakeningOf("f").union(weakeningOf("g"));
+
+        assertEquals(2, both.causes().size(), both.toString());
+    }
+
+    private static souther.compiler.query.WeakeningSet weakeningOf(String behavior) {
+        PositionAccount at = new PositionAccount(behavior, TermPath.of("r").then("cost"),
+                Type.BOOL,
+                new ReadingResidue(new BlockedDescent(new BlockReason.ValueRulesNotReached()),
+                        java.util.Set.of()),
+                null, null);
+        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), List.of(),
+                new LinesRead());
+        return souther.compiler.query.WeakeningSet.of(
+                ((MeasureClosure.OfThePartition.Open) closed.partition()).by().stream()
+                        .map(souther.compiler.query.Weakening.ModelReadingIncomplete::new)
+                        .toArray(souther.compiler.query.Weakening[]::new));
     }
 
     /**

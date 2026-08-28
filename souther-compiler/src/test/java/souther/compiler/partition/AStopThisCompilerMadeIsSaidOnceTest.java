@@ -283,7 +283,7 @@ class AStopThisCompilerMadeIsSaidOnceTest {
      */
     private static Set<Class<?>> gapKindsOf(ReadingResidue residue) {
         MeasureClosure.Both closed = MeasureClosure.of(
-                List.of(new PositionAccount(TermPath.of("r").then("cost"), Type.BOOL, residue,
+                List.of(new PositionAccount("f", TermPath.of("r").then("cost"), Type.BOOL, residue,
                         null, null)),
                 List.of(), List.of(), new LinesRead());
         return ((MeasureClosure.OfThePartition.Open) closed.partition()).by().stream()

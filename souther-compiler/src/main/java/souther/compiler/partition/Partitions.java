@@ -531,11 +531,17 @@ public final class Partitions {
      * what can exist; a {@code guard} says where the behavior does something else, and both sides of
      * that line hold values a row can write. The cuts merge into one partition and the origins stay
      * apart, so reaching the line through one rule still leaves the others unmet.
+     *
+     * <p><b>Not the way in.</b> These take a list per kind of thing a rule can say and put them
+     * together, and putting them together is not the reading's order — every range comes before
+     * every equality, whatever order a body wrote them in. What the rules said arrives as one list
+     * in that order ({@link #withEvidence}); these are here for a caller writing the lines itself,
+     * which has no reading to be in the order of.
      */
-    public static Partitioning withThresholds(Partitioning base,
-                                              souther.compiler.inputs.Quantities reading,
-                                              List<Threshold> thresholds,
-                                              Symbols symbols, ReadingPolicy policy) {
+    static Partitioning withThresholds(Partitioning base,
+                                       souther.compiler.inputs.Quantities reading,
+                                       List<Threshold> thresholds,
+                                       Symbols symbols, ReadingPolicy policy) {
         return withThresholds(base, reading, thresholds, symbols, policy, List.of());
     }
 
@@ -547,11 +553,11 @@ public final class Partitions {
      * written in is one no reader here takes apart. Carried rather than re-derived, because the only
      * place that knows is the reader that gave up.
      */
-    public static Partitioning withThresholds(Partitioning base,
-                                              souther.compiler.inputs.Quantities reading,
-                                              List<Threshold> thresholds,
-                                              Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> rulesWithoutALine) {
+    static Partitioning withThresholds(Partitioning base,
+                                       souther.compiler.inputs.Quantities reading,
+                                       List<Threshold> thresholds,
+                                       Symbols symbols, ReadingPolicy policy,
+                                       List<RuleWithoutALine> rulesWithoutALine) {
         return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, List.of());
     }
 
@@ -564,12 +570,12 @@ public final class Partitions {
      * divides the position as well, the model has drawn the further distinction itself and the value
      * is one more line among the ranges.
      */
-    public static Partitioning withThresholds(Partitioning base,
-                                              souther.compiler.inputs.Quantities reading,
-                                              List<Threshold> thresholds,
-                                              Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> rulesWithoutALine,
-                                              List<GuardThresholds.Guards.Singled> singled) {
+    static Partitioning withThresholds(Partitioning base,
+                                       souther.compiler.inputs.Quantities reading,
+                                       List<Threshold> thresholds,
+                                       Symbols symbols, ReadingPolicy policy,
+                                       List<RuleWithoutALine> rulesWithoutALine,
+                                       List<GuardThresholds.Guards.Singled> singled) {
         return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, List.of());
     }
 
@@ -581,13 +587,13 @@ public final class Partitions {
      * beside the partition, which is what keeps a position the classes could say nothing about from
      * losing the line its body draws about it.
      */
-    public static Partitioning withThresholds(Partitioning base,
-                                              souther.compiler.inputs.Quantities reading,
-                                              List<Threshold> thresholds,
-                                              Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> rulesWithoutALine,
-                                              List<GuardThresholds.Guards.Singled> singled,
-                                              List<LineDrawn> between) {
+    static Partitioning withThresholds(Partitioning base,
+                                       souther.compiler.inputs.Quantities reading,
+                                       List<Threshold> thresholds,
+                                       Symbols symbols, ReadingPolicy policy,
+                                       List<RuleWithoutALine> rulesWithoutALine,
+                                       List<GuardThresholds.Guards.Singled> singled,
+                                       List<LineDrawn> between) {
         return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
                 souther.compiler.check.PathReachability.Answers.NONE);
     }
@@ -606,15 +612,15 @@ public final class Partitions {
      * of anything. Both are needed and neither is the other — a line well inside a position's values
      * can still be one nothing on the way to it can be either side of.
      */
-    public static Partitioning withThresholds(Partitioning base,
-                                              souther.compiler.inputs.Quantities reading,
-                                              List<Threshold> thresholds,
-                                              Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> rulesWithoutALine,
-                                              List<GuardThresholds.Guards.Singled> singled,
-                                              List<LineDrawn> between,
-                                              souther.compiler.check.PathReachability.Answers
-                                                      arrives) {
+    static Partitioning withThresholds(Partitioning base,
+                                       souther.compiler.inputs.Quantities reading,
+                                       List<Threshold> thresholds,
+                                       Symbols symbols, ReadingPolicy policy,
+                                       List<RuleWithoutALine> rulesWithoutALine,
+                                       List<GuardThresholds.Guards.Singled> singled,
+                                       List<LineDrawn> between,
+                                       souther.compiler.check.PathReachability.Answers
+                                               arrives) {
         return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
                 arrives, ReachingCuts.NONE);
     }
@@ -627,16 +633,16 @@ public final class Partitions {
      * that recovered it from where a comparison sits would be free to name a condition nothing here
      * could read.
      */
-    public static Partitioning withThresholds(Partitioning base,
-                                              souther.compiler.inputs.Quantities reading,
-                                              List<Threshold> thresholds,
-                                              Symbols symbols, ReadingPolicy policy,
-                                              List<RuleWithoutALine> rulesWithoutALine,
-                                              List<GuardThresholds.Guards.Singled> singled,
-                                              List<LineDrawn> between,
-                                              souther.compiler.check.PathReachability.Answers
-                                                      arrives,
-                                              ReachingCuts reaching) {
+    static Partitioning withThresholds(Partitioning base,
+                                       souther.compiler.inputs.Quantities reading,
+                                       List<Threshold> thresholds,
+                                       Symbols symbols, ReadingPolicy policy,
+                                       List<RuleWithoutALine> rulesWithoutALine,
+                                       List<GuardThresholds.Guards.Singled> singled,
+                                       List<LineDrawn> between,
+                                       souther.compiler.check.PathReachability.Answers
+                                               arrives,
+                                       ReachingCuts reaching) {
         List<LineEvidence> evidence = new ArrayList<>();
         thresholds.forEach(each -> evidence.add(new LineEvidence.Divides(each)));
         singled.forEach(each -> evidence.add(new LineEvidence.Singles(each)));
@@ -1045,7 +1051,7 @@ public final class Partitions {
                 // all the same: a `Map` a rule about its size divides is one nothing was read into,
                 // and taking that off the axis with the fallback is how the stop went unreported
                 // (issue #1084).
-                PositionAccount at = PositionAccount.of(position, null, null);
+                PositionAccount at = PositionAccount.of(behavior, position, null, null);
                 positions.add(at);
                 out.add(new Axis(id, term, at, divided.classes(), divided.cuts().cuts(), List.of(),
                         position.narrowedEnds()));
@@ -1065,7 +1071,7 @@ public final class Partitions {
                     // position that the local reading could not take in, which is what keeps the
                     // position from completing as one the model divides no way.
                     case StructuralInspection.Retained retained -> {
-                        PositionAccount at = PositionAccount.of(position,
+                        PositionAccount at = PositionAccount.of(behavior, position,
                                 retained.continuation(), leftAt(position));
                         positions.add(at);
                         out.add(Axis.pendingAt(id, term, at));

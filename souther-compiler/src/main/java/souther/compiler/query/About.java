@@ -211,11 +211,22 @@ public sealed interface About {
         }
     }
 
-    /** A position the axes measure whose rules the walk never reached. */
+    /**
+     * A position the axes measure whose rules the walk never reached.
+     *
+     * <p>The gap the reading of the model already recorded, and not a measure that was weakened by
+     * it. A location is measured at as many numbers as the rules name of it, and every one of those
+     * measures is weakened by one stop under the location — so read off the measures, one stop is
+     * one finding per number, and two behaviors happening to be measured alike are told apart by
+     * nothing.
+     *
+     * <p>Which measures it weakened is beside this and is each measure's own
+     * ({@link PartitionEvidence.AxisCoverage.Reading}). What went wrong is here, once.
+     */
     record APositionWhoseRulesWereNotReached(
-            PartitionEvidence.AxisCoverage axis) implements About {
+            souther.compiler.partition.ClosureGap.RulesNotReached gap) implements About {
         public APositionWhoseRulesWereNotReached {
-            java.util.Objects.requireNonNull(axis, "a finding is about something");
+            java.util.Objects.requireNonNull(gap, "a finding is about something");
         }
     }
 

@@ -195,7 +195,8 @@ public final class MeasureClosure {
             // nothing at all about the position it could not read (issue #1084).
             BlockedDescent blocked = at.residue().blockedDescent();
             if (blocked != null) {
-                ClosureGap gap = new ClosureGap.PositionNotReachedInto(at.id(), blocked.why());
+                ClosureGap gap = new ClosureGap.PositionNotReachedInto(at.behavior(), at.id(),
+                        blocked.why());
                 partition.add(gap);
                 border.add(gap);
             }
@@ -203,7 +204,7 @@ public final class MeasureClosure {
                 if (derived(unread)) {
                     continue;
                 }
-                ClosureGap gap = new ClosureGap.RulesNotReached(at.id());
+                ClosureGap gap = new ClosureGap.RulesNotReached(at.behavior(), at.id());
                 partition.add(gap);
                 border.add(gap);
             }

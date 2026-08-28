@@ -33,7 +33,7 @@ import souther.compiler.types.Type;
  *                 the walk could not reach into what the position holds, a rule about what is
  *                 inside describes that same stop from the other end
  */
-public record PositionAccount(TermPath path, Type type, ReadingResidue residue,
+public record PositionAccount(String behavior, TermPath path, Type type, ReadingResidue residue,
                               StructuralInspection.Continuation pending,
                               LeftAtThePosition leftWith) {
 
@@ -44,21 +44,29 @@ public record PositionAccount(TermPath path, Type type, ReadingResidue residue,
         }
     }
 
-    /** What names this position across a report, which is where it is. */
+    /**
+     * Where this position is, which is what tells it from the others of one behavior's input.
+     *
+     * <p>The path and nothing else, as the reading of the input names it. What tells it from a
+     * position of another behavior is {@link #behavior}, which travels beside this wherever an
+     * account of one behavior is put together with another's — every such account says whose it is
+     * ({@code Weakening.ProofContradicted}), and a fact that did not would be one fact where two
+     * behaviors happen to be shaped alike.
+     */
     public souther.compiler.inputs.PositionId id() {
         return new souther.compiler.inputs.PositionId(path);
     }
 
     /** What one position's reading came to, as the reading itself answered it. */
-    public static PositionAccount of(Position position,
+    public static PositionAccount of(String behavior, Position position,
                                      StructuralInspection.Continuation pending,
                                      LeftAtThePosition leftWith) {
-        return new PositionAccount(position.path(), position.type(),
+        return new PositionAccount(behavior, position.path(), position.type(),
                 ReadingResidue.of(position), pending, leftWith);
     }
 
     /** A position outside a reading of the declarations, which is where a test writes one. */
-    static PositionAccount at(TermPath path, Type type) {
-        return new PositionAccount(path, type, ReadingResidue.NOTHING, null, null);
+    static PositionAccount at(String behavior, TermPath path, Type type) {
+        return new PositionAccount(behavior, path, type, ReadingResidue.NOTHING, null, null);
     }
 }

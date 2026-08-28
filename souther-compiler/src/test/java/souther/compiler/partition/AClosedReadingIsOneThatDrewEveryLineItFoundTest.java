@@ -152,7 +152,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
     /** The position the lines here are of. This measure's closure is about what the reading of a
      *  position came to, and the axis on it is not what that is asked of. */
     private static PositionAccount aPosition() {
-        return PositionAccount.at(TermPath.of("h").then("a"), Type.INT);
+        return PositionAccount.at("f", TermPath.of("h").then("a"), Type.INT);
     }
 
     private static Axis anAxis() {

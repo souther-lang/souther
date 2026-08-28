@@ -84,24 +84,14 @@ public final class LinesWhereTheyFall {
         // per kind of thing a rule can say puts every range before every equality, whatever order a
         // body wrote them in, and every reader downstream takes the numbers in that order.
         for (LineEvidence each : evidence) {
-            int before = out.size();
-            switch (standingOf(inputs, each.at(), symbols, each.by())) {
-                case WhereTheNameStands.AsWritten(NumericTerm at) -> out.add(measuredAt(each, at));
-                case WhereTheNameStands.FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
-                    out.add(measuredAt(each, first));
-                    rest.forEach(at -> out.add(measuredAt(each, at)));
-                }
-            }
-            // Counted here, where the piece is in hand. Reconciled afterwards by the rule each
-            // piece came from, this would have had to establish that no two pieces share one — and
-            // the case it is for is the one where the second of two never comes out, which is
-            // exactly the case a shared name hides. Nothing derives a name at all now.
-            if (out.size() == before) {
-                throw new IllegalStateException(
-                        "a rule this stage was given came out of it nowhere: " + each
-                                + " — filing a rule at the positions its name reaches may put it"
-                                + " at several and never at none");
-            }
+            // Every number the name stands at, filed together. Filing is one rule to as many
+            // positions as its name reaches, so a piece put out one part at a time can leave the
+            // others behind — and the account that runs after this begins with what comes out of
+            // here, so it has nothing to say those others were ever expected. There is no partial
+            // filing to write: what a name stands at is one list and this maps it.
+            List<NumericTerm> destinations =
+                    standingOf(inputs, each.at(), symbols, each.by()).all();
+            destinations.forEach(at -> out.add(measuredAt(each, at)));
         }
         for (LineDrawn each : between) {
             place(inputs, each, quantities, symbols, outBetween, notPlaced);
@@ -279,6 +269,26 @@ public final class LinesWhereTheyFall {
      * these two, so a reader asking whether the name moved never reads it off a length.
      */
     private sealed interface WhereTheNameStands {
+
+        /**
+         * Every number the name stands at, never none.
+         *
+         * <p>Asked as the whole list so that filing a piece of evidence is one step. Taken apart by
+         * the caller — the first here, the rest there — the walk has as many places to add as the
+         * shape has parts, and a piece filed at three positions can leave two behind while the
+         * account beside it, which starts after this stage, has no way of knowing there were three.
+         */
+        default List<NumericTerm> all() {
+            return switch (this) {
+                case AsWritten(NumericTerm term) -> List.of(term);
+                case FiledAt(NumericTerm first, List<NumericTerm> rest) -> {
+                    List<NumericTerm> every = new ArrayList<>();
+                    every.add(first);
+                    every.addAll(rest);
+                    yield List.copyOf(every);
+                }
+            };
+        }
 
         /**
          * Nothing was filed for this name, so the line stays where the model wrote it.

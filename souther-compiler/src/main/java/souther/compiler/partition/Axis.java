@@ -61,8 +61,8 @@ public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<Partiti
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, PositionAccount.at(term.path(), type), classes, cuts, List.of(),
-                NarrowedBounds.NOTHING);
+        this(id, term, PositionAccount.at(id.behavior(), term.path(), type), classes, cuts,
+                List.of(), NarrowedBounds.NOTHING);
     }
 
     /**
