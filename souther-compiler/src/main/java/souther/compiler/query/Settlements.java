@@ -300,7 +300,6 @@ public record Settlements(List<OfferItem> requested,
     private record OneBehavior(String behavior, BehaviorInputs where, List<Axis> axes, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
                                List<Generator.ClassOwed> classes, List<Generator.ArmOwed> arms,
-                               Map<OfferItem.APointOfALine, PointResolution> resolved,
                                Map<OfferItem.APointOfALine, List<AtAPoint>> reads) {
 
         /**
@@ -329,49 +328,29 @@ public record Settlements(List<OfferItem> requested,
             if (read == null) {
                 return null;
             }
-            Map<OfferItem.APointOfALine, PointResolution> resolved = new LinkedHashMap<>();
             Map<OfferItem.APointOfALine, List<AtAPoint>> reads = new LinkedHashMap<>();
-            // Its own account, where this run asked it for rows and nowhere else. Whether the
-            // search was made is what `searched` says, and asking for it here would make it: the
-            // behavior would come back owing points at its own lines, which are not work this run
-            // set anybody.
-            if (boundaries && filling != null) {
-                List<BorderObligationPointAssessment> points =
-                        db.ask(new Adequacy.Obligations(module)).value();
-                for (BorderObligationPointAssessment point
-                        : points == null ? List.<BorderObligationPointAssessment>of() : points) {
-                    // A row this body's own rule is owed, met somewhere in this body. A point owed
-                    // to the declarations is answered once for the module and from every reading of
-                    // it, which is an account this behavior keeps no entry of.
-                    if (!point.owedToTheReading() || !point.carriedBy(behavior)) {
-                        continue;
-                    }
-                    // Every reading of the point, in the order they were made, and a row from
-                    // whichever of them composes one. A point read at two positions is one row to
-                    // write and either position may be the one that can be written at — so taking a
-                    // reading and offering what it came to is offering a representative, and a
-                    // point whose other reading composed a row goes out as one nothing composed.
-                    OfferItem.APointOfALine item = new OfferItem.APointOfALine(point.point());
-                    point.met().forEach((_, at) -> reads.computeIfAbsent(item, _ -> new ArrayList<>())
-                            .add(new AtAPoint(at.border(), at.owedAt(point.role()).criterion())));
-                    // What the measurement says is worth a row, which is the point's answer over
-                    // its readings and not one reading's: a point a written row stands at is owed
-                    // and is nobody's work, and counted here a candidate standing there would be
-                    // its only offer and could never be dropped.
-                    PointResolution came = PointResolver.resolveAt(point.said(),
-                            point.owed(), List.copyOf(point.met().keySet()),
-                            reading -> Adequacy.readingOf(db, module,
-                                    new GenerationScope.Behavior(behavior), point, point.role(),
-                                    reading));
-                    if (!(came instanceof PointResolution.NoSearch)) {
-                        resolved.put(item, came);
-                    }
+            // Where this behavior meets each point its own rules are owed a row at. Read whether or
+            // not anything was asked of the behavior, for the reason the declarations' lines below
+            // are: a row written under it stands where it stands, and whether this run went looking
+            // for one has nothing to do with it.
+            //
+            // Which row is offered there is not here. That is one search over every reading of the
+            // point, and the module's account holds it ({@link BorderAccount}) — a behavior
+            // resolving its own points beside that would be one search made twice, free to come to
+            // two answers about one row.
+            List<BorderObligationPointAssessment> points =
+                    db.ask(new Adequacy.Obligations(module)).value();
+            for (BorderObligationPointAssessment point
+                    : points == null ? List.<BorderObligationPointAssessment>of() : points) {
+                if (!point.owedToTheReading() || !point.carriedBy(behavior)) {
+                    continue;
                 }
+                OfferItem.APointOfALine item = new OfferItem.APointOfALine(point.point());
+                point.met().forEach((_, at) -> reads.computeIfAbsent(item, _ -> new ArrayList<>())
+                        .add(new AtAPoint(at.border(), at.owedAt(point.role()).criterion())));
             }
-            // And this behavior's readings of the lines the declarations own, which its own account
-            // holds none of. Read whether or not anything was asked of the behavior: a row written
-            // under it stands where it stands, and that is how it answers the line it was composed
-            // for.
+            // And this behavior's readings of the lines the declarations own, which its own rules
+            // are owed none of. Read the same way and for the same reason.
             declared.forEach((point, byBehavior) -> {
                 for (BorderAssessment at : byBehavior.getOrDefault(behavior, List.of())) {
                     if (at.at(point.role()) instanceof ItemAssessment.Owed owed) {
@@ -388,7 +367,7 @@ public record Settlements(List<OfferItem> requested,
                             : Adequacy.runningRowsOf(trials, behavior, sig),
                     filling == null ? List.of() : filling.composed().plan().classesOwed(),
                     filling == null ? List.of() : filling.composed().plan().armsOwed(),
-                    resolved, reads);
+                    reads);
         }
 
         /**
@@ -414,23 +393,21 @@ public record Settlements(List<OfferItem> requested,
                             RowKey.of(behavior, filling.composed().rowFor(built.row())));
                 }
             }
-            // The row a search over the readings of the point composed, filed under the behavior
-            // that composed it — which for a point of this behavior's own line is this one, since
-            // every reading of such a point is a reading in the body that drew it.
-            resolved.forEach((item, came) -> {
-                if (came instanceof PointResolution.Generated(var by, var row)) {
-                    out.put(item, RowKey.of(by, row));
-                }
-            });
             return out;
         }
 
-        /** What this behavior was asked to offer a row for. */
+        /**
+         * What this behavior was asked to offer a row for.
+         *
+         * <p>Its classes and its arms, and no point of a line. A row at a point is owed once
+         * however many readings there are, and it is offered from the module's account of them —
+         * so a behavior listing its own points here would put one piece of work into a run twice
+         * and let the two answer differently.
+         */
         List<OfferItem> owed() {
             List<OfferItem> out = new ArrayList<>();
             classes.forEach(each -> out.add(new OfferItem.AClass(each)));
             arms.forEach(each -> out.add(new OfferItem.AnArm(each)));
-            out.addAll(resolved.keySet());
             return out;
         }
 

@@ -1639,16 +1639,21 @@ public final class Adequacy {
      * {@link BoundarySearch} — which is keyed, so a reading is searched once however many lines are
      * resolved from it, and a request about one behavior spends nothing on the rest.
      */
-    public static DeclaredRows generatedForDeclarationsOf(Db db, String module,
+    public static BorderAccount generatedForDeclarationsOf(Db db, String module,
                                                           GenerationScope scope) {
-        DeclaredBoundaries account = db.ask(new DeclaredBorders(module)).value();
+        List<BorderObligationPointAssessment> points = db.ask(new Obligations(module)).value();
         java.util.SequencedMap<souther.compiler.partition.BorderObligationPoint,
-                DeclaredRows.Answer> resolved = new LinkedHashMap<>();
-        if (account == null) {
-            return new DeclaredRows(scope, resolved);
+                BorderAccount.Answer> resolved = new LinkedHashMap<>();
+        if (points == null) {
+            return new BorderAccount(scope, resolved);
         }
-        for (DeclaredDebt owed : account.owed()) {
-            BorderObligationPointAssessment debt = owed.debt();
+        for (BorderObligationPointAssessment debt : points) {
+            FindingSubject owes = owedBy(debt, module);
+            // A point this module answers for nothing at: a line owed to declarations elsewhere,
+            // whose values this module's are held to and whose row is somebody else's to write.
+            if (owes == null) {
+                continue;
+            }
             // Which lines this request is about, settled once and here. A line no reading the
             // request asked about carries is not a question this was put — read further down, a
             // renderer would be deciding a second time what the request had already decided.
@@ -1657,13 +1662,34 @@ public final class Adequacy {
             }
             String said = debt.said();
             resolved.put(debt.point(),
-                    new DeclaredRows.Answer(said, owed.subject().named(),
+                    new BorderAccount.Answer(said, owes,
                             PointResolver.resolveAt(said, debt.owed(),
                                     List.copyOf(debt.met().keySet()),
                                     reading -> readingOf(db, module, scope, debt, debt.role(),
                                             reading))));
         }
-        return new DeclaredRows(scope, resolved);
+        return new BorderAccount(scope, resolved);
+    }
+
+    /**
+     * Who this module answers for a row at {@code point}, or null where it answers for none.
+     *
+     * <p>The attribution's answer and no second reading of it. A line a declaration of this module
+     * drew is owed to those declarations wherever the type is carried; a line a body drew is that
+     * body's, and such a line is read only in the body that wrote it, so the behavior carrying it
+     * is the one that owes it.
+     *
+     * <p>Null for a line owed to declarations none of which are this module's. Its values are held
+     * to the line and a row at it is somebody else's to write, which is not the same as nobody
+     * owing one.
+     */
+    private static FindingSubject owedBy(BorderObligationPointAssessment point, String module) {
+        List<TypeSymbol.AtModule> owners = point.ownersIn(module);
+        if (!owners.isEmpty()) {
+            return new FindingSubject.OfADeclaration(owners);
+        }
+        return point.owedToTheReading()
+                ? new FindingSubject.OfABehavior(point.carriedBy().getFirst()) : null;
     }
 
     /**
@@ -3337,7 +3363,7 @@ public final class Adequacy {
          * <p><b>The points this behavior is owed a row at, and no others.</b> The two points against
          * a line an {@code invariant} drew are the declaration's — one row settles the line however
          * many positions carry the type — and they are offered once, where the line is resolved
-         * ({@link DeclaredRows}). Offered from here as well, one authored line comes out as a row
+         * ({@link BorderAccount}). Offered from here as well, one authored line comes out as a row
          * per position of every behavior that carries it. The regions either side stay, because
          * where a region stops is settled by every other rule reaching this position.
          */

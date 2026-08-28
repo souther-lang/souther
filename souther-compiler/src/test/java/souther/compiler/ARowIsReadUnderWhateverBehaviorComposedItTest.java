@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PointResolution;
-import souther.compiler.query.DeclaredRows;
+import souther.compiler.query.BorderAccount;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.query.OfferItem;
@@ -63,7 +63,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         assertFalse(declared.rowsByCarrier().isEmpty(),
                 "a declaration's line is owed a row and one behavior composed it: " + declared);
@@ -105,7 +105,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
@@ -134,7 +134,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);

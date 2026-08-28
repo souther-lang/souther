@@ -35,7 +35,7 @@ public final class Offering {
     private final OfferingRequest request;
     private final SequencedMap<String, List<OfferedRow>> rows;
     private final SequencedMap<String, Adequacy.Filling> searched;
-    private final DeclaredRows declared;
+    private final BorderAccount declared;
     private final Set<OfferItem> answered;
 
     /**
@@ -49,7 +49,7 @@ public final class Offering {
      *                 written, whichever row it was composed for
      */
     Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rows,
-             SequencedMap<String, Adequacy.Filling> searched, DeclaredRows declared,
+             SequencedMap<String, Adequacy.Filling> searched, BorderAccount declared,
              Set<OfferItem> answered) {
         this.request = request;
         this.rows = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rows));
@@ -74,7 +74,7 @@ public final class Offering {
     }
 
     /** What the module's declarations are owed, or null where none were asked for. */
-    public DeclaredRows declared() {
+    public BorderAccount declared() {
         return declared;
     }
 

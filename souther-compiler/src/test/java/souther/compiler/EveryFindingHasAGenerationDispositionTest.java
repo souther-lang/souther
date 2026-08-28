@@ -8,7 +8,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PointResolution;
-import souther.compiler.query.DeclaredRows;
+import souther.compiler.query.BorderAccount;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.SearchCoverage;
 import souther.compiler.report.GeneratedRows;
@@ -232,7 +232,7 @@ class EveryFindingHasAGenerationDispositionTest {
      * {@code Narrow} says about its own field is a line too, and a reading that can compose nothing
      * at {@code Code}'s line composes one at that.
      */
-    private static List<PointResolution> drawnBy(DeclaredRows rows, String declaredOn) {
+    private static List<PointResolution> drawnBy(BorderAccount rows, String declaredOn) {
         return rows.resolved().entrySet().stream()
                 .filter(each -> each.getKey().line().owedToTheDeclaration()
                         .map(on -> on.name().equals(declaredOn)).orElse(false))
@@ -272,7 +272,7 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     @Test
     void oneLineIsOfferedOneRow() {
-        DeclaredRows rows = resolved(compiled(NARROWED), "example.narrowed",
+        BorderAccount rows = resolved(compiled(NARROWED), "example.narrowed",
                 new GenerationScope.Module());
 
         assertFalse(rows.resolved().isEmpty(), "the model under test has a line owed at both");
@@ -506,7 +506,7 @@ class EveryFindingHasAGenerationDispositionTest {
                         + block);
     }
 
-    private static DeclaredRows resolved(Compilation compilation, String module,
+    private static BorderAccount resolved(Compilation compilation, String module,
                                          GenerationScope scope) {
         return Adequacy.generatedForDeclarationsOf(compilation.db(), module, scope);
     }

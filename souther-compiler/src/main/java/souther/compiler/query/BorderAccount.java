@@ -32,7 +32,7 @@ import java.util.SequencedMap;
  *                 time is a reader that can decide it differently
  * @param resolved one answer per point of each line the scope admits
  */
-public record DeclaredRows(GenerationScope scope,
+public record BorderAccount(GenerationScope scope,
         SequencedMap<BorderObligationPoint, Answer> resolved) {
 
     /**
@@ -43,20 +43,28 @@ public record DeclaredRows(GenerationScope scope,
      * a subject taken from one would say the row is about that position. Worked out where the search
      * was, so that a reader with the answer never has to go back to the line for what it was about.
      *
-     * @param owedBy the declaration that drew the line. Where a note about it goes, and the whole of
-     *               what tells two lines apart that a reader would otherwise see written the same
-     *               way: what a newtype wraps is spelled {@code value} in every declaration
+     * @param owedBy who owes a row here — the declarations that drew the line, or the body that
+     *               did. Where a note about it goes, and the whole of what tells two lines apart
+     *               that a reader would otherwise see written the same way: what a newtype wraps is
+     *               spelled {@code value} in every declaration. Kept as the subject rather than as
+     *               its name, because what it is decides where a row is offered as well as what the
+     *               note says ({@link #rowsByCarrier})
      */
-    public record Answer(String said, String owedBy, PointResolution resolution) {
+    public record Answer(String said, FindingSubject owedBy, PointResolution resolution) {
 
         public Answer {
             if (said == null || owedBy == null || resolution == null) {
                 throw new IllegalArgumentException("an answer is to something, and is an answer");
             }
         }
+
+        /** Whether a row here is the body's own to write, which is what a block offers first. */
+        boolean owedByTheBody() {
+            return owedBy instanceof FindingSubject.OfABehavior;
+        }
     }
 
-    public DeclaredRows {
+    public BorderAccount {
         resolved = java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>(resolved));
     }
 
@@ -71,15 +79,32 @@ public record DeclaredRows(GenerationScope scope,
      * composed the row was settled by the search, and a renderer that grouped differently would
      * still be handed the same row for each point. Two points answered by one row are two entries
      * here and one row where the block is written, which is where that count is made.
+     *
+     * <p><b>The body's own lines first, and the declarations' after them.</b> An order, because what
+     * is offered turns on one: a reduction keeps the earlier of two rows that answer the same
+     * thing, so that an edit further down the model does not move what is offered above it
+     * ({@link Settlements#keeping}). That order was the two searches being asked in turn, and it
+     * survives the two becoming one account here rather than being left to the order the points
+     * happened to be gathered in — which is a fact about a walk and about nothing a reader can see.
+     *
+     * <p>Which is why it is here and not in what the account holds. What is owed and what became of
+     * it are the same whichever way they are listed; this is the listing.
      */
     public SequencedMap<String, List<Generator.GeneratedRow>> rowsByCarrier() {
         SequencedMap<String, List<Generator.GeneratedRow>> out = new LinkedHashMap<>();
+        take(out, true);
+        take(out, false);
+        return java.util.Collections.unmodifiableSequencedMap(out);
+    }
+
+    /** The rows of the points the body owes, or of the rest, under the behavior that composed each. */
+    private void take(SequencedMap<String, List<Generator.GeneratedRow>> out, boolean theBodys) {
         resolved.forEach((_, answer) -> {
-            if (answer.resolution() instanceof PointResolution.Generated(var by, var row)) {
+            if (answer.owedByTheBody() == theBodys
+                    && answer.resolution() instanceof PointResolution.Generated(var by, var row)) {
                 out.computeIfAbsent(by, _ -> new ArrayList<>()).add(row);
             }
         });
-        return java.util.Collections.unmodifiableSequencedMap(out);
     }
 
     /**
@@ -143,14 +168,13 @@ public record DeclaredRows(GenerationScope scope,
                 case SearchCoverage.ReadingSearch.OutOfScope _ -> { }
             }
         });
+        String owedBy = answer.owedBy().named();
         if (came.isEmpty()) {
-            return new Unmet.NothingWasSearched(answer.owedBy(), answer.said());
+            return new Unmet.NothingWasSearched(owedBy, answer.said());
         }
         return coverage.provesTheLineCannotBeWritten()
-                ? new Unmet.TheLineCannotBeWritten(answer.owedBy(), answer.said(),
-                        List.copyOf(came))
-                : new Unmet.WhatTheReadingsCameTo(answer.owedBy(), answer.said(),
-                        List.copyOf(came));
+                ? new Unmet.TheLineCannotBeWritten(owedBy, answer.said(), List.copyOf(came))
+                : new Unmet.WhatTheReadingsCameTo(owedBy, answer.said(), List.copyOf(came));
     }
 
     /**

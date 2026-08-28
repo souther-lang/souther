@@ -187,15 +187,17 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                         unasked, new SearchCoverage.ReadingSearch.OutOfScope()),
                 List.of(answered, silent, unasked));
 
-        DeclaredRows.Unmet unmet = DeclaredRows.unmet(new DeclaredRows.Answer(SAID, "Code",
+        BorderAccount.Unmet unmet = BorderAccount.unmet(new BorderAccount.Answer(SAID,
+                new FindingSubject.OfADeclaration(List.of(souther.compiler.types.TypeSymbols
+                        .declared(new souther.compiler.types.TypeKey("example", "Code")))),
                 new PointResolution.Unresolved(coverage)));
 
-        List<DeclaredRows.At> came = assertInstanceOf(
-                DeclaredRows.Unmet.WhatTheReadingsCameTo.class, unmet).came();
-        assertEquals(List.of(answered, silent), came.stream().map(DeclaredRows.At::reading).toList(),
+        List<BorderAccount.At> came = assertInstanceOf(
+                BorderAccount.Unmet.WhatTheReadingsCameTo.class, unmet).came();
+        assertEquals(List.of(answered, silent), came.stream().map(BorderAccount.At::reading).toList(),
                 "the reading that answered and the one that could not be searched");
-        assertInstanceOf(DeclaredRows.At.Searched.class, came.get(0));
-        assertInstanceOf(DeclaredRows.At.CouldNotBeSearched.class, came.get(1));
+        assertInstanceOf(BorderAccount.At.Searched.class, came.get(0));
+        assertInstanceOf(BorderAccount.At.CouldNotBeSearched.class, came.get(1));
     }
 
     /**
