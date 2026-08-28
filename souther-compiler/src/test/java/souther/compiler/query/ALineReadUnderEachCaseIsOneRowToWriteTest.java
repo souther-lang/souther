@@ -68,8 +68,8 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
                 guarded.stream().map(BorderObligationPointAssessment::role).toList(),
                 () -> "the four points of one line: " + said(guarded));
         for (BorderObligationPointAssessment each : guarded) {
-            assertEquals(List.of("check/r@P.deadline", "check/r@T.deadline"),
-                    each.met().keySet().stream().map(Object::toString).toList(),
+            assertEquals(List.of("r@P.deadline", "r@T.deadline"),
+                    each.met().keySet().stream().map(where -> where.target().left()).toList(),
                     () -> "read under each case: " + each.point());
         }
     }
@@ -92,8 +92,8 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
                 () -> "so nothing is looked for at it: " + on.owed());
         Map<String, Boolean> byReading = new LinkedHashMap<>();
         on.met().forEach((where, at) ->
-                byReading.put(where.toString(), at.owedAt(PointRole.ON).hasRowWitness()));
-        assertEquals(Map.of("check/r@P.deadline", true, "check/r@T.deadline", false), byReading,
+                byReading.put(where.target().left(), at.owedAt(PointRole.ON).hasRowWitness()));
+        assertEquals(Map.of("r@P.deadline", true, "r@T.deadline", false), byReading,
                 () -> "and which case a row stands under is still said: " + byReading);
     }
 

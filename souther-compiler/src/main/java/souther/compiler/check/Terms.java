@@ -612,16 +612,9 @@ final class Terms {
         return b.coefs().isEmpty() ? a.times(b.constant()) : null;
     }
 
-    /** A node the affine walk composes nothing out of, as a form: a numeric atom, a newtype
-     * construct's wrapped value, what a name was given, or {@code null}. */
+    /** A node the affine walk composes nothing out of, as a form: a numeric atom, what a name was
+     * given, or {@code null}. */
     private LinearForm<FactSubject> leafOf(Core n, Denotations at) {
-        // A newtype built around a number is that number here. What makes it one is the
-        // declaration, which `affineScalarBase` asks; a construction of it has the one field the
-        // declaration gives it.
-        if (n instanceof Core.Construct nd
-                && affineScalarBase(Type.ref(nd.typeName())) != null) {
-            return affineOf(nd.values().get(0).value(), at);
-        }
         Core written = writtenValue(n, at);
         if (written != null && written != n) {
             return affineOf(written, at);
@@ -650,8 +643,7 @@ final class Terms {
      * form is a caller that can keep an account of the arithmetic beside the one walk that has one.
      */
     AffineForms.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
-        if (!computesAsWhatItWasGiven(read.binding(), at)
-                || affineScalarBase(read.type()) == null) {
+        if (!computesAsWhatItWasGiven(read.binding(), at) || !carriesANumber(read.type())) {
             return null;
         }
         Core given = at.valueOf(read.binding());
@@ -702,6 +694,13 @@ final class Terms {
      * a container read through its name and not through a binding, a closure's answer read through
      * neither. What is left to the reader is what is genuinely about the value — the fields a
      * construction is built from, the arithmetic a number is — and never how it was written down.
+     *
+     * <p><b>This is what the environment holds and not what a reading is licensed to follow.</b>
+     * Every name a binding gives a value to is peeled here, which is the question a reader asking
+     * what was built wants answered. What one occurrence may be read as another is a narrower
+     * answer with an owner of its own ({@link AffineForms.Reading#readThrough}), and the walk that
+     * resolves an occurrence under it is held to that owner rather than to this one — so the two
+     * are not made one, however alike the shapes they peel look.
      */
     Given given(Core e, Denotations at) {
         if (e instanceof Core.Read r) {
@@ -765,8 +764,7 @@ final class Terms {
      * where it is recorded.
      */
     FactSubject atomOfTheCaseCarrying(Core e, Type carried, Denotations at) {
-        return affineScalarBase(carried) == null ? null
-                : atomOfIdentity(subjectOf(e, at), carried, e, at);
+        return carriesANumber(carried) ? atomOfIdentity(subjectOf(e, at), carried, e, at) : null;
     }
 
     /**
@@ -793,11 +791,27 @@ final class Terms {
     /** What a position is called, and the atom it is — either may be absent. */
     record Position(FactSubject key, FactSubject atom) {}
 
-    /** Whether the numeric domain carries values of what {@code e} answers at all. A number the term
+    /**
+     * Whether the numeric domain carries values of what {@code e} answers at all. A number the term
      * grammar cannot read is still a number, which is why an atom asks this of the type and not of
-     * whether the expression has a symbolic key. */
+     * whether the expression has a symbolic key.
+     *
+     * <p><b>Asked of the carrier, which is the one authority for what counts.</b> A date is counted
+     * in days and a time of day in seconds, and a rule relating two of them states a distance as
+     * readily as a rule over two whole numbers does. Which of the two scalars a type reaches is a
+     * narrower question and answers about fewer carriers than the arithmetic here can hold.
+     *
+     * <p>A string is a carrier and counts nothing: its values are ordered and stand no measurable
+     * distance apart, which is a difference the carrier already answers.
+     */
     private boolean carriesANumber(Core e) {
-        return affineScalarBase(e.type()) != null;
+        return carriesANumber(e.type());
+    }
+
+    /** The same, of a type a caller already holds. */
+    private boolean carriesANumber(Type t) {
+        Carrier carrier = Carrier.ofValue(t, symbols);
+        return carrier != null && carrier.counts();
     }
 
     /** {@code identity} as the atom of a value of {@code type} computed at {@code e}: held to how
@@ -807,7 +821,10 @@ final class Terms {
     private FactSubject atomOfIdentity(FactSubject identity, Type type, Core e, Denotations at) {
         FactSubject atom = named(identity, granularityOf(type));
         if (atom != null) {
-            atomExtents.putIfAbsent(atom, extentOf(affineScalarBase(type)));
+            // Of the type itself, which is what the carrier is asked of. An atom named with nothing
+            // said about where its counts run starts every rule about it from a range that admits
+            // what the order does not hold.
+            atomExtents.putIfAbsent(atom, extentOf(type));
             recording(atom, e, type, at);
             // What the value carries is filed where the value is named, so that a reader holding the
             // atom and no tree has it. Asked of the operation the value came from, whichever surface
@@ -1629,16 +1646,20 @@ final class Terms {
         return subject;
     }
 
-    /** How the values of a numeric type are spaced. */
+    /**
+     * How the values of a numeric type are spaced.
+     *
+     * <p>The carrier's answer, which is where the spacing of every order this language has is
+     * written. An atom cannot be named without one, so a spacing decided here from whichever of two
+     * scalars a type reaches would leave every other counted carrier out of the domain rather than
+     * in it.
+     */
     Granularity granularityOf(Type t) {
-        Type carrier = affineScalarBase(t);
-        if (carrier == Type.INT) {
-            return Granularity.DISCRETE;
+        Carrier carrier = Carrier.ofValue(t, symbols);
+        if (carrier == null || !carrier.counts()) {
+            throw new IllegalStateException("not a number the domain carries: " + Type.show(t));
         }
-        if (carrier == Type.DECIMAL) {
-            return Granularity.DENSE;
-        }
-        throw new IllegalStateException("not a number the domain carries: " + Type.show(t));
+        return carrier.spacing();
     }
 
     /** The spacing of every atom {@code f} is written over, for the domain to record. Every one of

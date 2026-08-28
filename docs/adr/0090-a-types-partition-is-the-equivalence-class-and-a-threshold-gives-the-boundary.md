@@ -228,6 +228,17 @@ A carrier with no step already gets that answer; a `Decimal` and a `DateTime` ha
 So the place a value sits on its carrier's order and the number it counts to are separate, and only
 the second is a number.
 
+A carrier's count is an internal coordinate and need not itself be a value the model calls a number.
+A reader that reasons over counted carriers may use that coordinate; doing so does not make the
+carried value numeric. A date counts days, and a rule counting two dates apart states a relation over
+those days as readily as a rule over two whole numbers states one over theirs — so the reading that
+proves a construction satisfies its declaration reasons over the day, and a `Date` is still no `Int`.
+Which readers may use it is therefore not a question any of them answers separately: asked per
+reader, one reader carried a statement written as a shift and refused the same statement written as
+the count, which is one arithmetic read two ways. What a carrier counts, how its counts are spaced,
+how far they run and what a written value counts as are the carrier's four answers, and every reader
+of a count asks it for all four.
+
 A position that is one case of an enumeration, or a union of some of them, is not a carrier. It is
 comparable on its sum's order — that is the wider question the type checker asks — and it ranges over
 less than that order, so a line drawn from the sum's places would ask for a row at a value the

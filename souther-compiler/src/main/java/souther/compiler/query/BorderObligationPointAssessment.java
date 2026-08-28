@@ -50,46 +50,50 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                                                       met) {
 
     /**
-     * One reading of the line: which behavior met it, and at which of that behavior's positions.
+     * One reading of the line: which behavior met it, and where in that behavior it was met.
      *
-     * <p><b>The position and not the behavior alone.</b> One behavior can carry the type at more
-     * than one position — {@code { a: Code, b: Code }} is two readings of {@code Code}'s line in
-     * whichever behavior takes that record — and what a search of one of them comes to is a fact
-     * about that position: the rules reaching it, and the values its decoder took. Told apart by
-     * the behavior alone, the second position's answer was dropped and which one survived was
-     * whichever the search walked first.
+     * <p><b>The place and not the behavior alone.</b> One behavior can carry the type at more than
+     * one place — {@code { a: Code, b: Code }} is two readings of {@code Code}'s line in whichever
+     * behavior takes that record — and what a search of one of them comes to is a fact about that
+     * place: the rules reaching it, and the values its decoder took. Told apart by the behavior
+     * alone, the second answer was dropped and which one survived was whichever the search walked
+     * first.
      *
-     * <p>{@code at} is the bare term a row at the position is labelled with — {@code
-     * String.length(x.a)} — and two readings of one line in one behavior are two positions, so it
-     * tells them apart. The behavior-qualified spelling is not used here because it would say the
-     * behavior twice; where the pair would not tell two readings apart, {@link #across} refuses
-     * rather than keeping one of them.
+     * <p><b>The whole target, because that is what says where a line was read.</b> A quantity runs
+     * over as many positions as it runs over: a rule relating {@code today} to a field of a sum is
+     * read once under each case, and both readings write {@code today} on the left. A word off the
+     * target — the left of it, the sentence a report prints — names one of the positions or spells
+     * the pair, and neither is what tells two of them apart; keyed on one, two readings of one line
+     * arrived as one and {@link #across} refused a model the compiler can read.
+     *
+     * <p><b>So a point and a reading of it are a line and where it was read.</b> A point carries
+     * the authored line ({@link souther.compiler.partition.BorderObligationId#line}), this carries
+     * the target, and the two together are the {@link souther.compiler.partition.BoundaryLine} the
+     * readings of one behavior were folded under ({@code Coverages.merged}). That is why the fold
+     * and this cannot come apart: they are one equivalence written once, rather than two that agree
+     * while every quantity has one position.
      */
-    public record Reading(String behavior, String at) {
+    public record Reading(String behavior, souther.compiler.partition.BoundaryTarget target) {
 
         public Reading {
-            if (behavior == null || at == null) {
+            if (behavior == null || target == null) {
                 throw new IllegalArgumentException("a reading is some behavior's, somewhere in it");
             }
         }
 
-        /**
-         * The reading a behavior made where it met {@code line}.
-         *
-         * <p>The one spelling of it, because it is compared. A reader asking whether a row was
-         * composed at its own position holds a border and a behavior and works out the pair; so
-         * does the gathering that keyed the readings in the first place, and two of them spelling
-         * the position differently is a comparison that answers no every time. It fails as a row
-         * that quietly stops being offered — nothing is thrown and no answer is wrong on its face —
-         * so the pair is made here and nowhere else.
-         */
+        /** The reading a behavior made where it met {@code line}. */
         public static Reading of(String behavior, souther.compiler.partition.Border line) {
-            return new Reading(behavior, line.cut().left());
+            return new Reading(behavior, line.cut());
         }
 
+        /**
+         * How a message names this reading. For a person to read, and never a key: what tells two
+         * readings apart is the value, and a caller comparing these words is asking a question the
+         * pair already answers.
+         */
         @Override
         public String toString() {
-            return behavior + "/" + at;
+            return behavior + "/" + target.label();
         }
     }
 
@@ -123,6 +127,14 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * account reads {@link #owedToTheReading}. Asked before the grouping instead, one of the two
      * kinds is gathered and the other is not — and the one that is not has no value naming its
      * readings, so whatever offers it a row has only one of them to offer from.
+     *
+     * <p><b>Of lines already folded, one per line a behavior read.</b> A point and a {@link Reading}
+     * are the authored line and where it was read, which is the
+     * {@link souther.compiler.partition.BoundaryLine} {@code Coverages.merged} folds on — so after
+     * merging, one point of one behavior has one reading at one target, and two of them under one
+     * key say the caller handed lines that were never merged. That is what the refusal below is
+     * about; it is not a fold, and joining two such entries would put the order of a walk into what
+     * a row is offered for.
      */
     public static List<BorderObligationPointAssessment> across(
             Map<String, List<BorderAssessment>> byBehavior) {
@@ -147,12 +159,16 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                     BorderAssessment already = byPoint
                             .computeIfAbsent(owed, _ -> new LinkedHashMap<>()).put(where, reading);
                     if (already != null) {
-                        // Two readings this cannot tell apart, which is not two readings: what a
-                        // search of one of them came to would stand for the other, chosen by the
-                        // order the walk took. Refused rather than kept, for the reason `owedAt`
-                        // refuses one behavior's lines holding one line twice.
-                        throw new IllegalStateException("one behavior reads " + owed + " twice at "
-                                + where + ", so the two readings of it are one");
+                        // One line, one behavior, one place, twice — which the lines handed in were
+                        // folded on and so cannot be. What is wrong is upstream: these are the
+                        // readings a behavior's lines came to after Coverages merged them, and two
+                        // entries under one key say the list was never merged. Refused rather than
+                        // kept, because keeping one of them means
+                        // what a search of it came to stands for the other, chosen by the order the
+                        // walk took.
+                        throw new IllegalStateException("two of one behavior's lines are the same"
+                                + " line read at the same place, so they were never merged: " + owed
+                                + " at " + where);
                     }
                 }
             }

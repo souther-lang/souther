@@ -91,7 +91,16 @@ public final class PartitionDerivation {
      * complete or partial by the same fact.
      */
     public static Measure<List<PartitionEvidence.AxisCoverage>> of(
-            List<PartitionEvidence.AxisCoverage> at, MeasureClosure.OfThePartition closure) {
+            List<PartitionEvidence.AxisCoverage> at, MeasureClosure.OfThePartition closure,
+            souther.compiler.inputs.EmptyInput inputIsEmpty) {
+        // Before anything about what was found. A class is a set of values a row can be written at,
+        // and where the rules leave the input none there is nothing for this measure to be about —
+        // which is not the same as the reading having fallen short of one, and not a gap any row
+        // could fill. Read from the one proof the behavior carries rather than concluded here, so
+        // that this measure and the border beside it cannot answer it two ways.
+        if (inputIsEmpty != null) {
+            return new Measure.NotApplicable<>(new NoFeasibleInput(inputIsEmpty));
+        }
         if (closure instanceof MeasureClosure.OfThePartition.Closed closed) {
             return at.isEmpty()
                     ? new Measure.NotApplicable<>(new NothingIsDivided(closed))

@@ -85,6 +85,14 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                 "a rule of the value above is placed under that value and accounted for there; "
                         + "counted here as well, one rule would owe an answer twice",
                 "NoRuleIsPlacedWhereNothingAccountsForItTest.everyRuleThatPlacedAnEndIsInTheAccount"));
+        table.put("clausesWithoutAnEnd", new Decided(Above.NOT_ASKED,
+                "the pair of `placed`, and the same answer for the same reason: a clause of the "
+                        + "value above is handed over by that value's own reading, and one handed "
+                        + "over here as well would draw its line twice. Which is where this parts "
+                        + "from `noLineAt` beside it — that one is asked about a position and owes "
+                        + "every rule reaching it, and this is asked of a reading and owes the "
+                        + "clauses that reading holds",
+                "AClauseAboveASumDrawsItsLineOnceTest"));
         table.put("bounds", new Decided(Above.NOT_ASKED,
                 "what a reading holds of its own value, which is what the answers above are taken "
                         + "from — the value above is asked through them and not through this",

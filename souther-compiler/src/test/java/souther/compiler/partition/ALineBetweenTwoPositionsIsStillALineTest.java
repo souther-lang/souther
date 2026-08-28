@@ -495,8 +495,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
                 notRead(RULED_OUT_BY_THE_RECORD),
                 "the record's own rule relates them, and the guard's line is outside the distance"
                         + " that rule leaves between them");
-        assertEquals(0, borders(RULED_OUT_BY_THE_RECORD),
-                "the diagonal holds nothing, so there is no border to owe a row at");
+        assertEquals(1, borders(RULED_OUT_BY_THE_RECORD),
+                "the diagonal holds nothing, so the guard has no border to owe a row at — and the"
+                        + " record's own rule, which is what leaves the distance where it is, has"
+                        + " the one line here");
     }
 
     /**
@@ -505,13 +507,17 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      * <p>The pair to the case above. Without it, refusing every line under a record that relates its
      * fields would pass just as well, and that would drop the rows the model does owe wherever an
      * author wrote a rule of any kind.
+     *
+     * <p>Two lines, because the model states two rules about the pair: the record's clause and the
+     * body's guard. They fall on one quantity and each is its own line — a row answering one says
+     * nothing about the other, and what each owes is read off the rule that drew it.
      */
     @Test
     void aRuleThatAdmitsTheDiagonalStillOwesTheRow() {
         String report = report(ALLOWED_BY_THE_RECORD);
 
         assertTrue(report.contains("no row is at the OFF point cmp/p.a = p.b"), report);
-        assertTrue(report.contains("border      borders 1   coverage items 1/2"), report);
+        assertTrue(report.contains("border      borders 2   coverage items 1/3"), report);
     }
 
     private static String report(String model) {

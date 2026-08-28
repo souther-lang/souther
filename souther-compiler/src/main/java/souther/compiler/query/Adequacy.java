@@ -1949,7 +1949,7 @@ public final class Adequacy {
                     + " the model divides it into, and no answer about the lines that"
                     + " reading drew");
         }
-        return BoundaryDerivation.of(read, divided.borderClosure());
+        return BoundaryDerivation.of(read, divided.borderClosure(), divided.inputIsEmpty());
     }
 
     /**

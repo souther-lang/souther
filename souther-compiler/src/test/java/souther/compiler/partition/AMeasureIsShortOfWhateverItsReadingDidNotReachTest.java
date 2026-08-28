@@ -116,20 +116,24 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     }
 
     /**
-     * And a rule set aside for what it says leaves neither.
+     * And a rule set aside for what it says leaves neither measure short.
      *
      * <p>The third, and the one the other two would be read as if a refusal were counted rather
-     * than asked. Both measures answer inapplicable: there is nothing here for either to be about,
-     * and holding a verdict open for it would be this compiler reporting a model whose every rule
-     * it understood.
+     * than asked. Neither measure is held open: the rule was read from end to end, and holding a
+     * verdict open for it would be this compiler reporting a model whose every rule it understood.
+     *
+     * <p><b>Which is not the same as there being nothing to measure.</b> The rule divides neither
+     * position, so the partition has no class to be about; it does say where the pair parts, so the
+     * border has a line and answers in full. Read as one verdict for both, a model stating a
+     * relation comes back as one stating nothing.
      */
     @Test
     void andARuleSetAsideForWhatItSaysLeavesNeither() {
         PartitionEvidence evidence = evidenceFor(SET_ASIDE_COSTING_NEITHER, "f");
 
         assertInstanceOf(Measurement.NotApplicable.class, evidence.partitioned());
-        assertInstanceOf(Measurement.NotApplicable.class,
-                readingFor(SET_ASIDE_COSTING_NEITHER, "f"));
+        assertInstanceOf(Measurement.Complete.class, readingFor(SET_ASIDE_COSTING_NEITHER, "f"),
+                "the relation is a line, and one read from end to end is measured in full");
         // And the rule is named beside them, so the two answers are about a model with a rule in it
         // and not about one with none.
         assertEquals(2, evidence.rulesWithoutALine().size(), () -> "unread: " + evidence.rulesWithoutALine());

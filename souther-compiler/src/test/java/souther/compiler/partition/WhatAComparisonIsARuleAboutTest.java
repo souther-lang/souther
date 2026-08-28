@@ -77,7 +77,7 @@ class WhatAComparisonIsARuleAboutTest {
         }
         return ComparisonAssessment.of("f", comparison,
                 InputReads.ofWhatIsDeclared(inputs, roots), symbols,
-                inputs.quantities(symbols), rule.value());
+                inputs.quantities(symbols), rule.value(), false);
     }
 
     /** The same over two {@code Int} positions, which is what most of the table is written over. */

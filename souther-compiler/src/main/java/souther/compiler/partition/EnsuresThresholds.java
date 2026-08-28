@@ -204,7 +204,7 @@ public final class EnsuresThresholds {
         // is what {@link ComparisonAssessment} is for: a clause and a guard over one arithmetic form
         // draw one line and raise one question, and neither is worked out beside the other.
         ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, reads,
-                symbols, quantities, rule.value());
+                symbols, quantities, rule.value(), false);
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
@@ -259,6 +259,7 @@ public final class EnsuresThresholds {
             // above, in the one place that answers it for both readers of a comparison.
             case ComparisonAssessment.Unread _, ComparisonAssessment.CutsNothing _,
                  ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.NoFeasibleInput _,
                  ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
         return line + 1;

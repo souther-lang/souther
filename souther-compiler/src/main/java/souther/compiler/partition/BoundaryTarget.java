@@ -12,6 +12,13 @@ package souther.compiler.partition;
  *
  * <p>The sentence a line is named by is {@code left = right} whatever it is on, so both are asked
  * here rather than assembled by each reader out of whichever fields it knows about.
+ *
+ * <p><b>This value is what tells one place a line was read from another.</b> Two of these are equal
+ * when they are the same quantity cut at the same place, and nothing about how either was found or
+ * printed is in here — which is what lets a reader hold the whole value as an identity instead of
+ * keying on a word it can spell. Anything added to it that is not part of what is cut or where —
+ * where the reading came from, what a diagnostic wants to say — would start telling two readings of
+ * one place apart.
  */
 public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
 
@@ -54,15 +61,28 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
         return of.named();
     }
 
-    /** The left of the {@code left = right} a report names this by. */
+    /**
+     * The left of the {@code left = right} a report names this by.
+     *
+     * <p>A word for a reader, and not what tells two of these apart. A quantity runs over as many
+     * positions as it runs over and this names one of them, so two lines from one position to two
+     * different ones are both written {@code today} here — a map keyed on it holds one of the two.
+     * What tells them apart is the whole value; a reader wanting the sentence takes {@link #label}.
+     */
     public String left() {
         return of.left();
     }
 
     /** The right of it, which is where the rule cut, written the way the quantity writes its own
-     *  levels. */
+     *  levels. The same caution as {@link #left()}: a word, and not half of a key. */
     public String right() {
         return of.writtenAt(at());
+    }
+
+    /** The whole sentence a report names this line by. The one spelling of it, so that a reader
+     *  meeting it in two places meets one wording. */
+    public String label() {
+        return left() + " = " + right();
     }
 
     /** Which shape a line has, for a reader that has to tell them apart without holding either. */

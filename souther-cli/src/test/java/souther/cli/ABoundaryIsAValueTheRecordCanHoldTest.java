@@ -152,7 +152,13 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
     void anEdgeIsWhereTheRecordStopsAndNotWhereTheFieldsTypeDoes() throws Exception {
         List<String> asked = placedByTheRecord(TIMESHEET);
 
-        assertEquals(4, asked.size(), () -> "asked for " + asked);
+        // Four ends, and the relation that moved two of them. That relation is a line of its own —
+        // it says where the pair parts — and it divides neither field, which is why the ends below
+        // are still each field's own.
+        assertEquals(5, asked.size(), () -> "asked for " + asked);
+        assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = interval.endsAt - 1")
+                        && l.contains("invariant WorkInterval (endsAfterStart)")),
+                () -> "the pair parts one minute in from where they are level: " + asked);
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 1439")),
                 () -> "the last minute an interval can start at is 1439: " + asked);
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.endsAt = 1")),
@@ -211,7 +217,9 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 .replace("else ShortShift", "else ShortShift");
         List<String> asked = boundariesOf(gated);
 
-        assertEquals(4, asked.size(), () -> "asked for " + asked);
+        // The four ends, and the record's own relation between the two fields. What the guard would
+        // have drawn is what is absent, and that is what the assertion below is about.
+        assertEquals(5, asked.size(), () -> "asked for " + asked);
         // The word and not the spelling. A guard says `guard@15:23` where it is written in a file
         // this compile holds and names its declaration where it is not, so matching the first of
         // those would stop seeing the second — which is a line drawn by a guard all the same.

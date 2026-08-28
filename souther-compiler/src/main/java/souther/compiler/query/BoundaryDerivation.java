@@ -70,7 +70,16 @@ public final class BoundaryDerivation {
     /** What the measure came to, from what it found and whether its reading ran out. The one place
      *  the states are chosen between. */
     public static Measure<List<BorderAssessment>> of(List<BorderAssessment> at,
-                                                         MeasureClosure.OfTheBorder closure) {
+                                                         MeasureClosure.OfTheBorder closure,
+                                                         souther.compiler.inputs.EmptyInput
+                                                                 inputIsEmpty) {
+        // The same answer the partition beside it gives, from the same proof. A point of a line is a
+        // value a row stands at, and where the rules leave the input none there is no row to ask
+        // for — read here rather than concluded, so the two measures cannot disagree about one
+        // model.
+        if (inputIsEmpty != null) {
+            return new Measure.NotApplicable<>(new NoFeasibleInput(inputIsEmpty));
+        }
         if (closure instanceof MeasureClosure.OfTheBorder.Closed closed) {
             return at.isEmpty()
                     ? new Measure.NotApplicable<>(new NoRuleDrawsALine(closed))

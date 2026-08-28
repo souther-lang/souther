@@ -212,9 +212,9 @@ final class DischargeRules {
      *
      * <p>Every declaration is about the operation and not about a reader, so the ones here are a
      * subset of what is declared: what an operation answers is stated over the counts of its
-     * arguments, and this check's arithmetic is over the numbers a model wrote. A date counts days
-     * and is no number, so {@code Date.daysBetween} states a form this reads and cannot carry — the
-     * partition can, since a position's count is what it works in.
+     * arguments, and what this check can do with such a statement is settled by whether it can name
+     * those counts. A carrier that counts has an internal coordinate this reasons over — a date's is
+     * its day — and reasoning over it does not make the value a number the model wrote.
      *
      * <p>Derived from what this side relates and not written as a list. A list is a second copy of
      * a capability, wrong the day the capability changes; asked this way, the operations that arrive
@@ -226,7 +226,7 @@ final class DischargeRules {
         // difference answer it by being the arithmetic they are, and what reads them is the
         // grammar; a program firing one would be firing the operator.
         for (ValueName operation : Bound.answersAFormOfItsArguments()) {
-            if (everyPartIsANumber(stdlib, operation)) {
+            if (everyPartHasACountedCarrier(stdlib, operation)) {
                 carried.add(operation);
             }
         }
@@ -234,30 +234,38 @@ final class DischargeRules {
     }
 
     /**
-     * Whether the result and every argument the declared form names stand at a number this check
-     * relates.
+     * Whether the result and every argument the declared form names stand on a carrier that counts.
      *
      * <p>Both ends, because the fact is an equation between them: what the operation answers,
      * counted, and what it was given, counted. A form whose arguments this can carry and whose
      * result it cannot is a form it cannot carry.
      *
-     * <p>Asked with {@link NumericAnswers#isANumber} where the binding asks
-     * {@link Carrier#countsToANumber}. That is the difference between what is true of the
-     * operation and what this check can do with it — a date counts and is no number, so
-     * {@code Date.daysBetween} is declared and is not carried here.
+     * <p><b>Asked of the carrier, which is the one authority for what counts.</b> A count is an
+     * internal coordinate and need not itself be a value the model calls a number: a date counts
+     * days, and reasoning over that day does not make the date an {@code Int}. Asked of whether the
+     * type is a number the model wrote, this would be a second capability beside the term reader's —
+     * and two capabilities over one arithmetic answer apart on the spelling, carrying a statement
+     * written as a shift and refusing the same statement written as the count.
+     *
+     * <p>Nothing here asks whether the parts share one count space. What a declared form does with
+     * two of them is what the declaration says: an operation answering seconds in days writes the
+     * conversion as its coefficients, and a rule requiring one space would refuse the conversions
+     * the library states. Where an expression rather than a declared form puts two counts together,
+     * keeping them apart is the expression reader's.
      *
      * <p>The library has the operation and the argument is one it takes, both of which
      * {@link OperationFactBinder} held before any of this was asked. What is left to decide is what
      * stands there.
      */
-    private static boolean everyPartIsANumber(Stdlib stdlib, ValueName operation) {
+    private static boolean everyPartHasACountedCarrier(Stdlib stdlib, ValueName operation) {
         Stdlib.Signature signature = stdlib.entry(theLibraryOperation(operation)).signature();
-        if (!NumericAnswers.isANumber(signature.result())) {
+        if (!Carrier.countsToANumber(signature.result())) {
             return false;
         }
         List<Type> params = signature.params();
         return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument ->
-                NumericAnswers.isANumber(params.get(CallArguments.positionIn(argument, operation))));
+                Carrier.countsToANumber(
+                        params.get(CallArguments.positionIn(argument, operation))));
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a

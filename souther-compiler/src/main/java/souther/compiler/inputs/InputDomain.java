@@ -105,7 +105,7 @@ public final class InputDomain {
     /** Nothing to read: a behavior whose signature is not in hand. */
     public static final InputDomain NONE =
             new InputDomain(List.of(), Map.of(), List.of(), List.of(), null, NameReach.NONE,
-                    List.of());
+                    List.of(), List.of());
 
     private final List<Position> positions;
     private final Map<TermPath, Position> byPath;
@@ -126,11 +126,25 @@ public final class InputDomain {
     /** Everything the rules of the values this reading opened placed, in the words each of them was
      * written in. What became of each is {@link #placements()}. */
     private final List<PlacementSeed> placed;
+    /**
+     * The clauses of those declarations that placed no end, once per conjunct.
+     *
+     * <p>Held at this level because a rule relating two positions is about the input and not about
+     * either of them: hung on a position it would be one of that position's rules, which is the
+     * reading a relation may not be given.
+     *
+     * <p>No part of what makes two readings one. These are the clauses the declarations wrote, so
+     * a reading with the same parameters under the same policy has the same ones — a reading that
+     * agreed about the parameters and disagreed here would be disagreeing with itself.
+     */
+    private final List<ClauseWithoutAnEnd> clauses;
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
-                        NameReach reach, List<PlacementSeed> placed) {
+                        NameReach reach, List<PlacementSeed> placed,
+                        List<ClauseWithoutAnEnd> clauses) {
         this.placed = List.copyOf(placed);
+        this.clauses = List.copyOf(clauses);
         this.positions = List.copyOf(positions);
         this.read = Map.copyOf(read);
         this.parameters = List.copyOf(parameters);
@@ -226,7 +240,7 @@ public final class InputDomain {
         NameReach.Observed observed = new NameReach.Observed();
         // Everything the rules of every value this reading opened placed, gathered as each reading
         // is opened. What became of each of them is asked once the positions are all in hand.
-        List<PlacementSeed> account = new ArrayList<>();
+        Gathered account = new Gathered();
         for (Parameter parameter : parameters) {
             if (parameter.binding() != null) {
                 read.putIfAbsent(parameter.binding(), parameter.name());
@@ -234,7 +248,7 @@ public final class InputDomain {
             TermPath at = TermPath.of(parameter.name());
             roots.add(new RuleRoot(at, parameter.type()));
             PlacedRules rules = PlacedRules.of(at, parameter.type(), symbols, policy);
-            account.addAll(rules.placed());
+            account.from(rules);
             // One walk, carrying the paths the measurement named under this parameter. Walked once
             // per demand instead, two paths sharing a prefix would open that prefix's declaration
             // twice, place its rules twice, and record a second answer where the ledger of what was
@@ -253,7 +267,34 @@ public final class InputDomain {
                 .toList();
         return settled.isEmpty() ? NONE
                 : new InputDomain(settled, read, parameters, roots, policy, observed.reach(),
-                        List.copyOf(account));
+                        account.placed(), account.clauses());
+    }
+
+    /**
+     * What every declaration this walk opened put forward, kept as the walk goes.
+     *
+     * <p>One value because they are filled together, at the one step that opens a declaration's
+     * rules. Threaded as two lists, a reading that opened a declaration would have had two places to
+     * remember to write to, and a walk added later writes to whichever its author noticed.
+     */
+    private static final class Gathered {
+
+        private final List<PlacementSeed> placed = new ArrayList<>();
+        private final List<ClauseWithoutAnEnd> clauses = new ArrayList<>();
+
+        /** Everything {@code rules} put forward, ends and clauses alike. */
+        void from(PlacedRules rules) {
+            placed.addAll(rules.placed());
+            clauses.addAll(rules.clausesWithoutAnEnd());
+        }
+
+        List<PlacementSeed> placed() {
+            return List.copyOf(placed);
+        }
+
+        List<ClauseWithoutAnEnd> clauses() {
+            return List.copyOf(clauses);
+        }
     }
 
     /**
@@ -354,6 +395,22 @@ public final class InputDomain {
             out.add(file(each));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The clauses of this input's declarations that placed no end, and where each is written about.
+     *
+     * <p>Handed over rather than read here. What a clause states about the values of this input is
+     * settled in the vocabulary a line is drawn in, which is the measure's and not this reading's —
+     * so this says which clauses there are and where they are read against, and says nothing about
+     * what any of them comes to.
+     *
+     * <p>Every one of them, whatever this reading made of it. A clause set aside here is one the
+     * reading that draws lines may still read: the two name their atoms differently, and a rule over
+     * a number this reading has no atom for is a rule that one names two positions in.
+     */
+    public List<ClauseWithoutAnEnd> clausesWithoutAnEnd() {
+        return clauses;
     }
 
     /**
@@ -836,7 +893,7 @@ public final class InputDomain {
                              ReadingPolicy policy, PlacedRules placed, List<Position> found,
                              List<RuleRoot> roots, java.util.Set<Type> visited,
                              RuleHandoffs handoffs, NameReach.Observed observed,
-                             List<PlacementSeed> account, Reach reach) {
+                             Gathered account, Reach reach) {
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
@@ -956,7 +1013,7 @@ public final class InputDomain {
                               Symbols symbols, ReadingPolicy policy,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
                               java.util.Set<Type> visited, RuleHandoffs handoffs,
-                              NameReach.Observed observed, List<PlacementSeed> account,
+                              NameReach.Observed observed, Gathered account,
                               Reach reach, boolean stopped) {
         switch (continuation) {
             // Nothing is opened under the position, so a handoff made there stays standing. Which
@@ -1110,7 +1167,7 @@ public final class InputDomain {
                                          java.util.Set<Type> visited, RuleHandoffs handoffs,
                                          NameReach.Observed observed,
                                          PlacedRules.Reaching crossing,
-                                         List<PlacementSeed> account, Reach reach) {
+                                         Gathered account, Reach reach) {
         roots.add(new RuleRoot(opened, type));
         if (reach.handedOn()) {
             handoffs.accepts(by, at, opened);
@@ -1118,7 +1175,7 @@ public final class InputDomain {
         PlacedRules rules = PlacedRules.of(opened, type, symbols, policy, crossing);
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
-        account.addAll(rules.placed());
+        account.from(rules);
         walk(opened, type, ancestry, symbols, policy, rules, found, roots, visited,
                 handoffs, observed, account, reach);
     }
@@ -1140,7 +1197,7 @@ public final class InputDomain {
                                    List<Position> found, List<RuleRoot> roots,
                                    java.util.Set<Type> visited, RuleHandoffs handoffs,
                                    NameReach.Observed observed, PlacedRules.Reaching crossing,
-                                   List<PlacementSeed> account, Reach reach, boolean stopped) {
+                                   Gathered account, Reach reach, boolean stopped) {
         // <b>A descent that costs no level stops only where it returns to a value it has already
         // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
         // on is the value reached and never the narrowing taken: a narrowing is an edge and the
