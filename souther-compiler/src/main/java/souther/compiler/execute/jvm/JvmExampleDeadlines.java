@@ -30,7 +30,6 @@ import java.time.Duration;
  * to the thread that asked. It is named for the machine it is of, and reached through
  * {@code Compilation} — which is where the implementation that uses one is named.
  */
-@FunctionalInterface
 public interface JvmExampleDeadlines {
 
     /**

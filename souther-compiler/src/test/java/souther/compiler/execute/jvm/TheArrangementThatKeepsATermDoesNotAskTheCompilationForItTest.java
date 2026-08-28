@@ -71,14 +71,22 @@ class TheArrangementThatKeepsATermDoesNotAskTheCompilationForItTest {
                         + " saying so here");
     }
 
-    /** Every file that says how a deadline is kept: one that answers {@link JvmExampleDeadlines},
-     *  and one that builds a {@code Deadline} of its own. */
+    /**
+     * Every file that says how a deadline is kept: one that answers {@link JvmExampleDeadlines},
+     * and one that is a {@code Deadline}.
+     *
+     * <p>Both spellings of the second, because which one a file uses says nothing about whether it
+     * reads the store. {@code Deadline} is not sealed — a class may answer it as readily as an
+     * anonymous body does — so looking only for the body that is here today would let the next one
+     * past.
+     */
     private static List<Path> arrangements() throws IOException {
         List<Path> found = new ArrayList<>();
         try (Stream<Path> written = Files.walk(MAIN)) {
             for (Path each : written.filter(p -> p.toString().endsWith(".java")).sorted().toList()) {
                 String said = Files.readString(each);
                 if (said.contains("implements JvmExampleDeadlines")
+                        || said.contains("implements Deadline")
                         || said.contains("new Deadline() {")) {
                     found.add(each);
                 }

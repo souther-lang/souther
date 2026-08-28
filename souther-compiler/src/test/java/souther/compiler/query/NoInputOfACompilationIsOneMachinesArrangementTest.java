@@ -16,7 +16,6 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a compilation is told, and never how one machine carries it out.
@@ -83,11 +82,14 @@ class NoInputOfACompilationIsOneMachinesArrangementTest {
     @Test
     void andEveryInputThereIsWasWalked() throws IOException {
         Set<String> declaringInSource = new LinkedHashSet<>();
+        int writtenDown = 0;
         try (Stream<Path> written = Files.walk(MAIN)) {
             for (Path each : written.filter(p -> p.toString().endsWith(".java")).toList()) {
-                if (Files.readString(each).contains("implements Input<")) {
+                int here = declarationsIn(Files.readString(each));
+                if (here > 0) {
                     String file = each.getFileName().toString();
                     declaringInSource.add(file.substring(0, file.length() - ".java".length()));
+                    writtenDown += here;
                 }
             }
         }
@@ -97,7 +99,14 @@ class NoInputOfACompilationIsOneMachinesArrangementTest {
                 declaringInSource,
                 "every file declaring an input is one this walks; a new one has to be added here"
                         + " with a reason, not left out of the walk");
-        assertTrue(inputs().size() >= 10, "and the walk found them: " + inputs());
+        assertEquals(writtenDown, inputs().size(),
+                () -> "as many inputs were walked as are written: " + inputs());
+    }
+
+    /** How many inputs {@code written} declares. Counted rather than compared against a number
+     *  kept here, which would be a second place to say how many there are. */
+    private static int declarationsIn(String written) {
+        return written.split("implements Input<", -1).length - 1;
     }
 
     /** Every input key declared in {@link #DECLARING}. */
