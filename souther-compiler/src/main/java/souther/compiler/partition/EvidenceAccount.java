@@ -16,9 +16,11 @@ import java.util.Set;
  * none, with the measurement called complete (issue #1140). An account is worth what it is anchored
  * to, and this one is anchored to what this stage was handed.
  *
- * <p><b>Exactly one disposition each.</b> Not at least one: a piece of evidence measured at one axis
- * and left aside at another is this stage saying two things about one fact. Not at most one either —
- * that is the whole point.
+ * <p><b>One disposition each, and the same one however often it is said.</b> A piece of evidence
+ * measured at one axis and left aside at another is this stage saying two things about one fact, and
+ * it is refused where the second is said. Saying the same thing twice about one piece is one answer:
+ * what this holds the stage to is that everything it was handed has an answer, and not that the
+ * stage reached each piece exactly once.
  *
  * <p>What the dispositions are is not decided here. Each is written where the stage does the thing
  * it names, so an outcome added to the stage is an outcome named at the place it happens; gathered
@@ -55,18 +57,28 @@ final class EvidenceAccount {
      *  {@link Disposition.Measured} can ask the evidence what it should have left behind. */
     private record Answered(LineEvidence what, Disposition how) {}
 
-    private final Set<LineEvidence.FiledOccurrence> owed = new LinkedHashSet<>();
-    private final Map<LineEvidence.FiledOccurrence, Answered> answered = new LinkedHashMap<>();
+    private final Set<LineEvidence.FiledEvidenceId> owed = new LinkedHashSet<>();
+    private final Map<LineEvidence.FiledEvidenceId, Answered> answered = new LinkedHashMap<>();
 
     EvidenceAccount(List<LineEvidence> evidence) {
-        evidence.forEach(each -> owed.add(each.occurrence()));
+        evidence.forEach(each -> owed.add(each.id()));
     }
 
     void disposedOf(LineEvidence what, Disposition how) {
-        Answered already = answered.put(what.occurrence(), new Answered(what, how));
-        if (already != null && !already.how().equals(how)) {
-            throw new IllegalStateException("what became of " + what.occurrence()
+        Answered already = answered.put(what.id(), new Answered(what, how));
+        if (already == null) {
+            return;
+        }
+        if (!already.how().equals(how)) {
+            throw new IllegalStateException("what became of " + what.id()
                     + " was said twice, as " + already.how() + " and as " + how);
+        }
+        // And that the two are one piece of evidence, which the identity says and this is what
+        // checks it. Two pieces sharing a rule and a number while parting the position's values in
+        // different places would be one entry here, with whichever came last behind it.
+        if (!already.what().equals(what)) {
+            throw new IllegalStateException("two pieces of evidence share " + what.id() + ": "
+                    + already.what() + " and " + what);
         }
     }
 
@@ -96,11 +108,11 @@ final class EvidenceAccount {
             if (axis == null) {
                 throw new IllegalStateException(
                         "this stage says it measured evidence at an axis it did not keep: "
-                                + each.what().occurrence());
+                                + each.what().id());
             }
             if (!carries(axis, each.what())) {
                 throw new IllegalStateException(
-                        "this stage says it measured " + each.what().occurrence() + " at " + at
+                        "this stage says it measured " + each.what().id() + " at " + at
                                 + ", which carries nothing that rule drew");
             }
         }
@@ -127,7 +139,7 @@ final class EvidenceAccount {
 
     /** That this stage said what became of everything it was handed. */
     private void everyPieceWasDisposedOf() {
-        List<LineEvidence.FiledOccurrence> lost = owed.stream()
+        List<LineEvidence.FiledEvidenceId> lost = owed.stream()
                 .filter(each -> !answered.containsKey(each)).toList();
         if (!lost.isEmpty()) {
             throw new IllegalStateException(
@@ -135,7 +147,7 @@ final class EvidenceAccount {
                             + " — a measure reported as complete over evidence that went missing"
                             + " is what this account exists to refuse");
         }
-        List<LineEvidence.FiledOccurrence> strangers = answered.keySet().stream()
+        List<LineEvidence.FiledEvidenceId> strangers = answered.keySet().stream()
                 .filter(each -> !owed.contains(each)).toList();
         if (!strangers.isEmpty()) {
             throw new IllegalStateException(

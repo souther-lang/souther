@@ -1277,7 +1277,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionWhoseRulesWereNotReached(var axis)) {
                 out.append(String.format("      %s rules not reached: %s%n",
-                        mark(f), axis.name()));
+                        mark(f), axis.path()));
             }
         }
         // The questions this measure answers: which values may stand where, which classes hold
@@ -2509,7 +2509,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.APositionNoLineDivides(var position) -> position.at().toString();
             case About.APositionThisCouldNotRead(var it) -> it.at();
             case About.ARuleWithoutALine(var it) -> it.at();
-            case About.APositionWhoseRulesWereNotReached(var axis) -> axis.name();
+            // The position and not a number measured of it: which of this position's rules went
+            // unread is a fact about the location, and the measures on it are as many as the rules
+            // name numbers there.
+            case About.APositionWhoseRulesWereNotReached(var axis) -> axis.path();
             // The position, as the two above write it. What is said of it is the kind's; there is
             // no rule to name and no class this is about, so the position is the whole subject.
             case About.APositionReadWiderThanItsRules(var it) -> it.at().toString();

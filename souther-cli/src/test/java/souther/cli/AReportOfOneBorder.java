@@ -187,7 +187,8 @@ final class AReportOfOneBorder {
                         PartitionDerivation.TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT,
                         WeakeningSet.of(new Weakening.ModelReadingIncomplete(
                                 new souther.compiler.partition.ClosureGap.RulesNotReached(
-                                        new souther.compiler.partition.AxisId("b", "t"))))),
+                                        new souther.compiler.inputs.PositionId(
+                                                souther.compiler.inputs.TermPath.of("t")))))),
                 souther.compiler.query.OwedBoundaryPoint.accountOf(border),
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
@@ -205,7 +206,8 @@ final class AReportOfOneBorder {
         return new Measurement.Partial<>(List.of(boundary),
                 WeakeningSet.of(new Weakening.ModelReadingIncomplete(
                         new souther.compiler.partition.ClosureGap.RulesNotReached(
-                                new souther.compiler.partition.AxisId("b", "m")))));
+                                new souther.compiler.inputs.PositionId(
+                                        souther.compiler.inputs.TermPath.of("m"))))));
     }
 
     /**

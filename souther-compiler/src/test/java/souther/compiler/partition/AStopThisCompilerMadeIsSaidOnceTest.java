@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.BlockedDescent;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RulesLeftUnread;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
@@ -279,42 +278,45 @@ class AStopThisCompilerMadeIsSaidOnceTest {
      * Which kinds of gap one axis carrying {@code residue} leaves the partition measure short of.
      *
      * <p>The kinds and not the values: what a gap is keyed by is asserted where that decision is
-     * ({@link #theStopIsNamedForTheAxisCarryingIt}), and repeating it in every row here would make
+     * ({@link #theStopIsNamedForThePositionItIsAt}), and repeating it in every row here would make
      * every row of the arithmetic fail the day the identity is revisited.
      */
     private static Set<Class<?>> gapKindsOf(ReadingResidue residue) {
         MeasureClosure.Both closed = MeasureClosure.of(
-                List.of(new Axis(new AxisId("f", "r.cost"),
-                        new NumericTerm.ValueOf(TermPath.of("r").then("cost")),
-                        new PositionAccount(TermPath.of("r").then("cost"), Type.BOOL, residue,
-                                null, null),
-                        List.of(), List.of(), List.of(),
-                        souther.compiler.check.NarrowedBounds.NOTHING)),
+                List.of(new PositionAccount(TermPath.of("r").then("cost"), Type.BOOL, residue,
+                        null, null)),
                 List.of(), List.of(), new LinesRead());
         return ((MeasureClosure.OfThePartition.Open) closed.partition()).by().stream()
                 .map(Object::getClass).collect(java.util.stream.Collectors.toSet());
     }
 
     /**
-     * The stop is named for the axis carrying it, which is not always the position that was blocked.
+     * The stop is named for the position it is at, and not for a number that position is measured
+     * at.
      *
-     * <p>Where the two come apart, and the whole of why this arm is keyed by an axis. The map's
-     * contents are what the walk could not reach; the axis is the size a rule measures. A reader is
-     * being told something about the number it holds, so that is what the finding names — and the
-     * position is that axis's path.
+     * <p>Where the two come apart. The map's contents are what the walk could not reach and the
+     * size is what a rule measures, so the position and the number are different words here.
+     *
+     * <p><b>This used to name the number, and that reading needed one measure per position.</b> The
+     * argument for it was that a gap beside a measurement is about the measure a reader holds — but
+     * a location is measured at as many numbers as the rules name of it, and one stop under such a
+     * location came out once per number, which is a compiler's own state counted several times. What
+     * weakens one measurement is said per measurement elsewhere; these are one behavior's account of
+     * what its reading of the model came to, and a reader holding a measure reaches its position by
+     * the path it reads from.
      */
     @Test
-    void theStopIsNamedForTheAxisCarryingIt() {
+    void theStopIsNamedForThePositionItIsAt() {
         List<Weakening> said = weakeningOf(A_MAP_A_BODY_MEASURES, "f");
 
-        assertEquals(List.of("f/Map.size(r.cost)"),
+        assertEquals(List.of("r.cost"),
                 said.stream()
                         .filter(each -> each instanceof Weakening.ModelReadingIncomplete(
                                 ClosureGap.PositionNotReachedInto _))
                         .map(each -> ((ClosureGap.PositionNotReachedInto)
                                 ((Weakening.ModelReadingIncomplete) each).cause()).at().toString())
                         .toList(),
-                () -> "the axis carrying the stop, not the position blocked: " + said);
+                () -> "the position the walk stopped at, not a number measured of it: " + said);
     }
 
     private static List<Weakening> weakeningOf(String source, String behavior) {

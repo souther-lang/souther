@@ -16,7 +16,7 @@ import souther.compiler.inputs.NumericTerm;
  *
  * <p><b>Not an identity, before filing.</b> One rule about a name every case of a sum spreads is
  * filed at each of those positions, and what the partition is owed is each of them. The identity of
- * a filed one is {@link #occurrence}, which is that expansion's answer and not this reading's.
+ * a filed one is {@link #id}, which is that expansion's answer and not this reading's.
  */
 public sealed interface LineEvidence {
 
@@ -27,15 +27,15 @@ public sealed interface LineEvidence {
     OriginRef by();
 
     /**
-     * What tells one filed piece of evidence from another.
+     * What tells one filed piece of evidence from another, once it has been filed.
      *
      * <p>The rule and the number together, because filing takes one rule to the positions the name
      * it is written at reaches: three cases of a sum spreading one field is one rule and three
      * numbers, and the partition owes an answer at each. Keyed by the rule alone, answering at one
      * of them would close the account over all three.
      */
-    default FiledOccurrence occurrence() {
-        return new FiledOccurrence(by(), at());
+    default FiledEvidenceId id() {
+        return new FiledEvidenceId(by(), at());
     }
 
     /** Where a run of the position's values ends and the next begins. */
@@ -72,8 +72,9 @@ public sealed interface LineEvidence {
         }
     }
 
-    /** One filed piece of evidence, told from every other. */
-    record FiledOccurrence(OriginRef by, NumericTerm at) {}
+    /** What one filed piece of evidence is called: the rule that said it and the number it was
+     *  filed at. Not a count of how many times anything reached it. */
+    record FiledEvidenceId(OriginRef by, NumericTerm at) {}
 
     /**
      * The lines among {@code evidence}, for a reader that wants only those.

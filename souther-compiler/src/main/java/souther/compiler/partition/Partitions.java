@@ -70,7 +70,7 @@ public final class Partitions {
      * @param along   the lines drawn on one position, by the axis they are on. Every measurable axis
      *                has an entry, and an axis that is not measurable has no lines to have one for
      */
-    public record Partitioning(List<Axis> axes,
+    public record Partitioning(List<PositionAccount> positions, List<Axis> axes,
                                List<souther.compiler.inputs.StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
@@ -83,6 +83,7 @@ public final class Partitions {
                                MeasureClosure.OfThePartition partitionClosure,
                                MeasureClosure.OfTheBorder borderClosure) {
         public Partitioning {
+            positions = List.copyOf(positions);
             axes = List.copyOf(axes);
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
@@ -188,6 +189,11 @@ public final class Partitions {
         // has something to say, and a position with none is no more affected than any other.
         List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated = new ArrayList<>();
         List<souther.compiler.inputs.StandingQuestion> standing = new ArrayList<>();
+        // The positions this phase answers for, kept as they are made. A collection of its own
+        // because a position is what a reader of a stop or an absence is asking about, and the only
+        // other way to reach one is to walk the measures and put them back together — which is a
+        // rule about which measure answers for the location, invented once per reader.
+        List<PositionAccount> positions = new ArrayList<>();
         for (Position position : inputs.positions()) {
             // Not at a position made of positions. Such a one is given up in favour of what is
             // under it and carries no classes of its own, so what this qualifies is not there —
@@ -199,7 +205,8 @@ public final class Partitions {
                 notSeparated.add(
                         new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
             }
-            axisOf(behavior, position, symbols, policy, found, uncertain, rulesWithoutALine);
+            axisOf(behavior, position, symbols, policy, found, positions, uncertain,
+                    rulesWithoutALine);
             // What the rules of this position raise that nothing answered, gathered from the
             // reading that found it. Once per position and not once per axis: a question is the
             // model's, and which axis is standing beside it is this compiler's business.
@@ -235,9 +242,12 @@ public final class Partitions {
         LinesRead read = new LinesRead();
         java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, symbols, read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
-        MeasureClosure.Both closed = MeasureClosure.of(kept, standing, rulesWithoutALine, read);
-        return new Partitioning(kept, standing, uncertain, undividedIn(measured),
-                List.copyOf(rulesWithoutALine), blockedIn(measured), List.copyOf(notSeparated),
+        MeasureClosure.Both closed =
+                MeasureClosure.of(positions, standing, rulesWithoutALine, read);
+        return new Partitioning(List.copyOf(positions), kept, standing, uncertain,
+                undividedIn(positions, measured),
+                List.copyOf(rulesWithoutALine), blockedIn(positions, measured),
+                List.copyOf(notSeparated),
                 List.of(), lines, ReachingCuts.NONE,
                 closed.partition(), closed.border());
     }
@@ -445,37 +455,40 @@ public final class Partitions {
      * the model does divide. What this phase came to about the location is
      * {@link BodyCutInspection#outranking}'s to fold.
      */
-    private static List<UndividedPosition> undividedIn(List<Measured> measured) {
+    private static List<UndividedPosition> undividedIn(List<PositionAccount> positions,
+                                                       List<Measured> measured) {
         List<UndividedPosition> out = new ArrayList<>();
-        for (AtOnePosition each : byPosition(measured)) {
-            PendingPosition pending = PendingPosition.of(each.at(), each.measured());
+        for (PositionAccount at : positions) {
+            PendingPosition pending = PendingPosition.of(at, anythingMeasures(at, measured));
             if (pending != null) {
-                out.add(pending.complete(each.body()));
+                out.add(pending.complete(cameTo(at, measured)));
             }
         }
         return List.copyOf(out);
     }
 
-    /** One position, whether anything measures it, and what this phase came to about it. */
-    private record AtOnePosition(PositionAccount at, boolean measured, BodyCutInspection body) {}
+    /** Whether any measure of this position has something to divide it by. */
+    private static boolean anythingMeasures(PositionAccount at, List<Measured> measured) {
+        return measured.stream()
+                .anyMatch(each -> each.axis().path().equals(at.path())
+                        && each.axis().measurable());
+    }
 
     /**
-     * The measures gathered back into the positions they are of.
+     * What this phase came to about one position, over every number it measures the position at.
      *
      * <p>A location is measured at as many numbers as the rules name of it, and what a report says
-     * about the location is one sentence. Whether anything measures it is any of them measuring it;
-     * what this phase came to about it is {@link BodyCutInspection#outranking}'s to fold.
+     * about the location is one sentence. Which of the answers it is is
+     * {@link BodyCutInspection#outranking}'s, and null where nothing was measured here at all.
      */
-    private static List<AtOnePosition> byPosition(List<Measured> measured) {
-        Map<TermPath, AtOnePosition> out = new LinkedHashMap<>();
+    private static BodyCutInspection cameTo(PositionAccount at, List<Measured> measured) {
+        BodyCutInspection came = null;
         for (Measured each : measured) {
-            out.merge(each.axis().path(),
-                    new AtOnePosition(each.axis().at(), each.axis().measurable(), each.body()),
-                    (had, also) -> new AtOnePosition(had.at(),
-                            had.measured() || also.measured(),
-                            BodyCutInspection.outranking(had.body(), also.body())));
+            if (each.axis().path().equals(at.path())) {
+                came = BodyCutInspection.outranking(came, each.body());
+            }
         }
-        return List.copyOf(out.values());
+        return came;
     }
 
     /**
@@ -489,10 +502,10 @@ public final class Partitions {
      * a list of what this compiler cannot generally do rather than of what it did not read here.
      */
     private static List<souther.compiler.inputs.PositionReadingBlocked> blockedIn(
-            List<Measured> measured) {
+            List<PositionAccount> positions, List<Measured> measured) {
         List<souther.compiler.inputs.PositionReadingBlocked> out = new ArrayList<>();
-        for (AtOnePosition each : byPosition(measured)) {
-            PendingPosition pending = PendingPosition.of(each.at(), each.measured());
+        for (PositionAccount at : positions) {
+            PendingPosition pending = PendingPosition.of(at, anythingMeasures(at, measured));
             souther.compiler.inputs.PositionReadingBlocked stopped =
                     pending == null ? null : pending.reportable();
             if (stopped != null && !out.contains(stopped)) {
@@ -675,9 +688,11 @@ public final class Partitions {
         List<Border> across = Border.allOf(between, partedByQuantity(out), read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
-        MeasureClosure.Both closed = MeasureClosure.of(out, base.unanswered(), rules, read);
-        return new Partitioning(out, base.unanswered(), base.uncertain(),
-                undividedIn(measured), List.copyOf(rules), blockedIn(measured),
+        MeasureClosure.Both closed =
+                MeasureClosure.of(base.positions(), base.unanswered(), rules, read);
+        return new Partitioning(base.positions(), out, base.unanswered(), base.uncertain(),
+                undividedIn(base.positions(), measured), List.copyOf(rules),
+                blockedIn(base.positions(), measured),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
                 // it was read from the relation the rules admit.
@@ -995,7 +1010,8 @@ public final class Partitions {
      */
     private static void axisOf(String behavior, Position position, Symbols symbols,
                                ReadingPolicy policy,
-                               List<Axis> out, java.util.Set<NumericTerm> uncertain,
+                               List<Axis> out, List<PositionAccount> positions,
+                               java.util.Set<NumericTerm> uncertain,
                                List<RuleWithoutALine> rulesWithoutALine) {
         for (RuleWithoutALine each : position.rulesWithoutALine()) {
             if (rulesWithoutALine.stream().noneMatch(had -> had.sameAs(each))) {
@@ -1020,8 +1036,9 @@ public final class Partitions {
                 // all the same: a `Map` a rule about its size divides is one nothing was read into,
                 // and taking that off the axis with the fallback is how the stop went unreported
                 // (issue #1084).
-                out.add(new Axis(id, term, PositionAccount.of(position, null, null),
-                        divided.classes(), divided.cuts().cuts(), List.of(),
+                PositionAccount at = PositionAccount.of(position, null, null);
+                positions.add(at);
+                out.add(new Axis(id, term, at, divided.classes(), divided.cuts().cuts(), List.of(),
                         position.narrowedEnds()));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
@@ -1038,9 +1055,12 @@ public final class Partitions {
                     // carries what it is left with if nothing answers — including a rule about this
                     // position that the local reading could not take in, which is what keeps the
                     // position from completing as one the model divides no way.
-                    case StructuralInspection.Retained retained ->
-                            out.add(Axis.pendingAt(id, term, PositionAccount.of(position,
-                                    retained.continuation(), leftAt(position))));
+                    case StructuralInspection.Retained retained -> {
+                        PositionAccount at = PositionAccount.of(position,
+                                retained.continuation(), leftAt(position));
+                        positions.add(at);
+                        out.add(Axis.pendingAt(id, term, at));
+                    }
                 }
             }
         }

@@ -46,6 +46,11 @@ public record PositionAccount(TermPath path, Type type, ReadingResidue residue,
         }
     }
 
+    /** What names this position across a report, which is where it is. */
+    public souther.compiler.inputs.PositionId id() {
+        return new souther.compiler.inputs.PositionId(path);
+    }
+
     /** What one position's reading came to, as the reading itself answered it. */
     public static PositionAccount of(Position position,
                                      StructuralInspection.Continuation pending,
