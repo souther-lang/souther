@@ -102,21 +102,31 @@ public sealed interface About {
      * <p>Which is why it carries the debt and not one of the readings. Over {@code crm} one clause
      * of {@code UserId} is read at 126 positions; a finding naming one of them would name whichever
      * the walk reached first, and an author sent there would be sent to a body that says nothing
-     * about the length of a user id (issue #1062).
+     * about the length of a user id.
+     *
+     * <p>The declaration's debt and not the point alone, so that what a report writes it on is the
+     * quantity the author wrote. A point holds no such word — its readings each name a position
+     * they met the line at — and a finding that reached for one got the rule's own name standing in
+     * for it.
      */
-    record APointOfADeclaredBorder(BorderObligationPointAssessment debt) implements About {
+    record APointOfADeclaredBorder(Adequacy.DeclaredDebt owed) implements About {
         public APointOfADeclaredBorder {
-            java.util.Objects.requireNonNull(debt, "a finding is about something");
+            java.util.Objects.requireNonNull(owed, "a finding is about something");
+        }
+
+        /** What the readings of the line came to, which is what the finding stands on. */
+        public BorderObligationPointAssessment debt() {
+            return owed.debt();
         }
 
         /** Which of a border's four points this is about, which the point itself says. */
         public souther.compiler.partition.PointRole role() {
-            return debt.role();
+            return debt().role();
         }
 
         /** What became of this point, which is what the finding is about. */
         public ItemAssessment item() {
-            return debt.item();
+            return debt().item();
         }
     }
 

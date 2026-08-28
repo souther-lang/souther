@@ -833,7 +833,8 @@ public final class Analyzer {
             }
             if (each.subject().isBehavior(behavior)
                     || each.about() instanceof souther.compiler.query.About
-                            .APointOfADeclaredBorder(var debt) && debt.carriedBy(behavior)) {
+                            .APointOfADeclaredBorder(var owed)
+                            && owed.debt().carriedBy(behavior)) {
                 return true;
             }
         }

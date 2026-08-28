@@ -1644,9 +1644,16 @@ public final class Adequacy {
                 db.ask(new Obligations(module, scope)).value();
         java.util.SequencedMap<souther.compiler.partition.BorderObligationPoint,
                 BorderAccount.Answer> resolved = new LinkedHashMap<>();
-        if (points == null) {
+        Symbols symbols = Names.derivedSymbols(db, module).value();
+        souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
+        if (points == null || symbols == null || policy == null) {
             return new BorderAccount(module, scope, resolved);
         }
+        // What the declarations wrote their lines on, for the points that have a declaration.
+        // Reading a declaration costs no search, so an account of one behavior pays nothing here
+        // for the rest of the module; what it would pay for is asking the declarations' own
+        // account, which is built from every reading there is.
+        Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declarations = new LinkedHashMap<>();
         for (BorderObligationPointAssessment debt : points) {
             // A point this module answers for nothing at: a line owed to declarations elsewhere,
             // whose values this module's are held to and whose row is somebody else's to write.
@@ -1661,6 +1668,8 @@ public final class Adequacy {
                 continue;
             }
             resolved.put(debt.point(), new BorderAccount.Answer(debt,
+                    debt.id().owedToTheDeclaration().isPresent()
+                            ? axisOf(debt.id(), declarations, symbols, policy) : null,
                     PointResolver.resolveAt(debt.owed(), List.copyOf(debt.met().keySet()),
                             reading -> readingOf(db, module, scope, debt, debt.role(), reading))));
         }
@@ -1761,7 +1770,7 @@ public final class Adequacy {
             // line says is worth searching. That is the search and the debt disagreeing about one
             // point rather than evidence of anything, and a state read as either would report our
             // own bookkeeping as an answer about the line.
-            throw new IllegalStateException("nothing was searched for at " + debt.said()
+            throw new IllegalStateException("nothing was searched for at " + debt.point()
                     + ", which the line says is worth searching, at " + reading);
         }
         return new PointResolver.ReadingEvidence.Searched(here.attempt());
@@ -3900,7 +3909,8 @@ public final class Adequacy {
                 // The same two rules, asked of the role. A line owed once over its readings and a
                 // line owed at one of them are the same technique's item and are told apart under
                 // the same two codes.
-                case About.APointOfADeclaredBorder(var debt) -> debt.role().againstTheLine()
+                case About.APointOfADeclaredBorder(var owed) ->
+                        owed.debt().role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APointOfABorder(var point) -> point.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
@@ -3962,11 +3972,16 @@ public final class Adequacy {
      * all the list is.
      *
      * @param debt   what the readings of the line came to
+     * @param axis   what the line is on, in the words the declaration wrote it in. Here rather than
+     *               on the debt because only a declaration has such a word: a reading names the
+     *               position it met the line at and there are as many of those as there are
+     *               positions, and a line no declaration drew is on nothing anybody named
      * @param owners the module's own declarations that owe it, each with where it is written. Never
      *               empty: a line no declaration here owes is not this module's debt and is not one
      *               of these
      */
-    public record DeclaredDebt(BorderObligationPointAssessment debt, List<Owner> owners) {
+    public record DeclaredDebt(BorderObligationPointAssessment debt, String axis,
+                               List<Owner> owners) {
 
         /** One declaration that owes the line, and where a reader is sent to it. */
         public record Owner(TypeSymbol.AtModule declaration, Citation at) {
@@ -3983,6 +3998,20 @@ public final class Adequacy {
             if (debt == null || owners.isEmpty()) {
                 throw new IllegalArgumentException("a debt is some declaration's, somewhere");
             }
+            if (axis == null) {
+                throw new IllegalArgumentException(
+                        "a declaration's line is a line on something it wrote: " + debt.point());
+            }
+        }
+
+        /** What this point asks of a row, as a report writes it. */
+        public String said() {
+            return debt.said(axis);
+        }
+
+        /** What a row here would have to do, as a report writes it. */
+        public String against() {
+            return debt.against(axis);
         }
 
         /** What a finding about it is about, which is every declaration that owes it. */
@@ -4070,7 +4099,7 @@ public final class Adequacy {
             for (DeclaredDebt each : owed) {
                 BorderObligationPointAssessment debt = each.debt().keptFor(behaviors);
                 if (debt != null) {
-                    owedHere.add(new DeclaredDebt(debt, each.owners()));
+                    owedHere.add(new DeclaredDebt(debt, each.axis(), each.owners()));
                 }
             }
             return new DeclaredBoundaries(owedHere, kept);
@@ -4164,7 +4193,8 @@ public final class Adequacy {
                 if (owners.isEmpty()) {
                     continue;
                 }
-                out.add(new DeclaredDebt(debt, owners));
+                out.add(new DeclaredDebt(debt,
+                        axisOf(debt.id(), declarations, symbols, policy), owners));
             }
             return Answer.of(new DeclaredBoundaries(out, went));
         }
@@ -4178,17 +4208,18 @@ public final class Adequacy {
      * clause. A coordinate spells an empty path as "the value", which is what it is called where a
      * sentence says it rather than where a line is named.
      *
-     * <p>A line no declaration drew has the rule's own name and no more. Where such a line is is
-     * the reading's answer and there are as many of those as there are positions carrying the rule,
-     * so a point named after one of them would be named after a place it is not owed at.
+     * <p>Asked only of a line some declaration drew, and refused of the rest. A line a body's own
+     * rule drew is on no quantity anybody wrote: where it is is the reading's answer and there are
+     * as many of those as there are positions carrying the rule, so a point named after one of them
+     * would be named after a place it is not owed at. Answered with the rule's own name instead,
+     * a report said a comparison was the thing being compared.
      */
     private static String axisOf(souther.compiler.partition.BorderObligationId id,
                                  Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
                                  Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
-        TypeSymbol declaredOn = id.owedToTheDeclaration().orElse(null);
-        if (declaredOn == null) {
-            return id.named();
-        }
+        TypeSymbol declaredOn = id.owedToTheDeclaration().orElseThrow(
+                () -> new IllegalStateException("what a line with no declaration is on is not"
+                        + " something anybody wrote: " + id));
         souther.compiler.check.FieldDomains.Coordinate at =
                 declarationRead(read, declaredOn, symbols, policy)
                         // Which line of the declaration this is, asked of the rule. Taken apart
@@ -4282,18 +4313,7 @@ public final class Adequacy {
             if (readings.isEmpty()) {
                 return Answer.of(List.of());
             }
-            // What names a line is read from the declaration that drew it, and it is not something
-            // a point can go without — so it is asked here, once, and its absence is this having no
-            // answer rather than points named by nothing.
-            Symbols symbols = Names.derivedSymbols(db, name).value();
-            souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
-            if (symbols == null || policy == null) {
-                return Answer.absent();
-            }
-            Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declarations =
-                    new LinkedHashMap<>();
-            return Answer.of(BorderObligationPointAssessment.across(readings,
-                    point -> axisOf(point.line(), declarations, symbols, policy)));
+            return Answer.of(BorderObligationPointAssessment.across(readings));
         }
     }
 
@@ -4377,7 +4397,7 @@ public final class Adequacy {
                     continue;
                 }
                 out.add(Finding.by(owed.subject(), item.weakeningSource(), owed.at(),
-                        new About.APointOfADeclaredBorder(owed.debt())));
+                        new About.APointOfADeclaredBorder(owed)));
             }
         }
 
@@ -4682,16 +4702,16 @@ public final class Adequacy {
                         // A line owed once over every reading of it. The rule has a name — a
                         // declaration's clause always does — so there is one sentence and not two,
                         // and what the line is on is what the declaration wrote rather than the
-                        // position some behavior met it at (issue #1062).
-                        case About.APointOfADeclaredBorder(var debt) ->
-                                debt.role().againstTheLine()
+                        // position some behavior met it at.
+                        case About.APointOfADeclaredBorder(var owed) ->
+                                owed.debt().role().againstTheLine()
                                         ? new ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew(
-                                                debt.role().name(), debt.axis(), debt.against(),
-                                                debt.id().named())
+                                                owed.debt().role().name(), owed.axis(),
+                                                owed.against(), owed.debt().id().named())
                                         : new ExampleMessage
                                                 .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
-                                                debt.role().name(), debt.axis(), debt.against(),
-                                                debt.id().named());
+                                                owed.debt().role().name(), owed.axis(),
+                                                owed.against(), owed.debt().id().named());
                         case About.APointOfABorder(var point) ->
                                 point.role().againstTheLine()
                                         ? point.origin().isWrittenRatherThanNamed()
@@ -4738,7 +4758,8 @@ public final class Adequacy {
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
                 // The same hints, asked of the role. What a row at each point shows is a fact
                 // about the point and not about which of the two questions raised it.
-                case About.APointOfADeclaredBorder(var debt) -> hintFor(debt.role(), built);
+                case About.APointOfADeclaredBorder(var owed) ->
+                        hintFor(owed.debt().role(), built);
                 case About.APointOfABorder(var point) -> {
                     // Asked of the point, and in the point's own vocabulary. A hint saying which
                     // side of the line the value falls on would be keyed on the border being closed

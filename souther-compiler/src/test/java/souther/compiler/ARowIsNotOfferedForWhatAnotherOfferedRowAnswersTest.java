@@ -133,8 +133,8 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
             OfferItem item = switch (finding.about()) {
                 case souther.compiler.query.About.APointOfABorder(var point) ->
                         new OfferItem.APointOfALine(point.owed());
-                case souther.compiler.query.About.APointOfADeclaredBorder(var debt) ->
-                        new OfferItem.APointOfALine(debt.point());
+                case souther.compiler.query.About.APointOfADeclaredBorder(var owed) ->
+                        new OfferItem.APointOfALine(owed.debt().point());
                 case souther.compiler.query.About.AnArmNoRowGoesThrough(var arm) ->
                         new OfferItem.AnArm(
                                 new souther.compiler.partition.Generator.ArmOwed(arm.index()));

@@ -42,9 +42,9 @@ public final class Offering {
      * @param request  what was asked for, which is what settles which rows are here
      * @param rows     one entry per behavior with rows to offer, in the order they were asked about
      * @param searched what each behavior's own search came to, keyed the way a report keys them
-     * @param account what the module's declarations are owed, or null where the request asked for
-     *                 no boundary rows — which is not the same as a request that asked and found
-     *                 none
+     * @param account every point of a line this request answers for, whosever it is — a body's own
+     *                 and its declarations' alike — or null where the request asked for no boundary
+     *                 rows, which is not the same as a request that asked and found none
      * @param answered what the rows here settle: every item one of them would answer if it were
      *                 written, whichever row it was composed for
      */

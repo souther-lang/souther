@@ -16,8 +16,7 @@ import java.util.Map;
  * <p>What a report prints, what a build refuses over and what an editor offers are readings of
  * these. A {@link BorderAssessment} beside one is a border as some position of some behavior met it,
  * and there is one of those per position of every behavior carrying the type. Answered from an
- * occurrence, one clause of {@code UserId} was 126 things to write a row for over {@code crm}
- * (issue #1062).
+ * occurrence, one clause of {@code UserId} is 126 things to write a row for over {@code crm}.
  *
  * <p><b>Every point, whosever it is.</b> Whether a row here is a body's to write or is owed to the
  * declarations that drew the line is what {@link souther.compiler.partition.PointAttribution}
@@ -42,7 +41,7 @@ import java.util.Map;
  * the identity is what is wrong. Joined instead — the stronger demand winning, or the two merged —
  * that mistake would come out as a report asking for a row at a point some other line owns.
  */
-public record BorderObligationPointAssessment(BorderObligationPoint point, String axis,
+public record BorderObligationPointAssessment(BorderObligationPoint point,
                                               souther.compiler.partition.PointAttribution
                                                       attribution,
                                               souther.compiler.check.RuleCitation cited,
@@ -93,9 +92,6 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
                     "a point owed a row asks for one, came to something, is owed to somebody and"
                             + " is found somewhere: " + point);
         }
-        if (axis == null) {
-            throw new IllegalArgumentException("a line is a line on something: " + point);
-        }
         met = java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>(met));
     }
 
@@ -115,8 +111,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      * readings, so whatever offers it a row has only one of them to offer from.
      */
     public static List<BorderObligationPointAssessment> across(
-            Map<String, List<BorderAssessment>> byBehavior,
-            java.util.function.Function<BorderObligationPoint, String> named) {
+            Map<String, List<BorderAssessment>> byBehavior) {
         Map<BorderObligationPoint, java.util.SequencedMap<Reading, BorderAssessment>> byPoint =
                 new LinkedHashMap<>();
         Map<BorderObligationPoint, souther.compiler.partition.PointAttribution> attribution =
@@ -149,27 +144,30 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
             }
         });
         List<BorderObligationPointAssessment> out = new ArrayList<>();
-        byPoint.forEach((point, met) ->
-                out.add(of(point, named.apply(point), attribution.get(point), met)));
+        byPoint.forEach((point, met) -> out.add(of(point, attribution.get(point), met)));
         return List.copyOf(out);
     }
 
     /**
-     * One point, from the readings of it, on a quantity called {@code axis}.
+     * One point, from the readings of it.
      *
-     * <p>What the line is on is handed in rather than taken from a reading, because that is the
-     * whole of what a debt is not. A reading names the position it met the line at — {@code
-     * String.length(draft.owner)} — and there are as many of those as there are positions carrying
-     * the type; what the author wrote is {@code String.length(value)}, and it is read from the
-     * declaration ({@link souther.compiler.check.DeclaredBorders}).
+     * <p><b>Nothing here says what the line is on.</b> A reading names the position it met the line
+     * at — {@code String.length(draft.owner)} — and there are as many of those as there are
+     * positions carrying the type, so none of them names the point. What the author wrote — {@code
+     * String.length(value)} — is the declaration's word, and a point no declaration drew has no such
+     * word at all: written on this, the rule's own name stood in for a quantity nobody named, and a
+     * report reading it was told a comparison was the thing being compared.
+     *
+     * <p>So a consumer with a declaration to speak about takes the wording from the declaration
+     * ({@link Adequacy.DeclaredDebt}), and one without does not have one to take.
      */
     public static BorderObligationPointAssessment of(
-            BorderObligationPoint point, String axis,
+            BorderObligationPoint point,
             souther.compiler.partition.PointAttribution attribution,
             java.util.SequencedMap<Reading, BorderAssessment> met) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Demand asked = asked(point, readings);
-        return new BorderObligationPointAssessment(point, axis, attribution,
+        return new BorderObligationPointAssessment(point, attribution,
                 foundAt(point, readings), asked, came(point.role(), readings, asked), met);
     }
 
@@ -243,7 +241,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
                 kept.put(where, reading);
             }
         });
-        return kept.isEmpty() ? null : of(point, axis, attribution, kept);
+        return kept.isEmpty() ? null : of(point, attribution, kept);
     }
 
     /** Every reading of the line that owes this point, in the order they were made. */
@@ -370,7 +368,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      * and here because an editor's offer stands beside a behavior. What a row written for that
      * behavior settles is this point, so an offer there has to know the point is one of the things
      * it would answer. Without it the offer beside a behavior went quiet as soon as the only work
-     * left was a line the declaration is owed (issue #1062).
+     * left was a line the declaration is owed.
      */
     public boolean carriedBy(String behavior) {
         return met.keySet().stream().anyMatch(each -> each.behavior().equals(behavior));
@@ -382,33 +380,34 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
         return met.keySet().stream().map(Reading::behavior).distinct().toList();
     }
 
-    /**
-     * What this point asks of a row, as a report writes it.
-     *
-     * <p>The same sentence a reading's point writes ({@link BorderAssessment.Point#said}), on what
-     * the declaration wrote rather than on the position a reading met it at. The two are joined by
-     * a consumer against one of a border's items, so they are spelled by one rule and not two.
-     */
-    public String said() {
-        return role().againstTheLine() ? axis + " = " + against()
-                : axis + " " + operator() + " " + against();
-    }
-
     /** How this point relates a row's value to what it is against. */
     public String operator() {
         return demand.criterion().operator();
     }
 
     /**
-     * What a row here would have to do, as a report writes it.
+     * What a row here would have to do, written on a quantity called {@code axis}.
      *
-     * <p>Written on a reading's quantity, and any of them will do. What a criterion writes is the
-     * level in the terms of the order that level is on, and which order that is, is part of what a
-     * point is — the readings of one point cut one carrier at one place, which is checked where
-     * their demands are. So this is not a reading standing in for the rest; it is the one answer
-     * they all give.
+     * <p>The quantity is handed in because no reading of the point names it and this holds no name
+     * of its own. What a criterion writes is the level in the terms of the order that level is on,
+     * and which order that is, is part of what a point is — the readings of one point cut one
+     * carrier at one place, which is checked where their demands are. So the order here is not one
+     * reading standing in for the rest; it is the one answer they all give.
      */
-    public String against() {
+    public String against(String axis) {
         return demand.criterion().written(met.firstEntry().getValue().border().cut().of(), axis);
+    }
+
+    /**
+     * What this point asks of a row, as a report writes it, on a quantity called {@code axis}.
+     *
+     * <p>The same sentence a reading's point writes ({@link BorderAssessment.Point#said}), on the
+     * quantity the caller has a declaration for rather than on the position a reading met it at.
+     * The two are joined by a consumer against one of a border's items, so they are spelled by one
+     * rule and not two.
+     */
+    public String said(String axis) {
+        return role().againstTheLine() ? axis + " = " + against(axis)
+                : axis + " " + operator() + " " + against(axis);
     }
 }

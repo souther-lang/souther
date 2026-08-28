@@ -7,8 +7,8 @@ import souther.compiler.partition.Generator;
  *
  * <p>One of these per point, however many readings the line has. A row at the line shows something
  * about the type, and one row anywhere shows it — so the work is one piece and the answer about it
- * is one answer (issue #1076). Composed per reading, the same authored line was handed to an author
- * as four things to write.
+ * is one answer. Composed per reading, one authored line is handed to an author as four things to
+ * write.
  *
  * <p><b>The row's behavior is where it was composed and not who owes it.</b> Who owes it is whose
  * rules settled the point ({@link souther.compiler.partition.PointAttribution}) — the declaration

@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.PointRole;
 
 import java.util.ArrayList;
@@ -69,7 +70,7 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
         for (BorderObligationPointAssessment each : guarded) {
             assertEquals(List.of("check/r@P.deadline", "check/r@T.deadline"),
                     each.met().keySet().stream().map(Object::toString).toList(),
-                    () -> "read under each case: " + each.said());
+                    () -> "read under each case: " + each.point());
         }
     }
 
@@ -107,7 +108,7 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
     void theOrderTheReadingsArriveInDecidesNothing() {
         Map<String, List<BorderAssessment>> readings = readingsOf("");
         List<BorderObligationPointAssessment> forwards =
-                BorderObligationPointAssessment.across(readings, point -> "the line");
+                BorderObligationPointAssessment.across(readings);
         Map<String, List<BorderAssessment>> reversed = new LinkedHashMap<>();
         readings.forEach((behavior, lines) -> {
             List<BorderAssessment> back = new ArrayList<>(lines);
@@ -115,7 +116,7 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
             reversed.put(behavior, back);
         });
         List<BorderObligationPointAssessment> backwards =
-                BorderObligationPointAssessment.across(reversed, point -> "the line");
+                BorderObligationPointAssessment.across(reversed);
 
         assertEquals(points(forwards), points(backwards),
                 "the same points, whichever order their readings were met in");
@@ -123,9 +124,9 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
             BorderObligationPointAssessment also = backwards.stream()
                     .filter(one -> one.point().equals(each.point())).findFirst().orElseThrow();
             assertEquals(each.met().keySet(), also.met().keySet(),
-                    () -> "and every reading of each of them: " + each.said());
+                    () -> "and every reading of each of them: " + each.point());
             assertEquals(each.owed().hasRowWitness(), also.owed().hasRowWitness(),
-                    () -> "and what each came to: " + each.said());
+                    () -> "and what each came to: " + each.point());
         }
     }
 
@@ -134,8 +135,11 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
                 .sorted(java.util.Comparator.comparing(Object::toString)).toList();
     }
 
+    /** Which points these are, as a message names them. Their own identity and not a sentence about
+     *  them: a guard's line is on nothing a declaration wrote, so there is no quantity to say it
+     *  on. */
     private static List<String> said(List<BorderObligationPointAssessment> each) {
-        return each.stream().map(BorderObligationPointAssessment::said).toList();
+        return each.stream().map(one -> one.point().toString()).toList();
     }
 
     /** The points the guard's own line is owed a row at, which are the ones a body owes. */
@@ -145,6 +149,39 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
                         new GenerationScope.Module())).value();
         assertNotNull(points, "the model under test compiles");
         return points.stream().filter(BorderObligationPointAssessment::owedToTheReading).toList();
+    }
+
+    /**
+     * A coordinate the row was not written under is a finding, and no second row is offered for it.
+     *
+     * <p>The two questions coming apart. A finding stands at a coordinate — {@code T}'s side of the
+     * guard has no row at it — and a row is owed once for the line, which the row under {@code P}
+     * answered. Both are true at once, so an offering that took the finding for a claim about the
+     * line would refuse to run, and one that took the line's answer for the finding's would write
+     * {@code T} a row for work already done.
+     */
+    @Test
+    void aCoordinateNoRowStandsAtIsNotOfferedASecondRowForTheSameLine() {
+        Compilation compilation = compiled(UNDER_P);
+        // Run at all, which is half of what this fixes: a request that read the finding as a claim
+        // about the line met a line already answered and refused to go on.
+        Offering offering = Adequacy.offeredFor(compilation.db(),
+                OfferingRequest.overTheModule("example.line", true));
+        assertNotNull(offering, "an offering is made for a model in this state");
+
+        Map<PointRole, GenerationOutcome> againstTheLine = new LinkedHashMap<>();
+        compilation.db().ask(new Adequacy.Generated("example.line", "check")).value()
+                .generation().forEach(each -> {
+                    if (each.finding().about() instanceof About.APointOfABorder(var point)
+                            && point.role().againstTheLine()) {
+                        againstTheLine.put(point.role(), each.outcome());
+                    }
+                });
+        assertEquals(Map.of(PointRole.ON, new GenerationOutcome.AlreadySettled(),
+                        PointRole.OFF, new GenerationOutcome.AlreadySettled()),
+                againstTheLine,
+                () -> "the coordinates under `T` are findings whose line is answered, and no row"
+                        + " is composed a second time for them: " + againstTheLine);
     }
 
     private static Map<String, List<BorderAssessment>> readingsOf(String rows) {

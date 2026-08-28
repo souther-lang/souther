@@ -534,9 +534,17 @@ public final class GeneratedRows {
                 case GenerationOutcome.NotSupported none -> say(out, said,
                         String.format("// nothing offers a row for `%s` in `%s`: %s%n",
                                 about(each.finding()), behavior, none.reason().said()));
-                // Filtered out above, and listed here so that the switch stays exhaustive: a
-                // fourth answer added later has to be given words rather than falling silently
-                // into whichever arm a default would have put it in.
+                // Said rather than passed over, because the report counts this coordinate among
+                // what is missing and no row is offered for it. Left out, an author reads a gap
+                // above and no account of why nothing was written for it; the account is that the
+                // line it is a coordinate of is owed one row and already has it.
+                case GenerationOutcome.AlreadySettled _ -> say(out, said,
+                        String.format("// no row offered for `%s` in `%s`: a row already stands"
+                                + " where this line is owed one%n",
+                                about(each.finding()), behavior));
+                // Filtered out above, and listed here so that the switch stays exhaustive: an
+                // answer added later has to be given words rather than falling silently into
+                // whichever arm a default would have put it in.
                 case GenerationOutcome.NotApplicable _ -> { }
             }
         }

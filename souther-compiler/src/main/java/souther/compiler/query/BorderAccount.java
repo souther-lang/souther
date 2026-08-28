@@ -16,8 +16,7 @@ import java.util.SequencedMap;
  * A point is one piece of work however many positions carry the type, and that is a rule about what
  * is owed rather than about how a block is laid out — so it is settled here, where the search is
  * resolved, and every reader below is a projection of this map. Left to the block, one authored line
- * came out as up to four answers because each reading composed its own (issue #1076), and a block
- * written another way would have brought it back.
+ * comes out as up to four answers, one per reading that composed its own.
  *
  * <p>How many rows a person is offered is another count and is made further down: two points can be
  * answered by one row, and a block offers a row once per set of inputs ({@code GeneratedRows}). One
@@ -45,14 +44,38 @@ public record BorderAccount(String module, GenerationScope scope,
      * up wherever the line is a body's.
      *
      * <p>So a reader that writes about a point asks the point, and does it where its own words are
-     * true.
+     * true. {@code declaredAxis} is the one word that is not the point's: what the declaration wrote
+     * its line on, which exists exactly where a declaration drew the line and nowhere else.
+     *
+     * @param point        what the readings of the line came to
+     * @param declaredAxis what the declaration wrote the line on, or null where no declaration drew
+     *                     it — a body's own comparison is on nothing anybody named
+     * @param resolution   what a search of the point's readings came to
      */
-    public record Answer(BorderObligationPointAssessment point, PointResolution resolution) {
+    public record Answer(BorderObligationPointAssessment point, String declaredAxis,
+                         PointResolution resolution) {
 
         public Answer {
             if (point == null || resolution == null) {
                 throw new IllegalArgumentException("an answer is to something, and is an answer");
             }
+            // Both ways round and in one place, so that neither side can be read as the other's
+            // absence. A word where no declaration drew the line is a name made up for a body's
+            // comparison; none where one did is a declaration's own line left unsayable.
+            if ((declaredAxis == null)
+                    != point.id().owedToTheDeclaration().isEmpty()) {
+                throw new IllegalArgumentException("a line is on what a declaration wrote exactly"
+                        + " where a declaration drew it: " + point.point() + " " + declaredAxis);
+            }
+        }
+
+        /** What this point asks of a row, as a report writes it — of a declaration's line only. */
+        String said() {
+            if (declaredAxis == null) {
+                throw new IllegalStateException("what a body's own line is on is not something"
+                        + " anybody wrote: " + point.point());
+            }
+            return point.said(declaredAxis);
         }
 
         /** Whether a row here is the body's own to write, which is what a block offers first. */
@@ -116,8 +139,8 @@ public record BorderAccount(String module, GenerationScope scope,
      * search of one reading came to is a fact about that reading; that no row can be written at the
      * line is a claim about every one of them, and which of the two a reader is holding was
      * something the reader had to know. Handed on as a flat list of what the readings said, the one
-     * sentence a reader may act on (ADR-0091) was printed under the declaration's own name for a
-     * line one reading had merely refused.
+     * sentence a reader may act on is printed under the declaration's own name for a line one
+     * reading has merely refused.
      */
     public SequencedMap<BorderObligationPoint, Unmet> unmet() {
         SequencedMap<BorderObligationPoint, Unmet> out = new LinkedHashMap<>();
@@ -154,7 +177,7 @@ public record BorderAccount(String module, GenerationScope scope,
         // newtype wraps is spelled `value` in every declaration, and every reading of the line
         // meets that same quantity under its own name.
         return unmet(new FindingSubject.OfADeclaration(answer.point().ownersIn(module)).named(),
-                answer.point().said(), answer.resolution());
+                answer.said(), answer.resolution());
     }
 
     /**
@@ -259,12 +282,9 @@ public record BorderAccount(String module, GenerationScope scope,
      * <p>Read off the same resolutions the rows are, so the two cannot disagree. Asked separately,
      * a block printed a row two lines above a sentence saying nothing offers one.
      *
-     * <p>Findings whose point this holds no resolution for, and findings at a point the resolution
-     * says needed no search, are both refused rather than skipped. A finding stands where the point
-     * was measured and missed and something showed a row can be written there; a resolution saying a
-     * row already stands at it, or that nothing measured it, is the two disagreeing about one point —
-     * and a walk that quietly passed over such a finding would leave an author told nothing about it
-     * while the rows above read as though they filled everything (issue #1062).
+     * <p>Findings whose point this holds no resolution for are refused rather than skipped. A walk
+     * that quietly passed over one would leave an author told nothing about it while the rows above
+     * read as though they filled everything.
      */
     public List<Adequacy.GenerationDisposition> dispositions(List<Adequacy.Finding> findings) {
         // Which lines this request was about, read off what it answered rather than asked of the
@@ -276,13 +296,13 @@ public record BorderAccount(String module, GenerationScope scope,
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         List<Adequacy.GenerationDisposition> out = new ArrayList<>();
         for (Adequacy.Finding finding : findings) {
-            if (!(finding.about() instanceof About.APointOfADeclaredBorder(var debt))) {
+            if (!(finding.about() instanceof About.APointOfADeclaredBorder(var owed))) {
                 continue;
             }
-            if (!asked.contains(debt.id())) {
+            if (!asked.contains(owed.debt().id())) {
                 continue;   // a line this request was not put a question about
             }
-            BorderObligationPoint at = debt.point();
+            BorderObligationPoint at = owed.debt().point();
             out.add(new Adequacy.GenerationDisposition(finding,
                     java.util.Optional.of(new OfferItem.APointOfALine(at)), outcomeAt(at)));
         }
@@ -294,14 +314,20 @@ public record BorderAccount(String module, GenerationScope scope,
      *
      * <p>The one reading of a resolution as an outcome, whoever owes the point. A row a search
      * composed is the row that answers it; a search that composed none says what every reading of
-     * the point came to; and a point the measurement says needs nothing looked for is not one a
-     * finding stands at.
+     * the point came to; and a row that already stands where the point is owed is the point's work
+     * done.
      *
-     * <p>Refused rather than answered where this holds no resolution, or holds one saying no search
-     * was called for. A finding stands where the point was measured and missed and something showed
-     * a row can be written there, so either is the finding and the account disagreeing about one
-     * point — and a caller that quietly passed over it would leave an author told nothing while the
-     * rows beside it read as though they filled everything.
+     * <p><b>A finding is at a coordinate and this answers about a line.</b> A rule read at two
+     * positions is met at both and owes one row, so a row written at one position leaves the other
+     * a coordinate no row stands at — a finding, and nothing for a generation to do, at once. That
+     * is {@link GenerationOutcome.AlreadySettled}, and it is what the two questions coming apart
+     * looks like rather than a disagreement between them.
+     *
+     * <p>Refused rather than answered where this holds no resolution, or holds one saying nothing
+     * measured the point. A finding stands where the point was measured and missed, so a
+     * measurement that says it was never made is the finding and the account contradicting each
+     * other about one point — and a caller that quietly passed over it would leave an author told
+     * nothing while the rows beside it read as though they filled everything.
      */
     GenerationOutcome outcomeAt(BorderObligationPoint at) {
         Answer answer = resolved.get(at);
@@ -314,9 +340,11 @@ public record BorderAccount(String module, GenerationScope scope,
             case PointResolution.Generated(var _, var row) ->
                     new GenerationOutcome.Generated(List.of(row));
             case PointResolution.Unresolved(var coverage) -> cannot(coverage);
-            case PointResolution.NoSearch(var cause) -> throw new IllegalStateException(
-                    "a finding at a point nothing was looked for at, which the measurement says"
-                            + " needs nothing looked for: " + at + " " + cause);
+            case PointResolution.NoSearch(var cause) -> switch (cause) {
+                case A_ROW_ALREADY_STANDS -> new GenerationOutcome.AlreadySettled();
+                case NOTHING_MEASURED -> throw new IllegalStateException(
+                        "a finding at a point the measurement says was never measured: " + at);
+            };
         };
     }
 
