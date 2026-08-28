@@ -341,7 +341,7 @@ public final class FieldDomains {
                 // built: the two names are two ways one position's rules were filed, and what they
                 // leave between them is the machine that position pays for. Where it could not be
                 // built, the set widens and says so in the same breath — which is the list below.
-                souther.compiler.values.Sets.Composed made =
+                souther.compiler.values.Allowance.Composed made =
                         values.sets().meet(name, here, values.at(name));
                 here = made.set();
                 if (made.gaveUp()) {

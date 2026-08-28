@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * asserted here is that the connectives keep them closed — no pair of rules leaves an answer neither
  * shape can hold — and that emptiness is reached only where values were counted.
  *
- * <p>Put together by {@link Sets}, which is where two of them are put together. Every set below is
+ * <p>Put together by {@link Allowance}, which is where two of them are put together. Every set below is
  * values written out, so nothing is built and the allowance is never touched — what is being read
  * is the arithmetic.
  */
@@ -27,7 +27,7 @@ class WhatTwoRulesAboutOnePositionLeaveItTest {
     private static final Value B = Value.text("B");
     private static final Value C = Value.text("C");
 
-    private final Sets<String> sets = Sets.ofAdmittedValues();
+    private final Allowance<String> sets = Allowance.ofAdmittedValues();
 
     /** What both leave, read as the set it is. */
     private ValueSet met(ValueSet one, ValueSet other) {

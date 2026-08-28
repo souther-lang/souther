@@ -78,8 +78,8 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
     }
 
     /** An allowance of {@code inAll} states in all, no one machine being larger than the lot. */
-    private static Sets<String> allowing(int inAll) {
-        return Sets.of(new PatternPlan.Budget(inAll, inAll));
+    private static Allowance<String> allowing(int inAll) {
+        return Allowance.of(new PatternPlan.Budget(inAll, inAll));
     }
 
     /**
@@ -102,11 +102,11 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
 
         // Room for either meet on its own, and one state short of room for both. So the only thing
         // that can refuse the second is what the first one spent.
-        Sets<String> sets = allowing(first + second - 1);
+        Allowance<String> sets = allowing(first + second - 1);
 
         assertFalse(sets.meet(HERE, three, four).gaveUp(),
                 "the first meet fits, which is what the allowance was set to");
-        Sets.Composed met = sets.meet(HERE, both, five);
+        Allowance.Composed met = sets.meet(HERE, both, five);
         assertTrue(met.gaveUp(),
                 "and the second does not, once the first has been paid for out of the same purse");
         assertEquals(ValueSet.ANY, met.set(), "what is left is every value, which is true");
@@ -129,7 +129,7 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
         ValueSet three = everyMultipleOf(3);
         ValueSet four = everyMultipleOf(4);
         // Enough for one such meet and not for two, so that a shared purse would be seen.
-        Sets<String> sets = allowing(costOfMeeting(three, four));
+        Allowance<String> sets = allowing(costOfMeeting(three, four));
 
         assertFalse(sets.meet(HERE, three, four).gaveUp());
         assertFalse(sets.meet(THERE, three, four).gaveUp(),
@@ -142,7 +142,7 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
      *
      * <p>The attribution the whole arrangement rests on. Both patterns were read — each compiles on
      * its own — so neither of them is a rule anybody could rewrite to make this go away, and what
-     * is recorded is the position whose answer was not built. {@link Sets.Composed} carries the
+     * is recorded is the position whose answer was not built. {@link Allowance.Composed} carries the
      * widening and the shortfall together, so a caller cannot take the one and drop the other.
      */
     @Test
@@ -151,9 +151,9 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
         ValueSet five = everyMultipleOf(5);
         // Enough for either pattern and not for what they come to, which is the whole point: each
         // was read, and it is the answer between them that was not built.
-        Sets<String> sets = allowing(costOfMeeting(four, five) - 1);
+        Allowance<String> sets = allowing(costOfMeeting(four, five) - 1);
 
-        Sets.Composed made = sets.meet(HERE, four, five);
+        Allowance.Composed made = sets.meet(HERE, four, five);
 
         assertTrue(made.gaveUp());
         assertEquals(ValueSet.ANY, made.set());
@@ -204,11 +204,11 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
 
         for (List<Integer> order : List.of(List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
                 List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0))) {
-            Sets<String> sets = allowing(allowed);
+            Allowance<String> sets = allowing(allowed);
             ValueSet held = rules.get(order.get(0));
             boolean gaveUp = false;
             for (int at = 1; at < order.size(); at++) {
-                Sets.Composed made = sets.meet(HERE, held, rules.get(order.get(at)));
+                Allowance.Composed made = sets.meet(HERE, held, rules.get(order.get(at)));
                 held = made.set();
                 gaveUp |= made.gaveUp();
             }

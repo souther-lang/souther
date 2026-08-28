@@ -46,7 +46,7 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
 
     /** What puts the sets of these readings together. Every set here is values written out, so
      *  nothing is built and no allowance is spent. */
-    private static final Sets<String> SETS = Sets.ofAdmittedValues();
+    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
 
     /**
      * A record of this model is one of four, and a set of them is a bit of a nibble.

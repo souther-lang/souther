@@ -226,8 +226,8 @@ final class ReadQuantities implements Quantities {
         // parameter: what each parameter was read under is the allowance of its own declaration,
         // and the set a position finally admits here is met out of all of them — so this is the
         // answer being built and this is where building it is charged.
-        souther.compiler.values.Sets<InputAtom> sets =
-                souther.compiler.values.Sets.ofAdmittedValues();
+        souther.compiler.values.Allowance<InputAtom> sets =
+                souther.compiler.values.Allowance.ofAdmittedValues();
         for (FieldDomains.Carried<InputAtom> each : conditioned().values()) {
             made = made.meet(each.constraints().under(sets));
         }

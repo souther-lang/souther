@@ -43,7 +43,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
 
     /** What puts the sets of these readings together. Every set here is values written out, so
      *  nothing is built and no allowance is spent. */
-    private static final Sets<String> SETS = Sets.ofAdmittedValues();
+    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
 
     /** Both positions of one alternative, which is a product and is held as one. */
     private static AdmissibleValues<String> pair(Value a, Value b) {

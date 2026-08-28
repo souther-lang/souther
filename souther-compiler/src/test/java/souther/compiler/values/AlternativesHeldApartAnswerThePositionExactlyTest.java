@@ -36,7 +36,7 @@ class AlternativesHeldApartAnswerThePositionExactlyTest {
 
     /** What puts the sets of one reading together. Every set here is written out, so nothing is
      *  built and no allowance is spent. */
-    private final Sets<String> sets = Sets.ofAdmittedValues();
+    private final Allowance<String> sets = Allowance.ofAdmittedValues();
 
     private static AdmissibleValues<String> says(String atom, Value value) {
         return AdmissibleValues.at(atom, ValueSet.just(value));

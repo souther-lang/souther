@@ -31,7 +31,7 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
 
     /** What puts the sets of one reading together. Every set here is written out, so nothing is
      *  built and no allowance is spent. */
-    private final Sets<String> sets = Sets.ofAdmittedValues();
+    private final Allowance<String> sets = Allowance.ofAdmittedValues();
 
     /** {@code value == 5}. */
     private static AdmissibleValues<String> is5() {

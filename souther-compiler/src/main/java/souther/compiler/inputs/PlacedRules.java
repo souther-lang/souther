@@ -28,7 +28,7 @@ import java.util.List;
  * how {@code interval.startsAt < cap} stopped reaching {@code interval.startsAt}.
  */
 record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoReaching,
-                   souther.compiler.values.Sets<TermPath> sets) {
+                   souther.compiler.values.Allowance<TermPath> sets) {
 
     /**
      * The value this case was narrowed out of, whose rules name some of the same positions.
@@ -111,7 +111,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // Made per call instead, every ask would get its own allowance and the whole of what a
         // reading costs would be bounded by nothing.
         return new PlacedRules(root, read, Rules.of(read, symbols, policy), alsoReaching,
-                souther.compiler.values.Sets.ofAdmittedValues());
+                souther.compiler.values.Allowance.ofAdmittedValues());
     }
 
     /**
@@ -239,7 +239,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // Spent from this reading's own allowance, which is what every position of it is met out
         // of. The two sides were read from two declarations and each was read in full where it was
         // written; what is being built here is a third set, the one this position finally admits.
-        souther.compiler.values.Sets.Composed made =
+        souther.compiler.values.Allowance.Composed made =
                 sets.meet(path, here.approximation(), outer.approximation());
         AdmissibleSet.Completeness read = bothRead(here.completeness(), outer.completeness());
         // And where it was not built, that is not a rule going unread. Both rules were read; what

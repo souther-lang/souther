@@ -4,134 +4,30 @@ import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
 
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.Set;
 
 /**
- * Where two sets of values are put together, and what this compiler can afford to build by doing it.
+ * What two sets of values come to, and what making it costs.
  *
- * <p>Two questions, and they are not the same one. {@link ValueSet} says which values a position
- * holds; this says whether the set that answering exactly would take is one that can be made. So the
- * first is a value and stays one — two equal sets are equal wherever they came from — and the
- * allowance lives out here, with the reading that is spending it.
+ * <p>The one table there is, and the one place the shapes are told apart. What each pair costs is
+ * what it builds: a finite set is arithmetic over values in hand however it is paired, and two
+ * languages are a machine. Written twice, the day one of them learned something the other did not
+ * would be a day two readings of one model disagreed.
  *
- * <p><b>Held per position and not per rule.</b> What is being built is the set of values one
- * position finally admits, and every rule about that position pays into the same machine: two
- * patterns stated in one clause meet, and so do two stated in different rules of one declaration.
- * Given one allowance for the whole reading instead, a complicated pattern at one position would
- * spend what a plain one at another was going to need, and which of the two went unanswered would
- * turn on the order they were written in.
+ * <p><b>The table and nothing else.</b> Which position pays, whether one has been given up on, and
+ * what order several of them are put together in are not here — they are questions about an answer
+ * being built rather than about a pair of sets, and they belong to whoever is building it
+ * ({@link Allowance}). Held here too, a caller with two sets in hand could put them together
+ * wherever it happened to hold them, which is a fold in arrival order under another name.
  *
- * <p><b>Nothing narrows on the way out.</b> Where the allowance is gone, what comes back is
- * {@link ValueSet#ANY} — every value there is, which is what is known once the exact answer is not
- * being built — together with the fact that it is not the exact answer. The two arrive as one
- * {@link Composed}, so a caller cannot take the set and leave the shortfall: a widening whose reason
- * went missing is a reading that says a position admits everything and means that nobody looked.
- *
- * <p>Only what builds a machine is charged, and only that is refused. A meet of two finite sets is
- * arithmetic over values that were already written down, and it stays exact at a position whose
- * allowance has gone — there is nothing to buy.
- *
- * @param <A> what a position is called
+ * <p>Null where the allowance ran out, and never a smaller set. What a caller is told is that this
+ * was not built, which is a fact about this compiler, and never that the rules leave less than they
+ * do.
  */
-public final class Sets<A> {
+public final class Sets {
 
-    /**
-     * A set, and whether it is the exact one.
-     *
-     * <p>One value because the two are one fact. {@code gaveUp} does not describe the set — every
-     * set here is an upper bound of what the rules leave, and this one is wider than it had to be.
-     *
-     * @param set what the two sides come to, or every value where the exact answer was not built
-     * @param gaveUp whether building the exact answer was given up on for want of allowance
-     */
-    public record Composed(ValueSet set, boolean gaveUp) {
-
-        public Composed {
-            if (set == null) {
-                throw new IllegalArgumentException("a composition comes to some set");
-            }
-        }
-    }
-
-    /**
-     * One of the two ways two sets are put together, as something to hand to a caller that does not
-     * care which.
-     *
-     * <p>The position is part of it, because the allowance is per position. A composer handed
-     * without one would be a composition nobody could charge.
-     */
-    @FunctionalInterface
-    public interface Composing<A> {
-
-        /** What the two come to at {@code atom}, and whether it is the exact answer. */
-        Composed of(A atom, ValueSet one, ValueSet other);
-    }
-
-    private final PatternPlan.Budget budget;
-    /** What each position is allowed and has spent, entered when it is first built at. */
-    private final Map<A, Meter> meters = new LinkedHashMap<>();
-    /** The positions whose exact answer this stopped building, in the order they were found. */
-    private final Set<A> spent = new LinkedHashSet<>();
-    /**
-     * What a set belonging to no position is allowed, and whether it was given up on.
-     *
-     * <p>A reading holds one of those: what it guarantees at every position it holds no guarantee
-     * for. It is not any position's, so it cannot be charged to one — a set standing for all of
-     * them, put on the first position that happened to be met, would take the allowance of a
-     * position whose own rules had not been read yet.
-     */
-    private final Meter elsewhere;
-    private boolean spentElsewhere;
-
-    private Sets(PatternPlan.Budget budget) {
-        this.budget = budget;
-        this.elsewhere = budget.meter();
-    }
-
-    /** A fresh allowance for every position of one reading. */
-    public static <A> Sets<A> of(PatternPlan.Budget budget) {
-        if (budget == null) {
-            throw new IllegalArgumentException("a composer spends some allowance");
-        }
-        return new Sets<>(budget);
-    }
-
-    /** The same, at what one answer of a declaration is allowed. */
-    public static <A> Sets<A> ofAdmittedValues() {
-        return of(PatternPlan.Budget.OF_ADMITTED_VALUES);
-    }
-
-    /**
-     * The positions whose exact answer was given up on, in the order they were found.
-     *
-     * <p>Not how a reader learns of it. What each of them left is in the reading already — a
-     * {@link Composed} carried the widening and the shortfall to whoever asked, together, so
-     * neither can arrive without the other — and this is the same fact gathered, for holding the
-     * allowance to what it is supposed to do.
-     */
-    public Set<A> spent() {
-        return Set.copyOf(spent);
-    }
-
-    /**
-     * The same allowances, filed under what {@code naming} calls each position.
-     *
-     * <p>One derivation and not two. A reading renamed into another vocabulary is the same answer
-     * being built under other names, so what a position has already spent goes with it — given a
-     * fresh composer instead, a position would be allowed its machine once on each side of the
-     * renaming and the product of the two would be bought by nobody.
-     */
-    public <B> Sets<B> renamed(java.util.function.Function<A, B> naming) {
-        Sets<B> out = new Sets<>(budget);
-        // The meters themselves and not copies of them: what a position has spent is what it has
-        // spent, and two allowances for one answer would be the renaming buying it twice.
-        meters.forEach((atom, meter) -> out.meters.put(naming.apply(atom), meter));
-        spent.forEach(atom -> out.spent.add(naming.apply(atom)));
-        out.spentElsewhere = spentElsewhere;
-        return out;
+    private Sets() {
     }
 
     /**
@@ -242,96 +138,6 @@ public final class Sets<A> {
         return made == null ? null : ValueSet.matching(made);
     }
 
-    /** The values both admit — what two rules stated together leave a position. */
-    public Composed meet(A atom, ValueSet one, ValueSet other) {
-        return put(atom, one, other, true);
-    }
-
-    /** The values either admits — what a rule stated as one of two alternatives leaves. */
-    public Composed join(A atom, ValueSet one, ValueSet other) {
-        return put(atom, one, other, false);
-    }
-
-    /**
-     * Either of them, out of what the position is allowed.
-     *
-     * <p>The shapes are told apart in one place ({@link #metUnder}), and what is here is the
-     * allowance: which position pays, whether it has already been given up on, and what a refusal
-     * leaves. Written twice, a pair that built something on one side and not on the other would be
-     * two answers to what a position admits.
-     */
-    private Composed put(A atom, ValueSet one, ValueSet other, boolean met) {
-        if (isSpent(atom) && (one instanceof ValueSet.Matching
-                || other instanceof ValueSet.Matching)) {
-            return gaveUp(atom);
-        }
-        Meter meter = meter(atom);
-        ValueSet made = met ? metUnder(one, other, meter) : joinedUnder(one, other, meter);
-        return made == null ? gaveUp(atom) : new Composed(made, false);
-    }
-
-
-    /**
-     * The same two, where what comes out is a promise rather than a bound.
-     *
-     * <p>Giving up leaves nothing and not everything, which is the other direction. What
-     * {@link #meet} and {@link #join} answer is which values a position may hold, so an answer this
-     * did not build widens to every value and stays true. A promise says which values it certainly
-     * may hold, and every value is the strongest thing that can be said rather than the weakest —
-     * so an unbuilt one promises nothing, and a reader is short of a guarantee instead of holding
-     * one nobody proved.
-     */
-    public Composed meetPromised(A atom, ValueSet one, ValueSet other) {
-        return promised(meet(atom, one, other));
-    }
-
-    /** The same for a choice, on the same terms. */
-    public Composed joinPromised(A atom, ValueSet one, ValueSet other) {
-        return promised(join(atom, one, other));
-    }
-
-    private static Composed promised(Composed made) {
-        return made.gaveUp() ? new Composed(ValueSet.NONE, true) : made;
-    }
-
-    /**
-     * One machine, made out of what the position is allowed and counted as it is made.
-     *
-     * <p>What it will cost is not worked out here and is not worked out anywhere. A meet is at most
-     * the two sizes multiplied and is usually far less, so a caller deciding on that number refuses
-     * answers it could afford and charges for states nobody built. The meter says no at the state
-     * that would have been one too many ({@link Meter}), and what comes back here is either a
-     * language or nothing.
-     */
-    private Composed built(A atom, java.util.function.Function<Meter, Language> make) {
-        if (isSpent(atom)) {
-            return gaveUp(atom);
-        }
-        Language made = make.apply(meter(atom));
-        return made == null ? gaveUp(atom)
-                : new Composed(ValueSet.matching(made), false);
-    }
-
-    /** Every value there is, and the fact that this is not what the rules leave. */
-    private Composed gaveUp(A atom) {
-        if (atom == null) {
-            spentElsewhere = true;
-        } else {
-            spent.add(atom);
-        }
-        return new Composed(ValueSet.ANY, true);
-    }
-
-    /** What {@code atom} has left to spend, the reading's own allowance where it names no
-     *  position. */
-    private Meter meter(A atom) {
-        return atom == null ? elsewhere : meters.computeIfAbsent(atom, _ -> budget.meter());
-    }
-
-    /** Whether the exact answer here was already given up on. */
-    private boolean isSpent(A atom) {
-        return atom == null ? spentElsewhere : spent.contains(atom);
-    }
 
     /** The strings among {@code values}, which are the only ones a language has a word for. */
     private static Set<String> textsIn(Set<Value> values) {

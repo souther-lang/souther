@@ -740,7 +740,7 @@ public final class InvariantChecker {
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
                     new PartsRead(readBy, adoptedBy));
             ConstraintState<FactSubject> constraints = k.constraints()
-                    .takingValuesRead(values)
+                    .takingValuesRead(values, allowed)
                     .taking(stated.ordered());
             // How each atom's values are spaced, kept so that settling one afterwards states the
             // equality the same way this does. A count is a whole number of things whatever the

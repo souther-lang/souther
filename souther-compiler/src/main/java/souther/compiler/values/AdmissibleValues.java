@@ -169,7 +169,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
              * there is an allowance to charge; left to whoever asks {@link AdmissibleValues#at},
              * every reader of a reading would be doing it again, none of them counted.
              */
-            static <A> Made<A> of(Set<Box<A>> boxes, Sets<A> sets) {
+            static <A> Made<A> of(Set<Box<A>> boxes, Allowance<A> sets) {
                 Map<A, ValueSet> across = new LinkedHashMap<>();
                 Set<A> gaveUp = new LinkedHashSet<>();
                 java.util.Iterator<Box<A>> reading = boxes.iterator();
@@ -186,7 +186,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                             held = box.get(atom);
                             continue;
                         }
-                        Sets.Composed made = sets.join(atom, held, box.get(atom));
+                        Allowance.Composed made = sets.join(atom, held, box.get(atom));
                         held = made.set();
                         if (made.gaveUp()) {
                             gaveUp.add(atom);
@@ -642,7 +642,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
     }
 
     /** Both readings holding at once. */
-    public AdmissibleValues<A> meet(AdmissibleValues<A> other, Sets<A> sets) {
+    public AdmissibleValues<A> meet(AdmissibleValues<A> other, Allowance<A> sets) {
         // Promising what both sides promise, where both promise their positions together. Where
         // one of them does not, the sets it holds are each true of some value and of no one value
         // at once, and met they would promise a combination neither reading has — so the
@@ -713,7 +713,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * That is what parts a conjunction from a choice here — see {@link #join}, where nothing an
      * alternative said survives the alternative being one nobody can take.
      */
-    private Held<A> met(AdmissibleValues<A> other, Sets<A> sets, Set<A> gaveUp) {
+    private Held<A> met(AdmissibleValues<A> other, Allowance<A> sets, Set<A> gaveUp) {
         if (isBottom() || other.isBottom()) {
             return new Held.Nothing<>();
         }
@@ -736,10 +736,10 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
 
     /** Both sides holding at each position, each side missing one standing at ANY. */
     private static <A> Map<A, ValueSet> narrowed(Map<A, ValueSet> these, Map<A, ValueSet> those,
-                                                 Sets<A> sets, Set<A> gaveUp) {
+                                                 Allowance<A> sets, Set<A> gaveUp) {
         Map<A, ValueSet> out = new LinkedHashMap<>(these);
         those.forEach((atom, set) -> out.merge(atom, set, (here, there) -> {
-            Sets.Composed made = sets.meet(atom, here, there);
+            Allowance.Composed made = sets.meet(atom, here, there);
             if (made.gaveUp()) {
                 gaveUp.add(atom);
             }
@@ -756,7 +756,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * had something it could not read: those are open too, and open because of the reading rather
      * than because of the model.
      */
-    public AdmissibleValues<A> join(AdmissibleValues<A> other, Sets<A> sets) {
+    public AdmissibleValues<A> join(AdmissibleValues<A> other, Allowance<A> sets) {
         return joining(other, false, sets);
     }
 
@@ -776,11 +776,11 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * clauses before any of them is read ({@code ExpansionCost}), so that precision cannot turn on
      * how a fold was bracketed.
      */
-    public AdmissibleValues<A> joinApart(AdmissibleValues<A> other, Sets<A> sets) {
+    public AdmissibleValues<A> joinApart(AdmissibleValues<A> other, Allowance<A> sets) {
         return joining(other, true, sets);
     }
 
-    private AdmissibleValues<A> joining(AdmissibleValues<A> other, boolean apart, Sets<A> sets) {
+    private AdmissibleValues<A> joining(AdmissibleValues<A> other, boolean apart, Allowance<A> sets) {
         Set<A> gaveUp = new LinkedHashSet<>();
         // An alternative nobody can take leaves the answer to the others. Both being that is a
         // different case: no side speaks for the other, and meeting them would state a conjunction
@@ -858,12 +858,12 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * <p>The keys of both and not of either: a position one side says nothing about is one the
      * choice says nothing about, since a value satisfying that side may hold anything there.
      */
-    private Held<A> merged(AdmissibleValues<A> other, Sets<A> sets, Set<A> gaveUp) {
+    private Held<A> merged(AdmissibleValues<A> other, Allowance<A> sets, Set<A> gaveUp) {
         Map<A, ValueSet> out = new LinkedHashMap<>();
         adopted().forEach(atom -> {
             ValueSet there = other.at(atom);
             if (!there.isAny()) {
-                Sets.Composed made = sets.join(atom, at(atom), there);
+                Allowance.Composed made = sets.join(atom, at(atom), there);
                 if (made.gaveUp()) {
                     gaveUp.add(atom);
                 }
@@ -881,7 +881,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * <p>A set, so the same alternative offered twice is one. Neither side is bottom here, so every
      * box of either stands in the choice — nothing is dropped and nothing is merged.
      */
-    private Held<A> apart(AdmissibleValues<A> other, Sets<A> sets, Set<A> gaveUp) {
+    private Held<A> apart(AdmissibleValues<A> other, Allowance<A> sets, Set<A> gaveUp) {
         Set<Box<A>> boxes = new LinkedHashSet<>(alternatives());
         boxes.addAll(other.alternatives());
         Held.Alternatives.Made<A> made = Held.Alternatives.of(boxes, sets);
@@ -926,12 +926,12 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
     /** Either side holding at each position, which is what both spoke about: a position one of
      *  them says nothing about is one a value satisfying that side may hold anything at. */
     private static <A> Map<A, ValueSet> widenedBy(Map<A, ValueSet> these, Map<A, ValueSet> those,
-                                                  Sets<A> sets, Set<A> gaveUp) {
+                                                  Allowance<A> sets, Set<A> gaveUp) {
         Map<A, ValueSet> out = new LinkedHashMap<>();
         these.forEach((atom, set) -> {
             ValueSet there = those.get(atom);
             if (there != null) {
-                Sets.Composed made = sets.join(atom, set, there);
+                Allowance.Composed made = sets.join(atom, set, there);
                 if (made.gaveUp()) {
                     gaveUp.add(atom);
                 }
@@ -958,7 +958,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      *  side missing one standing at its own default. */
     private static <A> Map<A, ValueSet> guaranteedBy(Map<A, ValueSet> these, ValueSet theseElse,
                                                      Map<A, ValueSet> those, ValueSet thoseElse,
-                                                     Sets.Composing<A> both) {
+                                                     Allowance.Composing<A> both) {
         Set<A> named = new LinkedHashSet<>(these.keySet());
         named.addAll(those.keySet());
         Map<A, ValueSet> out = new LinkedHashMap<>();

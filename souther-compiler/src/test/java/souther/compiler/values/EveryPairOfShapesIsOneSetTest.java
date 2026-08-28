@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * two that were here already and guessed at against itself is one whose meet is not a meet, and the
  * answer is a set either way — so nothing downstream would find out.
  *
- * <p>Asked of {@link Sets}, since that is where two of these are put together. Every pair below is
+ * <p>Asked of {@link Allowance}, since that is where two of these are put together. Every pair below is
  * within what one answer is allowed, so nothing here is given up on and what is read is the
  * algebra.
  */
@@ -38,7 +38,7 @@ class EveryPairOfShapesIsOneSetTest {
     private static final String POSITION = "value";
 
     /** What puts the sets together, and what it is allowed to build doing it. */
-    private final Sets<String> sets = Sets.ofAdmittedValues();
+    private final Allowance<String> sets = Allowance.ofAdmittedValues();
 
     private static Language language(String regex) {
         PatternRead read = PatternParser.read(regex);
@@ -78,14 +78,14 @@ class EveryPairOfShapesIsOneSetTest {
 
     /** What both hold, which is always built here: every pair is within the allowance. */
     private ValueSet met(ValueSet one, ValueSet two) {
-        Sets.Composed made = sets.meet(POSITION, one, two);
+        Allowance.Composed made = sets.meet(POSITION, one, two);
         assertFalse(made.gaveUp(), () -> one + " meet " + two + " is within what one answer holds");
         return made.set();
     }
 
     /** And what either holds, on the same terms. */
     private ValueSet joined(ValueSet one, ValueSet two) {
-        Sets.Composed made = sets.join(POSITION, one, two);
+        Allowance.Composed made = sets.join(POSITION, one, two);
         assertFalse(made.gaveUp(), () -> one + " join " + two + " is within what one answer holds");
         return made.set();
     }

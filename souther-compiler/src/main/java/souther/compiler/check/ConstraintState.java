@@ -223,12 +223,13 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * conjunctions firing on a side that read nothing, and lifting it is about which rules went
      * unread rather than about how the alternatives are held.
      */
-    ConstraintState<A> takingValuesRead(AdmissibleValues<A> read) {
-        // Met with what nothing read leaves, which builds nothing: top says nothing at any
-        // position, so every pair is one side or the other. The composer a later conjunction
-        // spends from is that conjunction's, and it is given one where it is made
-        // ({@code ReadQuantities}).
-        souther.compiler.values.Sets<A> sets = souther.compiler.values.Sets.ofAdmittedValues();
+    ConstraintState<A> takingValuesRead(AdmissibleValues<A> read,
+                                        souther.compiler.values.Allowance<A> sets) {
+        // The allowance the reading was worked out under, and not a fresh one. What this state
+        // holds is that reading, and what a later reader builds out of it is more of the same
+        // answer at the same positions — given an allowance of its own, a position would be allowed
+        // its machine again for every phase that touched it, and the bound would be on a phase
+        // rather than on what the model is finally told.
         // Said once, and what stands here until it is said is what nothing read leaves. Saying it
         // twice would keep the second reading and drop the first without a word, which is the one
         // way this can be got wrong now that it cannot combine two of them. An assertion because a
@@ -252,7 +253,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * admitted set that neither of them paid for — so the caller that is building it says where
      * that is charged, and the states are taken under it before they are met.
      */
-    public ConstraintState<A> under(souther.compiler.values.Sets<A> sets) {
+    public ConstraintState<A> under(souther.compiler.values.Allowance<A> sets) {
         return new ConstraintState<>(numbers, facts, values.under(sets), ordered, shown);
     }
 

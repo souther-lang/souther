@@ -79,9 +79,9 @@ public final class ConjoinedAdmissibleValues<A> {
      * <p>Null where nothing has been read, which is a conjunction with no factors and nothing to
      * put together.
      */
-    private final Sets<A> sets;
+    private final Allowance<A> sets;
 
-    private ConjoinedAdmissibleValues(List<AdmissibleValues<A>> factors, Sets<A> sets) {
+    private ConjoinedAdmissibleValues(List<AdmissibleValues<A>> factors, Allowance<A> sets) {
         this.factors = List.copyOf(factors);
         this.sets = sets;
         Map<A, AdmissibleValues<A>> named = new LinkedHashMap<>();
@@ -102,7 +102,7 @@ public final class ConjoinedAdmissibleValues<A> {
      * <p>Null where nothing was read. A reader holding that is holding every value at every
      * position, which is what it would have composed its way to anyway.
      */
-    public Sets<A> sets() {
+    public Allowance<A> sets() {
         return sets;
     }
 
@@ -117,7 +117,7 @@ public final class ConjoinedAdmissibleValues<A> {
      *
      * <p>Nothing already read is undone. What is being said is where the next machine is charged.
      */
-    public ConjoinedAdmissibleValues<A> under(Sets<A> sets) {
+    public ConjoinedAdmissibleValues<A> under(Allowance<A> sets) {
         return this.sets == sets ? this : new ConjoinedAdmissibleValues<>(factors, sets);
     }
 
@@ -127,7 +127,7 @@ public final class ConjoinedAdmissibleValues<A> {
     }
 
     /** One reading, which is a conjunction of one, beside what put its sets together. */
-    public static <A> ConjoinedAdmissibleValues<A> of(AdmissibleValues<A> read, Sets<A> sets) {
+    public static <A> ConjoinedAdmissibleValues<A> of(AdmissibleValues<A> read, Allowance<A> sets) {
         return new ConjoinedAdmissibleValues<>(List.of(read), sets);
     }
 
@@ -278,7 +278,7 @@ public final class ConjoinedAdmissibleValues<A> {
      * Connectivity decides who is met with whom; arrival decides in what order.
      */
     private static <A> List<AdmissibleValues<A>> byComponent(List<AdmissibleValues<A>> of,
-                                                             Sets<A> sets) {
+                                                             Allowance<A> sets) {
         List<Set<A>> vocabularies = new ArrayList<>(of.size());
         of.forEach(each -> vocabularies.add(each.subjects()));
         // Which factors name each subject, which is what says two of them are in one component

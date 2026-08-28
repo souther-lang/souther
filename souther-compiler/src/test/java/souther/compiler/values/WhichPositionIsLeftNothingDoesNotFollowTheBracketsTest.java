@@ -45,7 +45,7 @@ class WhichPositionIsLeftNothingDoesNotFollowTheBracketsTest {
 
     /** What puts the sets of one reading together. Every set here is written out, so nothing is
      *  built and no allowance is spent. */
-    private final Sets<String> sets = Sets.ofAdmittedValues();
+    private final Allowance<String> sets = Allowance.ofAdmittedValues();
 
     private AdmissibleValues<String> pair(Value a, Value b) {
         return at(A, a).meet(at(B, b), sets);

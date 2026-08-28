@@ -177,12 +177,12 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     private static ConstraintState<FactSubject> valuesAtBottom() {
         // Met as one reading and handed over as one. Two readings are combined where the
         // clauses of a declaration are read, and never at the state's boundary.
-        souther.compiler.values.Sets<FactSubject> sets =
-                souther.compiler.values.Sets.ofAdmittedValues();
+        souther.compiler.values.Allowance<FactSubject> sets =
+                souther.compiler.values.Allowance.ofAdmittedValues();
         return ConstraintState.<FactSubject>top().takingValuesRead(
                 AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
                         .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))),
-                                sets));
+                                sets), sets);
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {
