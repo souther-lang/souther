@@ -4193,12 +4193,18 @@ public final class Adequacy {
             // reading a line another module wrote and narrowing nothing about it owes nothing here,
             // which is the dependency it carries rather than a debt.
             for (BorderObligationPointAssessment debt : BorderObligationPointAssessment.across(
-                    readings, name,
-                    point -> axisOf(point.line(), declarations, symbols, policy))) {
+                    readings, point -> axisOf(point.line(), declarations, symbols, policy))) {
                 List<DeclaredDebt.Owner> owners = new ArrayList<>();
-                for (TypeSymbol.AtModule owner : debt.attribution().ownersIn(name)) {
+                for (TypeSymbol.AtModule owner : debt.ownersIn(name)) {
                     owners.add(new DeclaredDebt.Owner(owner,
                             read(declarations, owner, symbols, policy).at()));
+                }
+                // A point this module keeps no account of: a row its own reading settled, which
+                // is that body's to write, or a line owed to declarations elsewhere. Left out here
+                // and gathered all the same, so that whoever does keep the account has every
+                // reading of it.
+                if (owners.isEmpty()) {
+                    continue;
                 }
                 out.add(new DeclaredDebt(debt, owners));
             }
@@ -4211,11 +4217,18 @@ public final class Adequacy {
          * <p>The value a newtype wraps is written {@code value}, which is what the author writes in
          * the clause. A coordinate spells an empty path as "the value", which is what it is called
          * where a sentence says it rather than where a line is named.
+         *
+         * <p>A line no declaration drew has the rule's own name and no more. Where such a line is
+         * is the reading's answer and there are as many of those as there are positions carrying
+         * the rule, so a debt that took one of them would be named after a place it is not owed at.
          */
         private static String axisOf(souther.compiler.partition.BorderObligationId id,
                                      Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
                                      Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
-            TypeSymbol declaredOn = id.owedToTheDeclaration().orElseThrow();
+            TypeSymbol declaredOn = id.owedToTheDeclaration().orElse(null);
+            if (declaredOn == null) {
+                return id.named();
+            }
             souther.compiler.check.FieldDomains.Coordinate at =
                     read(read, declaredOn, symbols, policy)
                             // Which line of the declaration this is, asked of the rule. Taken apart

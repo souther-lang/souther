@@ -19,6 +19,13 @@ import java.util.Map;
  * occurrence, one clause of {@code UserId} was 126 things to write a row for over {@code crm}
  * (issue #1062).
  *
+ * <p><b>Every point, whosever it is.</b> Whether a row here is a body's to write or is owed to the
+ * declarations that drew the line is what {@link souther.compiler.partition.PointAttribution}
+ * answers, and it decides who keeps the account and where a row goes — not whether the readings of
+ * the point are gathered. Made for one of the two, the other kind had no value naming its readings
+ * at all, and its one row was offered for whichever reading a walk wrote last. So the readings are
+ * gathered here for both, and whose the point is is read off this rather than asked before it.
+ *
  * <p><b>One of these per point and not per line.</b> A line owes as many as four things and they are
  * not one piece of work: a row at the line and a row beside it are two values, and two runs beside
  * one line that stop in different places are two obligations, whether or not one row answers both.
@@ -37,7 +44,7 @@ import java.util.Map;
  */
 public record BorderObligationPointAssessment(BorderObligationPoint point, String axis,
                                               souther.compiler.partition.PointAttribution
-                                                      .TheDeclarations attribution,
+                                                      attribution,
                                               Demand demand, ItemAssessment.Owed item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met) {
@@ -99,49 +106,34 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      * caller that grouped by anything else — the label, the rule, the position — would be deciding
      * what a debt is a second time and somewhere else.
      *
-     * <p><b>Which points those are is asked of the attribution and of nothing else.</b> A row this
-     * reading's own rule settled is that body's to write and is no debt of any declaration; a row
-     * owed to declarations none of which are this module's is a line this module's values are held
-     * to and somebody else's to answer for. Both are the reading's own answer, read here rather
-     * than re-derived, and the module is what this account is of.
+     * <p><b>No point is left out, whosever it is.</b> Which account a point falls in and who may
+     * answer for it are questions about what this produces, and every reader of one asks them of
+     * it: a module keeping the declarations' account reads {@link #ownersIn}, and a behavior's own
+     * account reads {@link #owedToTheReading}. Asked before the grouping instead, one of the two
+     * kinds is gathered and the other is not — and the one that is not has no value naming its
+     * readings, so whatever offers it a row has only one of them to offer from.
      */
     public static List<BorderObligationPointAssessment> across(
-            Map<String, List<BorderAssessment>> byBehavior, String module,
+            Map<String, List<BorderAssessment>> byBehavior,
             java.util.function.Function<BorderObligationPoint, String> named) {
         Map<BorderObligationPoint, java.util.SequencedMap<Reading, BorderAssessment>> byPoint =
                 new LinkedHashMap<>();
-        Map<BorderObligationPoint,
-                souther.compiler.partition.PointAttribution.TheDeclarations> attribution =
+        Map<BorderObligationPoint, souther.compiler.partition.PointAttribution> attribution =
                 new LinkedHashMap<>();
         byBehavior.forEach((behavior, readings) -> {
             for (BorderAssessment reading : readings) {
                 Reading where = new Reading(behavior, reading.border().cut().left());
+                // Every arm answered, for the reason the readings are: a point whose arm nothing
+                // names is a point gathered nowhere, and everything downstream would go on
+                // compiling.
                 for (souther.compiler.partition.OwedPoint each : reading.border().owes()) {
-                    // Every arm answered, for the reason the account beside this one answers them
-                    // all: a point whose arm neither producer names is a point measured nowhere,
-                    // and both of them would go on compiling.
-                    souther.compiler.partition.PointAttribution.TheDeclarations owedTo =
-                            switch (each.attribution()) {
-                                // A row a rule of this body settled is that behavior's own account
-                                // ({@link OwedBoundaryPoint#across}).
-                                case souther.compiler.partition.PointAttribution.TheReading _ ->
-                                        null;
-                                case souther.compiler.partition.PointAttribution
-                                        .TheDeclarations it -> it;
-                            };
-                    // And this module keeps the account only where its own declarations are among
-                    // the owners: a line another module wrote and this one narrowed nothing about
-                    // is the dependency it carries rather than a debt.
-                    if (owedTo == null || owedTo.ownersIn(module).isEmpty()) {
-                        continue;
-                    }
                     BorderObligationPoint owed = each.point();
                     // What settled the point is the reading's, so a point read twice is owed to
                     // what either reading says owes it. Kept as the first reading's, a point one
                     // module's declaration narrowed at one position and another's at another would
                     // be attributed to whichever the walk reached first.
-                    attribution.merge(owed, owedTo,
-                            souther.compiler.partition.PointAttribution.TheDeclarations::and);
+                    attribution.merge(owed, each.attribution(),
+                            souther.compiler.partition.PointAttribution::and);
                     BorderAssessment already = byPoint
                             .computeIfAbsent(owed, _ -> new LinkedHashMap<>()).put(where, reading);
                     if (already != null) {
@@ -172,7 +164,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      */
     public static BorderObligationPointAssessment of(
             BorderObligationPoint point, String axis,
-            souther.compiler.partition.PointAttribution.TheDeclarations attribution,
+            souther.compiler.partition.PointAttribution attribution,
             java.util.SequencedMap<Reading, BorderAssessment> met) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Demand asked = asked(point, readings);
@@ -298,6 +290,30 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
     /** The measured half, which a point owed a row always has. */
     public ItemAssessment.Owed owed() {
         return item;
+    }
+
+    /**
+     * Which of {@code module}'s declarations owe a row here, in the order the point names them.
+     *
+     * <p>Empty for a point a body's rule settled, and empty for one owed to declarations none of
+     * which are this module's — a line this module's values are held to and somebody else's to
+     * answer for. The two are one answer to the question asked: this module keeps no account of the
+     * point.
+     */
+    public List<souther.compiler.types.TypeSymbol.AtModule> ownersIn(String module) {
+        return attribution instanceof souther.compiler.partition.PointAttribution
+                .TheDeclarations owed ? owed.ownersIn(module) : List.of();
+    }
+
+    /**
+     * Whether a row here is the reading's own to write.
+     *
+     * <p>The other side of {@link #ownersIn} and not its negation. A point owed to declarations in
+     * another module is neither, and a caller reading one question as the other would put that
+     * line into this behavior's account.
+     */
+    public boolean owedToTheReading() {
+        return attribution instanceof souther.compiler.partition.PointAttribution.TheReading;
     }
 
     /**
