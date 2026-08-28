@@ -3,7 +3,7 @@ package souther.compiler;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.DeclaredRows;
+import souther.compiler.query.BorderAccount;
 import souther.compiler.query.GenerationScope;
 
 import java.util.ArrayList;
@@ -33,26 +33,26 @@ public final class OfferedAtTheLines {
         Adequacy.Filling filling = all == null ? null : all.get(behavior);
         Generator.GenerationResult own = filling == null
                 ? Generator.GenerationResult.NONE : filling.boundaries();
-        DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(), module,
+        BorderAccount declared = Adequacy.accountFor(compilation.db(), module,
                 new GenerationScope.Module());
         List<Generator.GeneratedRow> rows = souther.compiler.query.Composition.atTheLines(
-                own.rows(), declared.rowsByCarrier().get(behavior));
+                declared.rowsByCarrier().get(behavior));
         List<Generator.UnresolvedCombination> unresolved = new ArrayList<>(own.unresolved());
         declared.unmet().forEach((_, unmet) -> {
             switch (unmet) {
-                case DeclaredRows.Unmet.TheLineCannotBeWritten(var _, var _, var proving) ->
+                case BorderAccount.Unmet.TheLineCannotBeWritten(var _, var _, var proving) ->
                         proving.forEach(at -> searched(unresolved, at));
-                case DeclaredRows.Unmet.WhatTheReadingsCameTo(var _, var _, var came) ->
+                case BorderAccount.Unmet.WhatTheReadingsCameTo(var _, var _, var came) ->
                         came.forEach(at -> searched(unresolved, at));
-                case DeclaredRows.Unmet.NothingWasSearched(var _, var _) -> { }
+                case BorderAccount.Unmet.NothingWasSearched(var _, var _) -> { }
             }
         });
         return new Generator.GenerationResult(rows, unresolved, own.reasons());
     }
 
     /** What one reading came to, where it was searched at all. */
-    private static void searched(List<Generator.UnresolvedCombination> out, DeclaredRows.At at) {
-        if (at instanceof DeclaredRows.At.Searched(var _, var why)) {
+    private static void searched(List<Generator.UnresolvedCombination> out, BorderAccount.At at) {
+        if (at instanceof BorderAccount.At.Searched(var _, var why)) {
             out.add(why);
         }
     }

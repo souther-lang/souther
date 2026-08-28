@@ -129,7 +129,7 @@ class EveryPointOwedIsInOneAccountTest {
                 .filter(owed -> owed.debt().met().size() > 1).toList();
         assertFalse(acrossBoth.isEmpty(),
                 () -> "both behaviors carry the type, so a point of its line is read twice and owed"
-                        + " once: " + debts.stream().map(each -> each.debt().said()).toList());
+                        + " once: " + debts.stream().map(each -> each.said()).toList());
     }
 
     /**
@@ -285,7 +285,7 @@ class EveryPointOwedIsInOneAccountTest {
         // never came back. Asserted so that what the filtered view drops is something it had.
         assertFalse(account.weakening().isEmpty(),
                 () -> "a row of `stalls` did not come back, so the debt is not settled: "
-                        + account.owed().stream().map(each -> each.debt().said()).toList());
+                        + account.owed().stream().map(each -> each.said()).toList());
 
         Adequacy.DeclaredBoundaries shown = account.keptFor(java.util.Set.of("seen"));
         assertFalse(shown.owed().isEmpty(), "`seen` carries the line, so the debt is still work");

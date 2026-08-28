@@ -83,7 +83,7 @@ class WhichModuleKeepsTheAccountOfARunTest {
         // where this module's record takes the position in. Its own `Lim` owes lines of its own,
         // which is not what this is about.
         List<Adequacy.DeclaredDebt> aboveTheFloor = debts.stream()
-                .filter(each -> each.debt().said().equals("value in 0 < value <= 50")).toList();
+                .filter(each -> each.said().equals("value in 0 < value <= 50")).toList();
 
         assertEquals(1, aboveTheFloor.size(),
                 () -> "the run above the imported floor is one debt here: " + said(debts));
@@ -163,14 +163,14 @@ class WhichModuleKeepsTheAccountOfARunTest {
     private static Adequacy.DeclaredDebt aboveTheFloor(Compilation compilation, String module) {
         List<Adequacy.DeclaredDebt> debts = debtsOf(compilation, module);
         return debts.stream()
-                .filter(each -> each.debt().said().equals("value in 0 < value <= 50"))
+                .filter(each -> each.said().equals("value in 0 < value <= 50"))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError(
                         module + " keeps no account of the run above the floor: " + said(debts)));
     }
 
     private static List<String> said(List<Adequacy.DeclaredDebt> debts) {
-        return debts.stream().map(each -> each.debt().role() + " " + each.debt().said()).toList();
+        return debts.stream().map(each -> each.debt().role() + " " + each.said()).toList();
     }
 
     private static List<Adequacy.DeclaredDebt> debtsOf(Compilation compilation, String module) {

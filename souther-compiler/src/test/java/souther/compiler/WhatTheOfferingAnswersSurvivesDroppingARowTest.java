@@ -149,7 +149,7 @@ class WhatTheOfferingAnswersSurvivesDroppingARowTest {
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.shipping", true), generated,
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.shipping",
+                Adequacy.accountFor(compilation.db(), "example.shipping",
                         new GenerationScope.Module()));
         Settlements table = Settlements.of(compilation.db(), composed);
         assertFalse(table.byRow().isEmpty(), "the model under test is offered rows");

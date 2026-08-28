@@ -126,12 +126,12 @@ class ANameBesideAnEndIsOwedToTheDifferenceItMadeTest {
         assertNotNull(account, "the model under test compiles");
         List<Adequacy.DeclaredDebt> debts = account.owed();
         return debts.stream()
-                .filter(each -> each.debt().role() == role && each.debt().said().equals(said))
+                .filter(each -> each.debt().role() == role && each.said().equals(said))
                 .map(each -> each.subject().named())
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no " + role + " debt asking " + said + ": "
                         + debts.stream()
-                                .map(each -> each.debt().role() + " " + each.debt().said()
+                                .map(each -> each.debt().role() + " " + each.said()
                                         + " -> " + each.subject().named())
                                 .toList()));
     }

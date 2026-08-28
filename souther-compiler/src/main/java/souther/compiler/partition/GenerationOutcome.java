@@ -14,7 +14,7 @@ import java.util.List;
  * had been asked for went unanswered, and a strategy could only ever be written for what the bars
  * already gated on. The two are projections of one set of findings now, neither through the other.
  *
- * <p>Which of the four it is, is a question about strategies and not about searches. A strategy
+ * <p>Which of them it is, is a question about strategies and not about searches. A strategy
  * that takes a finding of this kind and composed nothing is {@link CannotGenerate}; a finding no
  * strategy takes and one a strategy could be written for is {@link NotSupported}; a finding row
  * synthesis is not the answer to at all is {@link NotApplicable}. Whether anything was tried
@@ -26,6 +26,12 @@ import java.util.List;
  * gains a form it can read moves findings from {@link NotSupported} to one of the others.
  * {@link NotApplicable} is not on that path: nothing anyone writes turns a measure this compiler
  * could not make into a row somebody can write.
+ *
+ * <p>{@link ObligationAlreadySettled} is not on it either, and for the opposite reason: a row would
+ * answer that finding, and the line it belongs to has one. It is the answer wherever a finding and
+ * what a row is owed for are counted differently — a finding stands at a coordinate, a row is owed
+ * once for the line whatever its coordinates, and the two are then free to be a finding and no work
+ * at the same time.
  */
 public sealed interface GenerationOutcome {
 
@@ -111,6 +117,28 @@ public sealed interface GenerationOutcome {
             }
         }
     }
+
+    /**
+     * A row would answer this finding, and the obligation it is a coordinate of is answered
+     * somewhere else.
+     *
+     * <p>Named for the obligation and not for the finding, because the finding is not settled: the
+     * coordinate this stands at has no row at it and a report goes on counting it. What is settled
+     * is the line the coordinate belongs to, and no row is offered here for that reason.
+     *
+     * <p>Apart from every other arm because the news is different: nothing is missing at the line,
+     * nobody has to write a strategy, and no row is offered. The three that say a row is not coming
+     * say it of the finding — this says it of what the finding is a coordinate of.
+     *
+     * <p>Two ways the line comes to be answered elsewhere, and one piece of news. A row this
+     * compilation read may already stand at another reading of the line, or a row composed for
+     * another reading may be the one on offer for it — either way what would be written here is a
+     * second row for work that has one. Answered as {@link NotApplicable}, a reader would be told no
+     * row changes it, which is false; answered as {@link Generated} with that other row, a reader is
+     * handed a row written in another position's terms and told it fills this coordinate, which it
+     * does not.
+     */
+    record ObligationAlreadySettled() implements GenerationOutcome {}
 
     /** No strategy takes a finding of this kind, or the form this one would need. */
     record NotSupported(Reason reason) implements GenerationOutcome {

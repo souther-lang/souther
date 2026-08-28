@@ -109,12 +109,12 @@ class ADeclarationThatCannotMoveACutIsNotNamedAtItTest {
         List<Adequacy.DeclaredDebt> debts = account.owed();
         return debts.stream()
                 .filter(each -> each.debt().role() == PointRole.ON
-                        && each.debt().said().equals(said))
+                        && each.said().equals(said))
                 .map(each -> each.subject().named())
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no ON debt asking " + said + ": "
                         + debts.stream()
-                                .map(each -> each.debt().role() + " " + each.debt().said()
+                                .map(each -> each.debt().role() + " " + each.said()
                                         + " -> " + each.subject().named())
                                 .toList()));
     }

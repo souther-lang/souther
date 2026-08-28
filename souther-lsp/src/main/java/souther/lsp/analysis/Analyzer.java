@@ -831,13 +831,57 @@ public final class Analyzer {
             if (souther.compiler.query.Adequacy.whereNoRowCouldAnswer(each.about()) != null) {
                 continue;
             }
-            if (each.subject().isBehavior(behavior)
+            // A finding at a point of a line is not by itself work. A line is owed one row however
+            // many positions read it, so a coordinate of a line another position answered is a
+            // finding standing over nothing to write — and counted here, an offer is made that
+            // resolves to no rows. What is owed is the point's own answer and is asked below.
+            if (each.about() instanceof souther.compiler.query.About.APointOfABorder
                     || each.about() instanceof souther.compiler.query.About
-                            .APointOfADeclaredBorder(var debt) && debt.carriedBy(behavior)) {
+                            .APointOfADeclaredBorder) {
+                continue;
+            }
+            if (each.subject().isBehavior(behavior)) {
                 return true;
             }
         }
-        return false;
+        return anyLineIsOwedARow(compilation, module, behavior);
+    }
+
+    /**
+     * Whether a line this behavior reads is owed a row nothing has written.
+     *
+     * <p>Asked of what is owed rather than of the findings that stand at it. A report counts a line
+     * once per coordinate it was read at and a row is owed once for the line, so the two answer
+     * different questions — and the question an offer to write rows is putting is the second one.
+     *
+     * <p>This behavior's lines and its declarations' alike. A line an {@code invariant} drew is not
+     * this behavior's finding — what {@code UserId} says is the same wherever the type is carried —
+     * and a row written for a behavior carrying the type is what discharges it, so an offer standing
+     * beside that behavior is an offer to do that work.
+     *
+     * <p>And only the lines this module answers for
+     * ({@link souther.compiler.query.BorderObligationPointAssessment#keptBy}). A module that carries
+     * an imported type reads its lines and owes rows at none of them: the row belongs where the
+     * declaration is. Offered here, the offer is made and the search that follows it leaves the
+     * point out, so there is nothing to hand back.
+     *
+     * <p>What is asked is whether the point is worth looking for a row at, which is the measurement
+     * saying no row stands there. Whether one can be composed is a further question and costs a
+     * decoder run to answer, so it is left to whoever takes the offer: an offer made here and
+     * resolved to nothing is a search that could not compose the row somebody asked for, which is
+     * news, and one never made would have been the same search decided in advance.
+     */
+    private static boolean anyLineIsOwedARow(Compilation compilation, String module,
+                                             String behavior) {
+        List<souther.compiler.query.BorderObligationPointAssessment> owed = compilation.db()
+                .ask(new souther.compiler.query.Adequacy.Obligations(module,
+                        new souther.compiler.query.GenerationScope.Behavior(behavior))).value();
+        if (owed == null) {
+            return false;
+        }
+        return owed.stream().anyMatch(point -> point.carriedBy(behavior)
+                && point.keptBy(module)
+                && point.owed().worthSearching());
     }
 
     /**

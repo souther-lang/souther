@@ -118,7 +118,7 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
 
     /** What each of the module's debts asks a row for, as a report writes it. */
     private static List<String> said(Compilation compilation, String module) {
-        return debtsOf(compilation, module).stream().map(each -> each.debt().said()).toList();
+        return debtsOf(compilation, module).stream().map(each -> each.said()).toList();
     }
 
     /** How many lines the module's debts are points of, which the owners of a line never multiply
@@ -333,7 +333,7 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
     /** How many rows the module is offered for one line. */
     private static long generationTargetsFor(Compilation compilation, String module,
                                              BorderObligationId line) {
-        return Adequacy.generatedForDeclarationsOf(compilation.db(), module,
+        return Adequacy.accountFor(compilation.db(), module,
                         new GenerationScope.Module())
                 .resolved().keySet().stream()
                 .filter(each -> each.line().equals(line)).count();
@@ -345,14 +345,14 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
                 .map(each -> {
                     About.APointOfADeclaredBorder about =
                             (About.APointOfADeclaredBorder) each.about();
-                    return each.named() + ": " + about.debt().said();
+                    return each.named() + ": " + about.owed().said();
                 })
                 .toList();
     }
 
     private static List<String> subjects(Compilation compilation, String module) {
         return debtsOf(compilation, module).stream()
-                .map(each -> each.subject().named() + " " + each.debt().axis()).toList();
+                .map(each -> each.subject().named() + " " + each.axis()).toList();
     }
 
     private static Compilation compiled(String... sources) {

@@ -226,21 +226,21 @@ public record Settlements(List<OfferItem> requested,
         // And the points the module's declarations are owed, which are no behavior's own. A row of
         // whichever behavior composed one answers the line for everybody, so they are items of the
         // offering rather than of the block a row happens to sit in.
-        if (offering.declared() != null) {
-            offering.declared().resolved().forEach((point, answer) -> {
+        if (offering.account() != null) {
+            offering.account().resolved().forEach((point, answer) -> {
                 OfferItem item = new OfferItem.APointOfALine(point);
                 switch (answer.resolution()) {
-                    case DeclarationResolution.Generated(var by, var row) -> {
+                    case PointResolution.Generated(var at, var row) -> {
                         requested.add(item);
-                        composedFor.put(item, RowKey.of(by, row));
+                        composedFor.put(item, RowKey.of(at.behavior(), row));
                     }
                     // Asked for and nothing came of it, which is still a thing this run is short of
                     // — and something else may stand there, which is what makes it worth asking.
-                    case DeclarationResolution.Unresolved _ -> requested.add(item);
+                    case PointResolution.Unresolved _ -> requested.add(item);
                     // Not asked for at all: a row already stands there, or nothing measured it. A
                     // point in nobody's way is not work this run offers, and holding it here would
                     // let a candidate be the only offer for it.
-                    case DeclarationResolution.NoSearch _ -> { }
+                    case PointResolution.NoSearch _ -> { }
                 }
             });
         }
@@ -300,7 +300,6 @@ public record Settlements(List<OfferItem> requested,
     private record OneBehavior(String behavior, BehaviorInputs where, List<Axis> axes, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
                                List<Generator.ClassOwed> classes, List<Generator.ArmOwed> arms,
-                               Map<OfferItem.APointOfALine, OwedBoundaryPoint> owedHere,
                                Map<OfferItem.APointOfALine, List<AtAPoint>> reads) {
 
         /**
@@ -329,36 +328,30 @@ public record Settlements(List<OfferItem> requested,
             if (read == null) {
                 return null;
             }
-            Map<OfferItem.APointOfALine, OwedBoundaryPoint> owedHere = new LinkedHashMap<>();
             Map<OfferItem.APointOfALine, List<AtAPoint>> reads = new LinkedHashMap<>();
-            // Its own account, where this run asked it for rows and nowhere else. Whether the
-            // search was made is what `searched` says, and asking for it here would make it: the
-            // behavior would come back owing points at its own lines, which are not work this run
-            // set anybody.
-            if (boundaries && filling != null) {
-                List<BorderAssessment> edges =
-                        db.ask(new Adequacy.BoundarySearch(module, behavior)).value();
-                if (edges != null) {
-                    // What this run was asked for a row at. Neither of the readings beside it will
-                    // do: the places a row is composed at drop what tells two obligations at one
-                    // point apart, and the account holds points the measurement has already
-                    // settled — a point a written row stands at is owed and is nobody's work, and
-                    // counted here a candidate standing there would be its only offer and could
-                    // never be dropped.
-                    for (OwedBoundaryPoint point
-                            : OwedBoundaryPoint.askedForARow(OwedBoundaryPoint.across(edges)).at()) {
-                        OfferItem.APointOfALine item =
-                                new OfferItem.APointOfALine(point.owed());
-                        owedHere.put(item, point);
-                        reads.computeIfAbsent(item, _ -> new ArrayList<>())
-                                .add(new AtAPoint(point.line(), point.item().criterion()));
-                    }
+            // Where this behavior meets each point its own rules are owed a row at. Read whether or
+            // not anything was asked of the behavior, for the reason the declarations' lines below
+            // are: a row written under it stands where it stands, and whether this run went looking
+            // for one has nothing to do with it.
+            //
+            // Which row is offered there is not here. That is one search over every reading of the
+            // point, and the module's account holds it ({@link BorderAccount}) — a behavior
+            // resolving its own points beside that would be one search made twice, free to come to
+            // two answers about one row.
+            List<BorderObligationPointAssessment> points = db.ask(
+                    new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior)))
+                    .value();
+            for (BorderObligationPointAssessment point
+                    : points == null ? List.<BorderObligationPointAssessment>of() : points) {
+                if (!point.owedToTheReading() || !point.carriedBy(behavior)) {
+                    continue;
                 }
+                OfferItem.APointOfALine item = new OfferItem.APointOfALine(point.point());
+                point.met().forEach((_, at) -> reads.computeIfAbsent(item, _ -> new ArrayList<>())
+                        .add(new AtAPoint(at.border(), at.owedAt(point.role()).criterion())));
             }
-            // And this behavior's readings of the lines the declarations own, which its own account
-            // holds none of. Read whether or not anything was asked of the behavior: a row written
-            // under it stands where it stands, and that is how it answers the line it was composed
-            // for.
+            // And this behavior's readings of the lines the declarations own, which its own rules
+            // are owed none of. Read the same way and for the same reason.
             declared.forEach((point, byBehavior) -> {
                 for (BorderAssessment at : byBehavior.getOrDefault(behavior, List.of())) {
                     if (at.at(point.role()) instanceof ItemAssessment.Owed owed) {
@@ -375,7 +368,7 @@ public record Settlements(List<OfferItem> requested,
                             : Adequacy.runningRowsOf(trials, behavior, sig),
                     filling == null ? List.of() : filling.composed().plan().classesOwed(),
                     filling == null ? List.of() : filling.composed().plan().armsOwed(),
-                    owedHere, reads);
+                    reads);
         }
 
         /**
@@ -401,20 +394,21 @@ public record Settlements(List<OfferItem> requested,
                             RowKey.of(behavior, filling.composed().rowFor(built.row())));
                 }
             }
-            owedHere.forEach((item, point) -> {
-                if (point.item().attempt() instanceof ItemAssessment.Attempt.Built built) {
-                    out.put(item, RowKey.of(behavior, built.row()));
-                }
-            });
             return out;
         }
 
-        /** What this behavior was asked to offer a row for. */
+        /**
+         * What this behavior was asked to offer a row for.
+         *
+         * <p>Its classes and its arms, and no point of a line. A row at a point is owed once
+         * however many readings there are, and it is offered from the module's account of them —
+         * so a behavior listing its own points here would put one piece of work into a run twice
+         * and let the two answer differently.
+         */
         List<OfferItem> owed() {
             List<OfferItem> out = new ArrayList<>();
             classes.forEach(each -> out.add(new OfferItem.AClass(each)));
             arms.forEach(each -> out.add(new OfferItem.AnArm(each)));
-            out.addAll(owedHere.keySet());
             return out;
         }
 

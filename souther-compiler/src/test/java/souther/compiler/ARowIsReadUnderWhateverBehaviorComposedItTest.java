@@ -3,8 +3,8 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.DeclarationResolution;
-import souther.compiler.query.DeclaredRows;
+import souther.compiler.query.PointResolution;
+import souther.compiler.query.BorderAccount;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.query.OfferItem;
@@ -63,7 +63,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         assertFalse(declared.rowsByCarrier().isEmpty(),
                 "a declaration's line is owed a row and one behavior composed it: " + declared);
@@ -105,7 +105,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
@@ -123,7 +123,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         }
         assertEquals(new LinkedHashSet<>(declared.resolved().keySet().stream()
                         .filter(point -> !(declared.resolved().get(point).resolution()
-                                instanceof DeclarationResolution.NoSearch))
+                                instanceof PointResolution.NoSearch))
                         .toList()),
                 asked,
                 "only the declarations' points are asked about, and none of the behavior's own");
@@ -134,7 +134,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        DeclaredRows declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
@@ -150,7 +150,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         assertTrue(settles > 0, "the rows settle something: " + table.byRow());
 
         for (var each : declared.resolved().entrySet()) {
-            if (!(each.getValue().resolution() instanceof DeclarationResolution.Generated(var by,
+            if (!(each.getValue().resolution() instanceof PointResolution.Generated(var by,
                     var row))) {
                 continue;
             }
