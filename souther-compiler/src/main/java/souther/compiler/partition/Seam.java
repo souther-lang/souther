@@ -261,6 +261,22 @@ public record Seam(CutPosition at, Level below, Level above) {
     }
 
     /**
+     * Where a rule leaves off on one side: the last value the quantity takes there, or the line
+     * itself where the order names none.
+     *
+     * <p><b>What a rule places, as against the number it wrote.</b> An order that steps has a next
+     * value, so a rule refusing its own threshold keeps the values from one count in; an order that
+     * fills has none, and what such a rule keeps comes arbitrarily close to the line without
+     * reaching it. Both are one question and this is where it is answered — asked as the threshold
+     * alone, a range that stops where the rule leaves off disagrees with it by exactly one count,
+     * and asked as the side alone, an order that fills has no answer at all.
+     */
+    Level leaving(Towards side) {
+        Level named = side == Towards.BELOW ? below : above;
+        return named != null ? named : at.asALevelOfTheQuantity();
+    }
+
+    /**
      * One value of the quantity that this seam is at, for a reader putting several of them in the
      * order their values are in.
      *

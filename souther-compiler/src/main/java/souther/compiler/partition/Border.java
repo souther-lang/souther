@@ -348,7 +348,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         boolean holdsHere = holdsAtTheValue(origin);
         Map<PointRole, PointAnswer> demands = new EnumMap<>(PointRole.class);
         if (!ordersAroundTheCut(origin)) {
-            aLineWithOneSide(demands, origin, cut, holdsHere, space, reach, arrangement);
+            aLineWithOneSide(demands, origin, target.of(), cut, holdsHere, space, reach,
+                    arrangement);
             return new Border(target, origin, demands);
         }
         // Which way the rule is satisfied from the threshold, which is the one thing the two points
@@ -583,8 +584,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * offered as the {@code OUT} point of a border nothing can be outside of.
      */
     private static void aLineWithOneSide(Map<PointRole, PointAnswer> demands, OriginRef origin,
-                                         Level cut, boolean holdsHere, LevelSpace space,
-                                         NumericDomain.Bounds within,
+                                         BorderQuantity of, Level cut, boolean holdsHere,
+                                         LevelSpace space, NumericDomain.Bounds within,
                                          QuantityArrangement arrangement) {
         Criterion rest = new Criterion.AnythingBut(cut);
         switch (noSideOf(origin)) {
@@ -594,7 +595,15 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
                 // the line, and which of the two ends it is is what says which way it runs. Held
                 // against the range below, which the same reading settled.
                 Towards kept = satisfyingSide(origin);
-                requireItIsTheEndItKeeps(within, cut, kept, origin);
+                // Asked of a bound on a position and of nothing else. A position's range ends where
+                // its own bound is, so the two readings are answers to one question and are held
+                // against each other. What a rule relating positions cuts runs between whatever
+                // their ranges leave it, and its line falls inside that — so the range is no
+                // account of where this rule stops, and requiring the two to agree would refuse
+                // every relation a model states.
+                if (of.aBoundOnItEndsItsRange()) {
+                    requireItIsTheEndItKeeps(within, space, cut, kept, origin);
+                }
                 PointAnswer on = againstABound(space, cut, kept, holdsHere, within, origin);
                 demands.put(PointRole.ON, on);
                 demands.put(PointRole.OFF,
@@ -687,11 +696,18 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * <p>The side and not either end. A rule leaving one value puts both ends at the line, and each
      * of its two bounds answers for the end it placed rather than for whichever end matches.
      */
-    private static void requireItIsTheEndItKeeps(NumericDomain.Bounds within, Level cut,
-                                                 Towards kept, OriginRef origin) {
+    private static void requireItIsTheEndItKeeps(NumericDomain.Bounds within, LevelSpace space,
+                                                 Level cut, Towards kept, OriginRef origin) {
         Endpoint end = within == null ? null
                 : kept == Towards.ABOVE ? within.min() : within.max();
-        if (end == null || !end.at().sameAs(placeOf(cut))) {
+        // Where the rule leaves off, which is not always the number it wrote. A carrier that counts
+        // has a next value, so a rule refusing its own threshold keeps the values from one count in
+        // — and the range this is held against stops there too. Held against the number instead,
+        // the two agree wherever a rule admits its threshold and are one count apart wherever it
+        // does not, which is half the operators an author can write.
+        Level leaves = Seam.of(space, cut,
+                valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE).leaving(kept);
+        if (end == null || !end.at().sameAs(placeOf(leaves))) {
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: " + origin.named());
         }

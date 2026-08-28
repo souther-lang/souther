@@ -194,12 +194,11 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      * site, where both kinds arrive. Where the rule stops is the line either way, and which value
      * the point against it stands at is the order's answer.
      *
-     * <p><b>Which is not a licence to step one here.</b> An end a carrier can step is stepped before
-     * it arrives — by {@code InvariantBound} for a type's own clause and by the solver for what a
-     * record leaves — so {@code value > 5} on an {@code Int} is an inclusive 6 by the time a border
-     * is built and never an exclusive 5. Answered by stepping to the 6, this would be a third place
-     * that normalizes ends, and the day either of the two above stopped doing it the border would
-     * still come out right with nothing saying the reading had been repaired on the way through.
+     * <p><b>Which is not a licence to repair one here.</b> Two readings say where a rule leaves off
+     * and they are independent: the rules of the value say what range they leave, and the order the
+     * quantity is on says where the rule's own threshold parts its values. A border holds the two
+     * against each other and normalizes neither — so a bound whose range stops at 5 while its rule
+     * parts the values at 6 is a model this refuses rather than one it quietly agrees with.
      *
      * <p>What a {@code Decimal} does with the same shape is {@code
      * ABoundOnACarrierWithNoStepIsStillALineTest}, over a model rather than a hand-made origin: the
@@ -216,9 +215,10 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
                         souther.compiler.numeric.EndSide.LOWER, false)),
-                "an `Int` bounded strictly at 5 is an inclusive 6 long before it reaches a border");
+                "a rule parting the values at 6 over a range that stops at 5 is two readings of one"
+                        + " model that disagree");
         assertTrue(refused.getMessage().startsWith(
-                        "a bound that stops short of its own line where the order names 6 beside it"),
+                        "a bound whose line is not where what it leaves stops"),
                 refused.getMessage());
     }
 
