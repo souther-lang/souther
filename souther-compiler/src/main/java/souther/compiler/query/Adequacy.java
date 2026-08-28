@@ -1734,7 +1734,7 @@ public final class Adequacy {
      * rules reaching it, the values its decoder took. Folded to one answer per behavior, the second
      * position's was dropped and which one survived was whichever the search walked first.
      */
-    private static DeclarationResolver.ReadingEvidence readingOf(
+    static DeclarationResolver.ReadingEvidence readingOf(
             Db db, String module, GenerationScope scope, BorderObligationPointAssessment debt,
             souther.compiler.partition.PointRole role,
             BorderObligationPointAssessment.Reading reading) {
