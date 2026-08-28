@@ -558,7 +558,34 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     /**
-     * And every reason a measure can be unavailable for is registered with some field.
+     * The reasons a measure can give that no {@code reason} field of the document carries.
+     *
+     * <p>Each of them belongs to a measure whose whole section is left out where it holds, and the
+     * fact is written under {@code weakening} instead — which the schema says itself, at
+     * {@code partition} and at {@code signature}: absent where the behavior has no signature to
+     * read, said as {@code behavior_boundary_not_derived}. So there is no {@code reason} key for a
+     * word to go in, and a vocabulary naming them would be a field promising words nothing writes.
+     *
+     * <p>Written out because the alternative is worse in both directions. Left off the check below,
+     * a reason really nobody published looks exactly like these; folded into a vocabulary, the
+     * schema would carry three words the writer never emits. Naming them makes the third case — a
+     * reason a document says nothing about — a thing somebody decided rather than a thing nobody
+     * noticed.
+     */
+    private static final Set<Class<?>> SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT = Set.of(
+            // A reading of the rows, which the human report writes as `rows not read` and the
+            // document does not carry as a measure at all.
+            Adequacy.RowReading.NotAsked.class,
+            Adequacy.RowReading.Unavailable.class,
+            // A behavior whose signature could not be read. Every measure that needs the boundary
+            // is short of it, and the document leaves those sections out rather than writing each
+            // of them a reason: `behavior_boundary_not_derived` is a `weakening` word, and is held
+            // as one above.
+            souther.compiler.query.BoundaryForMeasurement.NotDerived.class);
+
+    /**
+     * And every reason a measure can give is either registered with some field or named as one no
+     * field carries.
      *
      * <p>The other direction of the test below, and it takes a different hole. That one asks whether
      * every field of the schema has somebody saying where its words come from; this asks whether
@@ -570,31 +597,53 @@ class EverySchemaWordIsAccountedForTest {
      * because more than one measure gives it. So it was a producer with no surface, and neither list
      * had a place to notice.
      *
+     * <p><b>All three families, because the writer does not tell them apart.</b> One door writes a
+     * measure's reason — {@code word(said.reason())} — and what it is handed is a
+     * {@link souther.compiler.observe.MeasureReason}, so which of the three a reason implements
+     * decides nothing about whether a document carries its word. Held over
+     * {@code NotApplicableReason} alone, a shared {@code FailureReason} or {@code NotMeasuredReason}
+     * put beside its producers would reopen exactly the hole this closed; {@code NothingWasAsked}
+     * shows that shared reasons outside any measure are the ordinary case rather than a one-off.
+     *
      * <p>Held over the <em>types</em> rather than over the words. Two reasons may spell one word —
      * that is what a shared field is — so a check that a word turns up somewhere passes for a reason
      * that got its spelling by coincidence, which is the orphan this is here to catch.
-     *
-     * <p>Only the reasons for a measure that does not apply. Something read and unavailable is a
-     * state of this compiler's reading, and a document says what it can about it under the keys it
-     * has; being unable to measure is not by itself something a version promises a word for.
      */
     @Test
-    void everyReasonAMeasureDoesNotApplyForIsRegisteredWithSomeField() {
+    void everyMeasureReasonProducerIsRegisteredWithSomeFieldOrNamedAsCarriedByNone() {
         Set<Class<?>> registered = new LinkedHashSet<>();
         for (Vocabulary each : VOCABULARIES) {
             registered.addAll(each.source());
         }
 
-        List<String> unregistered = new ArrayList<>();
-        for (Class<?> arm : armsOf(souther.compiler.query.NotApplicableReason.class)) {
-            if (!registered.contains(arm)) {
-                unregistered.add(arm.getSimpleName());
+        List<String> unaccounted = new ArrayList<>();
+        Set<Class<?>> leaves = new LinkedHashSet<>();
+        for (Class<?> family : List.of(souther.compiler.query.NotApplicableReason.class,
+                souther.compiler.query.NotMeasuredReason.class,
+                souther.compiler.query.FailureReason.class)) {
+            for (Class<?> arm : armsOf(family)) {
+                leaves.add(arm);
+                if (!registered.contains(arm)
+                        && !SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT.contains(arm)) {
+                    unaccounted.add(arm.getSimpleName());
+                }
             }
         }
 
-        assertEquals(List.of(), unregistered,
-                "a reason no field of the schema was told about, so the compiler can write a word"
-                        + " the shipped schema refuses");
+        assertEquals(List.of(), unaccounted,
+                "a reason no field of the schema was told about and nothing says a field never"
+                        + " carries, so the compiler can write a word the shipped schema refuses");
+
+        // And the exceptions are still exceptions. One that got a field, or one whose type went
+        // away, leaves a reason exempted from the check above for a fact that stopped being true —
+        // which is the same silence one more turn along.
+        for (Class<?> said : SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT) {
+            assertTrue(leaves.contains(said),
+                    said.getSimpleName() + " is no longer a reason any measure gives");
+            assertTrue(!registered.contains(said),
+                    said.getSimpleName() + " is registered with a field, so a document does carry"
+                            + " its word and it is not one of these");
+        }
     }
 
     /**
