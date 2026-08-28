@@ -111,6 +111,13 @@ public final class InputPath {
             return null;
         }
         switch (e) {
+            // What a `let` comes to is what its body comes to, and the name it bound is answered
+            // where it is read. Ordinary binding semantics, and what a helper applied to the
+            // element leaves behind once it is spliced in: `amountOf(line).value` is a field of a
+            // binding holding the element, and reading only the field would stop at the splice.
+            case Core.LetIn let -> {
+                return projection(let.body(), root, bound, symbols, through);
+            }
             case Core.Read read -> {
                 if (root.equals(read.binding())) {
                     return java.util.List.of();

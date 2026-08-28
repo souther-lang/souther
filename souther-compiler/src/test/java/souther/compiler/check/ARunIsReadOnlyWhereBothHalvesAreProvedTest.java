@@ -54,6 +54,13 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
             let kept (lines) =
                 if List.length(List.filter(line -> line.free, lines)) >= 3
                     then Needed else NotNeeded
+
+            let amountOf (line: Item): Amount = line.amount
+
+            behavior throughAHelperOnTheElement : (lines: List<Item>) -> Verdict
+            let throughAHelperOnTheElement (lines) =
+                if List.sum(List.map(line -> amountOf(line).value, lines)) >= 100000
+                    then Needed else NotNeeded
             """;
 
     /**
@@ -123,6 +130,24 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
         assertEquals("amount", elements.projectionAt(element).toString(),
                 "the value each element answered stands one field in, and the expression it was"
                         + " read from is not kept");
+    }
+
+    /**
+     * A closure that reaches the place through a helper answers the same place.
+     *
+     * <p>What a helper leaves behind once it is spliced in is a binding holding the element and a
+     * field of that binding, and the way there is the same way. Read without following the binding,
+     * a model that names its projection — which is how a model of any size writes one — would have
+     * been the shape this could not follow, and the rule about the total would go unread for a
+     * reason that is about the spelling rather than about the model.
+     */
+    @Test
+    void aClosureThatReachesThePlaceThroughAHelperAnswersTheSamePlace() {
+        ElementBindings elements = elements("throughAHelperOnTheElement");
+        assertEquals(1, elements.projected().size(),
+                "a helper applied to the element is a binding holding it and a field of that");
+        assertEquals("amount",
+                elements.projectionAt(elements.projected().keySet().iterator().next()).toString());
     }
 
     /**
