@@ -560,9 +560,9 @@ public final class Output {
      * compiles in one JVM may differ and so that a long-lived one — a build daemon, an editor's
      * language server — is not held for its whole life to whatever the first compile in it read.
      */
-    public static souther.compiler.examples.EvaluationPolicy policyOf(Db db) {
-        souther.compiler.examples.EvaluationPolicy said = db.ask(new Front.Policy()).value();
-        return said == null ? souther.compiler.examples.EvaluationPolicy.DEFAULT : said;
+    public static souther.compiler.execute.EvaluationPolicy policyOf(Db db) {
+        souther.compiler.execute.EvaluationPolicy said = db.ask(new Front.Policy()).value();
+        return said == null ? souther.compiler.execute.EvaluationPolicy.DEFAULT : said;
     }
 
     /**
@@ -575,8 +575,13 @@ public final class Output {
     public static souther.compiler.examples.Deadline deadlineOf(Db db) {
         souther.compiler.examples.Deadline said = db.ask(new Front.ExampleDeadline()).value();
         return said != null ? said
-                : souther.compiler.examples.Deadline.ofMillis(exampleBudgetMs(db),
-                        policyOf(db).workerStackBytes());
+                : souther.compiler.examples.Deadline.ofMillis(exampleBudgetMs(db), workerStack(db));
+    }
+
+    /** How much stack this compilation makes a worker with. */
+    private static long workerStack(Db db) {
+        Long asked = db.ask(new Front.WorkerStack()).value();
+        return asked == null ? souther.compiler.examples.Deadline.DEFAULT_WORKER_STACK_BYTES : asked;
     }
 
     /**

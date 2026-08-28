@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.examples.Deadline;
 import souther.compiler.observe.RowIdentity;
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.execute.EvaluationPolicy;
 import java.time.Duration;
 import java.util.function.Predicate;
 

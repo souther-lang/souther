@@ -1,7 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.examples.Deadline;
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 

@@ -1,6 +1,7 @@
 package souther.compiler.execute.jvm;
 
 import souther.compiler.examples.Answering;
+import souther.compiler.examples.Deadline;
 import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.observe.ArmObservation;
@@ -31,10 +32,15 @@ public final class JvmExampleRuns {
      * the module as this reading of the source has it, which is the whole reason the source is read
      * at the time the run happens.
      *
+     * <p>{@code deadline} is asked for beside the reading rather than taken out of it. What a row is
+     * held to crosses as terms; the arrangement that keeps them is this implementation's, and here
+     * it is the caller's own — a row driven one at a time from Java hands its applications back to
+     * the thread that asked.
+     *
      * @throws IllegalStateException where this compile emitted nothing to run the rows against
      */
     public static ExampleVerifier evaluating(JvmProgramImages images, ExampleExecution asked,
-                                             Answering answering) {
+                                             Deadline deadline, Answering answering) {
         JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
         if (image == null) {
             throw new IllegalStateException("`" + asked.module() + "` emitted nothing to run its"
@@ -42,7 +48,7 @@ public final class JvmExampleRuns {
         }
         return ExampleVerifier.evaluating(asked.rows(), asked.symbols(), asked.signatures(),
                 image.program(), image.published(), asked.requirements(), image.around(),
-                asked.definitions(), asked.deadline(), asked.policy(), answering,
+                asked.definitions(), deadline, asked.policy(), answering,
                 asked.contracts());
     }
 }

@@ -64,7 +64,11 @@ public final class Compilation {
         // Read now, so this compilation is held to what the settings said when it started rather than
         // to what the first compile in this JVM happened to read. A caller with a reason of its own
         // says so with withEvaluationPolicy.
-        db.set(new Front.Policy(), souther.compiler.examples.EvaluationPolicy.fromSettings());
+        db.set(new Front.Policy(), souther.compiler.execute.EvaluationPolicy.fromSettings());
+        // And the stack a worker of this compilation's own is made with, read now for the same
+        // reason. Not one of the terms above: what a recursion is held to is counted, and this is
+        // what the arrangement running it on a JVM thread gives that count room to be reached in.
+        db.set(new Front.WorkerStack(), souther.compiler.examples.Deadline.workerStackFromSettings());
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
         db.set(new Front.Reading(), Front.Reading.STANDARD);
@@ -81,7 +85,10 @@ public final class Compilation {
         // program, and ADR-0032 settles that it is run as the program that will ship. Which
         // implementation that is belongs here, so that nothing deciding whether the language
         // accepts a program names one.
-        db.running(new souther.compiler.execute.jvm.JvmProgramExecution(jvmProgramImages));
+        // Its classes, and the deadline it runs them under. The second is read at the question and
+        // not handed over now, because a test says one after this line has run.
+        db.running(new souther.compiler.execute.jvm.JvmProgramExecution(jvmProgramImages,
+                () -> Output.deadlineOf(db)));
     }
 
     /**
@@ -402,7 +409,7 @@ public final class Compilation {
      * What a caller says here is said about this compilation alone, so a test holding a row to a few
      * steps does not hold every other compile in the same JVM to them.
      */
-    public Compilation withEvaluationPolicy(souther.compiler.examples.EvaluationPolicy policy) {
+    public Compilation withEvaluationPolicy(souther.compiler.execute.EvaluationPolicy policy) {
         db.set(new Front.Policy(), policy);
         return this;
     }

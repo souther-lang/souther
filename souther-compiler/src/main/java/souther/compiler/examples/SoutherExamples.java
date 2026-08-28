@@ -140,8 +140,8 @@ public final class SoutherExamples {
         // A row runs on a worker of this compile's own, so what it spends is counted on one thread
         // and how deep it may recurse is this compile's answer; what it hands outside runs on
         // whoever called, because that is the world a supplied implementation answers out of.
-        compiled.withDeadline(Deadline.crossingBackToTheCaller(
-                EvaluationPolicy.DEFAULT.workerStackBytes()));
+        compiled.withDeadline(
+                Deadline.crossingBackToTheCaller(Deadline.DEFAULT_WORKER_STACK_BYTES));
         return new SoutherExamples(compiled);
     }
 
@@ -202,6 +202,7 @@ public final class SoutherExamples {
         }
         return new BoundExamples(module, asked.rows(),
                 JvmExampleRuns.evaluating(compilation.jvmProgramImages(), asked,
+                        Output.deadlineOf(compilation.db()),
                         Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))),
                 bound);
     }

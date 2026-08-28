@@ -1,7 +1,7 @@
 package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.InputCaseEvidence;

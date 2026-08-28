@@ -45,7 +45,7 @@
  *
  * <p><b>4. Resource policy belongs to the compilation.</b> A limit is an input the query graph hands
  * to the analysis, the way {@link souther.compiler.check.ReadingPolicy} and
- * {@link souther.compiler.examples.EvaluationPolicy} already are, rather than a private constant or
+ * {@link souther.compiler.execute.EvaluationPolicy} already are, rather than a private constant or
  * a system property read wherever the work happens. {@link
  * souther.compiler.partition.AdequacyPolicy} is where the three are written, grouped by which
  * result each weakens — a caller raising one to lift a partial measurement should not as readily

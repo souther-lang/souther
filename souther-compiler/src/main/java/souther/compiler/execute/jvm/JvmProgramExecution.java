@@ -41,12 +41,18 @@ import java.util.Optional;
 public final class JvmProgramExecution implements ProgramExecution {
 
     private final JvmProgramImages images;
+    private final JvmExampleDeadlines deadlines;
 
-    public JvmProgramExecution(JvmProgramImages images) {
+    public JvmProgramExecution(JvmProgramImages images, JvmExampleDeadlines deadlines) {
         if (images == null) {
             throw new IllegalArgumentException("a run of the JVM program needs its classes");
         }
+        if (deadlines == null) {
+            throw new IllegalArgumentException(
+                    "a run of the JVM program needs the deadline it runs under");
+        }
         this.images = images;
+        this.deadlines = deadlines;
     }
 
     @Override
@@ -57,7 +63,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         }
         Observations observed = ExampleVerifier.check(asked.rowsWrittenIn(source), asked.symbols(),
                 asked.signatures(), image.program(), image.published(), asked.requirements(),
-                image.around(), asked.definitions(), asked.deadline(), asked.policy(),
+                image.around(), asked.definitions(), deadlines.forThisCompile(), asked.policy(),
                 // What applies a behavior here is what this compile emitted. A compile has nothing
                 // else to run a row against; something supplied from outside one arrives through
                 // the same seam and brings its own classes.
@@ -83,7 +89,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         // a question this asks.
         return new TableBuild.Built(ExampleStatements.fakeTables(asked.rows(), asked.symbols(),
                 asked.signatures(), image.program().classes(), image.around(), asked.definitions(),
-                source, asked.deadline(), asked.policy(), asked.contracts()));
+                source, deadlines.forThisCompile(), asked.policy(), asked.contracts()));
     }
 
     @Override
@@ -102,7 +108,7 @@ public final class JvmProgramExecution implements ProgramExecution {
                         reading.definitions())));
         return new StatementReading.Read(ExampleStatements.disagreements(asked.rows(),
                 asked.symbols(), asked.signatures(), image.program().classes(), image.around(),
-                asked.definitions(), asked.deadline(), asked.policy(), asked.contracts(),
+                asked.definitions(), deadlines.forThisCompile(), asked.policy(), asked.contracts(),
                 declaring));
     }
 

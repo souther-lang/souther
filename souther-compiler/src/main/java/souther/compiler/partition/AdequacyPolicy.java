@@ -7,7 +7,7 @@ package souther.compiler.partition;
  * a caller — which is the absence issue #969 opened on, and it was never only about the one limit
  * that issue removed. A limit is an input the query graph hands to the analysis (rule 4 of this
  * package's documentation), the way {@link souther.compiler.check.ReadingPolicy} and
- * {@link souther.compiler.examples.EvaluationPolicy} already are.
+ * {@link souther.compiler.execute.EvaluationPolicy} already are.
  *
  * <p><b>Grouped by which result each weakens, and not by being numbers.</b> A budget is only ever
  * read beside the answer it makes partial, and the two halves here are not interchangeable: the

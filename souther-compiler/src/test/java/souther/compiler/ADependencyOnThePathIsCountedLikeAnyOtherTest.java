@@ -3,7 +3,7 @@ package souther.compiler;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;

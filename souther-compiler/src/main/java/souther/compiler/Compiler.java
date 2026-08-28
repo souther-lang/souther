@@ -9,7 +9,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.examples.Deadline;
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Acceptance;
 import souther.compiler.query.Adequacy;

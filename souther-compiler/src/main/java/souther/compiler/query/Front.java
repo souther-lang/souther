@@ -95,11 +95,11 @@ public final class Front {
      * row evaluated, or one written statement read to compare it against another.
      *
      * <p>Not what decides a row. What a row is held to is counted
-     * ({@link souther.compiler.examples.EvaluationPolicy#stepLimit}), and this is the wait after which an
+     * ({@link souther.compiler.execute.EvaluationPolicy#stepLimit}), and this is the wait after which an
      * evaluation that has stopped answering is given up on — which is reported as the compiler
      * failing to decide, not as the model failing to terminate.
      *
-     * <p>Absent means {@link souther.compiler.examples.EvaluationPolicy#outerTimeout}. Nothing but a caller
+     * <p>Absent means {@link souther.compiler.execute.EvaluationPolicy#outerTimeout}. Nothing but a caller
      * with a reason to differ has to know this exists.
      */
     public record ExampleBudget() implements Input<Long> {}
@@ -118,8 +118,21 @@ public final class Front {
     public record ExampleDeadline() implements Input<souther.compiler.examples.Deadline> {}
 
     /**
+     * How much stack a worker of this compilation's own is made with, in bytes.
+     *
+     * <p>Not a term a row is held to. What holds a recursion is counted
+     * ({@link souther.compiler.execute.EvaluationPolicy#recursionDepthLimit}) and reads the same on
+     * every machine; this is how much room the arrangement that runs a row on a JVM thread makes for
+     * that count to be reached before the stack runs out, and it means nothing to a way of running a
+     * row that is not that one.
+     *
+     * <p>Absent means {@link souther.compiler.examples.Deadline#DEFAULT_WORKER_STACK_BYTES}.
+     */
+    public record WorkerStack() implements Input<Long> {}
+
+    /**
      * What this compilation allows one row's evaluation: the steps and the depth that decide it, and
-     * the wait and the stack the machinery running it is given.
+     * the wait after which it is given up on.
      *
      * <p>Read once, here, rather than out of a system property wherever a row happens to be evaluated.
      * A property read at class initialization is fixed for the life of the JVM, which is the wrong
@@ -127,9 +140,9 @@ public final class Front {
      * a setting was written for is not the one that reads it. Held as an input, it belongs to the
      * compilation, and two of them in one JVM may differ.
      *
-     * <p>Absent means {@link souther.compiler.examples.EvaluationPolicy#DEFAULT}.
+     * <p>Absent means {@link souther.compiler.execute.EvaluationPolicy#DEFAULT}.
      */
-    public record Policy() implements Input<souther.compiler.examples.EvaluationPolicy> {}
+    public record Policy() implements Input<souther.compiler.execute.EvaluationPolicy> {}
 
     /**
      * The standard library this compilation reads names against.

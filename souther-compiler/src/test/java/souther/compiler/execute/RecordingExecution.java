@@ -51,8 +51,16 @@ final class RecordingExecution implements ProgramExecution {
      * can be declared without the machine and not that it can be met: the imports it does not need
      * are the ones for the parts it never opened. So this reads all of them, and what it makes of
      * them is a sentence, because what it is showing is that they can be read at all.
+     *
+     * <p>The terms are worked with and not quoted. A getter called for the object that comes back
+     * would compile against a term whose type this cannot name, and print it — which says the ask
+     * carries something, not that an execution can be held to it. Splitting the budget over the rows
+     * is this stand-in's own arrangement, and it is what makes the number in the sentence the terms'
+     * and not the sentence's.
      */
     private static String read(ExampleExecution about) {
+        EvaluationPolicy held = about.policy();
+        long rows = Math.max(1, about.rows().rows().size());
         return about.module()
                 + " (" + about.rows().rows().size() + " rows"
                 + ", " + about.signatures().size() + " behaviors"
@@ -60,8 +68,9 @@ final class RecordingExecution implements ProgramExecution {
                 + ", " + about.definitions().size() + " definitions"
                 + ", " + about.contracts().size() + " contracts"
                 + ", names " + (Objects.requireNonNull(about.symbols()) != null)
-                + ", within " + Objects.requireNonNull(about.deadline())
-                + " and " + Objects.requireNonNull(about.policy()) + ")";
+                + ", " + held.stepLimit() / rows + " steps a row"
+                + ", " + held.recursionDepthLimit() + " deep"
+                + ", given up on after " + held.outerTimeout().toMillis() + "ms)";
     }
 
     @Override

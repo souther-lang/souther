@@ -6,8 +6,6 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.examples.Deadline;
-import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.ValueName;
 
@@ -46,7 +44,6 @@ public final class ExampleExecution {
     private final Map<String, List<BehaviorRequirement>> requirements;
     private final Map<String, Hir.FnDef> definitions;
     private final Map<ValueName.Behavior, Contract> contracts;
-    private final Deadline deadline;
     private final EvaluationPolicy policy;
     private final Map<String, ExampleExecution> declaring;
 
@@ -55,7 +52,7 @@ public final class ExampleExecution {
                             Map<String, List<BehaviorRequirement>> requirements,
                             Map<String, Hir.FnDef> definitions,
                             Map<ValueName.Behavior, Contract> contracts,
-                            Deadline deadline, EvaluationPolicy policy,
+                            EvaluationPolicy policy,
                             Map<String, ExampleExecution> declaring) {
         this.prepared = prepared;
         this.symbols = symbols;
@@ -68,7 +65,6 @@ public final class ExampleExecution {
         this.requirements = requirements;
         this.definitions = definitions;
         this.contracts = contracts;
-        this.deadline = deadline;
         this.policy = policy;
     }
 
@@ -139,12 +135,13 @@ public final class ExampleExecution {
         return contracts;
     }
 
-    /** How long a reading may take before it is stopped. */
-    public Deadline deadline() {
-        return deadline;
-    }
-
-    /** What a run is counted against. */
+    /**
+     * What a run of these rows is held to.
+     *
+     * <p>The terms and not a way of keeping them. How an execution arranges to stop a row that has
+     * spent them is its own — a worker and a wall clock here, something else elsewhere — and saying
+     * it here would put one implementation's arrangement in what every implementation is asked.
+     */
     public EvaluationPolicy policy() {
         return policy;
     }

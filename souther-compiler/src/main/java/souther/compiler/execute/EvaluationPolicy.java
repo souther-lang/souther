@@ -1,9 +1,15 @@
-package souther.compiler.examples;
+package souther.compiler.execute;
 
 import java.time.Duration;
 
 /**
- * What a compile allows one row's evaluation, and what it allows the machinery running it.
+ * What a compile holds one row's evaluation to, whoever runs it.
+ *
+ * <p>Terms and not a way of meeting them. Each of the three is a condition on the answer — how much
+ * the evaluated code may spend, how deep it may go, and how long the caller may be made to wait —
+ * and none of them says how an execution arranges to keep it. That is why they are here rather than
+ * beside the JVM's arrangement: an execution that is not this one honours the same three by its own
+ * means, and reads them without naming the subsystem that happens to run them today.
  *
  * <p>The first two are what decide a row. {@code stepLimit} is how many times the evaluated code may
  * pass a point the emitter counts, and {@code recursionDepthLimit} is how deep a recursive helper may
@@ -11,21 +17,22 @@ import java.time.Duration;
  * neither is a measure of time. Two compiles of the same model under the same policy therefore say
  * the same thing about it, however fast the host is and however loaded.
  *
- * <p>The last two are not about the model at all. {@code outerTimeout} is the wait after which the
- * evaluation is given up on, and it exists for what a counter cannot reach — a call into code this
- * compile did not generate, so has no counted points in. Losing to it is the compiler failing to
- * answer, not the model failing to terminate, and the two are reported as the different things they
- * are. {@code workerStackBytes} is the stack an evaluation runs on, said outright so that the depth a
- * recursion reaches is this compile's answer rather than whatever {@code -Xss} the JVM happens to
- * have been started with.
+ * <p>{@code outerTimeout} is not about the model at all. It exists for what a counter cannot reach —
+ * a call into code this compile did not generate, so has no counted points in. Losing to it is the
+ * compiler failing to answer, not the model failing to terminate, and the two are reported as the
+ * different things they are.
  *
- * <p>The relation between the two pairs is one-directional and cannot be made exact: the depth limit
- * is set to be reached before the stack runs out, and the outer timeout to be reached long after any
- * budget a row could spend. Neither can be proven — a frame's size depends on the helper it is for,
- * and a step's cost depends on what the step does — so both are set with room rather than derived.
+ * <p>What it obliges an execution to is elapsed time: past this, the caller is not still waiting.
+ * A limit on how much work is done is not the same promise and does not discharge it — an
+ * implementation counting fuel, instructions or reductions has bounded the work and not the wait, and
+ * still owes a clock of its own. What that clock is belongs to the implementation; that there is one
+ * is what reading this means.
+ *
+ * <p>The relation between the counted pair and the wait is one-directional and cannot be made exact:
+ * the outer timeout is set to be reached long after any budget a row could spend. It cannot be
+ * proven — a step's cost depends on what the step does — so it is set with room rather than derived.
  */
-public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration outerTimeout,
-                               long workerStackBytes) {
+public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration outerTimeout) {
 
     /**
      * Steps enough for anything a model states as an example, and far short of what code that does
@@ -42,16 +49,19 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
      *
      * <p>Which of the two happens first cannot be settled by reasoning about it: a frame's size is
      * decided by the helper's parameters and locals, so the depth a given stack holds differs between
-     * helpers. It was settled by measuring instead. On {@link #DEFAULT_WORKER_STACK_BYTES}, a plain
-     * recursion and one carrying eight extra parameters both reach a counted limit of a hundred
-     * thousand before the stack; at two hundred thousand the wide one runs the stack out first, at
-     * about a hundred and fifty thousand frames.
+     * helpers. It was settled by measuring instead, against the stack a worker of this compile's own
+     * is given. On sixty-four megabytes of it, a plain recursion and one carrying eight extra
+     * parameters both reach a counted limit of a hundred thousand before the stack; at two hundred
+     * thousand the wide one runs the stack out first, at about a hundred and fifty thousand frames.
      *
      * <p>Set below that rather than at it, and set higher than the depth any model here reaches. The
      * two ways this can be wrong are not equally bad: too low reports a legitimate deep walk as a
      * recursion that does not terminate, which is a wrong answer about the model, while too high
      * reports that the stack ran out first — which says the settings are wrong for this model and
      * what to do about it.
+     *
+     * <p>How much stack the execution actually gives a worker is that execution's own, and stating
+     * it is how it makes room for this count to be reached first.
      */
     public static final int DEFAULT_RECURSION_DEPTH_LIMIT = 50_000;
 
@@ -65,19 +75,9 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
      */
     public static final Duration DEFAULT_OUTER_TIMEOUT = Duration.ofSeconds(60);
 
-    /**
-     * The stack an evaluation is given.
-     *
-     * <p>Large, and said here rather than inherited, so that how deep a recursion gets before the
-     * stack runs out is not something the surrounding JVM decides. The depth limit is what is meant to
-     * stop a recursion; this is what makes room for it to, and how much room it makes is what
-     * {@link #DEFAULT_RECURSION_DEPTH_LIMIT} was measured against.
-     */
-    public static final long DEFAULT_WORKER_STACK_BYTES = 64L * 1024 * 1024;
-
     /** What a compile that says nothing is held to. */
     public static final EvaluationPolicy DEFAULT = new EvaluationPolicy(DEFAULT_STEP_LIMIT,
-            DEFAULT_RECURSION_DEPTH_LIMIT, DEFAULT_OUTER_TIMEOUT, DEFAULT_WORKER_STACK_BYTES);
+            DEFAULT_RECURSION_DEPTH_LIMIT, DEFAULT_OUTER_TIMEOUT);
 
     public EvaluationPolicy {
         if (stepLimit <= 0) {
@@ -89,10 +89,6 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
         }
         if (outerTimeout == null || outerTimeout.isNegative() || outerTimeout.isZero()) {
             throw new IllegalArgumentException("an outer timeout has to be positive: " + outerTimeout);
-        }
-        if (workerStackBytes <= 0) {
-            throw new IllegalArgumentException(
-                    "a worker stack size has to be positive: " + workerStackBytes);
         }
     }
 
@@ -116,11 +112,14 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
                         positiveLong("souther.example.recursion.depth",
                                 DEFAULT_RECURSION_DEPTH_LIMIT)),
                 Duration.ofMillis(positiveLong("souther.example.outer.timeout.ms",
-                        DEFAULT_OUTER_TIMEOUT.toMillis())),
-                positiveLong("souther.example.worker.stack.bytes", DEFAULT_WORKER_STACK_BYTES));
+                        DEFAULT_OUTER_TIMEOUT.toMillis())));
     }
 
-    private static long positiveLong(String setting, long fallback) {
+    /**
+     * One setting read as a positive number of something, or {@code fallback} where it does not say
+     * one. What "does not say one" covers is in {@link #fromSettings}.
+     */
+    public static long positiveLong(String setting, long fallback) {
         String written = System.getProperty(setting);
         if (written == null) {
             return fallback;
@@ -135,23 +134,18 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
 
     /** The default, holding a row to {@code stepLimit} steps. */
     public static EvaluationPolicy of(long stepLimit) {
-        return new EvaluationPolicy(stepLimit, DEFAULT_RECURSION_DEPTH_LIMIT, DEFAULT_OUTER_TIMEOUT,
-                DEFAULT_WORKER_STACK_BYTES);
+        return new EvaluationPolicy(stepLimit, DEFAULT_RECURSION_DEPTH_LIMIT, DEFAULT_OUTER_TIMEOUT);
     }
 
     public EvaluationPolicy withStepLimit(long steps) {
-        return new EvaluationPolicy(steps, recursionDepthLimit, outerTimeout, workerStackBytes);
+        return new EvaluationPolicy(steps, recursionDepthLimit, outerTimeout);
     }
 
     public EvaluationPolicy withRecursionDepthLimit(int depth) {
-        return new EvaluationPolicy(stepLimit, depth, outerTimeout, workerStackBytes);
+        return new EvaluationPolicy(stepLimit, depth, outerTimeout);
     }
 
     public EvaluationPolicy withOuterTimeout(Duration timeout) {
-        return new EvaluationPolicy(stepLimit, recursionDepthLimit, timeout, workerStackBytes);
-    }
-
-    public EvaluationPolicy withWorkerStackBytes(long bytes) {
-        return new EvaluationPolicy(stepLimit, recursionDepthLimit, outerTimeout, bytes);
+        return new EvaluationPolicy(stepLimit, recursionDepthLimit, timeout);
     }
 }
