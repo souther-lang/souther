@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 
 /**
@@ -69,23 +68,29 @@ interface ClauseReading<S> {
     }
 
     private S readInto(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
-        Core under = Conditions.negated(e);
-        if (under != null) {
-            return read(under, !positive, per);
+        return over(ClauseExpr.of(e, positive), per);
+    }
+
+    /**
+     * The same reading over the shape a clause has, which is read out of the tree once
+     * ({@link ClauseExpr}).
+     *
+     * <p>Here rather than over {@link Core}, so that what counts as a connective is settled in one
+     * place and every reading agrees about it by having been given the answer. Two readings that
+     * each recognised {@code &&} for themselves agreed until one of them learned something.
+     */
+    private S over(ClauseExpr shape, java.util.function.BiConsumer<Core, S> per) {
+        S out = switch (shape) {
+            case ClauseExpr.Leaf it -> leaf(it.of(), it.positive());
+            case ClauseExpr.Both it -> both(over(it.left(), per), over(it.right(), per));
+            case ClauseExpr.Either it -> either(over(it.left(), per), over(it.right(), per));
+        };
+        if (per != null) {
+            // Every node that was written as this shape, so a reader walking the clause afterwards
+            // finds what this made of the node it is holding — the denial as well as what is under
+            // it, since the two are one shape.
+            shape.spelled().forEach(each -> per.accept(each, out));
         }
-        if (e instanceof Core.Binary bin) {
-            // Stated, a conjunction gives both sides; denied, it gives the choice between their
-            // denials. And the same the other way round, which is the whole of what a denial does
-            // to a connective.
-            if (bin.op() == BinOp.AND) {
-                return positive ? both(read(bin.left(), true, per), read(bin.right(), true, per))
-                        : either(read(bin.left(), false, per), read(bin.right(), false, per));
-            }
-            if (bin.op() == BinOp.OR) {
-                return positive ? either(read(bin.left(), true, per), read(bin.right(), true, per))
-                        : both(read(bin.left(), false, per), read(bin.right(), false, per));
-            }
-        }
-        return leaf(e, positive);
+        return out;
     }
 }
