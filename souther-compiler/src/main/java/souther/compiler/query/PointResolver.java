@@ -77,9 +77,6 @@ public final class PointResolver {
      * request never asked about — because what an empty answer is worth is exactly how much of the
      * line was looked at ({@link SearchCoverage}).
      *
-     * @param said     what the point asks of a row, in the words the declaration wrote it in. The
-     *                 line's own and never a reading's: a reading names the position it met the line
-     *                 at, and a subject taken from one would say the row is about that position
      * @param owed     what the line came to at this point, over all of its readings. What decides
      *                 whether there is anything to look for, which is the measurement's answer and
      *                 not the search's
@@ -88,7 +85,7 @@ public final class PointResolver {
      *                 and what a search of each came to is a fact about that position
      * @param held     what each of them holds, asked in that order and only as far as the walk gets
      */
-    public static PointResolution resolveAt(String said, ItemAssessment.Owed owed,
+    public static PointResolution resolveAt(ItemAssessment.Owed owed,
                                                   List<Reading> readings,
                                                   Function<Reading, ReadingEvidence> held) {
         if (!owed.worthSearching()) {
@@ -120,9 +117,15 @@ public final class PointResolver {
                         // generator says it in, as the reading's own outcome: it is a fact about
                         // this run, and one of the reasons a reader may not act on — so a line
                         // holding one of these is not one the model settles.
+                        //
+                        // Named by the reading it happened at, which is what has a name for the
+                        // quantity: a clause names what it is about and a comparison in a body
+                        // names nothing, so a subject taken from the point would be a word the
+                        // model does not have wherever the line is a body's.
                         case ItemAssessment.Attempt.Unavailable _ -> walked.put(reading,
                                 new SearchCoverage.ReadingSearch.Attempted(
-                                        new Generator.UnresolvedCombination(List.of(said),
+                                        new Generator.UnresolvedCombination(
+                                                List.of(reading.at()),
                                                 Generator.UnresolvedCombination.Reason
                                                         .NOTHING_TO_BUILD_AGAINST)));
                     }

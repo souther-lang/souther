@@ -61,8 +61,8 @@ class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
         account.resolved().forEach((_, answer) -> {
             if (answer.resolution() instanceof PointResolution.Generated(var by, var row)
                     && by.equals("f")) {
-                (answer.owedBy() instanceof FindingSubject.OfABehavior ? theBodys
-                        : theDeclarations).add(written(row));
+                (answer.point().owedToTheReading() ? theBodys : theDeclarations)
+                        .add(written(row));
             }
         });
         assertFalse(theBodys.isEmpty(), "this model has lines of its own");
@@ -112,7 +112,7 @@ class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
     }
 
     private static BorderAccount account() {
-        return Adequacy.generatedForDeclarationsOf(compiled().db(), "example.dense",
+        return Adequacy.accountFor(compiled().db(), "example.dense",
                 new GenerationScope.Module());
     }
 

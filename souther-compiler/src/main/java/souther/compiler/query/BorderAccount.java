@@ -32,35 +32,32 @@ import java.util.SequencedMap;
  *                 time is a reader that can decide it differently
  * @param resolved one answer per point of each line the scope admits
  */
-public record BorderAccount(GenerationScope scope,
+public record BorderAccount(String module, GenerationScope scope,
         SequencedMap<BorderObligationPoint, Answer> resolved) {
 
     /**
-     * What a generation came to at one point, and what that point asks of a row.
+     * What a generation came to at one point, beside the point it came to it at.
      *
-     * <p>The words beside the answer because every reader of the answer needs them, and they are the
-     * declaration's rather than any reading's: a reading names the position it met the line at, and
-     * a subject taken from one would say the row is about that position. Worked out where the search
-     * was, so that a reader with the answer never has to go back to the line for what it was about.
+     * <p>The point and not words about it. What a row here is owed for, who owes it and what it
+     * asks are the point's own answers, and a word kept beside them is a second answer to one of
+     * them — one that has to be right for every point this account holds. A clause names what it is
+     * about and a comparison in a body names nothing, so a sentence made for every point makes one
+     * up wherever the line is a body's.
      *
-     * @param owedBy who owes a row here — the declarations that drew the line, or the body that
-     *               did. Where a note about it goes, and the whole of what tells two lines apart
-     *               that a reader would otherwise see written the same way: what a newtype wraps is
-     *               spelled {@code value} in every declaration. Kept as the subject rather than as
-     *               its name, because what it is decides where a row is offered as well as what the
-     *               note says ({@link #rowsByCarrier})
+     * <p>So a reader that writes about a point asks the point, and does it where its own words are
+     * true.
      */
-    public record Answer(String said, FindingSubject owedBy, PointResolution resolution) {
+    public record Answer(BorderObligationPointAssessment point, PointResolution resolution) {
 
         public Answer {
-            if (said == null || owedBy == null || resolution == null) {
+            if (point == null || resolution == null) {
                 throw new IllegalArgumentException("an answer is to something, and is an answer");
             }
         }
 
         /** Whether a row here is the body's own to write, which is what a block offers first. */
         boolean owedByTheBody() {
-            return owedBy instanceof FindingSubject.OfABehavior;
+            return point.owedToTheReading();
         }
     }
 
@@ -151,11 +148,26 @@ public record BorderAccount(GenerationScope scope,
      * argument, a caller could pass one walk's evidence beside another walk's answer, and the two
      * would have to be kept in step by whoever called.
      */
-    static Unmet unmet(Answer answer) {
-        if (!(answer.resolution() instanceof PointResolution.Unresolved(var coverage))) {
+    Unmet unmet(Answer answer) {
+        // The declarations that drew the line, and what the line asks in the words they wrote it
+        // in. Both are the point's, and both are sayable because the line is a clause's: what a
+        // newtype wraps is spelled `value` in every declaration, and every reading of the line
+        // meets that same quantity under its own name.
+        return unmet(new FindingSubject.OfADeclaration(answer.point().ownersIn(module)).named(),
+                answer.point().said(), answer.resolution());
+    }
+
+    /**
+     * The same, of the words and the walk alone.
+     *
+     * <p>Reachable from the package because what it decides is held directly, rather than through a
+     * rendering of it or a compilation arranged to produce the evidence.
+     */
+    static Unmet unmet(String owedBy, String said, PointResolution resolution) {
+        if (!(resolution instanceof PointResolution.Unresolved(var coverage))) {
             throw new IllegalStateException(
                     "what is left to say about a point a row was composed at, or none was looked"
-                            + " for at: " + answer.resolution());
+                            + " for at: " + resolution);
         }
         List<At> came = new ArrayList<>();
         coverage.came().forEach((reading, search) -> {
@@ -173,13 +185,12 @@ public record BorderAccount(GenerationScope scope,
                 case SearchCoverage.ReadingSearch.OutOfScope _ -> { }
             }
         });
-        String owedBy = answer.owedBy().named();
         if (came.isEmpty()) {
-            return new Unmet.NothingWasSearched(owedBy, answer.said());
+            return new Unmet.NothingWasSearched(owedBy, said);
         }
         return coverage.provesTheLineCannotBeWritten()
-                ? new Unmet.TheLineCannotBeWritten(owedBy, answer.said(), List.copyOf(came))
-                : new Unmet.WhatTheReadingsCameTo(owedBy, answer.said(), List.copyOf(came));
+                ? new Unmet.TheLineCannotBeWritten(owedBy, said, List.copyOf(came))
+                : new Unmet.WhatTheReadingsCameTo(owedBy, said, List.copyOf(came));
     }
 
     /**
@@ -302,7 +313,7 @@ public record BorderAccount(GenerationScope scope,
         return switch (answer.resolution()) {
             case PointResolution.Generated(var _, var row) ->
                     new GenerationOutcome.Generated(List.of(row));
-            case PointResolution.Unresolved _ -> cannot(unmet(answer));
+            case PointResolution.Unresolved(var coverage) -> cannot(coverage);
             case PointResolution.NoSearch(var cause) -> throw new IllegalStateException(
                     "a finding at a point nothing was looked for at, which the measurement says"
                             + " needs nothing looked for: " + at + " " + cause);
@@ -327,26 +338,24 @@ public record BorderAccount(GenerationScope scope,
      * says that about itself. Read as a search that came back empty, a request that could not look
      * at the one reading it was about would have reported it as the line refusing a row.
      */
-    private static GenerationOutcome.CannotGenerate cannot(Unmet unmet) {
-        List<Generator.UnresolvedCombination> said = switch (unmet) {
-            case Unmet.TheLineCannotBeWritten(var _, var _, var proving) -> whys(proving);
-            case Unmet.WhatTheReadingsCameTo(var _, var _, var came) -> whys(came);
-            case Unmet.NothingWasSearched(var _, var _) -> List.of();
-        };
+    private static GenerationOutcome.CannotGenerate cannot(SearchCoverage coverage) {
+        List<Generator.UnresolvedCombination> said = new ArrayList<>();
+        coverage.came().forEach((_, search) -> {
+            if (search instanceof SearchCoverage.ReadingSearch.Attempted(var why)) {
+                said.add(why);
+            }
+        });
         // Where no reading was searched there is nothing any of them said, and the run says that
-        // about itself. Read as a search that came back empty, a request that could look at none of
-        // the readings it was about would have reported it as the line refusing a row.
+        // about itself, naming the readings it was about. Read as a search that came back empty, a
+        // request that could look at none of them would have reported it as the line refusing a
+        // row; named by the point instead, a line a body drew would be named by a word the model
+        // does not have for what it was drawn on.
         return new GenerationOutcome.CannotGenerate(said.isEmpty()
-                ? List.of(new Generator.UnresolvedCombination(List.of(unmet.said()),
+                ? List.of(new Generator.UnresolvedCombination(
+                        coverage.came().keySet().stream()
+                                .map(BorderObligationPointAssessment.Reading::at).toList(),
                         Generator.UnresolvedCombination.Reason
                                 .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED))
-                : said);
-    }
-
-    /** What the readings that were searched came to, which is what a reason can be read from. */
-    private static List<Generator.UnresolvedCombination> whys(List<At> came) {
-        return came.stream()
-                .filter(At.Searched.class::isInstance)
-                .map(each -> ((At.Searched) each).why()).toList();
+                : List.copyOf(said));
     }
 }

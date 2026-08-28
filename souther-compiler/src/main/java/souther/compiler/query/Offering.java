@@ -35,26 +35,26 @@ public final class Offering {
     private final OfferingRequest request;
     private final SequencedMap<String, List<OfferedRow>> rows;
     private final SequencedMap<String, Adequacy.Filling> searched;
-    private final BorderAccount declared;
+    private final BorderAccount account;
     private final Set<OfferItem> answered;
 
     /**
      * @param request  what was asked for, which is what settles which rows are here
      * @param rows     one entry per behavior with rows to offer, in the order they were asked about
      * @param searched what each behavior's own search came to, keyed the way a report keys them
-     * @param declared what the module's declarations are owed, or null where the request asked for
+     * @param account what the module's declarations are owed, or null where the request asked for
      *                 no boundary rows — which is not the same as a request that asked and found
      *                 none
      * @param answered what the rows here settle: every item one of them would answer if it were
      *                 written, whichever row it was composed for
      */
     Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rows,
-             SequencedMap<String, Adequacy.Filling> searched, BorderAccount declared,
+             SequencedMap<String, Adequacy.Filling> searched, BorderAccount account,
              Set<OfferItem> answered) {
         this.request = request;
         this.rows = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rows));
         this.searched = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(searched));
-        this.declared = declared;
+        this.account = account;
         this.answered = Collections.unmodifiableSet(new LinkedHashSet<>(answered));
     }
 
@@ -74,8 +74,8 @@ public final class Offering {
     }
 
     /** What the module's declarations are owed, or null where none were asked for. */
-    public BorderAccount declared() {
-        return declared;
+    public BorderAccount account() {
+        return account;
     }
 
     /** The items one of these rows would answer if it were written. */

@@ -33,7 +33,7 @@ public final class OfferedAtTheLines {
         Adequacy.Filling filling = all == null ? null : all.get(behavior);
         Generator.GenerationResult own = filling == null
                 ? Generator.GenerationResult.NONE : filling.boundaries();
-        BorderAccount declared = Adequacy.generatedForDeclarationsOf(compilation.db(), module,
+        BorderAccount declared = Adequacy.accountFor(compilation.db(), module,
                 new GenerationScope.Module());
         List<Generator.GeneratedRow> rows = souther.compiler.query.Composition.atTheLines(
                 declared.rowsByCarrier().get(behavior));

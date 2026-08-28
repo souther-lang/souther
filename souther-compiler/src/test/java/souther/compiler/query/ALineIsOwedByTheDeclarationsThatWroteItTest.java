@@ -333,7 +333,7 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
     /** How many rows the module is offered for one line. */
     private static long generationTargetsFor(Compilation compilation, String module,
                                              BorderObligationId line) {
-        return Adequacy.generatedForDeclarationsOf(compilation.db(), module,
+        return Adequacy.accountFor(compilation.db(), module,
                         new GenerationScope.Module())
                 .resolved().keySet().stream()
                 .filter(each -> each.line().equals(line)).count();

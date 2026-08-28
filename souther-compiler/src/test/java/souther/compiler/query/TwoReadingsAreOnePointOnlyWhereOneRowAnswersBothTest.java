@@ -129,7 +129,8 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
 
     private static List<BorderObligationPointAssessment> obligations() {
         List<BorderObligationPointAssessment> points =
-                compiled().db().ask(new Adequacy.Obligations("example.line")).value();
+                compiled().db().ask(new Adequacy.Obligations("example.line",
+                        new GenerationScope.Module())).value();
         assertNotNull(points, "the model under test compiles");
         return points;
     }

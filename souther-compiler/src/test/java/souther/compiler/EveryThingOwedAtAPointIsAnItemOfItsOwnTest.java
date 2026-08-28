@@ -96,7 +96,8 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
     void everyOpenPointIsOneItemAndNothingElseIs() {
         Compilation compilation = compiled();
         List<BorderObligationPointAssessment> points = compilation.db()
-                .ask(new Adequacy.Obligations("example.stops")).value();
+                .ask(new Adequacy.Obligations("example.stops",
+                        new souther.compiler.query.GenerationScope.Module())).value();
         assertNotNull(points, "the model under test is measured");
 
         Set<BorderObligationPoint> open = new LinkedHashSet<>();
@@ -171,7 +172,7 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
                 Adequacy.generatedOf(compilation.db(), "example.stops");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
         return Composition.composed(OfferingRequest.overTheModule("example.stops", true), generated,
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.stops",
+                Adequacy.accountFor(compilation.db(), "example.stops",
                         new GenerationScope.Module()));
     }
 }

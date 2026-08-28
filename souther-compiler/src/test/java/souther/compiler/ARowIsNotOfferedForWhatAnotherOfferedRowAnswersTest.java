@@ -207,7 +207,7 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.shippingfee", true), generated,
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.shippingfee",
+                Adequacy.accountFor(compilation.db(), "example.shippingfee",
                         new GenerationScope.Module()));
         assertEquals(8, composed.count(),
                 "the searches compose one row per thing they are asked for");

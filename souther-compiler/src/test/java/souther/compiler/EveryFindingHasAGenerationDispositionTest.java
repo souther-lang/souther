@@ -182,7 +182,7 @@ class EveryFindingHasAGenerationDispositionTest {
         assertFalse(declared.isEmpty(), "the model under test has lines its declarations are owed");
 
         List<Adequacy.GenerationDisposition> answered =
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.policy",
+                Adequacy.accountFor(compilation.db(), "example.policy",
                         new GenerationScope.Module()).dispositions(
                                 compilation.db().ask(new Adequacy.Findings("example.policy"))
                                         .value());
@@ -508,7 +508,7 @@ class EveryFindingHasAGenerationDispositionTest {
 
     private static BorderAccount resolved(Compilation compilation, String module,
                                          GenerationScope scope) {
-        return Adequacy.generatedForDeclarationsOf(compilation.db(), module, scope);
+        return Adequacy.accountFor(compilation.db(), module, scope);
     }
 
     /** The same line, with the reading that can compose nothing at it declared first. */

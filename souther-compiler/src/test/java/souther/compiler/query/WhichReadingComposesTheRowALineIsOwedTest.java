@@ -45,7 +45,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void theFirstReadingThatComposedARowAnswers() {
         List<String> asked = new java.util.ArrayList<>();
-        PointResolution resolved = PointResolver.resolveAt(SAID, owed(),
+        PointResolution resolved = PointResolver.resolveAt(owed(),
                 List.of(at("held"), at("anywhere"), at("further")), reading -> {
                     asked.add(reading.behavior());
                     return searched(reading.behavior().equals("held")
@@ -64,7 +64,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void theReadingsAreWalkedInTheOrderTheyWereGiven() {
         List<String> asked = new java.util.ArrayList<>();
-        PointResolver.resolveAt(SAID, owed(),
+        PointResolver.resolveAt(owed(),
                 List.of(at("a"), at("b"), at("c")), reading -> {
                     asked.add(reading.behavior());
                     return searched(notComposed());
@@ -82,7 +82,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void aWalkThatComposedNothingAccountsForEveryReading() {
-        PointResolution resolved = PointResolver.resolveAt(SAID, owed(),
+        PointResolution resolved = PointResolver.resolveAt(owed(),
                 List.of(at("here"), at("elsewhere")),
                 reading -> reading.behavior().equals("here") ? searched(notComposed())
                         : new PointResolver.ReadingEvidence.OutOfScope());
@@ -187,10 +187,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                         unasked, new SearchCoverage.ReadingSearch.OutOfScope()),
                 List.of(answered, silent, unasked));
 
-        BorderAccount.Unmet unmet = BorderAccount.unmet(new BorderAccount.Answer(SAID,
-                new FindingSubject.OfADeclaration(List.of(souther.compiler.types.TypeSymbols
-                        .declared(new souther.compiler.types.TypeKey("example", "Code")))),
-                new PointResolution.Unresolved(coverage)));
+        BorderAccount.Unmet unmet = BorderAccount.unmet("Code", SAID,
+                new PointResolution.Unresolved(coverage));
 
         List<BorderAccount.At> came = assertInstanceOf(
                 BorderAccount.Unmet.WhatTheReadingsCameTo.class, unmet).came();
@@ -233,7 +231,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void aPointARowAlreadyStandsAtIsNotSearchedFor() {
-        PointResolution resolved = PointResolver.resolveAt(SAID,
+        PointResolution resolved = PointResolver.resolveAt(
                 new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
                         new Measurement.Complete<>(new ItemAssessment.Coverage.Hit()),
                         ItemAssessment.WritabilityProjection.PROVEN, null),

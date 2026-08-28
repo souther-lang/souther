@@ -63,7 +63,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        BorderAccount declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         assertFalse(declared.rowsByCarrier().isEmpty(),
                 "a declaration's line is owed a row and one behavior composed it: " + declared);
@@ -105,7 +105,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        BorderAccount declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
@@ -134,7 +134,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        BorderAccount declared = Adequacy.generatedForDeclarationsOf(compilation.db(),
+        BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);

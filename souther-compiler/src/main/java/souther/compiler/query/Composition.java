@@ -28,11 +28,11 @@ import java.util.SequencedMap;
  * @param request  what was asked for, which is what settles which rows are here
  * @param rows     one entry per behavior with rows, in the order they were asked about
  * @param searched what each behavior's own search came to, keyed the way a report keys them
- * @param declared what the module's declarations are owed, or null where the request asked for no
+ * @param account what the module's declarations are owed, or null where the request asked for no
  *                 boundary rows — which is not the same as a request that asked and found none
  */
 public record Composition(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rows,
-                          SequencedMap<String, Adequacy.Filling> searched, BorderAccount declared) {
+                          SequencedMap<String, Adequacy.Filling> searched, BorderAccount account) {
 
     public Composition {
         rows = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rows));
@@ -52,15 +52,15 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
      * them.
      *
      * @param generated one filling per behavior, keyed the way a report keys them
-     * @param declared  the rows the module's declarations are owed, or null where the request asked
+     * @param account  the rows the module's declarations are owed, or null where the request asked
      *                  for no boundary rows. One row per point of a line however many behaviors
      *                  carry the type, and under the behavior whose reading composed it
      */
     public static Composition composed(OfferingRequest request,
                                     Map<String, Adequacy.Filling> generated,
-                                    BorderAccount declared) {
-        Map<String, List<Generator.GeneratedRow>> owed = declared == null
-                ? Map.of() : declared.rowsByCarrier();
+                                    BorderAccount account) {
+        Map<String, List<Generator.GeneratedRow>> owed = account == null
+                ? Map.of() : account.rowsByCarrier();
         SequencedMap<String, Map<RowKey, OfferedRow>> byBehavior = new LinkedHashMap<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             take(byBehavior, behavior.getKey(), behavior.getValue().composed().rows(),
@@ -76,7 +76,7 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
         }
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         byBehavior.forEach((behavior, here) -> out.put(behavior, List.copyOf(here.values())));
-        return new Composition(request, out, new LinkedHashMap<>(generated), declared);
+        return new Composition(request, out, new LinkedHashMap<>(generated), account);
     }
 
     /** One behavior's rows, joined onto whatever it already offers. */
@@ -146,6 +146,6 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
                 out.put(behavior, left);
             }
         });
-        return new Offering(request, out, searched, declared, answered);
+        return new Offering(request, out, searched, account, answered);
     }
 }

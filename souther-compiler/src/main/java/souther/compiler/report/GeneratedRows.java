@@ -125,10 +125,10 @@ public final class GeneratedRows {
      * that does not support it.
      */
     private static void declarations(StringBuilder out, Offering offering) {
-        BorderAccount declared = offering.declared();
+        BorderAccount account = offering.account();
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
         for (Map.Entry<souther.compiler.partition.BorderObligationPoint, BorderAccount.Unmet> each
-                : declared.unmet().entrySet()) {
+                : account.unmet().entrySet()) {
             // Nothing about a point one of the rows above stands at. What is left to write is what
             // this says, and a line telling a person no row was composed for something they are
             // being handed a row for is work that is not left.
@@ -179,7 +179,7 @@ public final class GeneratedRows {
                            SourceNameResolver names) {
         String module = offering.request().module();
         boolean boundaries = offering.request().boundaries();
-        BorderAccount declared = offering.declared();
+        BorderAccount account = offering.account();
         // Written once and then read three times — printed, counted, and asked whether there is
         // anything to answer. Counting the candidates instead gives a number about work a reader
         // cannot see, and asking the candidates whether the block holds a hole prints the line
@@ -204,7 +204,7 @@ public final class GeneratedRows {
         // through it and appended the rest itself would be a second place that knows what a block
         // holds, and the one that forgot would print rows with nothing said about the work beside
         // them.
-        if (declared != null) {
+        if (account != null) {
             declarations(out, offering);
         }
         // The count leaves with the text. It was worked out here and thrown away, and the one

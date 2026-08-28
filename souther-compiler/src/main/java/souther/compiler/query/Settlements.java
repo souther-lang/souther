@@ -226,8 +226,8 @@ public record Settlements(List<OfferItem> requested,
         // And the points the module's declarations are owed, which are no behavior's own. A row of
         // whichever behavior composed one answers the line for everybody, so they are items of the
         // offering rather than of the block a row happens to sit in.
-        if (offering.declared() != null) {
-            offering.declared().resolved().forEach((point, answer) -> {
+        if (offering.account() != null) {
+            offering.account().resolved().forEach((point, answer) -> {
                 OfferItem item = new OfferItem.APointOfALine(point);
                 switch (answer.resolution()) {
                     case PointResolution.Generated(var by, var row) -> {
@@ -338,8 +338,9 @@ public record Settlements(List<OfferItem> requested,
             // point, and the module's account holds it ({@link BorderAccount}) — a behavior
             // resolving its own points beside that would be one search made twice, free to come to
             // two answers about one row.
-            List<BorderObligationPointAssessment> points =
-                    db.ask(new Adequacy.Obligations(module)).value();
+            List<BorderObligationPointAssessment> points = db.ask(
+                    new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior)))
+                    .value();
             for (BorderObligationPointAssessment point
                     : points == null ? List.<BorderObligationPointAssessment>of() : points) {
                 if (!point.owedToTheReading() || !point.carriedBy(behavior)) {
