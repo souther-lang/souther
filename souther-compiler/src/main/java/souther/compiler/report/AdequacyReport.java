@@ -1790,11 +1790,36 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AQuestionNothingAnswered(var asked)
                     && mine.test(asked.question())) {
-                out.append(String.format("      %s not accounted for: %s — %s %s%n",
+                out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
-                        asked(asked.question()), subjectOf(asked, names, declaredIn)));
+                        asked(asked.question()), subjectOf(asked, names, declaredIn),
+                        whyStanding(asked)));
             }
         }
+    }
+
+    /**
+     * Why a question stands, in the words this document promises its reader.
+     *
+     * <p>Every reason and not one of them, because a question stands until every part that asked it
+     * has been read: a part standing behind another is a second thing to lift, and naming one would
+     * send an author to lift it and find the question still there. Which is also why nothing here
+     * chooses between them — the only thing there is to choose by is which the reading met first.
+     *
+     * <p>Each projected on its own and the words made distinct afterwards, never the other way
+     * round. What a document promises is deliberately coarser than what this compiler records, so
+     * two reasons a reader is not offered to tell apart come out as one word — and that is the
+     * projection saying they are one thing to lift, rather than a report dropping one of them.
+     */
+    private static String whyStanding(souther.compiler.query.PartitionEvidence.Unanswered asked) {
+        java.util.List<String> said = new java.util.ArrayList<>();
+        for (souther.compiler.inputs.BlockReason.RuleReadingStopped each : asked.stopped()) {
+            String word = whyUnread(souther.compiler.partition.ReportedReason.of(each));
+            if (!said.contains(word)) {
+                said.add(word);
+            }
+        }
+        return String.join("; ", said);
     }
 
     /**

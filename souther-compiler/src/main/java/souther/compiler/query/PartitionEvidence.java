@@ -168,6 +168,18 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         }
 
         /**
+         * What this compiler was short of, which is why the question stands.
+         *
+         * <p>Every one of them, in the order the parts of the clause were met. Handed on as this
+         * compiler's own account and projected onto a published word where a document is written
+         * ({@link souther.compiler.partition.ReportedReason}) — projected here instead, a surface
+         * that says more than the document does would have nothing left to say it from.
+         */
+        public java.util.List<souther.compiler.inputs.BlockReason.RuleReadingStopped> stopped() {
+            return asked.stopped();
+        }
+
+        /**
          * The position it is about, spelled the way a report names it.
          *
          * <p>The walk's and not the accounting's: which position of a behavior's inputs a rule was

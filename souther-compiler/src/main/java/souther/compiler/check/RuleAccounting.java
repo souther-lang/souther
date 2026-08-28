@@ -127,25 +127,32 @@ public final class RuleAccounting {
     public List<Unanswered> unansweredQuestions() {
         return answers.entrySet().stream()
                 .filter(e -> e.getValue() instanceof Outcome.Unaccounted)
-                .map(e -> new Unanswered(rule, cited, e.getKey()))
+                .map(e -> new Unanswered(rule, cited, e.getKey(),
+                        ((Outcome.Unaccounted) e.getValue()).why()))
                 .toList();
     }
 
     /**
-     * One question of one rule that nothing answered.
+     * One question of one rule that nothing answered, and what it stands for.
      *
-     * <p>No reason beside it. What a reading records about why it stopped is about a position and
-     * this is about a rule at a subject, and putting the first here would be a fact at one
-     * granularity wearing another's name — which is the shape this whole accounting was written
-     * against. A reason belongs here once the readings say why per part of a clause, and until then
-     * an absent one is the honest answer.
+     * <p>The reason travels with the question. It is the reading's own account of what stopped it,
+     * asked per rule at the subject the question is about — so it is a fact at this question's
+     * granularity and not one borrowed from the position, which is what an earlier accounting could
+     * not say and left out rather than get wrong.
      *
      * <p>The rule as {@link RuleRef}, all the way to the report that names it. Carried as the
      * clause reference the reading had in hand, the one reader of these built the identity at the
      * last moment — right while only invariants raise a question, and a decision about what a rule
      * is taken by whoever consumed one.
      */
-    public record Unanswered(RuleRef rule, RuleCitation cited, Owed owed) {}
+    public record Unanswered(RuleRef rule, RuleCitation cited, Owed owed, Why why) {
+
+        public Unanswered {
+            if (why == null) {
+                throw new IllegalArgumentException("a question nothing answered stands for a reason");
+            }
+        }
+    }
 
     @Override
     public String toString() {
@@ -186,6 +193,37 @@ public final class RuleAccounting {
      * which is the sentence #842 is about, one level down.
      */
     public sealed interface Why {
+
+        /**
+         * The same, in the one vocabulary this compiler records what it could not do in.
+         *
+         * <p>Where the two readings' words become one, and the only place they do. A reader
+         * downstream is owed what this compiler fell short of and has no business knowing which of
+         * its readings was asked — that is provenance, and a document writing a different word for
+         * one reading than for another would be reporting an arrangement of readers as a fact about
+         * a model.
+         *
+         * <p>Not the word a document writes, which is {@link souther.compiler.partition
+         * .ReportedReason}'s. Two vocabularies with a projection between them is what keeps a
+         * published word from reaching back into what a reading is allowed to record.
+         *
+         * <p>In the order the parts of the clause were met, and each said once: two parts one limit
+         * stopped are one thing for a reader to lift.
+         */
+        default List<souther.compiler.inputs.BlockReason.RuleReadingStopped> stopped() {
+            List<souther.compiler.inputs.BlockReason.RuleReadingStopped> out = new java.util.ArrayList<>();
+            for (souther.compiler.inputs.BlockReason.RuleReadingStopped each : switch (this) {
+                case TheValueReadingSays it -> it.why().stream()
+                        .map(souther.compiler.inputs.BlockReason::ofARuleTheValueReadingLeft)
+                        .toList();
+                case TheEndReadingSays it -> it.why();
+            }) {
+                if (!out.contains(each)) {
+                    out.add(each);
+                }
+            }
+            return List.copyOf(out);
+        }
 
         /**
          * The reading that turns a clause into a set of values.
