@@ -77,6 +77,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     public static final int SCHEMA_VERSION = 8;
 
     /**
+     * Where the schema this writes documents ships.
+     *
+     * <p>Derived from the version rather than written beside it. Which schema describes what this
+     * writer emits is the writer's own answer and there is one of it; spelled again wherever
+     * something opens the file, raising the version is a hunt through however many spellings there
+     * are, and the ones nothing checks go on opening the schema of the version before.
+     *
+     * <p>What is not derived is the schema's own account of which version it is — the number a
+     * document must carry and the identifier a resolver keys on are the contract, and generating
+     * them from this constant would leave the contract and the writer agreeing by construction and
+     * checkable nowhere ({@code EverySchemaWordIsAccountedFor}).
+     */
+    public static final String SCHEMA_RESOURCE =
+            "/souther/adequacy-schema-" + SCHEMA_VERSION + ".json";
+
+    /**
      * Whether the rows meet what the bar this report is read against asks of them.
      *
      * <p>Apart from {@code status}, which says whether the measurement could be made at all. A

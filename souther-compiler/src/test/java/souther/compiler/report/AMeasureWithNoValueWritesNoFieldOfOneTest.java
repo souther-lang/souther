@@ -339,8 +339,8 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
 
     private static JsonNode schema() {
         try (java.io.InputStream in = AdequacyReport.class
-                .getResourceAsStream("/souther/adequacy-schema-8.json")) {
-            assertNotNull(in, "adequacy-schema-8.json ships beside the compiler");
+                .getResourceAsStream(AdequacyReport.SCHEMA_RESOURCE)) {
+            assertNotNull(in, AdequacyReport.SCHEMA_RESOURCE + " ships beside the compiler");
             return JsonMapper.builder().build().readTree(
                     new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.report.AdequacyReport;
+
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -153,7 +155,7 @@ class MainExamplesSubcommandTest {
     void theJsonCarriesTheNumbersABuildReads() throws Exception {
         JsonNode root = JSON.readTree(run("--format", "json"));
 
-        assertEquals(8, root.get("schemaVersion").asInt());
+        assertEquals(AdequacyReport.SCHEMA_VERSION, root.get("schemaVersion").asInt());
         assertEquals("complete", root.get("status").asString());
         assertNotNull(root.get("compilerVersion"));
 
@@ -182,8 +184,8 @@ class MainExamplesSubcommandTest {
     @Test
     void theEmittedJsonHasTheShippedSchemaShape() throws Exception {
         JsonNode schema;
-        try (var in = Main.class.getResourceAsStream("/souther/adequacy-schema-8.json")) {
-            assertNotNull(in, "adequacy-schema-8.json ships beside the compiler");
+        try (var in = Main.class.getResourceAsStream(AdequacyReport.SCHEMA_RESOURCE)) {
+            assertNotNull(in, AdequacyReport.SCHEMA_RESOURCE + " ships beside the compiler");
             schema = JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }
         JsonNode root = JSON.readTree(run("--format", "json"));
@@ -304,7 +306,7 @@ class MainExamplesSubcommandTest {
     void aKeyAddedSinceIsNotDemandedOfADocumentWrittenBeforeIt() throws Exception {
         JsonNode schema;
         try (java.io.InputStream in =
-                     Main.class.getResourceAsStream("/souther/adequacy-schema-8.json")) {
+                     Main.class.getResourceAsStream(AdequacyReport.SCHEMA_RESOURCE)) {
             assertNotNull(in);
             schema = JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }
