@@ -121,6 +121,24 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
                 souther.compiler.check.ElementBindings.NONE, true);
     }
 
+    /**
+     * The same, of a clause a declaration wrote about a value standing somewhere in the input.
+     *
+     * <p>Rooted at paths rather than at parameter names, which is what such a clause needs: it binds
+     * the fields of the declaration that wrote it, and those fields stand wherever a value of that
+     * declaration stands — under a parameter, under a field of one, under what a sequence holds. A
+     * name here is a field's binding and never a parameter's, so there is no name to look a
+     * parameter up by.
+     *
+     * <p>The operations the language defines the meaning of are left standing, as they are in every
+     * reading of what a declaration wrote: that is the representation a declaration's own rules are
+     * held in, and a clause read in the one that runs would have the calls in it gone.
+     */
+    public static InputReads ofADeclaredClause(InputDomain read, Map<BindingId, TermPath> roots) {
+        return new InputReads(read, roots, Map.of(),
+                souther.compiler.check.ElementBindings.NONE, true);
+    }
+
     /** The same, before there is a reading to hold beside it ({@link #ofParameters}). */
     public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
         return new InputReads(null, rooted(roots), Map.of(),

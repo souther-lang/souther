@@ -1394,7 +1394,7 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            noLineDrawn(bin, from, at, byName, noLines, read);
+            noLineDrawn(bin, from, part, at, byName, noLines, read);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1584,7 +1584,8 @@ public final class InvariantChecker {
      * cannot come to a different answer. What is read here is only what each side of the comparison
      * came to, which is this reader's own way of looking a coordinate up.
      */
-    private void noLineDrawn(Core.Binary comparison, RuleRef.Invariant from, Denotations at,
+    private void noLineDrawn(Core.Binary comparison, RuleRef.Invariant from, int conjunct,
+                            Denotations at,
                             Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out,
                             Arithmetic read) {
         if (!InvariantBound.ordering(comparison.op())) {
@@ -1597,7 +1598,7 @@ public final class InvariantChecker {
                 place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.NoLine said =
-                    new FieldDomains.NoLine(each.at(), from, comparison, why);
+                    new FieldDomains.NoLine(each.at(), from, comparison, conjunct, why);
             if (!out.contains(said)) {
                 out.add(said);
             }

@@ -445,6 +445,35 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * The clauses of this value's declarations that no end came out of, once each.
+     *
+     * <p>For the reading that draws lines rather than places ends. A rule relating two coordinates
+     * places no end at either of them, and it is still a rule about where this behavior's values
+     * part — so it is handed over as a clause, with the path the value it is written about stands
+     * at, and read there in the vocabulary a line is drawn in.
+     *
+     * <p>Once per conjunct, not once per coordinate. The same conjunct is filed at each coordinate
+     * it names, which is what a reader after a position wants and what a reader after a rule must
+     * not have: taken as they are filed, {@code lo <= hi} would draw its line twice and owe two
+     * rows where the model states one thing.
+     *
+     * <p>Not what any of them came to. Which of these is a line is the drawing reading's answer,
+     * and this reading's word for why it drew none is no part of the question — the two read the
+     * same clause with different atoms, and a clause set aside here is one the other may read.
+     */
+    List<ClauseWithoutAnEnd> clausesWithoutAnEnd() {
+        java.util.Map<Key, ClauseWithoutAnEnd> once = new java.util.LinkedHashMap<>();
+        for (FieldDomains.NoLine each : bounds().noLines()) {
+            once.putIfAbsent(new Key(each.from(), each.conjunct()),
+                    new ClauseWithoutAnEnd(each.from(), each.conjunct(), each.part(), root));
+        }
+        return List.copyOf(once.values());
+    }
+
+    /** What makes two of them one: the clause, and which of its conjuncts. */
+    private record Key(souther.compiler.check.RuleRef.Invariant rule, int conjunct) {}
+
+    /**
      * The declaration a value of {@code type} is read under: the name the signature wrote where it
      * names one, and the record beneath the names where it does not.
      *

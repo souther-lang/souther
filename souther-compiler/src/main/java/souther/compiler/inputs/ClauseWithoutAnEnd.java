@@ -1,0 +1,42 @@
+package souther.compiler.inputs;
+
+import souther.compiler.check.RuleRef;
+import souther.compiler.core.Core;
+
+/**
+ * One conjunct of a declaration's clause that placed no end, and where the value it is written about
+ * stands.
+ *
+ * <p>What the reading of a behavior's input hands to the reading that draws lines. A clause bounding
+ * one coordinate leaves an end behind and is read through that; one relating two coordinates leaves
+ * nothing, and it is still a rule about where this behavior's values part — so it is handed over as
+ * the clause it is, to be read where a line is drawn.
+ *
+ * <p><b>Nothing here says what the clause comes to.</b> Which of these draws a line is settled by
+ * the reading that draws it, in that reading's own atoms, and the word the reading of ends had for
+ * why it placed none is no part of the question: the two read one clause with different atoms, and a
+ * clause over a number one of them has no atom for is one the other names two positions in.
+ *
+ * @param rule     which clause of which declaration
+ * @param conjunct where in that clause this conjunct is, counted from zero over every conjunct the
+ *                 clause has. What tells one authored line from another is the pair, and a reader
+ *                 holding the expression alone cannot tell two identical conjuncts apart
+ * @param part     the conjunct itself
+ * @param at       where the value the clause is written about stands. The clause binds each field of
+ *                 the declaration that wrote it, and a field an include brought in keeps that
+ *                 declaration's binding, so the names under this path are what the clause reads
+ *                 whichever declaration wrote it
+ */
+public record ClauseWithoutAnEnd(RuleRef.Invariant rule, int conjunct, Core part, TermPath at) {
+
+    public ClauseWithoutAnEnd {
+        if (rule == null || part == null || at == null) {
+            throw new IllegalArgumentException(
+                    "a clause is one of a declaration's, is written, and is about a value somewhere");
+        }
+        if (conjunct < 0) {
+            throw new IllegalArgumentException(
+                    "a conjunct of a clause is counted from zero: " + conjunct);
+        }
+    }
+}

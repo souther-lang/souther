@@ -303,6 +303,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * — the one relating them — so what a report can say is that the rule does not divide either,
      * which is where it is sent. An absence there would tell the author their model draws no
      * distinction at a position their model has a rule about (issue #772).
+     *
      */
     @Test
     void aClauseRelatingTwoPositionsPlacesNoEdge() {
@@ -318,7 +319,14 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                 """), report);
     }
 
-    /** Nor one bounding a field by another field rather than by a constant. */
+    /**
+     * Nor one bounding a field by another field rather than by a constant.
+     *
+     * <p><b>The line such a rule draws is beside the partition and not in it.</b> It says where the
+     * pair parts, and what it parts is on neither position — so it is a border with no classes under
+     * it, and the partition above stays what it was. What a declaration's line owes is a row on it
+     * and nothing beyond it: nothing outside a declaration's rule can be constructed at all.
+     */
     @Test
     void aBoundAgainstAnotherFieldPlacesNoEdge() {
         String report = report(MODEL);
@@ -330,7 +338,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                     partition   not applicable (the rules of this behavior divide no position)
                       · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
                       · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
-                    border      not applicable (the rules of this behavior draw no line)
+                    border      borders 1   coverage items 1/2   excluded 2
+                      · no OFF point is owed at v.n = v.min (invariant Floor #1): excluded — the rules leave no value there
+                      · no OUT point is owed at v.n = v.min (invariant Floor #1): excluded — the rules leave no value there
                 """), report);
     }
 

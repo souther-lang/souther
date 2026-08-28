@@ -129,6 +129,31 @@ sealed interface ComparisonAssessment {
     }
 
     /**
+     * Read in full, and the rules leave no input for any line to be about.
+     *
+     * <p>Its own answer and not {@link OutsideTheDomain}, which says the quantity exists and does
+     * not run as far as this rule's line. Here nothing runs anywhere: the declarations reaching this
+     * input admit no value at all, so neither this line nor any other is outside anything. Said as
+     * the first, an author is sent to look at one rule for a contradiction that is not in it — two
+     * clauses each admitting values are empty together, and neither of them is the one that failed.
+     *
+     * <p>Whose emptiness it is is the input's and not this comparison's. A quantity is a function of
+     * the input, so a quantity's values are empty exactly when the input's are — asked of the
+     * quantity, this would be a second reader deciding what the rules admit, and the two would
+     * disagree about a model wherever one of them read a rule the other did not.
+     */
+    record NoFeasibleInput(souther.compiler.inputs.EmptyInput why, Cutting cutting)
+            implements ComparisonAssessment {
+
+        public NoFeasibleInput {
+            if (why == null || cutting == null) {
+                throw new IllegalArgumentException(
+                        "an input the rules leave empty is still a line somebody wrote");
+            }
+        }
+    }
+
+    /**
      * The comparison names a position and the reading of it stopped.
      *
      * <p>Only a reason that says a reading stopped, which the type is what enforces. A rule read to
@@ -170,7 +195,7 @@ sealed interface ComparisonAssessment {
             return aboutNoPosition(comparison, reads, symbols);
         }
         return switch (Cutting.read(behavior, comparison, reads, symbols, quantities)) {
-            case Cutting.Read.Cuts cuts -> onTheQuantity(comparison, cuts.cutting());
+            case Cutting.Read.Cuts cuts -> onTheQuantity(comparison, cuts.cutting(), quantities);
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
             // of this compiler: `a <= a` holds of every row.
             case Cutting.Read.CutsNothing _ -> new CutsNothing();
@@ -202,7 +227,16 @@ sealed interface ComparisonAssessment {
     }
 
     /** What a line comes to on the input space, from the quantity it is on. */
-    private static ComparisonAssessment onTheQuantity(Core.Binary comparison, Cutting cutting) {
+    private static ComparisonAssessment onTheQuantity(Core.Binary comparison, Cutting cutting,
+                                                      Quantities quantities) {
+        // Whether there is an input at all, before anything is asked about where its values run.
+        // A quantity is a function of the input, so where the rules admit no input they admit no
+        // value of any quantity — and every question below is about one quantity's values against
+        // one rule's line, which is a question about a model that has some.
+        java.util.Optional<souther.compiler.inputs.EmptyInput> empty = quantities.emptiness();
+        if (empty.isPresent()) {
+            return new NoFeasibleInput(empty.get(), cutting);
+        }
         // The line and not one of its points. A rule drawing where the quantity never reaches
         // divides the position into nothing, and a reader told that the rule went unread would go
         // looking for a limit of this compiler that is not there.
@@ -262,6 +296,9 @@ sealed interface ComparisonAssessment {
         return switch (this) {
             case AcrossPositions over -> over.cutting().over();
             case OutsideTheDomain outside -> outside.cutting().over();
+            // The positions its quantity is over, as every read rule's are. That the rules leave
+            // the input empty says nothing about which positions this rule is about.
+            case NoFeasibleInput none -> none.cutting().over();
             case Unread unread -> unread.filedAt();
             case CutsNothing _ -> GuardThresholds.filedAt(comparison, reads, symbols);
             case AtAPosition _, AnswerDependent _, NoInput _ -> List.of();
@@ -303,6 +340,12 @@ sealed interface ComparisonAssessment {
             case CutsNothing _ -> Optional.of(new BlockReason.ComparisonCuttingNothing());
             case OutsideTheDomain _ ->
                     Optional.of(new BlockReason.ComparisonCuttingOutsideDomain());
+            // Nothing about this rule fell short, and nothing about this rule is what happened. The
+            // rules of the input admit no value between them, which is one fact about the behavior
+            // and not one per rule at each position it names — said here, a model with two clauses
+            // and four positions would be told eight times, and each time about a rule that is not
+            // the one at fault.
+            case NoFeasibleInput _ -> Optional.empty();
             // Its own answer for having stopped, decided where it stopped. Worked out again from
             // the comparison afterwards, one whose carrier stopped the reading came back as a rule
             // that relates two positions — a sentence saying no measure is short of anything, over
@@ -323,7 +366,8 @@ sealed interface ComparisonAssessment {
         return switch (this) {
             case AtAPosition at -> at.places() == Places.ACROSS_THE_VALUE;
             case AcrossPositions over -> over.places() == Places.ACROSS_THE_VALUE;
-            case AnswerDependent _, NoInput _, CutsNothing _, OutsideTheDomain _, Unread _ -> false;
+            case AnswerDependent _, NoInput _, CutsNothing _, OutsideTheDomain _,
+                 NoFeasibleInput _, Unread _ -> false;
         };
     }
 

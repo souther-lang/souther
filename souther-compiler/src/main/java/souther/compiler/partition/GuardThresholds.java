@@ -592,6 +592,7 @@ public final class GuardThresholds {
             }
             case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
                  ComparisonAssessment.CutsNothing _, ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.NoFeasibleInput _,
                  ComparisonAssessment.Unread _ -> { }
         }
     }

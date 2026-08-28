@@ -447,11 +447,17 @@ public final class FieldDomains {
      *             belongs to the one it came out of: asked of the rule and the position alone,
      *             {@code x <= y && x <= 10 * 2} said its bound went unread because a comparison
      *             relates two positions, which is what the conjunct beside it does
+     * @param conjunct where in the clause that conjunct is, counted from zero over every conjunct
+     *             the clause has. Beside the conjunct itself and not read back off it: what tells
+     *             one authored line from another is the clause and this number
+     *             ({@link souther.compiler.partition.AuthoredLine}), and a reader holding the
+     *             expression alone has no way to say which of two identical conjuncts it is
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
     public record NoLine(Coordinate at, RuleRef.Invariant from,
-                         Core part, souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
+                         Core part, int conjunct,
+                         souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
 
         /** Where in the value the end was to have been placed. */
         public String path() {
@@ -885,6 +891,19 @@ public final class FieldDomains {
      */
     public List<NoLine> noLineAt(String path) {
         return noLines.stream().filter(each -> each.path().equals(path)).toList();
+    }
+
+    /**
+     * The same, wherever they are filed.
+     *
+     * <p>For a reader whose subject is the clause rather than a position. A rule relating two
+     * coordinates is filed at each of them, so a reader after the rule meets it once per coordinate
+     * and a reader after a position meets each of its rules once — and neither can be had by asking
+     * the other and putting the answers back together, since which coordinates a rule was filed at
+     * is not what the rule is.
+     */
+    public List<NoLine> noLines() {
+        return List.copyOf(noLines);
     }
 
     /**

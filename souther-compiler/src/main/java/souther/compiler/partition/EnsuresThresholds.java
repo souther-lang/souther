@@ -259,6 +259,7 @@ public final class EnsuresThresholds {
             // above, in the one place that answers it for both readers of a comparison.
             case ComparisonAssessment.Unread _, ComparisonAssessment.CutsNothing _,
                  ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.NoFeasibleInput _,
                  ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
         return line + 1;

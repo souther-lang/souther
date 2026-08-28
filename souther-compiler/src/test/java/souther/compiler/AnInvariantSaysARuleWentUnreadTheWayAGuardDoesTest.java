@@ -149,12 +149,16 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
      *
      * <p>The rule beside it went unread; this one did not. A reading that answered the pair with
      * one verdict would have taken the boundary with it.
+     *
+     * <p>Three lines: one at each field's own end, and one on what the record's clause relates. That
+     * last divides neither field — which is what the partition above says of it — and it is still a
+     * line, drawn on the form the clause cuts rather than on either position.
      */
     @Test
     void andTheBoundTheFieldsOwnTypeStatesIsStillALine() {
         String block = blockOf("quote");
 
-        assertTrue(block.contains("border      borders 2   coverage items 0/0   excluded 4   (4 not measured"), block);
+        assertTrue(block.contains("border      borders 3   coverage items 0/0   excluded 6   (6 not measured"), block);
     }
 
     /** One clause and one sentence: what a reader has to lift is one thing. */
