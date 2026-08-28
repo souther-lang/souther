@@ -17,23 +17,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * That the rules leave an input no value is one fact about the behavior, however many rules and
- * positions it took to be true.
+ * The rules leaving an input no value is proved once, and every measure of that input is
+ * inapplicable for it.
  *
- * <p>Two clauses each admitting values are empty together. Neither of them is the one that failed,
- * and there is no position for it to be about — so a reader sent to look at either is looking at
- * half of a contradiction, and a reader told once per position is told the same thing as many times
- * as the record has fields.
+ * <p>Two things, and they are at different levels. The proof is one: two clauses each admitting
+ * values are empty together, neither of them is the one that failed, and there is no position for it
+ * to be about — so it is made where a behavior's parameters are held together, which is the only
+ * place such a contradiction is visible at all. What a document carries is per measure: a partition
+ * and a border each say they have no subject, in the word this proof spells.
  *
- * <p><b>Which is why the proof is asked for once and read by whoever needs it.</b> The reading of a
- * behavior's input holds every parameter's rules together, and that is the only place a
- * contradiction between two declarations is visible at all. Each measure of that input reads the one
- * answer; asked per measure, two of them could disagree about one model.
+ * <p>So the count below is two and not one. A reading that answered per position or per rule would
+ * say it four times or twice over the record here, and one that derived it per measure could let two
+ * measures disagree about a model — the fixture has four positions and two clauses so that both of
+ * those show.
  *
  * <p>Not a gap. A gap is a row nobody has written and somebody could; here no row exists to write,
  * so a strict build has nothing to refuse over and no author is being asked for anything.
  */
-class AnInputTheRulesLeaveEmptyIsSaidOnceTest {
+class AnInputTheRulesLeaveEmptyMakesEachInputMeasureNotApplicableTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -85,11 +86,12 @@ class AnInputTheRulesLeaveEmptyIsSaidOnceTest {
     }
 
     /**
-     * And the human report says it once, not once per position.
+     * And the human report says it once per measure, not once per position.
      *
      * <p>The count is the assertion. Four positions and two clauses are what would make a reading
-     * that answered per position or per rule say it four times or twice, and a reading that answers
-     * once says it once whatever the record holds.
+     * that answered per position or per rule say it four times or twice, and a reading that puts the
+     * one proof where each measure says why it has no subject says it as many times as there are
+     * such measures, whatever the record holds.
      */
     @Test
     void theReportSaysItOncePerMeasureAndNotOncePerPosition() {
