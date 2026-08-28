@@ -53,9 +53,19 @@ public final class Compilation {
      * shape of holding something for a backend, and a second one would want the name.
      */
     private final JvmProgramImages jvmProgramImages = new QueryJvmProgramImages(db);
-    /** And what it runs them under, one of it for the same reason: the run that decides whether the
-     *  rows hold and the run a Java binding drives are held to one compilation's answer. */
-    private final JvmExampleDeadlines jvmExampleDeadlines = new QueryJvmExampleDeadlines(db);
+    /**
+     * And what this compilation's own rows are run under.
+     *
+     * <p>Not one of it for the reason the images are one of them. What every run of these rows has
+     * to agree on is the program and the terms: two runs against different classes are not two runs
+     * of one model, and two runs under different limits do not say one thing about it. How a run
+     * keeps those terms is that run's, and a run outside the compile keeps them differently because
+     * it is somewhere else — a row a Java binding drives reaches an implementation that answers out
+     * of the caller's world, which no row this compile decides does. So this is the compile's
+     * arrangement and not the compilation's only one, and a caller running rows of its own brings
+     * the arrangement its world needs rather than taking this over.
+     */
+    private final ChosenJvmExampleDeadlines jvmExampleDeadlines = new ChosenJvmExampleDeadlines();
     /** Which source each id was, for a caller that identifies sources by index. */
     private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
@@ -69,10 +79,6 @@ public final class Compilation {
         // to what the first compile in this JVM happened to read. A caller with a reason of its own
         // says so with withEvaluationPolicy.
         db.set(new Front.Policy(), souther.compiler.execute.EvaluationPolicy.fromSettings());
-        // And the stack a worker of this compilation's own is made with, read now for the same
-        // reason. Not one of the terms above: what a recursion is held to is counted, and this is
-        // what the arrangement running it on a JVM thread gives that count room to be reached in.
-        db.set(new Front.WorkerStack(), souther.compiler.examples.Deadline.workerStackFromSettings());
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
         db.set(new Front.Reading(), Front.Reading.STANDARD);
@@ -103,13 +109,6 @@ public final class Compilation {
      */
     public JvmProgramImages jvmProgramImages() {
         return jvmProgramImages;
-    }
-
-    /** What the JVM runs this compilation's rows under, for the same caller. Reached the same way
-     *  and for the same reason: a binding that ran the rows under a deadline of its own making
-     *  would not be running them the way this compilation says. */
-    public JvmExampleDeadlines jvmExampleDeadlines() {
-        return jvmExampleDeadlines;
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
@@ -401,17 +400,32 @@ public final class Compilation {
     }
 
     /**
-     * What this compilation gives one row or one reading to finish within, said outright. Returns
-     * this compilation, so it can be said where the sources are.
+     * How the JVM implementation runs this compilation's rows and readings. Returns this
+     * compilation, so it can be said where the sources are.
      *
-     * <p>For a test that is asking what the compiler says about work that did not come back. Written
-     * with a budget, that test has to write a model that does not terminate and then race a clock to
-     * see it reported — and a loaded host loses the race in the direction that matters, reporting
-     * work that finished as work that did not. A deadline that decides by what the work is says the
-     * same thing as a fact. A build has no reason to set one; see {@link #withExampleBudget}.
+     * <p>Not a term. What a row is held to — the steps, the depth, the wait — is
+     * {@link #withEvaluationPolicy} and {@link #withExampleBudget}, and those are said in words any
+     * execution can be held to. This names the arrangement that keeps the wait on this machine, so
+     * it is offered as the implementation's seam rather than as an input of this compilation's, and
+     * it is reached the way {@link #jvmProgramImages} is.
+     *
+     * <p>Two callers say one. A Java binding runs a row on a worker and hands what the row reaches
+     * outside back to the thread that asked, because that is the world a supplied implementation
+     * answers out of. A test asking what the compiler says about work that did not come back says an
+     * arrangement under which the work it picks out does not come back — otherwise it has to write a
+     * model that does not terminate and race a clock to see it reported, and a loaded host loses that
+     * race in the direction that matters.
+     *
+     * <p>Said before any row is run, for the reason {@link Db#running} takes what runs a
+     * compilation's programs once: what runs one is beside the memos rather than in them, so a row
+     * already answered is not answered again because the arrangement changed, and the store would go
+     * on handing out what the first one said. A replacement after that is refused.
+     *
+     * @throws IllegalStateException where rows have already been run under the arrangement this
+     *     replaces
      */
-    public Compilation withDeadline(souther.compiler.examples.Deadline deadline) {
-        db.set(new Front.ExampleDeadline(), deadline);
+    public Compilation withJvmExampleDeadlines(JvmExampleDeadlines arrangement) {
+        jvmExampleDeadlines.chosen(arrangement);
         return this;
     }
 

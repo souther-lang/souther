@@ -77,7 +77,10 @@ public final class InputNumber {
      * with it, so what is read of the walk afterwards is read where the walk stands.
      *
      * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
-     * rather than a rule the model does not state — and is reported as one.
+     * rather than a rule the model does not state — and is reported as one. Null too where the three
+     * are in hand and what they come to is not one run
+     * ({@link RunSource#overTheOccurrencesAt}), which is the same answer for the same reason: a
+     * reading short rather than a line somewhere it does not go.
      */
     private static NumericTerm overARun(NumericMeasures.Measured measured, InputReads reads,
                                         Symbols symbols) {
@@ -106,10 +109,17 @@ public final class InputNumber {
             return null;
         }
         TermPath under = answered.from(at);
+        // Whether what is read from there is one run is the run's own question, and it is asked
+        // rather than assumed: a walk over a sequence inside another sequence is over some of the
+        // occurrences of its path, and a term made of it would state of every one of them what the
+        // model says of those.
+        RunSource over = RunSource.overTheOccurrencesAt(under);
+        if (over == null) {
+            return null;
+        }
         Type stands = where.read().typeAt(under, symbols);
         return stands == null ? null
-                : NumericTerm.TakenOver.of(measured.operation(),
-                        new RunSource.ProjectedOccurrences(under), stands, symbols);
+                : NumericTerm.TakenOver.of(measured.operation(), over, stands, symbols);
     }
 
     /** The number a comparison is about, from whichever side names one. */

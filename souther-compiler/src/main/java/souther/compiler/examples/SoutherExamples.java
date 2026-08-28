@@ -11,6 +11,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.execute.jvm.JvmExampleRuns;
 import souther.compiler.query.ExampleExecutions;
 import souther.compiler.query.Output;
@@ -137,11 +138,6 @@ public final class SoutherExamples {
     private static SoutherExamples settled(Compilation compiled) {
         compiled.db().ask(new Output.All());
         refuseIfItDoesNotCompile(compiled);
-        // A row runs on a worker of this compile's own, so what it spends is counted on one thread
-        // and how deep it may recurse is this compile's answer; what it hands outside runs on
-        // whoever called, because that is the world a supplied implementation answers out of.
-        compiled.withDeadline(
-                Deadline.crossingBackToTheCaller(Deadline.DEFAULT_WORKER_STACK_BYTES));
         return new SoutherExamples(compiled);
     }
 
@@ -200,9 +196,13 @@ public final class SoutherExamples {
             throw new IllegalStateException("`" + module + "` did not check, so it has no rows to"
                     + " run");
         }
+        // The program is the compilation's and the terms are the compilation's; how this run keeps
+        // them is this run's. A row driven from here reaches an implementation that answers out of
+        // the caller's world, which the compile's own rows do not, and an arrangement is how a run
+        // is run rather than what it is held to.
         return new BoundExamples(module, asked.rows(),
                 JvmExampleRuns.evaluating(compilation.jvmProgramImages(), asked,
-                        compilation.jvmExampleDeadlines()
+                        new CallerCrossingDeadlines(JvmDeadlines.workerStackFromSettings())
                                 .forThisCompile(asked.policy().outerTimeout()),
                         Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))),
                 bound);

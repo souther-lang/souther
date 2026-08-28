@@ -253,7 +253,8 @@ class CompileExampleCoverageTest {
                     | (Draft { n = 1 }) -> Done { n = 1 }
                 """;
         Compilation compilation = Compilation.ofSource(spinning, "Main")
-                .withDeadline(DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("go")));
+                .withJvmExampleDeadlines(
+                        DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String module = compilation.modules().get(0);

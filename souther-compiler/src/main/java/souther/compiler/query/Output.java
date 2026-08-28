@@ -558,33 +558,6 @@ public final class Output {
     }
 
     /**
-     * The arrangement this compilation keeps {@code outerTimeout} with.
-     *
-     * <p>The wait is a parameter and not something read here. It is a term, so it reaches the
-     * implementation the way every term does — across the boundary, in what the language asked —
-     * and a second reading of it out of this store is how the two came to say different things
-     * before. What is read here is the part that is not a term: the stack a worker is made with,
-     * and whether a caller said the arrangement outright.
-     *
-     * <p>A deadline set outright wins, and only a test sets one: what it is for is stating that a
-     * particular row does not come back, rather than writing a model that does not come back and
-     * racing a clock to observe it. It answers for the wait as it answers for everything else,
-     * which is why it takes no argument from here.
-     */
-    static souther.compiler.examples.Deadline deadlineOf(Db db, java.time.Duration outerTimeout) {
-        souther.compiler.examples.Deadline said = db.ask(new Front.ExampleDeadline()).value();
-        return said != null ? said
-                : souther.compiler.examples.Deadline.ofMillis(outerTimeout.toMillis(),
-                        workerStack(db));
-    }
-
-    /** How much stack this compilation makes a worker with. */
-    private static long workerStack(Db db) {
-        Long asked = db.ask(new Front.WorkerStack()).value();
-        return asked == null ? souther.compiler.examples.Deadline.DEFAULT_WORKER_STACK_BYTES : asked;
-    }
-
-    /**
      * Whether each constant newtype construction in a module satisfies its invariant, by running the
      * same bytecode a run-time construction would. A check that cannot be loaded or run here is left
      * to the run-time check.

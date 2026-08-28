@@ -41,7 +41,7 @@ class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
     private static Compilation overrunning(List<String> sources, String target) {
         Compilation compilation = Compilation.ofSources(sources,
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.withDeadline(DoesNotComeBack.overrunningOn(
+        compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf(target)));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

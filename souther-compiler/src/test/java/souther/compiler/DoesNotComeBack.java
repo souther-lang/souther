@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.examples.Deadline;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import java.time.Duration;
 import java.util.function.Predicate;
 
@@ -28,12 +29,15 @@ import java.util.function.Predicate;
 public final class DoesNotComeBack {
 
     /**
-     * The wait a test quotes when it says work did not come back.
+     * The wait a compile in one of these tests is given, and so the wait a report about work that
+     * did not come back quotes.
      *
-     * <p>Only {@link #overrunningOn} uses it, and there it is never waited out: the work is said to
-     * overrun rather than timed. What it is for is the number the report about it quotes.
+     * <p>Said to the compilation rather than held by the arrangement. What a report quotes has to be
+     * what the compilation was told it would give a row, and an arrangement with a wait of its own
+     * would be a second answer to that — a number in a rendered line that nothing asked for. Nothing
+     * waits it out here: the work is said to overrun rather than timed.
      */
-    static final Duration BUDGET = Duration.ofMillis(100);
+    public static final Duration WAIT = Duration.ofMillis(100);
 
     /**
      * Steps enough for a row that finishes, and far fewer than a row that does not will spend.
@@ -76,8 +80,8 @@ public final class DoesNotComeBack {
     }
 
     /**
-     * A deadline under which the work a test picks out does not come back, and everything else runs
-     * to completion.
+     * An arrangement under which the work a test picks out does not come back, and everything else
+     * runs to completion.
      *
      * <p>What a test about an overrun is asking is what the compiler <em>says</em> about work that
      * did not finish, and a clock is a poor way to ask it: the model has to be written so that
@@ -86,6 +90,11 @@ public final class DoesNotComeBack {
      * it out, and the rest is run on the calling thread — no worker, no waiting, and no row that
      * finishes reported as one that did not.
      *
+     * <p>The wait it quotes is the one this compilation was given, which is the whole of what it
+     * takes from the compile. A wait of its own would be a second answer to how long a row got, and
+     * a report quoting it would be quoting a number nothing said — which is what
+     * {@code AnOverrunIsReportedAgainstTheWaitTheCompilationWasGivenTest} holds it to.
+     *
      * <p>Picked out by what the work is, never by how many times something has been asked. One row
      * is worked on more than once over a compile — once to check it, again to measure what it
      * covered — so anything counting visits answers differently on the second pass.
@@ -93,12 +102,12 @@ public final class DoesNotComeBack {
      * <p>Only the work picked out overruns, so whatever else the model does still has to finish: it
      * is run inline, and a loop nothing picked out would not be cut short but would hang.
      */
-    public static Deadline overrunningOn(Predicate<Deadline.Work> which) {
-        return new Deadline() {
+    public static JvmExampleDeadlines overrunningOn(Predicate<Deadline.Work> which) {
+        return outerTimeout -> new Deadline() {
 
             @Override
             public long budgetMs() {
-                return BUDGET.toMillis();   // what a report about an overrun quotes
+                return outerTimeout.toMillis();   // what a report about an overrun quotes
             }
 
             @Override
@@ -119,7 +128,7 @@ public final class DoesNotComeBack {
     }
 
     /**
-     * A deadline under which the work a test picks out ends by throwing {@code thrown}, and
+     * An arrangement under which the work a test picks out ends by throwing {@code thrown}, and
      * everything else runs to completion.
      *
      * <p>For a test about how the compiler classifies what comes back out of an evaluation. Some of
@@ -128,12 +137,12 @@ public final class DoesNotComeBack {
      * decoder ever sees it. What is being tested is the classification and not the route to it, so
      * the route is stated.
      */
-    static Deadline throwingOn(Predicate<Deadline.Work> which, Throwable thrown) {
-        return new Deadline() {
+    static JvmExampleDeadlines throwingOn(Predicate<Deadline.Work> which, Throwable thrown) {
+        return outerTimeout -> new Deadline() {
 
             @Override
             public long budgetMs() {
-                return BUDGET.toMillis();
+                return outerTimeout.toMillis();
             }
 
             @Override

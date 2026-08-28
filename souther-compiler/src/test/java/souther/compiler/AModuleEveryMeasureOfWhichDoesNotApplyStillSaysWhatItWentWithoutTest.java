@@ -50,7 +50,7 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
                 example go
                     | (Draft { n = 1 }) -> Done { n = 1 }
                 """, "Main");
-        compilation.withDeadline(DoesNotComeBack.overrunningOn(
+        compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

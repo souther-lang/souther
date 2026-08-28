@@ -261,13 +261,6 @@ final class AnswerClosure {
                     + "already, that is the half of the assembly nobody has yet — it belongs inside "
                     + "the compute that asks");
 
-    /** How long a piece of work gets, and what a caller is handed when it does not finish. */
-    private static final Reading A_DEADLINE = new Reading("A_DEADLINE", CAPABILITY,
-            "a deadline decides by running a clock, or by reading which piece of work it is, and a "
-                    + "way of deciding never equals the same way of deciding built again. Handed in "
-                    + "rather than computed, so what is left of it is that the store hears a new "
-                    + "one as a change to the outside");
-
     /** What a generation is asked for on behalf of, carrying what it takes to go on asking. */
     private static final Reading GENERATION_READERS = new Reading("GENERATION_READERS", CAPABILITY,
             "the subject a row would be written for carries the means to ask further questions — "
@@ -517,9 +510,6 @@ final class AnswerClosure {
                     Traversal.Why.SAYS_NOTHING_OF_ITSELF),
             new KnownDeclared(declared(Q + "Front$Path", "souther.compiler.meta.ModulePath"),
                     MODULE_PATH, Traversal.Why.NOTHING_CLOSES_IT),
-            new KnownDeclared(
-                    declared(Q + "Front$ExampleDeadline", "souther.compiler.examples.Deadline"),
-                    A_DEADLINE, Traversal.Why.NOTHING_CLOSES_IT),
             // The way of asking, which is where the declarations stop. What a walk of a store goes
             // on to reach through it is the store itself, written down above.
             new KnownDeclared(declared(Q + "Names$ModuleScope",
