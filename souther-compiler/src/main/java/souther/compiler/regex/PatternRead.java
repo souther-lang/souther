@@ -87,6 +87,16 @@ public sealed interface PatternRead {
          */
         AN_ANCHOR_THIS_CANNOT_PLACE,
 
+        /**
+         * A repetition that gives nothing back.
+         *
+         * <p>{@code ++}, {@code *+} and the rest. Unlike a reluctant marker, which changes the
+         * order a matcher tries things and not which strings come out, a possessive one takes what
+         * it can and never tries again — so a body that accepts the empty string takes it once and
+         * stops, and the language is smaller than the same repetition without the marker.
+         */
+        A_POSSESSIVE_REPETITION,
+
         /** Written more deeply than this reads, which is a limit of the reading and not of the
          *  language. */
         NESTED_TOO_DEEPLY

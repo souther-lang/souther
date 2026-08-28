@@ -74,11 +74,23 @@ class APatternIsReadAsWhatItAcceptsTest {
         }
     }
 
-    /** A reluctant or possessive marker is about the walk, so the same language comes back. */
+    /**
+     * A reluctant marker is about the walk, so the same language comes back; a possessive one is
+     * not.
+     *
+     * <p>Reluctant takes as few copies as it can and takes more where the rest of the pattern needs
+     * them, so what is matched whole is matched either way. Possessive takes what it can and gives
+     * none of it back: {@code (?:|a)++} takes the empty string once and never tries again, and
+     * accepts nothing the plain repetition accepts beyond it. Read as the plain one, this answered
+     * for a wider language than the author wrote.
+     */
     @Test
-    void howAMatcherWalksIsNotPartOfWhatItAccepts() {
+    void howAMatcherWalksIsNotPartOfWhatItAcceptsUnlessItGivesNothingBack() {
         assertEquals(read("a+"), read("a+?"));
-        assertEquals(read("a{2,6}"), read("a{2,6}+"));
+        assertEquals(read("a{2,6}"), read("a{2,6}?"));
+
+        assertEquals(PatternRead.Unsupported.A_POSSESSIVE_REPETITION, refused("a{2,6}+"));
+        assertEquals(PatternRead.Unsupported.A_POSSESSIVE_REPETITION, refused("(?:|a)++"));
     }
 
     /**
@@ -167,7 +179,6 @@ class APatternIsReadAsWhatItAcceptsTest {
                 "at the edges they ask for nothing");
         assertTrue(accepted("a^b").isEmpty(),
                 "no position is both after an a and at the start, so no string is accepted");
-        assertTrue(accepted("a$b").isEmpty(), "and the same at the other end");
         assertEquals(accepted("a"), accepted("^a$|a^b"),
                 "an arm nothing satisfies leaves the choice its other arms");
     }
@@ -179,6 +190,11 @@ class APatternIsReadAsWhatItAcceptsTest {
                 "what is before it sometimes takes a symbol and sometimes does not");
         assertEquals(PatternRead.Unsupported.AN_ANCHOR_THIS_CANNOT_PLACE, refused("(^a)*"),
                 "how many copies come before it is the string's answer and not the pattern's");
+        // And `$` away from the end is not the mirror of `^` away from the start. It is satisfied
+        // just before a line terminator that ends the string as well as at the end itself, so
+        // `a$b` is not a pattern nothing satisfies — it is one this has no shape for.
+        assertEquals(PatternRead.Unsupported.AN_ANCHOR_THIS_CANNOT_PLACE, refused("a$b"),
+                "the end of a string is not the only place the engine puts it");
     }
 
     /** Every construct outside the subset is refused, and says which it was. */

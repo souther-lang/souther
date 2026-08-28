@@ -321,7 +321,7 @@ public sealed interface PlannedValues<A> {
      * What is here is the same arithmetic over descriptions rather than sets, which is why it costs
      * nothing and can be done before anything is built.
      */
-    default PlannedValues<A> joinedLive(PlannedValues<A> other, boolean apart) {
+    private PlannedValues<A> joinedLive(PlannedValues<A> other, boolean apart) {
         Settled<A> here = settled();
         Settled<A> there = other.settled();
         Map<A, AdmittedPlan> covered = guaranteedBy(here, there, false);

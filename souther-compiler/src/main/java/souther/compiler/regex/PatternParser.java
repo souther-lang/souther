@@ -124,10 +124,18 @@ public final class PatternParser {
                 return one;
             }
         }
-        // Reluctant and possessive say how a matcher walks and not which strings are accepted, so
-        // the marker is read and left out of what this holds.
-        if (peek() == '?' || peek() == '+') {
+        // Reluctant says how a matcher walks and not which strings are accepted: it takes as few
+        // copies as it can and takes more where the rest of the pattern needs them, so what is
+        // matched whole is matched either way. The marker is read and left out of what this holds.
+        if (peek() == '?') {
             take();
+        } else if (peek() == '+') {
+            // Possessive is not one of those. It takes what it can and gives none of it back, so a
+            // body that accepts the empty string takes it once and refuses to try again:
+            // {@code (?:|a)++} matches nothing that {@code (?:|a)+} matches beyond the empty
+            // string. Read as the plain one, this compiler answered for a wider language than the
+            // author wrote.
+            throw new Refused(PatternRead.Unsupported.A_POSSESSIVE_REPETITION);
         }
         return new PatternSyntax.Repeated(one, least, most);
     }

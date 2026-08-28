@@ -40,7 +40,13 @@ final class Anchors {
             case PatternSyntax.Nothing _, PatternSyntax.Never _, PatternSyntax.Symbols _ -> syntax;
             case PatternSyntax.Anchor it -> switch (it.end() ? atEnd : atStart) {
                 case YES -> new PatternSyntax.Nothing();
-                case NO -> new PatternSyntax.Never();
+                // {@code ^} asks to be at the start of the string and there is one such place, so
+                // anything that must take a symbol before it leaves no string at all. {@code $} is
+                // not the mirror of that: it is satisfied at the end and also just before a line
+                // terminator that ends the string, so {@code $[^a]} accepts the one string whose
+                // only symbol is that terminator. This compiler has no shape for a place defined
+                // by what comes after it, so the pattern is not read.
+                case NO -> it.end() ? null : new PatternSyntax.Never();
                 case UNSETTLED -> null;
             };
             // Every arm of a choice begins where the choice begins and ends where it ends.
