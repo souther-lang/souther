@@ -1876,7 +1876,7 @@ final class Terms {
             return null;
         }
         return evaluations.computeIfAbsent(asWritten(e),
-                node -> new EvaluationId(shapeOf(node), node.pos()));
+                node -> new EvaluationId(shapeOf(node), node.pos(), evaluations.size()));
     }
 
     /**

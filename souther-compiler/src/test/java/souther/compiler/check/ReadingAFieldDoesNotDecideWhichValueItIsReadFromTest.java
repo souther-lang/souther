@@ -52,7 +52,7 @@ class ReadingAFieldDoesNotDecideWhichValueItIsReadFromTest {
 
     @Test
     void theSameHoldsOfAValueThatIsNowhere() {
-        Term evaluated = interned.evaluated(new EvaluationId("an answer", POS));
+        Term evaluated = interned.evaluated(new EvaluationId("an answer", POS, 0));
 
         assertEquals(interned.on(evaluated, List.of("a", "b")),
                 interned.on(interned.on(evaluated, List.of("a")), List.of("b")));
@@ -62,7 +62,7 @@ class ReadingAFieldDoesNotDecideWhichValueItIsReadFromTest {
     void extendingAPathKeepsWhatItIsRootedAt() {
         BindingId x = BINDERS.binder("x", POS).id();
         BindingId y = BINDERS.binder("y", POS).id();
-        Term evaluated = interned.evaluated(new EvaluationId("an answer", POS));
+        Term evaluated = interned.evaluated(new EvaluationId("an answer", POS, 0));
 
         assertNotEquals(interned.on(interned.at(Location.of(x)), List.of("a")),
                 interned.on(interned.at(Location.of(y)), List.of("a")),
