@@ -215,8 +215,18 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         return out;
     }
 
-    /** One of each, for the rows to be read off. */
-    private static List<BlockReason.RuleWithoutLineReason> everyRuleWithoutALine() {
+    /**
+     * One of each reason there is, and nothing about which capability any of them is in.
+     *
+     * <p>The list is here to make a value of each, because a reason with an argument cannot be made
+     * from its class alone. Which capabilities one is in is the reason's own answer and is asked of
+     * the type below — written out per capability, the lists are a second declaration of
+     * membership, and a reason that gained one would keep whichever list it was put in.
+     *
+     * <p>That it holds every reason is not this list's word either: {@link
+     * #everyReasonThereIsHasARowAbove} reads the seal.
+     */
+    private static List<BlockReason> everyReason() {
         return List.of(
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
@@ -227,7 +237,22 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.CasePairingNotDetermined(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
-                new BlockReason.ComparisonBetweenPositions());
+                new BlockReason.ComparisonBetweenPositions(),
+                new BlockReason.TypeUnresolved(),
+                new BlockReason.RecursiveExpansion(
+                        souther.compiler.types.TypeSymbols.declared(
+                                new souther.compiler.types.TypeKey("g", "Chain")),
+                        TermPath.of("c")),
+                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
+                new BlockReason.ValueRulesNotReached(),
+                new BlockReason.NoReadingTookItIn());
+    }
+
+    /** Those of them that are rules with no line, asked of each rather than listed. */
+    private static List<BlockReason.RuleWithoutLineReason> everyRuleWithoutALine() {
+        return everyReason().stream()
+                .filter(BlockReason.RuleWithoutLineReason.class::isInstance)
+                .map(BlockReason.RuleWithoutLineReason.class::cast).toList();
     }
 
     /**
@@ -301,19 +326,26 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         }
     }
 
-    /** One of each reason that is in neither capability the two lists above are of. */
+    /**
+     * And those in neither, which is what a question is left standing by and no surface about a
+     * position can carry.
+     *
+     * <p>Asked of the two capabilities and not named. A reason that gained one of them belongs in
+     * the list beside this and would keep its row here — so the rows would go on saying what a
+     * document writes for it while what may carry it had moved, which is the whole of what the
+     * schema's two vocabularies are held against.
+     */
     private static List<BlockReason> theOtherReasons() {
-        return List.of(new BlockReason.NoReadingTookItIn());
+        return everyReason().stream()
+                .filter(each -> !(each instanceof BlockReason.RuleWithoutLineReason))
+                .filter(each -> !(each instanceof BlockReason.AboutThePosition))
+                .toList();
     }
 
+    /** And those of them that name a position and no rule. */
     private static List<BlockReason.AboutThePosition> everyStopAtAPosition() {
-        return List.of(
-                new BlockReason.TypeUnresolved(),
-                new BlockReason.RecursiveExpansion(
-                        souther.compiler.types.TypeSymbols.declared(
-                                new souther.compiler.types.TypeKey("g", "Chain")),
-                        TermPath.of("c")),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
-                new BlockReason.ValueRulesNotReached());
+        return everyReason().stream()
+                .filter(BlockReason.AboutThePosition.class::isInstance)
+                .map(BlockReason.AboutThePosition.class::cast).toList();
     }
 }
