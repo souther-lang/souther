@@ -58,6 +58,14 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
             "[\\x{10000}-\\x{10400}]",
             "[^\\x{10330}]",
             "\\u00e9",
+            // Two escapes spelling one symbol, which the engine reads as units before it reads
+            // symbols. Beside them the same character written whole and each half on its own, since
+            // what has to agree is which strings are in and a lone surrogate is a symbol.
+            "\\uD800\\uDC00",
+            "[\\uD800\\uDC00]",
+            "\\uD800",
+            "a\\uD800\\uDC00b",
+            "(?:\\uD800\\uDC00)+",
             "[\\d-]{2}");
 
     /** Strings that sit either side of what those patterns say. */
@@ -83,6 +91,8 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
         out.add("\ud800");
         out.add("\udc00");
         out.add("𐀀");
+        out.add("a𐀀b");
+        out.add("𐀀𐀀");
         for (int each : new int[] {'\n', '\r', 0x85, 0x2028, 0x2029, 0x0b, '\f', '\t'}) {
             out.add(String.valueOf((char) each));
         }
@@ -93,6 +103,38 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
      *  construction gets its own and what is measured is the language rather than the allowance. */
     private static Meter plenty() {
         return new Meter(100_000, 10_000_000);
+    }
+
+    /**
+     * A string this hands back is one it holds, whatever the pattern was written as.
+     *
+     * <p>The law under everything else here, and the one a difference with the engine is only the
+     * outward sign of. A language that names a string and refuses it is not a set: what a walk goes
+     * over is code points, so a machine whose steps are half of a pair holds strings its own
+     * membership test cannot reach, and a reader is handed a witness the language says it does not
+     * have.
+     *
+     * <p>Asked of every pattern here rather than of the one that broke it. Which spellings put a
+     * surrogate in a machine is not something to keep a list of — it is what this refuses to let
+     * any spelling do.
+     */
+    @Test
+    void whatItHandsBackIsWhatItHolds() {
+        for (String regex : PATTERNS) {
+            PatternRead said = PatternParser.read(regex);
+            if (!(said instanceof PatternRead.Read read)) {
+                continue;
+            }
+            Automaton machine = Automaton.of(read.syntax(), plenty());
+            assertNotNull(machine, regex);
+            String one = machine.shortest();
+            if (one == null) {
+                continue;
+            }
+            assertTrue(machine.accepts(one),
+                    () -> regex + " hands back " + written(one) + ", which it says it does not"
+                            + " hold");
+        }
     }
 
     @Test

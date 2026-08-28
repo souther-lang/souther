@@ -268,7 +268,7 @@ public final class PatternParser {
             case 'e' -> { take(); return CodePoints.of(0x1B); }
             case '0' -> { take(); return CodePoints.of(octal()); }
             case 'x' -> { take(); return CodePoints.of(hex()); }
-            case 'u' -> { take(); return CodePoints.of(fixedHex(4)); }
+            case 'u' -> { take(); return CodePoints.of(unicodeEscape()); }
             case 'p', 'P' -> throw new Refused(PatternRead.Unsupported.A_CHARACTER_PROPERTY);
             case 'b', 'B', 'A', 'z', 'Z', 'G', 'R' ->
                     throw new Refused(PatternRead.Unsupported.A_BOUNDARY);
@@ -330,6 +330,43 @@ public final class PatternParser {
             return value;
         }
         return fixedHex(2);
+    }
+
+    /**
+     * The symbol a {@code \\u} escape spells, two of them making one where they pair.
+     *
+     * <p>Java's engine reads a pattern as units before it reads it as symbols, so a high escape
+     * followed by a low one is the one supplementary symbol they encode — {@code \\uD800\\uDC00}
+     * accepts U+10000 and accepts neither half on its own. Read as two symbols, the same pattern
+     * would name the two halves and not the character, which is a different set of strings under
+     * the same spelling.
+     *
+     * <p>And a set that no walk here could even ask about. What a machine is walked over is code
+     * points, so a step over half a pair is a step nothing takes: the language would hold a string
+     * its own membership test refuses, and the shortest string it could name would be one it does
+     * not have.
+     *
+     * <p>A high escape with nothing to pair with is the symbol it spells and stays one. That is
+     * what the engine does with it, and a lone surrogate is a symbol a machine may hold.
+     */
+    private int unicodeEscape() {
+        int first = fixedHex(4);
+        if (!Character.isHighSurrogate((char) first) || peek() != '\\') {
+            return first;
+        }
+        int mark = at;
+        take();
+        if (peek() != 'u') {
+            at = mark;
+            return first;
+        }
+        take();
+        int second = fixedHex(4);
+        if (!Character.isLowSurrogate((char) second)) {
+            at = mark;
+            return first;
+        }
+        return Character.toCodePoint((char) first, (char) second);
     }
 
     private int fixedHex(int digits) {
