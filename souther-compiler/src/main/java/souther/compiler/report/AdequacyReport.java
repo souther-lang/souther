@@ -1321,6 +1321,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // reader to change something that may not be why.
             case EXACT_VALUES_TOO_COSTLY -> "read to the end, and the values the rules about this"
                     + " position leave between them are more than this compiler will work out";
+            case PATTERN_TOO_DEEPLY_NESTED ->
+                    "written more deeply nested than this compiler reads";
             case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
             case UNRESOLVED_CASE_PAIRING -> "it reaches case-specific positions on both sides, and "
                     + "how those positions pair up is not worked out";

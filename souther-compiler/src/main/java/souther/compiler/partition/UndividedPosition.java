@@ -164,6 +164,17 @@ public record UndividedPosition(TermPath at, Why why) {
          * less — or take the answer as the upper bound it is.
          */
         EXACT_VALUES_TOO_COSTLY,
+
+        /**
+         * A rule is written more deeply nested than this compiler reads.
+         *
+         * <p>Its own word because what a reader may do about it is its own. {@link
+         * #UNSUPPORTED_SYNTAX} promises a construct nothing here enters, and every construct in
+         * this rule is entered; {@link #EXACT_VALUES_TOO_COSTLY} promises the values were worked
+         * out as far as an allowance allowed, and this stopped before any of that. What is left is
+         * how the rule is bracketed, which is something an author can write differently.
+         */
+        PATTERN_TOO_DEEPLY_NESTED,
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
         /**

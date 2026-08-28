@@ -151,7 +151,17 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
         // A pattern is what it accepts, and what it is written out of is the author's. Read through
         // the fold above, so a format built out of pieces the model names — a shared tail joined to
         // a prefix — is the one pattern it comes to rather than an expression nobody followed.
-        if (!(PatternParser.read(written) instanceof PatternRead.Read read)) {
+        PatternRead said = PatternParser.read(written);
+        // Written more deeply than this reads is a limit of the reading and not a shape it has no
+        // word for, so it is said as itself. Left to fall through, it would go out as a form
+        // nothing here takes apart — and an author would go looking for the construct that was the
+        // trouble, when every construct in it is one this reads.
+        if (said instanceof PatternRead.NotRead it
+                && it.why() == souther.compiler.regex.PatternRead.Unsupported.NESTED_TOO_DEEPLY) {
+            return PlannedValues.unreadable(Set.of(position),
+                    UnreadReason.PATTERN_TOO_DEEPLY_NESTED);
+        }
+        if (!(said instanceof PatternRead.Read read)) {
             return null;
         }
         ValueSet made = states ? allowed.matching(position, read.syntax())

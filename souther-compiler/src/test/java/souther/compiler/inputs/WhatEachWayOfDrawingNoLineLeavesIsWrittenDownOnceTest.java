@@ -60,6 +60,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // the same two things and is not a rule without a line. This table is what a rule leaves,
         // and that one is not about a rule.
         table.put("PatternTooCostly", "short/short/EXACT_VALUES_TOO_COSTLY");
+        // And a rule this would not read that far in, which is short of both for the same reason:
+        // what the rule says is unknown, so what it would have divided or bounded is unknown too.
+        // Its own word and not the one above — that one reached the values and this did not.
+        table.put("PatternTooDeeplyNested", "short/short/PATTERN_TOO_DEEPLY_NESTED");
         // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
@@ -257,6 +261,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.UnreadValueRule(),
                 new BlockReason.PatternTooCostly(),
+                new BlockReason.PatternTooDeeplyNested(),
                 new BlockReason.ExactValuesTooCostly(),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.CompetingCoordinates(),

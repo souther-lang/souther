@@ -154,11 +154,13 @@ public sealed interface BlockReason {
                 case PARTITION -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                          UnreadValueRule _, ValueRuleRelatingTwoPositions _, PatternTooCostly _,
+                         PatternTooDeeplyNested _,
                          CompetingCoordinates _, CasePairingNotDetermined _ -> true;
                 };
                 case BOUNDARY -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                          UnreadValueRule _, ValueRuleRelatingTwoPositions _, PatternTooCostly _,
+                         PatternTooDeeplyNested _,
                          CompetingCoordinates _, CasePairingNotDetermined _ -> true;
                 };
             };
@@ -236,6 +238,7 @@ public sealed interface BlockReason {
             case RELATES_TWO_POSITIONS -> new ValueRuleRelatingTwoPositions();
             case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new UnreadValueRule();
             case PATTERN_TOO_COSTLY -> new PatternTooCostly();
+            case PATTERN_TOO_DEEPLY_NESTED -> new PatternTooDeeplyNested();
             // Refused rather than answered, for the reason `NOT_REACHED` is. This one is about
             // what the rules leave between them, so a caller here would be naming a rule that the
             // reason is not about — which is the whole of what {@link AnswerRealizationStopped} is
@@ -370,6 +373,17 @@ public sealed interface BlockReason {
      * this pattern and could write it differently.
      */
     record PatternTooCostly() implements RuleReadingStopped {}
+
+    /**
+     * A rule written more deeply nested than this compiler reads.
+     *
+     * <p>Its own case beside the two above, and the difference is again what an author does about
+     * it. {@link UnreadValueRule} sends them to the construct nothing here enters, and every
+     * construct in this one is entered; {@link PatternTooCostly} says the machine would be too
+     * large, and this never reached one. What is left is the brackets, which is something they can
+     * write differently.
+     */
+    record PatternTooDeeplyNested() implements RuleReadingStopped {}
 
     /**
      * The rules about this position were followed, every one of them became the set it names, and

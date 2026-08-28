@@ -46,6 +46,16 @@ public enum UnreadReason {
     ALTERNATIVE_NOT_READ,
 
     /**
+     * A rule about this position is written more deeply nested than this compiler reads.
+     *
+     * <p>Not a form it has no word for: every part of it is one this reads, and what stopped is how
+     * far in the reading goes. Not the machine being too large either — it never got as far as
+     * making one. Its own arm because what an author does about it is write the same pattern with
+     * fewer brackets, which neither of the others would tell them.
+     */
+    PATTERN_TOO_DEEPLY_NESTED,
+
+    /**
      * One rule about this position names a set of strings, and making the machine for it is more
      * than this compiler will do.
      *

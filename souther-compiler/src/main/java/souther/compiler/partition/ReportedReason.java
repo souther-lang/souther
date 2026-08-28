@@ -51,6 +51,11 @@ public final class ReportedReason {
             // than the rules leave them, because working them out was too much.
             case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _ ->
                     UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
+            // And its own word again, because this one never reached the values at all. A reader
+            // told the values were too much would go looking for what makes them so, and what is
+            // the matter is how far in the rule goes.
+            case BlockReason.PatternTooDeeplyNested _ ->
+                    UndividedPosition.Reason.PATTERN_TOO_DEEPLY_NESTED;
             // Its own word, and not the one above. That one promises a rule was read and could not
             // be used, which is a reader having engaged with it and given up; here none did, and an
             // author sent after the form their clause is written in would be looking for a
