@@ -116,7 +116,11 @@ final class NumericReadings {
             List<OperationFacts.Declared> declared, ValueName operation) {
         Stdlib.Entry entry = DischargeRules.holdTheOperationToTheLibrary(stdlib, operation);
         ValueName.Stdlib.Operation named = DischargeRules.theLibraryOperation(operation);
-        if (NumericAnswers.in(entry.signature().result()) == null) {
+        // Whether a number is answered for some value the operation could be given, which is what a
+        // reader of declarations can ask. Asked as "is the declared result a number", an operation
+        // whose answer is what its container holds was read as answering none — and a walk that
+        // adds up whole numbers answers one at every call it is given whole numbers.
+        if (!NumericAnswers.mayAnswerANumber(operation, stdlib)) {
             return List.of();
         }
         List<NumericReading> terms = new ArrayList<>();
@@ -143,12 +147,19 @@ final class NumericReadings {
                 // call answers has no account of its own here — and every operation carrying one
                 // today is written in the language as well, so nothing here has to tell the two
                 // apart.
+                // A walk that adds up what a container holds is a way of reading the number a call
+                // answered, and it is read as the account it already is rather than as a second
+                // one declared beside it. A walk of another kind carries an identity and a step
+                // and answers no number this reads — a join of strings, a product — so what it
+                // contributes here is nothing, and that it answers this question at all is said
+                // where the silences are.
+                case OperationFact.AccumulatesItsContainer _ -> {
+                    TakenAs how = OperationFacts.takenAs(operation);
+                    if (how != null) {
+                        terms.add(new NumericReading.AsATermTakenOfItsArgument(how));
+                    }
+                }
                 case OperationFact.IsDefinedByCases _,
-                     // What a walk over a container comes to is about the answer whatever type it
-                     // has, and a list of strings joined is one. Which of those answers a number is
-                     // a question about the elements at a call and not about the operation, so
-                     // there is no reading of a number here to be exclusive with another.
-                     OperationFact.AccumulatesItsContainer _,
                      // The rest say something else about the operation: where a number runs, what
                      // an operation keeps of a container, what a predicate travels through, what a
                      // shift is stated through, whether every answer has a value that gives it.

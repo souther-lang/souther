@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.OperationFacts;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -103,6 +104,49 @@ public final class NumericAnswers {
     /** The same, for a reader already holding the symbols its module was compiled against. */
     public static Type typeOf(ValueName operation, Symbols symbols) {
         return typeOf(operation, symbols.library());
+    }
+
+    /**
+     * The type of the number {@code operation} answers of a value of {@code source}, or null where
+     * it answers none this can name.
+     *
+     * <p>Two stages, because for one operation the signature settles the answer and for another it
+     * only says where the answer comes from. {@code String.length} answers an {@code Int} whatever
+     * it is given; {@code List.sum} answers what its container holds, and the library states no
+     * numeric constraint on that — Souther has no type classes, so which elements the language
+     * admits is a check where a call is typed, and the answer is an {@code Int} at one call and a
+     * {@code Decimal} at the next (ADR-0082).
+     *
+     * <p>So a caller with a value in hand gets a concrete answer, and a caller holding only a
+     * declaration asks {@link #mayAnswerANumber} instead. Answered from the signature alone, a
+     * polymorphic result reads as no number at all, and every rule written on a sum came back as a
+     * rule about nothing.
+     *
+     * <p>Where the answer comes from is not a fact of its own. An operation that walks a container
+     * carries what it has so far in the type it answers, which is what its accumulation already
+     * says and what the binding of that fact already holds — read again here as a third statement,
+     * the day one of them moved would be the day they disagreed.
+     */
+    public static Type typeOf(ValueName operation, Type source, Symbols symbols) {
+        if (OperationFacts.accumulatedContainer(operation) == null) {
+            return typeOf(operation, symbols.library());
+        }
+        Type element = source == null ? null
+                : Type.elementOfAContainer(TypeOps.base(source, symbols));
+        return element == null ? null : in(element);
+    }
+
+    /**
+     * Whether {@code operation} answers a number for some value it could be given.
+     *
+     * <p>The question a reader of declarations can ask, where {@link #typeOf} is the one a reader of
+     * a call can. What it may not do is decide the second: a sum over a list of text answers no
+     * number and is the same operation as a sum over a list of whole numbers, so an operation
+     * refused here would be refused for every call including the ones that do answer one.
+     */
+    static boolean mayAnswerANumber(ValueName operation, Stdlib library) {
+        return OperationFacts.accumulatedContainer(operation) != null
+                || typeOf(operation, library) != null;
     }
 
     private NumericAnswers() {}

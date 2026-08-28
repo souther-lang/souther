@@ -161,7 +161,10 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
         public static TakenOf of(ValueName.Stdlib operation, TermPath position, Type at,
                                  Symbols symbols) {
             TakenAs how = OperationFacts.takenAs(operation);
-            Type answers = NumericAnswers.typeOf(operation, symbols);
+            // Of what stands here, because for an operation that walks a container the answer is
+            // what the container holds. Asked of the operation alone, a sum answered no number this
+            // could name and no term was made for any rule written on one.
+            Type answers = NumericAnswers.typeOf(operation, at, symbols);
             if (how == null || answers == null || at == null) {
                 return null;
             }
@@ -278,7 +281,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
         return switch (this) {
             case ValueOf _ -> positionType == null ? null : Carrier.ofValue(positionType, symbols);
             case TakenOf taken -> {
-                Type answers = NumericAnswers.typeOf(taken.operation(), symbols);
+                Type answers = NumericAnswers.typeOf(taken.operation(), positionType, symbols);
                 yield answers == null ? null : Carrier.ofValue(answers, symbols);
             }
         };
@@ -367,6 +370,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
     private static Reading taken(TakenAs how, ObservedValue at, Carrier observed) {
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> howMany(at);
+            case TakenAs.TheSumOfWhatItHolds _ -> addedUp(at, observed);
             case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, observed);
             case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, observed);
         };
@@ -388,6 +392,42 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
             case ObservedValue.Mapping m -> new Reading.Number(Count.of(m.entries().size()));
             case null, default -> new Reading.NotNumber();
         };
+    }
+
+    /**
+     * What an observed container's elements add up to.
+     *
+     * <p>Every element, on the order the answer is measured on. That order is the elements' own —
+     * a walk carries what it has so far in the type it answers — so an element is read as a place
+     * of the same carrier the sum is, and there is no second order here for the two ends of the
+     * term to come apart on.
+     *
+     * <p>An element that reads as no place is what a container holding something other than what
+     * the position declares would give, and the sum of those is not a number rather than a number
+     * missing one of its parts. Nothing here reaches into an element: a sum is over what a
+     * container holds, and a value inside one of them is a position of its own.
+     *
+     * <p>Nothing added up is nought, which is what the walk starts from. An empty container is a
+     * value the model may write, and answering that it holds no number would put a row the author
+     * can write outside every class of the number a rule is about.
+     */
+    private static Reading addedUp(ObservedValue at, Carrier observed) {
+        if (observed == null || !(at instanceof ObservedValue.Sequence held)) {
+            return new Reading.NotNumber();
+        }
+        java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+        for (ObservedValue each : held.elements()) {
+            Membership.Incomplete unread = Membership.unread(each);
+            if (unread != null) {
+                return new Reading.Missing(unread.code());
+            }
+            Place read = observed.placeOf(each);
+            if (!(read instanceof Count count)) {
+                return new Reading.NotNumber();
+            }
+            total = total.add(count.at());
+        }
+        return new Reading.Number(new Count(total));
     }
 
     /**

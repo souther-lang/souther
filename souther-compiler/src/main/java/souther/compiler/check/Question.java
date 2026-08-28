@@ -548,8 +548,14 @@ enum Question {
     READING("which representation reads the number it answers") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            // Or one whose answer is what its argument holds, where whether that is a number is
+            // settled at the call and not in the declaration. Drawn on the result alone, an
+            // operation the library declares as `(List<'a>) -> 'a` was asked nothing — and it
+            // answers a number wherever its elements are numbers, so a rule written on one had no
+            // reading named anywhere.
             return signature.params().size() == 1
-                    && NumericAnswers.in(signature.result()) != null;
+                    && (NumericAnswers.in(signature.result()) != null
+                            || DischargeRules.resultIsElementOf(signature, 0));
         }
 
         @Override

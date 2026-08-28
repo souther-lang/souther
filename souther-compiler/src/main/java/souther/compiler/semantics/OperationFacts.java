@@ -458,6 +458,23 @@ public final class OperationFacts {
         // union and nothing else.
         out.addAll(saysNothing(OperationSubject.READING, op("String", "toInt"),
                 op("String", "toDecimal")));
+
+        // And the walks whose answer is what their container holds, where nothing reads that answer
+        // as a number. A join of strings answers no number at any call. A product answers one at
+        // every call its elements are numbers at, and what reads a number is one account at a time:
+        // the account for a walk that adds is read off that walk, and a walk that multiplies would
+        // need its own — how a total is read off a row and what containers come to a given one are
+        // not the sum's answers with the step changed.
+        //
+        // `List.concat` is not here. The language writes its body out, and a body is one of the
+        // representations — so it is answered already, and a silence beside that answer would deny
+        // it.
+        //
+        // Said rather than left out. These are in range by the shape of their declaration, so an
+        // absence here is an operation nobody has answered for, which is what the range exists to
+        // find.
+        out.addAll(saysNothing(OperationSubject.READING, op("List", "product"),
+                op("String", "concat")));
         return List.copyOf(out);
     }
 
@@ -739,15 +756,58 @@ public final class OperationFacts {
         return Index.ACCUMULATES.keySet();
     }
 
-    /** What {@code operation} takes of the one value it is given, or null where the number it
-     *  answers is not taken of one value. */
+    /**
+     * What {@code operation} takes of the one value it is given, or null where the number it
+     * answers is not taken of one value.
+     *
+     * <p>Declared, or read off the walk where the operation is one. An accumulation over one
+     * container already says what the answer is — start from this, carry that — so an arm declared
+     * beside it would be the same sentence in a second vocabulary, and the two would be free to
+     * disagree about what a sum is. What is read here is that statement put as a way of taking a
+     * number.
+     *
+     * <p>Only the walk that adds. A join carries an identity and a step as much as a sum does and
+     * answers a string; a product carries them and answers a number this measure has no reading
+     * for. What is derived is one account and not the family, so the reading a term gets is one
+     * something here can carry out — and a walk of another kind arriving is a walk nothing here
+     * claims to read.
+     *
+     * <p>Nothing here about how many arguments the operation takes. A number taken of the one value
+     * an operation is given is taken of one, and that is held where every taking is held to its
+     * declaration — so a walk that adds over a container beside other arguments stops the
+     * compilation rather than arriving as a term about whichever argument was written first.
+     */
     public static TakenAs takenAs(ValueName operation) {
-        return Index.TAKEN_AS.get(operation);
+        TakenAs declared = Index.TAKEN_AS.get(operation);
+        return declared != null ? declared : theSumItAccumulates(operation);
     }
 
-    /** The operations that answer a number taken of the one value they are given. */
+    /** The sum arm where {@code operation} is a walk that adds up what it holds, or null. */
+    private static TakenAs theSumItAccumulates(ValueName operation) {
+        Accumulation walk = accumulation(operation);
+        return walk != null
+                && walk.identity() == Accumulation.Identity.ZERO
+                && walk.combine() == Accumulation.Combine.ADD
+                ? new TakenAs.TheSumOfWhatItHolds() : null;
+    }
+
+    /**
+     * The operations that answer a number taken of the one value they are given.
+     *
+     * <p>The ones {@link #takenAs} answers for, which is not the same as the ones an account is
+     * declared of: a walk that adds up a container is read as one and its account is that walk.
+     * Answered off the declarations alone, this set and the accessor beside it would disagree about
+     * an operation, and every reader of the set — what a question is asked of, what a check
+     * enumerates — would be missing whichever operations the accessor derives.
+     */
     public static java.util.Set<ValueName> answersANumberTakenOfItsArgument() {
-        return Index.TAKEN_AS.keySet();
+        java.util.Set<ValueName> out = new java.util.LinkedHashSet<>(Index.TAKEN_AS.keySet());
+        Index.ACCUMULATES.keySet().forEach(operation -> {
+            if (takenAs(operation) != null) {
+                out.add(operation);
+            }
+        });
+        return java.util.Set.copyOf(out);
     }
 
     /**
