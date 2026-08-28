@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every word the shipped schema allows is one somebody accounted for.
  *
- * <p>Every enumerated field of {@code adequacy-schema-7.json} is a second spelling of a Java enum.
+ * <p>Every enumerated field of the shipped schema is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
  * one moved: `ROW_TIMED_OUT` became `ROW_UNDECIDED` when a row stopped being held to a clock, the
  * rename was right, and the schema went on promising a word that had not been emitted since.
@@ -57,7 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySchemaWordIsAccountedForTest {
 
-    private static final String SCHEMA = "/souther/adequacy-schema-7.json";
+    private static final String SCHEMA = AdequacyReport.SCHEMA_RESOURCE;
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -248,17 +248,11 @@ class EverySchemaWordIsAccountedForTest {
                             "reason"),
                     Set.of("no_axis_derived"),
                     souther.compiler.query.PartitionDerivation.class),
-            // Written once and referred to twice: a position's reading and a rule left unread are
-            // the same question asked of two things, and two copies of the words would be two
-            // places for one of them to gain a word the other does not have.
-            // `depth_limit` is beside them and is retired. The reading stopped after a count of
-            // steps and said so, and documents of this version carry the word — so it stays here,
-            // where what stops the reading is now the path returning to a declaration it had
-            // already opened.
-            new Vocabulary("notReadReason",
-                    List.of("$defs", "notReadReason"),
-                    Set.of("depth_limit"),
-                    souther.compiler.partition.UndividedPosition.Reason.class),
+            // The vocabularies a reason is written in are not here. Which words a surface of the
+            // document admits is decided by the capabilities its producers hold, and each is held
+            // against those in `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce` — a list here of
+            // which word belongs to which surface would be that answer kept a second time by hand,
+            // and it is what let one surface admit everything the other did.
             // And `no_lines_derived` likewise.
             Vocabulary.of("partition.boundariesMeasure.reason",
                     List.of("$defs", "partition", "properties", "boundariesMeasure", "properties",
@@ -474,20 +468,25 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     /**
-     * The three places this schema says which version it is agree.
+     * The places this schema says which version it is agree with the writer.
      *
-     * <p>Its name, the number a document carries, and the identifier a resolver keys on. They are
-     * edited in different places and one of them was left behind: a copy raised to 2 kept the
-     * `$id` of the first, so two schemas claimed one canonical name and a consumer holding a cache
-     * would be handed whichever it fetched first.
+     * <p>The number a document carries and the identifier a resolver keys on. They are edited in
+     * different places and one of them was left behind: a copy raised to 2 kept the `$id` of the
+     * first, so two schemas claimed one canonical name and a consumer holding a cache would be
+     * handed whichever it fetched first.
+     *
+     * <p>The file's own name is no longer one of them. What is opened is
+     * {@link AdequacyReport#SCHEMA_RESOURCE}, which the writer derives from the version it emits —
+     * so a copy raised and left under the old name is a file this does not find, and the
+     * {@code assertNotNull} where it is read says so. Held as a third literal beside the two below,
+     * the name was one more thing to raise by hand, and five other tests opened theirs and never
+     * checked it.
      */
     @Test
-    void theVersionIsTheSameInAllThreePlacesItIsWritten() {
+    void theVersionIsTheSameInBothPlacesTheSchemaWritesIt() {
         assertEquals(AdequacyReport.SCHEMA_VERSION,
                 schema().get("properties").get("schemaVersion").get("const").asInt(),
                 "what a document carries is what this schema demands");
-        assertTrue(SCHEMA.endsWith("-" + AdequacyReport.SCHEMA_VERSION + ".json"),
-                "and the file is named for it: " + SCHEMA);
         assertTrue(schema().get("$id").asString()
                         .endsWith("adequacy-" + AdequacyReport.SCHEMA_VERSION + ".json"),
                 "and so is the identifier a resolver keys on: " + schema().get("$id"));
@@ -560,6 +559,12 @@ class EverySchemaWordIsAccountedForTest {
         for (Vocabulary each : VOCABULARIES) {
             held.add("/" + String.join("/", each.at()));
         }
+        // The words each surface of the document may carry, held against the capabilities its
+        // producers hold rather than against an enum, in
+        // `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce`. What decides them is which reasons
+        // reach the surface, and a list of words here would say the same thing without saying why.
+        held.add("/$defs/ruleStoppedReadingReason");
+        held.add("/$defs/notReadReason/anyOf/1");
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
         held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
@@ -684,10 +689,37 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
+    /**
+     * The words a field is constrained to, however the schema spells the constraint.
+     *
+     * <p>A list of them, or a vocabulary written as another one and the words it adds. The second
+     * is how a surface that admits everything another admits and one word besides says so, and
+     * reading only the first would hold such a field against nothing.
+     */
     private static Set<String> allowedAt(JsonNode schema, List<String> at) {
+        return wordsOf(schema, nodeAt(schema, at));
+    }
+
+    private static Set<String> wordsOf(JsonNode schema, JsonNode node) {
         Set<String> out = new LinkedHashSet<>();
-        for (JsonNode each : nodeAt(schema, at).get("enum")) {
-            out.add(each.asString());
+        if (node.has("enum")) {
+            for (JsonNode each : node.get("enum")) {
+                out.add(each.asString());
+            }
+        }
+        if (node.has("const")) {
+            out.add(node.get("const").asString());
+        }
+        if (node.has("anyOf")) {
+            for (JsonNode each : node.get("anyOf")) {
+                out.addAll(wordsOf(schema, each));
+            }
+        }
+        if (node.has("$ref")) {
+            String ref = node.get("$ref").asString();
+            assertTrue(ref.startsWith("#/"), "a reference this cannot follow: " + ref);
+            out.addAll(wordsOf(schema,
+                    nodeAt(schema, List.of(ref.substring(2).split("/")))));
         }
         return out;
     }
@@ -720,7 +752,7 @@ class EverySchemaWordIsAccountedForTest {
 
     private static JsonNode schema() {
         try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
-            assertNotNull(in, "adequacy-schema-7.json ships beside the compiler");
+            assertNotNull(in, SCHEMA + " ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
             throw new AssertionError(e);

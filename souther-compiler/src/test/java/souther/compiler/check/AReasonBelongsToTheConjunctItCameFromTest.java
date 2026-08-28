@@ -9,6 +9,8 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -27,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class AReasonBelongsToTheConjunctItCameFromTest {
 
     /** What the reading of ends said about the line of the one clause written here. */
-    private static String whyTheLineStands(String clause) {
+    private static List<String> whyTheLineStands(String clause) {
         Compilation compilation = Compilation.ofSource("""
                 module m
 
@@ -45,16 +47,22 @@ class AReasonBelongsToTheConjunctItCameFromTest {
                 .filter(e -> e.getKey().obligation() == CoverageObligation.BOUNDARY)
                 .map(e -> assertInstanceOf(RuleAccounting.Outcome.Unaccounted.class, e.getValue()))
                 .map(e -> assertInstanceOf(RuleAccounting.Why.TheEndReadingSays.class, e.why()))
-                .map(e -> e.why().getClass().getSimpleName())
+                .map(e -> e.why().stream().map(each -> each.getClass().getSimpleName()).toList())
                 .findFirst().orElseThrow(() -> new AssertionError("the line was answered"));
     }
 
-    /** One model, two orders, one answer: the bound this could not fold is why. */
+    /**
+     * One model, two orders, one answer: the bound this could not fold is why.
+     *
+     * <p>The whole of the answer and not its first entry. A question stands with every part that
+     * was stopped behind it, so asserting one of them would pass a reading that had added the
+     * conjunct beside it as well — and that conjunct was read from end to end.
+     */
     @Test
     void theOrderTheConjunctsAreWrittenInDoesNotDecideWhy() {
-        assertEquals("UnreadComparisonForm", whyTheLineStands(
+        assertEquals(List.of("UnreadComparisonForm"), whyTheLineStands(
                 "invariant said = x <= 10 * 2 && x <= y"));
-        assertEquals("UnreadComparisonForm", whyTheLineStands(
+        assertEquals(List.of("UnreadComparisonForm"), whyTheLineStands(
                 "invariant said = x <= y && x <= 10 * 2"),
                 "and not the reason of the conjunct beside it, which relates two positions");
     }

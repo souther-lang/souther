@@ -74,7 +74,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 7;
+    public static final int SCHEMA_VERSION = 8;
+
+    /**
+     * Where the schema this writes documents ships.
+     *
+     * <p>Derived from the version rather than written beside it. Which schema describes what this
+     * writer emits is the writer's own answer and there is one of it; spelled again wherever
+     * something opens the file, raising the version is a hunt through however many spellings there
+     * are, and the ones nothing checks go on opening the schema of the version before.
+     *
+     * <p>What is not derived is the schema's own account of which version it is — the number a
+     * document must carry and the identifier a resolver keys on are the contract, and generating
+     * them from this constant would leave the contract and the writer agreeing by construction and
+     * checkable nowhere ({@code EverySchemaWordIsAccountedFor}).
+     */
+    public static final String SCHEMA_RESOURCE =
+            "/souther/adequacy-schema-" + SCHEMA_VERSION + ".json";
 
     /**
      * Whether the rows meet what the bar this report is read against asks of them.
@@ -1319,6 +1335,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // settled by the authority a reason belongs to
             // ({@link souther.compiler.inputs.BlockReason}), so no reason is written both ways.
             case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
+            case RULE_NOT_INTERPRETED_HERE ->
+                    "it was reached, and nothing worked out what it says about the values here";
             case RETURNS_TO_A_DECLARATION_ALREADY_READ ->
                     "the input returns here to a declaration already read above it, and what is"
                             + " under it is not read again";
@@ -1790,11 +1808,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AQuestionNothingAnswered(var asked)
                     && mine.test(asked.question())) {
-                out.append(String.format("      %s not accounted for: %s — %s %s%n",
+                out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
-                        asked(asked.question()), subjectOf(asked, names, declaredIn)));
+                        asked(asked.question()), subjectOf(asked, names, declaredIn),
+                        whyStanding(asked).stream().map(AdequacyReport::whyUnread)
+                                .collect(java.util.stream.Collectors.joining("; "))));
             }
         }
+    }
+
+    /**
+     * Why a question stands, in the words this document promises its reader.
+     *
+     * <p>Every reason and not one of them, because a question stands until every part that asked it
+     * has been read: a part standing behind another is a second thing to lift, and naming one would
+     * send an author to lift it and find the question still there. Which is also why nothing here
+     * chooses between them — the only thing there is to choose by is which the reading met first.
+     *
+     * <p>Each projected on its own and the words made distinct afterwards, never the other way
+     * round. What a document promises is deliberately coarser than what this compiler records, so
+     * two reasons a reader is not offered to tell apart come out as one word — and that is the
+     * projection saying they are one thing to lift, rather than a report dropping one of them.
+     */
+    private static java.util.List<souther.compiler.partition.UndividedPosition.Reason> whyStanding(
+            souther.compiler.query.PartitionEvidence.Unanswered asked) {
+        java.util.List<souther.compiler.partition.UndividedPosition.Reason> said =
+                new java.util.ArrayList<>();
+        for (souther.compiler.inputs.BlockReason.AboutARule each : asked.stopped()) {
+            souther.compiler.partition.UndividedPosition.Reason word =
+                    souther.compiler.partition.ReportedReason.of(each);
+            if (!said.contains(word)) {
+                said.add(word);
+            }
+        }
+        return said;
     }
 
     /**
@@ -2187,6 +2234,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 if (each.measure() != null) {
                     about.put("measure", each.measure());
                 }
+                // Why answering it stopped, in the words this document promises and through the
+                // one projection the human line is written from. Written from the same value and
+                // not gathered a second way: a document saying less about a question than the
+                // report beside it is the two disagreeing about one question, and nothing would
+                // have said which of them to believe.
+                ArrayNode stopped = one.putArray("stopped");
+                whyStanding(each).forEach(reason -> stopped.add(word(reason)));
             }
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");

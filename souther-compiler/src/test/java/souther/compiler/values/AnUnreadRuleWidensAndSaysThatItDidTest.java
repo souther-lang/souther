@@ -2,11 +2,11 @@ package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -158,8 +158,9 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
         AdmissibleValues<String> read =
                 AdmissibleValues.unreadable(Set.of(VALUE), UnreadReason.RELATES_TWO_POSITIONS);
 
-        assertEquals(UnreadReason.RELATES_TWO_POSITIONS, read.whyUnread(VALUE));
-        assertNull(read.whyUnread(OTHER), "a position no rule named is one nothing stopped");
+        assertEquals(List.of(UnreadReason.RELATES_TWO_POSITIONS), read.whyUnread(VALUE));
+        assertEquals(List.of(), read.whyUnread(OTHER),
+                "a position no rule named is one nothing stopped");
     }
 
     /**
@@ -183,7 +184,7 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
                 .join(AdmissibleValues.unreadable(Set.of(OTHER),
                         UnreadReason.RELATES_TWO_POSITIONS));
 
-        assertEquals(UnreadReason.ALTERNATIVE_NOT_READ, either.whyUnread(VALUE));
+        assertEquals(List.of(UnreadReason.ALTERNATIVE_NOT_READ), either.whyUnread(VALUE));
         assertTrue(either.speaksFor(OTHER),
                 "the alternative that was read admits every value there, so the choice does");
     }
@@ -198,7 +199,7 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
                         .meet(says(OTHER, A))
                         .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
 
-        assertEquals(UnreadReason.RELATES_TWO_POSITIONS, either.whyUnread(VALUE));
+        assertEquals(List.of(UnreadReason.RELATES_TWO_POSITIONS), either.whyUnread(VALUE));
     }
 
     /**

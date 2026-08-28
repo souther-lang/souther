@@ -127,25 +127,32 @@ public final class RuleAccounting {
     public List<Unanswered> unansweredQuestions() {
         return answers.entrySet().stream()
                 .filter(e -> e.getValue() instanceof Outcome.Unaccounted)
-                .map(e -> new Unanswered(rule, cited, e.getKey()))
+                .map(e -> new Unanswered(rule, cited, e.getKey(),
+                        ((Outcome.Unaccounted) e.getValue()).why()))
                 .toList();
     }
 
     /**
-     * One question of one rule that nothing answered.
+     * One question of one rule that nothing answered, and what it stands for.
      *
-     * <p>No reason beside it. What a reading records about why it stopped is about a position and
-     * this is about a rule at a subject, and putting the first here would be a fact at one
-     * granularity wearing another's name — which is the shape this whole accounting was written
-     * against. A reason belongs here once the readings say why per part of a clause, and until then
-     * an absent one is the honest answer.
+     * <p>The reason travels with the question. It is the reading's own account of what stopped it,
+     * asked per rule at the subject the question is about — so it is a fact at this question's
+     * granularity and not one borrowed from the position, which is what an earlier accounting could
+     * not say and left out rather than get wrong.
      *
      * <p>The rule as {@link RuleRef}, all the way to the report that names it. Carried as the
      * clause reference the reading had in hand, the one reader of these built the identity at the
      * last moment — right while only invariants raise a question, and a decision about what a rule
      * is taken by whoever consumed one.
      */
-    public record Unanswered(RuleRef rule, RuleCitation cited, Owed owed) {}
+    public record Unanswered(RuleRef rule, RuleCitation cited, Owed owed, Why why) {
+
+        public Unanswered {
+            if (why == null) {
+                throw new IllegalArgumentException("a question nothing answered stands for a reason");
+            }
+        }
+    }
 
     @Override
     public String toString() {
@@ -163,7 +170,15 @@ public final class RuleAccounting {
          * whether the model is covered may be read off it, because that is what tying a completeness
          * to the readers there happen to be amounts to.
          */
-        record Accounted(Reader by) implements Outcome {}
+        record Accounted(Reader by) implements Outcome {
+
+            public Accounted {
+                if (by == null) {
+                    throw new IllegalArgumentException("a question something answered was answered"
+                            + " by one of the readings");
+                }
+            }
+        }
 
         /**
          * Nothing took the rule in, so the question stands.
@@ -173,7 +188,15 @@ public final class RuleAccounting {
          * elsewhere: a published word reaching back into what a reading is allowed to record is the
          * coupling this whole arrangement is written against.
          */
-        record Unaccounted(Why why) implements Outcome {}
+        record Unaccounted(Why why) implements Outcome {
+
+            public Unaccounted {
+                if (why == null) {
+                    throw new IllegalArgumentException("a question nothing answered stands for a"
+                            + " reason");
+                }
+            }
+        }
     }
 
     /**
@@ -184,37 +207,103 @@ public final class RuleAccounting {
      * reading that turns a clause into an end says what would have to change before the rule could
      * be a line. Held as one word, a line about an end was written in the words of a set of values —
      * which is the sentence #842 is about, one level down.
+     *
+     * <p><b>And one arm that names no reading.</b> A question stands where no reading adopted the
+     * rule, which is not the same as a reading having been asked and fallen short: the readings a
+     * clause reaches are the ones that recognise the positions it names, and a clause about a
+     * position none of them knows is claimed by none of them. Answered with a reading's arm, such a
+     * question is attributed to a reader that never held the rule — and the account then says which
+     * capability of that reader would lift it, which is a sentence about the wrong reader.
      */
     public sealed interface Why {
 
-        /** The reading that turns a clause into a set of values. */
-        record TheValueReadingSays(UnreadReason why) implements Why {
+        /**
+         * The same, in the one vocabulary this compiler records what it could not do in.
+         *
+         * <p>Where the two readings' words become one, and the only place they do. A reader
+         * downstream is owed what this compiler fell short of and has no business knowing which of
+         * its readings was asked — that is provenance, and a document writing a different word for
+         * one reading than for another would be reporting an arrangement of readers as a fact about
+         * a model.
+         *
+         * <p>Not the word a document writes, which is {@link souther.compiler.partition
+         * .ReportedReason}'s. Two vocabularies with a projection between them is what keeps a
+         * published word from reaching back into what a reading is allowed to record.
+         *
+         * <p>In the order the parts of the clause were met, and each said once: two parts one limit
+         * stopped are one thing for a reader to lift.
+         */
+        default List<souther.compiler.inputs.BlockReason.AboutARule> stopped() {
+            List<souther.compiler.inputs.BlockReason.AboutARule> out = new java.util.ArrayList<>();
+            for (souther.compiler.inputs.BlockReason.AboutARule each : switch (this) {
+                case TheValueReadingSays it -> it.why().stream()
+                        .map(souther.compiler.inputs.BlockReason::ofARuleTheValueReadingLeft)
+                        .toList();
+                case TheEndReadingSays it -> it.why();
+                case NothingTookItIn _ ->
+                        List.of(new souther.compiler.inputs.BlockReason.NoReadingTookItIn());
+            }) {
+                if (!out.contains(each)) {
+                    out.add(each);
+                }
+            }
+            return List.copyOf(out);
+        }
+
+        /**
+         * The reading that turns a clause into a set of values.
+         *
+         * <p>Everything it was stopped by, in the order the parts of the clause were met. One
+         * position is named by as many parts as the author wrote about it, and two of them stop
+         * this reading in two ways that are lifted by different work — so a single reason here is a
+         * choice among an author's rules, made where the only thing to choose by is which part came
+         * first.
+         */
+        record TheValueReadingSays(List<UnreadReason> why) implements Why {
 
             public TheValueReadingSays {
-                if (why == null) {
+                if (why == null || why.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
+                why = List.copyOf(why);
             }
         }
 
         /**
          * The reading that turns a clause into an end a line can be drawn at.
          *
-         * <p>Only a reason that says that reading stopped. A rule it took in from end to end
-         * answered the question by being read — where it places no line, there is no line to be
-         * owed, and where it restricts no value there is nothing to be admitted. Held as either
-         * half, a rule this compiler understood completely was one nobody had accounted for, and
-         * the measurement went to partial on the strength of it.
+         * <p>Only reasons that say that reading stopped. A rule it took in from end to end answered
+         * the question by being read — where it places no line, there is no line to be owed, and
+         * where it restricts no value there is nothing to be admitted. Held as either half, a rule
+         * this compiler understood completely was one nobody had accounted for, and the measurement
+         * went to partial on the strength of it.
+         *
+         * <p>Everything it was stopped by, in the order the parts of the clause were met. One
+         * question about one line is asked by every conjunct that draws it, and it is answered when
+         * every one of them has been read — so a part still standing behind another is a second
+         * thing to lift and not a repeat of the first.
          */
-        record TheEndReadingSays(souther.compiler.inputs.BlockReason.RuleReadingStopped why)
+        record TheEndReadingSays(
+                List<souther.compiler.inputs.BlockReason.RuleReadingStopped> why)
                 implements Why {
 
             public TheEndReadingSays {
-                if (why == null) {
+                if (why == null || why.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
+                why = List.copyOf(why);
             }
         }
+
+        /**
+         * No reading took the rule in, and none of them recorded why.
+         *
+         * <p>Nothing to carry, and that is what it says. The readings that record a reason are the
+         * ones that recognised the position and gave up on the rule about it; where the position is
+         * one none of them knows, the rule is claimed by nobody and there is no reader whose
+         * account this could be.
+         */
+        record NothingTookItIn() implements Why {}
     }
 
     /** Which reading answered a question. */

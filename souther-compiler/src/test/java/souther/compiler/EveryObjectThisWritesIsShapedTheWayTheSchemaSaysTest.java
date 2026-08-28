@@ -333,8 +333,8 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
 
     private static JsonNode schema() {
         try (InputStream in =
-                     AdequacyReport.class.getResourceAsStream("/souther/adequacy-schema-7.json")) {
-            assertNotNull(in, "adequacy-schema-7.json ships beside the compiler");
+                     AdequacyReport.class.getResourceAsStream(AdequacyReport.SCHEMA_RESOURCE)) {
+            assertNotNull(in, AdequacyReport.SCHEMA_RESOURCE + " ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (IOException cannotRead) {
             throw new UncheckedIOException(cannotRead);

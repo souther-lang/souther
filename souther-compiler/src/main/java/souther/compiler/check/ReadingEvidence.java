@@ -1,8 +1,13 @@
 package souther.compiler.check;
 
+import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.UnreadReason;
+
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -50,6 +55,21 @@ final class ReadingEvidence {
     /** Where a part of a clause was taken in by nothing, which no other part makes up for. */
     private final Map<RuleRef, Set<FactSubject>> left = new LinkedHashMap<>();
 
+    /**
+     * What stopped the reading of values at each position of each rule.
+     *
+     * <p>Under the rule, which is what makes it an account of a rule rather than of a place. Two
+     * clauses reach one position and stop this reading in two ways — a pattern nothing takes apart
+     * beside an ordering it has no set for — and a reason filed under the position alone answers
+     * for whichever of them a report happens to ask about. The rule that was actually short of it
+     * is then named beside a limit that belongs to its neighbour.
+     *
+     * <p>Empty for a rule this reading took in, and empty as well for one it was short of without
+     * recording why. The second is what {@link #stoppedBy} answers for.
+     */
+    private final Map<RuleRef, Map<FactSubject, List<UnreadReason>>> stopped =
+            new LinkedHashMap<>();
+
     /** A reading took {@code rule} in at {@code position}. */
     void record(RuleRef rule, FactSubject position) {
         spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
@@ -70,6 +90,62 @@ final class ReadingEvidence {
     /** A part of {@code rule} was taken in by nothing, of the positions it named. */
     void leftStanding(RuleRef rule, Set<FactSubject> positions) {
         left.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
+    }
+
+    /**
+     * What the reading of values made of {@code rule}, as that reading recorded it.
+     *
+     * <p>Taken from the reading of this one clause and before it is met with the rest. What is met
+     * is a set of values, and the reasons of every clause meet with it — so a caller asking the
+     * whole what stopped it at a position is asking about the position and hearing whichever rule
+     * reached it.
+     *
+     * <p><b>What the reading wrote down, and not what it answers when asked about a position.</b>
+     * {@link AdmissibleValues#standing} is the record: a part this reading gave up on, at each
+     * position that part named. {@link AdmissibleValues#whyUnread} is a reading of that record
+     * against the set the alternatives arrived at, and it answers a different question — whether
+     * the set at a position is as narrow as the rules leave it. The two part company exactly where
+     * a choice covers a position: the set is exact and nothing is answerable for it, and the rule
+     * is still one nobody took in. Asked through the second, a rule left standing under alternatives
+     * that cover it came back with no reason at all, and an accounting with the decision from one
+     * question and the reason from the other has a seam to fill.
+     */
+    void stoppedBy(RuleRef rule, AdmissibleValues<FactSubject> read) {
+        Map<FactSubject, List<UnreadReason>> here =
+                stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>());
+        read.standing().forEach((position, why) -> here.merge(position, why,
+                ReadingEvidence::appended));
+    }
+
+    /**
+     * Everything the reading of values was stopped by, of {@code rule} at any of {@code positions}.
+     *
+     * <p>Every name the position answers to, as {@link #tookIn} asks: a clause reaching it is filed
+     * under whichever the reading recognised. Empty where this reading recorded nothing of the
+     * rule there, which a caller has to answer for rather than fill in from the position.
+     */
+    List<UnreadReason> stoppedBy(RuleRef rule, Collection<FactSubject> positions) {
+        Map<FactSubject, List<UnreadReason>> here = stopped.get(rule);
+        if (here == null) {
+            return List.of();
+        }
+        List<UnreadReason> out = new ArrayList<>();
+        for (FactSubject position : positions) {
+            out = appended(out, here.getOrDefault(position, List.of()));
+        }
+        return out;
+    }
+
+    /** The reasons of both, in the order they were met, and each said once. */
+    private static List<UnreadReason> appended(List<UnreadReason> these,
+                                               List<UnreadReason> those) {
+        List<UnreadReason> out = new ArrayList<>(these);
+        those.forEach(each -> {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        });
+        return out;
     }
 
     /**

@@ -1505,7 +1505,12 @@ public final class InputDomain {
                         case souther.compiler.check.Owed.Boundary it ->
                                 new InputQuestion.AboutANumber(
                                         termAt(path, it.on(), type, symbols));
-                    }));
+                    },
+                    // What the reading that would have answered was short of, in this compiler's
+                    // own terms. The crossing is where the two readings' vocabularies become one:
+                    // out here a reader is owed what was missing, and which reading was asked is
+                    // provenance a document has no business writing a different word for.
+                    each.why().stopped()));
         }
         return List.copyOf(out);
     }

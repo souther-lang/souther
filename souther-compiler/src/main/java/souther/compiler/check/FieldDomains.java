@@ -95,10 +95,12 @@ public final class FieldDomains {
     private final Map<String, NumericDomain.Bounds> heldByField;
     /** Which values each position may hold — see {@link #admits}. */
     private final Map<String, ValueSet> admittedByField;
-    /** What stopped the reading from speaking for a position, for the ones it could not speak for.
-     * A position not here is one the reading took every rule about into the set — see
-     * {@link #admits}. */
-    private final Map<String, UnreadReason> unreadByField;
+    /** Everything that stopped the reading from speaking for a position, for the ones it could not
+     * speak for. A position not here is one the reading took every rule about into the set — see
+     * {@link #admits}. Every reason and not the first: a position is named by as many parts of as
+     * many clauses as the author wrote about it, and two of them stop this reading in two ways that
+     * are lifted by different work. */
+    private final Map<String, List<UnreadReason>> unreadByField;
 
     /** The positions the reading of values could not show it holds exactly, resolved onto
      *  paths as the values are. Asked of each position rather than of the reading: the
@@ -146,7 +148,7 @@ public final class FieldDomains {
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
                          Map<String, ValueSet> admittedByField,
-                         Map<String, UnreadReason> unreadByField,
+                         Map<String, List<UnreadReason>> unreadByField,
                          Set<String> notSeparatedByField,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          Map<RuleRef, Required> raised,
@@ -307,7 +309,7 @@ public final class FieldDomains {
         // are. Every position and not only the fields: what a name wraps is at no path of its own,
         // and it is the position a reader of a newtype asks about.
         Map<String, ValueSet> admitted = new LinkedHashMap<>();
-        Map<String, UnreadReason> unread = new LinkedHashMap<>();
+        Map<String, List<UnreadReason>> unread = new LinkedHashMap<>();
         Set<String> notSeparated = new LinkedHashSet<>();
         // Every position that answers to either name. A number is called one thing by the interval
         // algebra and another by everything else, and the two are filed as they are found — so a
@@ -322,7 +324,7 @@ public final class FieldDomains {
             // is filed under whichever the reading recognised. Both are about the same values, so
             // what holds of it is what both leave.
             ValueSet here = ValueSet.ANY;
-            UnreadReason why = null;
+            List<UnreadReason> why = new ArrayList<>();
             // Asked of each name the position answers to, as the values are. What the reading could
             // not hold together is a fact about the positions a choice reached across, and a
             // position outside them is left where it was.
@@ -338,16 +340,20 @@ public final class FieldDomains {
                 here = here.meet(values.at(name));
                 separated = separated
                         && (values.isBottom() || values.projectionExactAt(name));
-                // The first that stopped it. Two names of one position are two ways the same rules
-                // were filed, so a second reason is another account of a position already known to
-                // be short of its rules rather than a further thing wrong with it.
-                if (why == null) {
-                    why = values.whyUnread(name);
-                }
+                // Every one of them. Two names of one position are two ways the same rules were
+                // filed, and a rule filed under one of them is not the rule filed under the other:
+                // an ordering the interval algebra knows the position by and a pattern the values
+                // reading knows it by stop this reading in two ways, and each is a rule of the
+                // author's to act on. Said once here — a limit met under both names is one limit.
+                values.whyUnread(name).forEach(each -> {
+                    if (!why.contains(each)) {
+                        why.add(each);
+                    }
+                });
             }
             admitted.put(field, here);
-            if (why != null) {
-                unread.put(field, why);
+            if (!why.isEmpty()) {
+                unread.put(field, List.copyOf(why));
             }
             if (!separated) {
                 notSeparated.add(field);
@@ -731,6 +737,12 @@ public final class FieldDomains {
         // left its own line unanswered by the half that draws none, and asked of the ends alone,
         // `value >= 1 && value <= 10 * 2` reported the half nothing could read as answered by the
         // half beside it. The parts each say what they raised, and an end says which part placed it.
+        //
+        // And every conjunct that was stopped, not the first of them. One question is answered when
+        // every part that asked it has been read, so a part still standing behind another is a
+        // second thing an author has to lift — and stopping at the first said one of them while the
+        // rest went out under an answer that was true of their neighbour.
+        List<souther.compiler.inputs.BlockReason.RuleReadingStopped> stopped = new ArrayList<>();
         for (Map.Entry<Core, Required> part : raisedByPart
                 .getOrDefault(rule, Map.of()).entrySet()) {
             // One arm each, so that a question added later is decided about rather than answered
@@ -745,19 +757,26 @@ public final class FieldDomains {
             }
             if (directs.stream().noneMatch(d -> d.from().equals(rule) && d.part() == part.getKey()
                     && d.at().equals(where))) {
-                return unreadAnswerFor(rule, part.getKey(), where);
+                whatStopped(rule, part.getKey(), where).forEach(each -> {
+                    if (!stopped.contains(each)) {
+                        stopped.add(each);
+                    }
+                });
             }
         }
-        return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+        return stopped.isEmpty()
+                ? new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING)
+                : new RuleAccounting.Outcome.Unaccounted(
+                        new RuleAccounting.Why.TheEndReadingSays(stopped));
     }
 
     /**
-     * What the reading of ends said about the rule at this position, where it said anything.
+     * What the reading of ends was stopped by at this position, of one part of the rule.
      *
-     * <p>Unanswered only where that reading stopped. A rule it read from end to end and drew no
-     * line from has answered the question that reading answers: the rule places no line, so there
-     * is none to be owed at, and a reader sent after it would be looking for a limit of this
-     * compiler that is not there.
+     * <p>Empty where that reading was not stopped. A rule it read from end to end and drew no line
+     * from has answered the question that reading answers: the rule places no line, so there is
+     * none to be owed at, and a reader sent after it would be looking for a limit of this compiler
+     * that is not there.
      *
      * <p>Which is the second of two places that has to hold. A rule read to the end raises no such
      * question in the first place ({@link ClauseStates.NoRestriction},
@@ -765,17 +784,18 @@ public final class FieldDomains {
      * question being unaskable is what makes the answer unreachable rather than the other way
      * about. Both are written, because the day one of them slips the other is what is left.
      */
-    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part, Coordinate where) {
+    private List<souther.compiler.inputs.BlockReason.RuleReadingStopped> whatStopped(
+            RuleRef rule, Core part, Coordinate where) {
+        List<souther.compiler.inputs.BlockReason.RuleReadingStopped> out = new ArrayList<>();
         for (NoLine said : noLines) {
             if (said.from().equals(rule) && said.part() == part
                     && said.at().equals(where)
                     && said.why() instanceof souther.compiler.inputs.BlockReason
                             .RuleReadingStopped stopped) {
-                return new RuleAccounting.Outcome.Unaccounted(
-                        new RuleAccounting.Why.TheEndReadingSays(stopped));
+                out.add(stopped);
             }
         }
-        return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+        return out;
     }
 
     /**
@@ -796,8 +816,7 @@ public final class FieldDomains {
         // one conjunct is not an account of the conjunct written beside it.
         if (took.anyLeftStanding(rule, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
-                    new RuleAccounting.Why.TheValueReadingSays(
-                            unreadByField.getOrDefault(at, UnreadReason.FORM_NOT_READ)));
+                    stoppedBy(rule, named));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
@@ -809,9 +828,31 @@ public final class FieldDomains {
         if (took.tookIn(rule, named)) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
-        UnreadReason why = unreadByField.get(at);
-        return new RuleAccounting.Outcome.Unaccounted(new RuleAccounting.Why.TheValueReadingSays(
-                why == null ? UnreadReason.FORM_NOT_READ : why));
+        return new RuleAccounting.Outcome.Unaccounted(stoppedBy(rule, named));
+    }
+
+    /**
+     * Everything the reading of values was stopped by, of {@code rule} at {@code named}.
+     *
+     * <p>Asked of the rule and never of the position. Two clauses reach one position and are short
+     * of this reading in two ways, and the position holds what both of them came to — so a rule
+     * answered from there is named beside a limit that belongs to its neighbour, which is the
+     * misattribution the whole accounting is asked per rule to avoid.
+     *
+     * <p>A form this reading has no word for where it recorded nothing of the rule there. What
+     * reaches here is a rule no reading took in, so this reading was short of it however little it
+     * wrote down — and an empty answer would say a question stands with nothing behind it. Not the
+     * position's reasons: those belong to whichever rule left them.
+     */
+    private RuleAccounting.Why stoppedBy(RuleRef rule, List<FactSubject> named) {
+        List<UnreadReason> why = took.stoppedBy(rule, named);
+        // Nothing recorded, so nothing is answerable for it. A rule reaches the readings that
+        // recognise the positions it names, and one about a position none of them knows — a field
+        // of a value a helper reads, reached through the call — is claimed by none of them and
+        // gave none of them anything to write down. Named as the value reading's, an author is
+        // sent to a reader that never held their clause.
+        return why.isEmpty() ? new RuleAccounting.Why.NothingTookItIn()
+                : new RuleAccounting.Why.TheValueReadingSays(why);
     }
 
     /** Every name the position at {@code path} answers to. */
@@ -929,10 +970,14 @@ public final class FieldDomains {
         // whichever way this one is.
         Set<AdmissibleSet.Widening> spread = notSeparatedByField.contains(path)
                 ? Set.of(new AdmissibleSet.Widening.AlternativesNotSeparated()) : Set.of();
-        UnreadReason here = unreadByField.get(path);
-        if (here != null) {
-            return AdmissibleSet.wider(values, with(spread,
-                    new AdmissibleSet.Widening.RuleUnread(here)));
+        List<UnreadReason> here = unreadByField.getOrDefault(path, List.of());
+        if (!here.isEmpty()) {
+            // One widening per reason. A set of them is what {@link AdmissibleSet.Completeness} is
+            // for — a reader looking for either finds it — and folding the several a position was
+            // stopped by into one would choose among an author's rules here, where the only thing
+            // to choose by is which was met first.
+            return AdmissibleSet.wider(values, with(spread, here.stream()
+                    .<AdmissibleSet.Widening>map(AdmissibleSet.Widening.RuleUnread::new).toList()));
         }
         // A clause that never reached the readings cannot have spoiled the position it was about,
         // because no reading here ever saw which position that was. A walk that fell over and a
@@ -945,19 +990,19 @@ public final class FieldDomains {
         // would settle this reading's completeness by a reading that is not this one.
         if (!everyRuleReachedAt(path)) {
             return AdmissibleSet.wider(values, with(spread,
-                    new AdmissibleSet.Widening.RuleUnread(UnreadReason.NOT_REACHED)));
+                    List.of(new AdmissibleSet.Widening.RuleUnread(UnreadReason.NOT_REACHED))));
         }
         return spread.isEmpty() ? AdmissibleSet.complete(values)
                 : AdmissibleSet.wider(values, spread);
     }
 
 
-    /** {@code these} and one more, in the order they are written here: the rule's own reason is
-     *  what an author acts on, and what the reading could not hold together is beside it. */
+    /** {@code these} and the rule's own reasons, in the order they are written here: a rule's own
+     *  reason is what an author acts on, and what the reading could not hold together is beside
+     *  them. */
     private static Set<AdmissibleSet.Widening> with(Set<AdmissibleSet.Widening> these,
-                                                    AdmissibleSet.Widening one) {
-        Set<AdmissibleSet.Widening> out = new LinkedHashSet<>();
-        out.add(one);
+                                                    List<AdmissibleSet.Widening> rules) {
+        Set<AdmissibleSet.Widening> out = new LinkedHashSet<>(rules);
         out.addAll(these);
         return out;
     }

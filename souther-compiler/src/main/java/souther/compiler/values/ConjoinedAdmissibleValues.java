@@ -160,14 +160,14 @@ public final class ConjoinedAdmissibleValues<A> {
     }
 
     /**
-     * What stopped a subject's rules from being read, or null where nothing did.
+     * Everything that stopped a subject's rules from being read, empty where nothing did.
      *
      * <p>Asked of the factor that names it, for the same reason: a reading that never heard of a
      * subject has no rule about it that went unread.
      */
-    public UnreadReason whyUnread(A subject) {
+    public List<UnreadReason> whyUnread(A subject) {
         AdmissibleValues<A> names = naming.get(subject);
-        return names == null ? null : names.whyUnread(subject);
+        return names == null ? List.of() : names.whyUnread(subject);
     }
 
     /** Every subject any factor names. */
