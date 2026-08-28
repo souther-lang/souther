@@ -38,34 +38,69 @@ class EveryPartOfAReadingIsAValueTest {
     private record Handed(Object given, Object mutable) {}
 
     /**
-     * Something to hand over for one part, of the shape that part is declared to hold.
+     * Something to hand over for one part, and one for its maker to keep hold of.
      *
-     * <p>The declared shape and not the erased one. A map of a reading is a map of something, and
-     * the constructor copies its values as what they are — handed a value of another kind, it
-     * throws on the way in and the part goes unasked while the failure reads as this test's own.
-     * Which is what a part whose values are not sets met the day one was added.
+     * <p>Only the parts something can be put into afterwards have a second half. What the whole
+     * thing is for is that the reading copied what it was handed, and there is nothing to copy
+     * about a value.
      */
     private static Handed sampleFor(java.lang.reflect.Type declared) {
         Class<?> type = erased(declared);
         if (Map.class.isAssignableFrom(type)) {
             Map<Object, Object> out = new LinkedHashMap<>();
-            out.put("a", inside(declared, 1));
+            out.put(sample(held(declared, 0)), sample(held(declared, 1)));
             return new Handed(out, out);
+        }
+        if (Collection.class.isAssignableFrom(type)) {
+            Collection<Object> out = Set.class.isAssignableFrom(type)
+                    ? new LinkedHashSet<>() : new ArrayList<>();
+            out.add(sample(held(declared, 0)));
+            return new Handed(out, out);
+        }
+        return new Handed(sample(declared), null);
+    }
+
+    /**
+     * A value of whatever {@code declared} is, read as the shape it is declared to be.
+     *
+     * <p>Recursive over the declared type and not a table of the shapes met so far. A part of a
+     * reading is a map of something to something, and what those are is part of what the part is —
+     * answered by a rule per outer shape, {@code Map<?, List<Reason>>} is handed the value a
+     * {@code Map<?, ValueSet>} wants and the constructor throws on the way in, so the part goes
+     * unasked while the failure reads as this test's own. That happened once for the erased type
+     * and would happen again one argument deeper.
+     *
+     * <p>A type variable is a position a reading is generic over, and a string stands for one:
+     * nothing here reads what a position is, only that two of them are told apart.
+     */
+    private static Object sample(java.lang.reflect.Type declared) {
+        Class<?> type = erased(declared);
+        if (Map.class.isAssignableFrom(type)) {
+            return Map.of(sample(held(declared, 0)), sample(held(declared, 1)));
         }
         if (Set.class.isAssignableFrom(type)) {
-            Set<Object> out = new LinkedHashSet<>();
-            out.add("a");
-            return new Handed(out, out);
+            return Set.of(sample(held(declared, 0)));
+        }
+        if (List.class.isAssignableFrom(type)) {
+            return List.of(sample(held(declared, 0)));
         }
         if (type == boolean.class) {
-            return new Handed(false, null);
+            return false;
         }
         if (type == ValueSet.class) {
-            return new Handed(ValueSet.ANY, null);
+            return ValueSet.just(Value.text("5"));
+        }
+        if (type == UnreadReason.class) {
+            return UnreadReason.FORM_NOT_READ;
         }
         if (type == AdmissibleValues.Held.class) {
-            return new Handed(new AdmissibleValues.Held.Alternatives<>(
-                    Set.of(new AdmissibleValues.Box<>(Map.of()))), null);
+            return new AdmissibleValues.Held.Alternatives<>(
+                    Set.of(new AdmissibleValues.Box<>(Map.of())));
+        }
+        // A position, which this reading is generic over. What one is is the caller's; that two of
+        // them are not the same one is all this needs.
+        if (declared instanceof java.lang.reflect.TypeVariable<?> || type == Object.class) {
+            return "a";
         }
         throw new IllegalArgumentException("nothing here knows how to hand over a " + declared
                 + ": a part of a reading was added in a shape this has no sample of");
@@ -75,15 +110,6 @@ class EveryPartOfAReadingIsAValueTest {
     private static java.lang.reflect.Type held(java.lang.reflect.Type declared, int which) {
         return declared instanceof java.lang.reflect.ParameterizedType parameterized
                 ? parameterized.getActualTypeArguments()[which] : Object.class;
-    }
-
-    /** A value of what {@code declared} holds at argument {@code which}. */
-    private static Object inside(java.lang.reflect.Type declared, int which) {
-        java.lang.reflect.Type what = held(declared, which);
-        if (List.class.isAssignableFrom(erased(what))) {
-            return List.of(UnreadReason.FORM_NOT_READ);
-        }
-        return ValueSet.just(Value.text("5"));
     }
 
     /** The class a declared type is written in terms of. */
