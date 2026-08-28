@@ -122,10 +122,15 @@ public final class PointResolver {
                         // quantity: a clause names what it is about and a comparison in a body
                         // names nothing, so a subject taken from the point would be a word the
                         // model does not have wherever the line is a body's.
+                        //
+                        // Put into words here and nowhere earlier. Which reading this is is settled
+                        // by the value the walk is keyed on, and what goes into the outcome is a
+                        // sentence for whoever reads it — the whole of the line, because half of it
+                        // is a word two readings of one line can share.
                         case ItemAssessment.Attempt.Unavailable _ -> walked.put(reading,
                                 new SearchCoverage.ReadingSearch.Attempted(
                                         new Generator.UnresolvedCombination(
-                                                List.of(reading.at()),
+                                                List.of(reading.target().label()),
                                                 Generator.UnresolvedCombination.Reason
                                                         .NOTHING_TO_BUILD_AGAINST)));
                     }

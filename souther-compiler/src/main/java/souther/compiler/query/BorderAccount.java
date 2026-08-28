@@ -416,7 +416,7 @@ public record BorderAccount(String module, GenerationScope scope,
         return new GenerationOutcome.CannotGenerate(said.isEmpty()
                 ? List.of(new Generator.UnresolvedCombination(
                         coverage.came().keySet().stream()
-                                .map(BorderObligationPointAssessment.Reading::at).toList(),
+                                .map(each -> each.target().label()).toList(),
                         Generator.UnresolvedCombination.Reason
                                 .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED))
                 : List.copyOf(said));

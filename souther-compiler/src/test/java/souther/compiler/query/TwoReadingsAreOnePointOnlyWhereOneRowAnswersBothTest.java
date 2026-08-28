@@ -77,7 +77,7 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
     void aPointIsReadUnderEveryCaseThatSharesIt() {
         Map<PointRole, List<BorderObligationPointAssessment>> byRole = theGuardsPoints();
 
-        assertEquals(List.of("check/r@P.deadline", "check/r@T.deadline"),
+        assertEquals(List.of("r@P.deadline", "r@T.deadline"),
                 readings(byRole.get(PointRole.ON).get(0)),
                 "the line is read under each case");
         for (BorderObligationPointAssessment each : byRole.get(PointRole.IN)) {
@@ -91,7 +91,9 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
      *
      * <p>What a search of one of them came to would stand for the other, chosen by the order the
      * walk took — so two readings this cannot tell apart are not two readings, and saying so is the
-     * only answer that does not depend on which arrived first.
+     * only answer that does not depend on which arrived first. What it says is about the caller:
+     * these are lines already folded on where each was read, so one line at one place twice is a
+     * list that was never merged.
      */
     @Test
     void aReadingOfferedTwiceIsRefused() {
@@ -101,11 +103,11 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> BorderObligationPointAssessment.across(Map.of("check", twice)));
-        assertTrue(refused.getMessage().contains("twice"), refused::getMessage);
+        assertTrue(refused.getMessage().contains("never merged"), refused::getMessage);
     }
 
     private static List<String> readings(BorderObligationPointAssessment point) {
-        return point.met().keySet().stream().map(Object::toString).toList();
+        return point.met().keySet().stream().map(where -> where.target().left()).toList();
     }
 
     /** The points the guard's own line is owed a row at, by which of the four each is. */
