@@ -137,6 +137,25 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers what {@code container} holds accumulated: started from an identity and
+     * carried through one step over what it has so far and an element, both of the type it answers.
+     *
+     * <p>Which argument holds them is named rather than looked for. A signature says which one it
+     * could be — an argument whose elements are of the type the operation answers — and says it of
+     * as many arguments as fit, so an operation given two such containers has a signature that
+     * admits two readings and a fact that admits one. Held to the signature where the declarations
+     * are bound, so a name that does not fit is refused where it is written.
+     */
+    record AccumulatesItsContainer(ArgumentRef container, Accumulation how)
+            implements OperationFact {
+
+        public AccumulatesItsContainer {
+            java.util.Objects.requireNonNull(container, "this one names a container");
+            java.util.Objects.requireNonNull(how, "and what walking it comes to");
+        }
+    }
+
+    /**
      * The operation is a predicate over what {@code container} holds, and its statement survives a
      * construction of the shapes in {@code through}.
      *

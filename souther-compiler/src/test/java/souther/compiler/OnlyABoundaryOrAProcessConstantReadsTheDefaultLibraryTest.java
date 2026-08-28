@@ -44,7 +44,6 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
     private static final Set<String> PROCESS_CONSTANTS = Set.of(
             "check/Combinators.java",
             "check/Preserved.java",
-            "check/Accumulations.java",
             "check/Reductions.java",
             "check/DischargeRules.java");
 

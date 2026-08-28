@@ -983,7 +983,8 @@ final class Terms {
     /** The value an accumulation starts from, as a number — or null where the domain carries no such
      * value. The empty list a {@code List.concat} starts from is a value the library states and this
      * reading has no number for, which is a fact about this reading. */
-    private LinearForm<FactSubject> startedFrom(Accumulations.Identity identity) {
+    private LinearForm<FactSubject> startedFrom(
+            souther.compiler.semantics.Accumulation.Identity identity) {
         return switch (identity) {
             case ZERO -> LinearForm.constant(java.math.BigDecimal.ZERO);
             case ONE -> LinearForm.constant(java.math.BigDecimal.ONE);
@@ -1001,8 +1002,9 @@ final class Terms {
      * bounded and the recipe answers a range; read with nothing assumed of the accumulator it
      * answers none, which is what leaves the unprovable candidates unproved.
      */
-    private LinearForm<FactSubject> repeating(Accumulations.Combine combine, FactSubject accumulator,
-                                              FactSubject element, Granularity spacing) {
+    private LinearForm<FactSubject> repeating(
+            souther.compiler.semantics.Accumulation.Combine combine, FactSubject accumulator,
+            FactSubject element, Granularity spacing) {
         return switch (combine) {
             case ADD -> LinearForm.atom(accumulator).plus(LinearForm.atom(element));
             case MULTIPLY -> {

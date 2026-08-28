@@ -248,6 +248,25 @@ public final class OperationFacts {
             about("Set", "insert", noSmallerThan(at(1))),
             about("Map", "insert", noSmallerThan(at(2))),
 
+            // The operations that answer what a container holds accumulated, and what walking one
+            // comes to. `List.concat` and `String.concat` are here beside the two numeric ones
+            // because they are the same shape said of other values: a list of lists joined from the
+            // empty list, a list of strings joined from the empty string — which the library states
+            // as `join("", xs)` itself.
+            //
+            // `String.join` is in range and is not one of these. A separator stands between
+            // elements and not before the first, so what the walk does at an element depends on
+            // whether anything came before it, and an identity with a step over two values of one
+            // type has nowhere to keep that.
+            about("List", "sum",
+                    accumulates(at(0), Accumulation.Identity.ZERO, Accumulation.Combine.ADD)),
+            about("List", "product",
+                    accumulates(at(0), Accumulation.Identity.ONE, Accumulation.Combine.MULTIPLY)),
+            about("List", "concat",
+                    accumulates(at(0), Accumulation.Identity.EMPTY, Accumulation.Combine.APPEND)),
+            about("String", "concat",
+                    accumulates(at(0), Accumulation.Identity.EMPTY, Accumulation.Combine.APPEND)),
+
             // Where a predicate reads its container, and which shapes of construction carry its
             // statement there.
             about("List", "all", reads(CONTAINER, ElementShape.PERMUTES, ElementShape.SUBSET)),
@@ -504,6 +523,15 @@ public final class OperationFacts {
         return new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(how);
     }
 
+    /** The answer is what {@code container} holds, started from {@code identity} and carried
+     *  through {@code combine}. */
+    private static OperationFact accumulates(ArgumentRef container,
+                                             Accumulation.Identity identity,
+                                             Accumulation.Combine combine) {
+        return new OperationFact.AccumulatesItsContainer(container,
+                new Accumulation(identity, combine));
+    }
+
     private static OperationFact meansSizeOf(String module, String size) {
         return new OperationFact.MeansTheSameAsASizeOfNought(ValueName.Stdlib.operation(module, size));
     }
@@ -693,6 +721,24 @@ public final class OperationFacts {
         return Index.SILENCES.getOrDefault(subject, java.util.Set.of());
     }
 
+    /** What walking {@code operation}'s container comes to, or null where it accumulates nothing —
+     *  including where the name is no operation of the library. */
+    public static Accumulation accumulation(ValueName operation) {
+        OperationFact.AccumulatesItsContainer stated = Index.ACCUMULATES.get(operation);
+        return stated == null ? null : stated.how();
+    }
+
+    /** Which argument {@code operation} accumulates, or null where it accumulates nothing. */
+    public static ArgumentRef accumulatedContainer(ValueName operation) {
+        OperationFact.AccumulatesItsContainer stated = Index.ACCUMULATES.get(operation);
+        return stated == null ? null : stated.container();
+    }
+
+    /** The operations that answer what a container holds accumulated. */
+    public static java.util.Set<ValueName> accumulates() {
+        return Index.ACCUMULATES.keySet();
+    }
+
     /** What {@code operation} takes of the one value it is given, or null where the number it
      *  answers is not taken of one value. */
     public static TakenAs takenAs(ValueName operation) {
@@ -765,6 +811,9 @@ public final class OperationFacts {
         private static final Map<ValueName, TakenAs> TAKEN_AS =
                 index(OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven.class,
                         OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven::how);
+
+        private static final Map<ValueName, OperationFact.AccumulatesItsContainer> ACCUMULATES =
+                index(OperationFact.AccumulatesItsContainer.class, each -> each);
 
         private static final java.util.Set<ValueName> EVERY_ANSWER_HAS_A_SOURCE =
                 stating(OperationFact.EveryAnswerItCanGiveHasASourceValue.class);

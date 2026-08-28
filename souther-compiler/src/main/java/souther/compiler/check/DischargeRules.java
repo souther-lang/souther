@@ -910,6 +910,50 @@ final class DischargeRules {
     }
 
     /**
+     * Holds an accumulation to the library: the argument it names holds elements, and they are of
+     * the type the operation answers.
+     *
+     * <p>Both halves, because an accumulation carries what it has so far in the answer's own type.
+     * A step over what it has and an element is written over two values of one type, so an argument
+     * whose elements are something else is one this walk could not be over, and the identity it
+     * starts from would be a value of a type nothing here names.
+     *
+     * <p>Which argument is named rather than searched for. A signature says of as many arguments as
+     * fit that they could be the one, and an operation given two containers of what it answers has
+     * a signature admitting two walks; the fact says which, and this says whether the signature
+     * bears it out.
+     */
+    static void holdAccumulation(Stdlib stdlib, ValueName operation, ArgumentRef container) {
+        Type stands = holdToTheDeclaration(stdlib, operation, container, null,
+                TypeRequirement.CONTAINER, "the container it accumulates");
+        Type answers = holdTheOperationToTheLibrary(stdlib, operation).signature().result();
+        Type element = Type.elementOfAContainer(stands);
+        if (!element.equals(answers)) {
+            throw new IllegalStateException(((ValueName.Stdlib) operation).qualified()
+                    + " is declared to accumulate a container of " + Type.show(element)
+                    + " and answers " + Type.show(answers)
+                    + ", and a walk carries what it has so far in the type it answers");
+        }
+    }
+
+    /**
+     * Whether what {@code signature} answers is what the argument at {@code position} holds.
+     *
+     * <p>The one reading of the relation, for the two questions asked about it: which operations an
+     * accumulation may be declared of at all, and whether the argument one names is the one that
+     * fits. Read twice, the range and the holding would be free to disagree about a signature, and
+     * a fact would be refused where it is written for not fitting a shape the range let it be
+     * declared under.
+     */
+    static boolean resultIsElementOf(Stdlib.Signature signature, int position) {
+        if (position < 0 || position >= signature.params().size()) {
+            return false;
+        }
+        Type element = Type.elementOfAContainer(signature.params().get(position));
+        return element != null && element.equals(signature.result());
+    }
+
+    /**
      * The container {@code call} built its result from, and where each element of what it answers
      * came from — the lineage itself, for a reader that has an answer per alternative.
      *

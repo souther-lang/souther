@@ -144,6 +144,11 @@ final class NumericReadings {
                 // today is written in the language as well, so nothing here has to tell the two
                 // apart.
                 case OperationFact.IsDefinedByCases _,
+                     // What a walk over a container comes to is about the answer whatever type it
+                     // has, and a list of strings joined is one. Which of those answers a number is
+                     // a question about the elements at a call and not about the operation, so
+                     // there is no reading of a number here to be exclusive with another.
+                     OperationFact.AccumulatesItsContainer _,
                      // The rest say something else about the operation: where a number runs, what
                      // an operation keeps of a container, what a predicate travels through, what a
                      // shift is stated through, whether every answer has a value that gives it.

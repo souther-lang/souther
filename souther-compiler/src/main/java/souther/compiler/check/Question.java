@@ -135,9 +135,16 @@ enum Question {
     ACCUMULATION("whether it accumulates what its container holds, and from what through what") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            Type result = signature.result();
-            return result != null && signature.params().stream().anyMatch(
-                    t -> result.equals(Type.elementOfAContainer(t)));
+            // Some argument, which is what a range is: an operation is asked this where any of its
+            // arguments could be the one it walks. Which one it does walk is the fact's to name,
+            // and whether the signature bears that out is asked of the same relation where the
+            // declaration is bound ({@link DischargeRules#resultIsElementOf}).
+            for (int i = 0; i < signature.params().size(); i++) {
+                if (DischargeRules.resultIsElementOf(signature, i)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         @Override
