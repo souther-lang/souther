@@ -74,7 +74,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 7;
+    public static final int SCHEMA_VERSION = 8;
 
     /**
      * Whether the rows meet what the bar this report is read against asks of them.
@@ -1793,7 +1793,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
                         asked(asked.question()), subjectOf(asked, names, declaredIn),
-                        whyStanding(asked)));
+                        whyStanding(asked).stream().map(AdequacyReport::whyUnread)
+                                .collect(java.util.stream.Collectors.joining("; "))));
             }
         }
     }
@@ -1811,15 +1812,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * two reasons a reader is not offered to tell apart come out as one word — and that is the
      * projection saying they are one thing to lift, rather than a report dropping one of them.
      */
-    private static String whyStanding(souther.compiler.query.PartitionEvidence.Unanswered asked) {
-        java.util.List<String> said = new java.util.ArrayList<>();
+    private static java.util.List<souther.compiler.partition.UndividedPosition.Reason> whyStanding(
+            souther.compiler.query.PartitionEvidence.Unanswered asked) {
+        java.util.List<souther.compiler.partition.UndividedPosition.Reason> said =
+                new java.util.ArrayList<>();
         for (souther.compiler.inputs.BlockReason.RuleReadingStopped each : asked.stopped()) {
-            String word = whyUnread(souther.compiler.partition.ReportedReason.of(each));
+            souther.compiler.partition.UndividedPosition.Reason word =
+                    souther.compiler.partition.ReportedReason.of(each);
             if (!said.contains(word)) {
                 said.add(word);
             }
         }
-        return String.join("; ", said);
+        return said;
     }
 
     /**
@@ -2212,6 +2216,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 if (each.measure() != null) {
                     about.put("measure", each.measure());
                 }
+                // Why answering it stopped, in the words this document promises and through the
+                // one projection the human line is written from. Written from the same value and
+                // not gathered a second way: a document saying less about a question than the
+                // report beside it is the two disagreeing about one question, and nothing would
+                // have said which of them to believe.
+                ArrayNode stopped = one.putArray("stopped");
+                whyStanding(each).forEach(reason -> stopped.add(word(reason)));
             }
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");

@@ -2,10 +2,16 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,11 +31,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStandingQuestionSaysWhatItStandsForTest {
 
-    private static String reportOf(String source) {
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    private static AdequacyReport measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation);
+    }
+
+    private static String reportOf(String source) {
+        return measured(source).human(SourceNameResolver.identity());
+    }
+
+    /** What the document says stopped the one question of {@code source}. */
+    private static List<String> stoppedInDocument(String source) {
+        JsonNode document =
+                JSON.readTree(measured(source).json(SourceNameResolver.identity()));
+        JsonNode standing = document.get("modules").get(0).get("behaviors").get(0)
+                .get("partition").get("unanswered");
+        assertEquals(1, standing.size(), "one question, so one entry: " + standing);
+        List<String> out = new ArrayList<>();
+        standing.get(0).get("stopped").forEach(each -> out.add(each.asString()));
+        return out;
     }
 
     /** The one line of the report about the rule {@code named}. */
@@ -137,5 +161,50 @@ class AStandingQuestionSaysWhatItStandsForTest {
         assertTrue(line.endsWith(": written in a form this compiler does not read"), line);
         assertEquals(1, line.split("written in a form", -1).length - 1,
                 "one limit, said once: " + line);
+    }
+
+    /**
+     * The document says what the report says, from the same projection.
+     *
+     * <p>Two surfaces of one adequacy document. A consumer reading the machine-readable one is owed
+     * what a person reading the other is told — written from a second walk, the two would answer one
+     * question differently and nothing would say which to believe.
+     *
+     * <p>The order is part of what is published. It is the author's, and the schema says so, so a
+     * consumer may read the first entry as the first thing to lift.
+     */
+    @Test
+    void theDocumentSaysWhatTheReportSays() {
+        assertEquals(List.of("unsupported_syntax"), stoppedInDocument("""
+                module probe.regex
+
+                data Number = String
+                    invariant String.matches("T[0-9]{13}", value)
+
+                data Held = { n: Number }
+
+                behavior read : (h: Held) -> Ok
+                """));
+
+        assertEquals(List.of("unsupported_partition_shape", "unsupported_syntax"),
+                stoppedInDocument("""
+                        module probe.two
+
+                        data Pair = { a: String, b: String }
+                            invariant both = a /= b && String.matches("x+", a)
+
+                        behavior read : (p: Pair) -> Ok
+                        """));
+
+        assertEquals(List.of("unsupported_syntax", "unsupported_partition_shape"),
+                stoppedInDocument("""
+                        module probe.two
+
+                        data Pair = { a: String, b: String }
+                            invariant both = String.matches("x+", a) && a /= b
+
+                        behavior read : (p: Pair) -> Ok
+                        """),
+                "and the order is the author's here too");
     }
 }

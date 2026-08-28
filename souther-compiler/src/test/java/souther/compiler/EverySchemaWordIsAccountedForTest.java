@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every word the shipped schema allows is one somebody accounted for.
  *
- * <p>Every enumerated field of {@code adequacy-schema-7.json} is a second spelling of a Java enum.
+ * <p>Every enumerated field of {@code adequacy-schema-8.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
  * one moved: `ROW_TIMED_OUT` became `ROW_UNDECIDED` when a row stopped being held to a clock, the
  * rename was right, and the schema went on promising a word that had not been emitted since.
@@ -57,7 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySchemaWordIsAccountedForTest {
 
-    private static final String SCHEMA = "/souther/adequacy-schema-7.json";
+    private static final String SCHEMA = "/souther/adequacy-schema-8.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -720,7 +720,7 @@ class EverySchemaWordIsAccountedForTest {
 
     private static JsonNode schema() {
         try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
-            assertNotNull(in, "adequacy-schema-7.json ships beside the compiler");
+            assertNotNull(in, "adequacy-schema-8.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
             throw new AssertionError(e);

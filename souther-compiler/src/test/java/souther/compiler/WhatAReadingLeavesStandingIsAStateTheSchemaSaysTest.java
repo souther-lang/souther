@@ -104,8 +104,8 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
 
     private static JsonNode schema() throws Exception {
         try (InputStream in =
-                     AdequacyReport.class.getResourceAsStream("/souther/adequacy-schema-7.json")) {
-            assertNotNull(in, "adequacy-schema-7.json ships beside the compiler");
+                     AdequacyReport.class.getResourceAsStream("/souther/adequacy-schema-8.json")) {
+            assertNotNull(in, "adequacy-schema-8.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }
     }
