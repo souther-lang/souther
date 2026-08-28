@@ -36,15 +36,29 @@ import java.util.Map;
  * of provenance goes on rather than stopping ({@link ElementLineage}).
  */
 public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Core> held,
-                              ElementProvenance provenance) {
+                              ElementProvenance provenance,
+                              Map<BindingId, souther.compiler.inputs.ElementProjection> projected) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
-            new ElementBindings(Map.of(), Map.of(), ElementProvenance.NONE);
+            new ElementBindings(Map.of(), Map.of(), ElementProvenance.NONE, Map.of());
 
     public ElementBindings {
         containers = Map.copyOf(containers);
         held = Map.copyOf(held);
+        projected = Map.copyOf(projected);
+    }
+
+    /**
+     * Where in the element at {@code binding} the value a walk answered stands, or null where the
+     * walk answered no place of it.
+     *
+     * <p>Keyed by the element and not by the closure's parameter, because the element is what a
+     * reader of a walk has: the answer to "which element does this walk hand out" is a binding, and
+     * this is what was made of it. What the closure was is neither kept nor answerable from here.
+     */
+    public souther.compiler.inputs.ElementProjection projectionAt(BindingId binding) {
+        return binding == null ? null : projected.get(binding);
     }
 
     /**
@@ -81,18 +95,59 @@ public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Co
      * value some other binding holds, and the parameter an element arrives on is that value's, not
      * this call's to name.
      */
-    public static ElementBindings of(Core body, ElementProvenance provenance) {
+    public static ElementBindings of(Core body, ElementProvenance provenance, Symbols symbols) {
         Map<BindingId, Core> found = new LinkedHashMap<>();
         Map<BindingId, Core> held = new LinkedHashMap<>();
-        walk(body, found, held);
+        Map<BindingId, Core> answered = new LinkedHashMap<>();
+        walk(body, found, held, provenance, answered);
+        Map<BindingId, souther.compiler.inputs.ElementProjection> projected =
+                projections(answered, held, symbols);
         return found.isEmpty() && provenance.isEmpty() ? NONE
-                : new ElementBindings(found, held, provenance);
+                : new ElementBindings(found, held, provenance, projected);
     }
 
-    private static void walk(Core e, Map<BindingId, Core> found, Map<BindingId, Core> held) {
+    /**
+     * What each licensed closure answered, as the way from the element to it.
+     *
+     * <p>A second pass, because a projection is read through the bindings on the way and the walk
+     * that collects them has not finished while it is walking. Resolved inside this call and never
+     * carried: what comes out is the path and the expression is dropped.
+     *
+     * <p>Keyed onto the element the closure was applied to, which is what a reader of a walk has in
+     * hand. A closure whose answer is no place of its element leaves nothing here — a branch
+     * between two of them, arithmetic over one, something built — and that absence is what says a
+     * rule about the answer is not a rule about any position.
+     */
+    private static Map<BindingId, souther.compiler.inputs.ElementProjection> projections(
+            Map<BindingId, Core> answered, Map<BindingId, Core> held, Symbols symbols) {
+        Map<BindingId, souther.compiler.inputs.ElementProjection> out = new LinkedHashMap<>();
+        answered.forEach((parameter, body) -> {
+            // The element the closure was applied to, which is what the parameter was bound to.
+            if (!(held.get(parameter) instanceof Core.Read read) || read.binding() == null) {
+                return;
+            }
+            java.util.List<String> steps =
+                    souther.compiler.inputs.InputPath.projectionOf(body, parameter, held, symbols);
+            if (steps != null) {
+                out.put(read.binding(),
+                        new souther.compiler.inputs.ElementProjection(steps));
+            }
+        });
+        return out;
+    }
+
+    private static void walk(Core e, Map<BindingId, Core> found, Map<BindingId, Core> held,
+                             ElementProvenance provenance, Map<BindingId, Core> answered) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
             held.putIfAbsent(let.binder().binding(), let.value());
+            // The body of a binding is read only where a fact proved before the tree was rewritten
+            // says this binding is a closure parameter of a walk answering one per element. The
+            // shape connects the two ends; it establishes nothing, and a binding nothing licenses
+            // is a `let` like any other.
+            if (provenance.projectedFrom(let.binder().binding()) != null) {
+                answered.putIfAbsent(let.binder().binding(), let.body());
+            }
         }
         if (e instanceof Core.Call call
                 && call.fn() instanceof Core.Reached reached) {
@@ -110,6 +165,6 @@ public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Co
                 }
             }
         }
-        Core.forEachChild(e, child -> walk(child, found, held));
+        Core.forEachChild(e, child -> walk(child, found, held, provenance, answered));
     }
 }

@@ -80,6 +80,65 @@ public final class InputPath {
     }
 
     /**
+     * The way from {@code root} to what {@code e} reads, or null where {@code e} is not a place
+     * inside it.
+     *
+     * <p>The ordinary meaning of a read, a binding and a field, and nothing else. What a closure
+     * answered is an expression like any other, and asking where in its argument the answer stands
+     * is asking what path it names — so the rules are the ones every other path reading uses,
+     * including {@link Location#isStep}, which is why {@code amount.value} over a numeric newtype
+     * comes back as one step and not two.
+     *
+     * <p><b>Null wherever the answer is not read out of the element.</b> A branch chooses between
+     * two of them and is neither; arithmetic over one is a value the element does not hold; a
+     * construction is something new. None of those is a place a row writes, so a rule about what a
+     * walk answered is not a rule about any position, and saying so is this method's whole job on
+     * that side.
+     *
+     * <p>Nothing here says the answer is one per element. That is a fact about the operation that
+     * handed the closure its elements, proved where that operation stood; a caller wanting a run
+     * needs both, and this is the half about the reading.
+     */
+    public static java.util.List<String> projectionOf(Core e, BindingId root,
+                                                      Map<BindingId, Core> bound, Symbols symbols) {
+        return projection(e, root, bound, symbols, 0);
+    }
+
+    private static java.util.List<String> projection(Core e, BindingId root,
+                                                     Map<BindingId, Core> bound, Symbols symbols,
+                                                     int through) {
+        if (through > FOLLOWED) {
+            return null;
+        }
+        switch (e) {
+            case Core.Read read -> {
+                if (root.equals(read.binding())) {
+                    return java.util.List.of();
+                }
+                Core held = bound.get(read.binding());
+                return held == null || held == e ? null
+                        : projection(held, root, bound, symbols, through + 1);
+            }
+            case Core.FieldAccess fa -> {
+                java.util.List<String> base =
+                        projection(fa.target(), root, bound, symbols, through);
+                if (base == null) {
+                    return null;
+                }
+                if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
+                    return base;
+                }
+                java.util.List<String> longer = new java.util.ArrayList<>(base);
+                longer.add(fa.field());
+                return java.util.List.copyOf(longer);
+            }
+            case null, default -> {
+                return null;
+            }
+        }
+    }
+
+    /**
      * The position {@code e}'s value came from, or null where it came from none.
      *
      * <p>Beside {@link #of} and licensing less. That one answers which position an expression names,

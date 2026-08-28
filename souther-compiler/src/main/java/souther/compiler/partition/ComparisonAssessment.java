@@ -100,6 +100,13 @@ sealed interface ComparisonAssessment {
                 throw new IllegalArgumentException("a line over a form names the form");
             }
         }
+
+        /** Whether what it cuts is a number read over a run of values rather than a form over
+         *  positions, which is a different thing to tell a reader who found no partition. */
+        boolean overARun() {
+            return cutting.quantity().direction().keySet().stream()
+                    .anyMatch(term -> term.atOnePosition() == null);
+        }
     }
 
     /** The comparison reads what the behavior answers. */
@@ -286,7 +293,13 @@ sealed interface ComparisonAssessment {
      */
     default Optional<BlockReason.RuleWithoutLineReason> whyTheLineReadingDrewNone() {
         return switch (this) {
-            case AcrossPositions _ -> Optional.of(new BlockReason.ComparisonBetweenPositions());
+            // Which of the two a form that divides nothing is: a line over a run is one number and
+            // one line with no position under it, and a line over several positions is a relation
+            // between them. Answered from what the quantity is over rather than by the count of its
+            // terms, since a form of one term is either.
+            case AcrossPositions across -> Optional.of(across.overARun()
+                    ? new BlockReason.ComparisonOverARun()
+                    : new BlockReason.ComparisonBetweenPositions());
             case CutsNothing _ -> Optional.of(new BlockReason.ComparisonCuttingNothing());
             case OutsideTheDomain _ ->
                     Optional.of(new BlockReason.ComparisonCuttingOutsideDomain());

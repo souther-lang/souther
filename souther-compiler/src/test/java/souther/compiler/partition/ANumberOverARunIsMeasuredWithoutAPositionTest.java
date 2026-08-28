@@ -37,9 +37,11 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
 
     private static final TermPath UNDER = TermPath.of("lines").element().then("amount");
 
-    private static final NumericTerm.TakenOver TOTAL = new NumericTerm.TakenOver(
+    private static final NumericTerm.TakenOver TOTAL = NumericTerm.TakenOver.of(
             ValueName.Stdlib.operation("List", "sum"),
-            new RunSource.ProjectedOccurrences(UNDER));
+            new RunSource.ProjectedOccurrences(UNDER),
+            souther.compiler.types.Type.Prim.INT,
+            souther.compiler.check.Symbols.none(souther.compiler.DefaultStdlib.get()));
 
     private static final TermOrders WHOLE =
             TermOrders.itself(new Carrier.Whole());

@@ -442,6 +442,21 @@ public sealed interface BlockReason {
     record ComparisonBetweenPositions() implements ReadToEndWithoutLine {}
 
     /**
+     * The comparison draws its line on a number taken over a run of values, which divides no
+     * position.
+     *
+     * <p>Its own word and not {@link ComparisonBetweenPositions}. Nothing here is between two
+     * positions: there is one number and one line, and the values it is read from stand at a place
+     * inside a sequence. Two lines of sixty and forty are on the boundary of a hundred as surely as
+     * one of a hundred is, so there is no class of that place for the rule to have drawn — and a
+     * reader told the rule relates two positions would go looking for the pair.
+     *
+     * <p>Not a limit of this compiler either. The rule was read to the end and its border is drawn;
+     * what is absent is a partition, because the model divides no position by it.
+     */
+    record ComparisonOverARun() implements ReadToEndWithoutLine {}
+
+    /**
      * What a derivation would have to be able to reach into.
      *
      * <p>What it can reach into is not here. The elements of a {@code List} or a {@code Set} were,

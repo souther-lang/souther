@@ -133,7 +133,9 @@ public final class NumericAnswers {
         }
         Type element = source == null ? null
                 : Type.elementOfAContainer(TypeOps.base(source, symbols));
-        return element == null ? null : in(element);
+        // Through the names the element is written under, as everywhere a number is looked for: a
+        // name wrapped round a whole number is a whole number, and a total of them is one too.
+        return element == null ? null : in(TypeOps.base(element, symbols));
     }
 
     /**

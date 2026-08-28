@@ -233,23 +233,69 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * is. What the declaration settles is every other answer about the term, and the account is
      * applied to the values of the run rather than to a value standing at a place.
      */
-    record TakenOver(ValueName.Stdlib operation, RunSource source) implements NumericTerm {
+    final class TakenOver implements NumericTerm {
 
-        public TakenOver {
-            java.util.Objects.requireNonNull(operation, "a number taken over a run is taken by an"
-                    + " operation");
-            java.util.Objects.requireNonNull(source, "and taken over values from somewhere");
-            if (OperationFacts.takenAs(operation) == null) {
-                throw new IllegalArgumentException(operation.qualified() + " declares no account of"
-                        + " what it takes, so a number of it would be read as whatever the reader's"
-                        + " default happened to be");
+        private final ValueName.Stdlib operation;
+        private final RunSource source;
+
+        private TakenOver(ValueName.Stdlib operation, RunSource source) {
+            this.operation = operation;
+            this.source = source;
+        }
+
+        /**
+         * The term for what {@code operation} answers over the values at {@code source}, or null
+         * where the two do not go together.
+         *
+         * <p><b>The one way one of these is made</b>, for the reason {@link TakenOf#of} is: the
+         * account the operation declares is what settles every other answer about the term, so one
+         * built without putting the two to that account would be read as whatever the reader's
+         * default happened to be. What is asked is the same question, of a container of the values
+         * the run holds — which is what the operation was given.
+         *
+         * @param each what stands at the place the run's values are read from
+         */
+        public static TakenOver of(ValueName.Stdlib operation, RunSource source, Type each,
+                                   Symbols symbols) {
+            TakenAs how = OperationFacts.takenAs(operation);
+            // A container of what the run holds, with the names its values are written under taken
+            // off — the same reach {@link TakenOf#of} takes of the value at a place, and for the
+            // same reason: a name wrapped round a whole number is what the account is taken of.
+            Type over = each == null ? null
+                    : new Type.ListOf(souther.compiler.check.TypeOps.base(each, symbols));
+            Type answers = over == null ? null
+                    : NumericAnswers.typeOf(operation, over, symbols);
+            if (how == null || answers == null || source == null) {
+                return null;
             }
+            return how.takenOf(over, answers) ? new TakenOver(operation, source) : null;
+        }
+
+        public ValueName.Stdlib operation() {
+            return operation;
+        }
+
+        public RunSource source() {
+            return source;
         }
 
         /** What this operation takes of what it is given. Never null: one of these cannot be made
          *  for an operation that declares none. */
         public TakenAs takenAs() {
             return OperationFacts.takenAs(operation);
+        }
+
+        /** By the operation and where its values come from, which is what makes two of these one
+         *  term. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof TakenOver over
+                    && operation.equals(over.operation) && source.equals(over.source);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(operation, source);
         }
 
         @Override
@@ -538,7 +584,12 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             if (unread != null) {
                 return new Reading.Missing(unread.code());
             }
-            Place read = observed.placeOf(each);
+            // Through the name an element is written under, as the one value a place holds is read
+            // through it. A run of a newtype over a whole number holds constructions, and the
+            // number each carries is one inside.
+            ObservedValue value = each instanceof ObservedValue.Constructed c
+                    && c.field("value") != null ? c.field("value") : each;
+            Place read = observed.placeOf(value);
             if (!(read instanceof Count count)) {
                 return new Reading.NotNumber();
             }

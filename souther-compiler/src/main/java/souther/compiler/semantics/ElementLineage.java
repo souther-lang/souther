@@ -56,6 +56,36 @@ public sealed interface ElementLineage {
     }
 
     /**
+     * The argument each of whose elements {@code operation} answers exactly one closure result of,
+     * or null where it answers no such run.
+     *
+     * <p>The two halves together and neither alone. What the closure answered is the lineage
+     * ({@link ClosureResult}), and that there is one answer per element is the count
+     * ({@link SizeAgainstItsSource#SAME}) — two statements about one operation, kept apart because
+     * they are different algebras and asked together here because a correspondence needs both.
+     * {@code Set.map} has the first and not the second: two elements may answer one, so what its
+     * result holds is a subset of what the closure made rather than one per element.
+     *
+     * <p>Read off the declarations and not off {@link BuiltFrom#shape}. The four words are a lossy
+     * reading of the pair — {@code List.filterMap} and {@code Set.map} share one — and a
+     * correspondence rested on them would be true of operations that do not have it.
+     *
+     * <p><b>What this licenses is a correspondence and not an order.</b> As many answers as
+     * elements, each of them the closure's on one of them; which came first is not stated by either
+     * half and is not claimed here.
+     */
+    public static ArgumentRef mapsEachElementOf(souther.compiler.types.ValueName operation) {
+        BuiltFrom built = OperationFacts.buildsItsResultFrom(operation);
+        if (built == null || built.outputs().size() != 1
+                || built.size() != SizeAgainstItsSource.SAME) {
+            return null;
+        }
+        ElementLineage lineage = built.lineage();
+        return lineage instanceof ClosureResult && lineage.source().elements() == 1
+                ? lineage.source().argument() : null;
+    }
+
+    /**
      * The argument an operation's answer holds elements <em>made from</em>, or null where its
      * elements are not made from an argument's.
      *
@@ -187,6 +217,14 @@ public sealed interface ElementLineage {
      *
      * <p>{@code List.map}, {@code Set.map}, {@code Map.mapValues}. The input position it came from is
      * known; what value there would put the answer anywhere in particular is not this to say.
+     *
+     * <p><b>The closure is applied to each element of the source, and its answer is one element of
+     * the result.</b> That is what this says and it says nothing more: not that the result has as
+     * many elements as the source — {@code Set.map} answers no more, since two elements may map onto
+     * one — and nothing about the order they come in. A reader wanting a correspondence between the
+     * two runs asks for this together with {@link SizeAgainstItsSource#SAME}
+     * ({@link #mapsEachElementOf}), and a reader wanting the order asks for something nobody
+     * declares yet.
      */
     record ClosureResult(Source source) implements ElementLineage {
 

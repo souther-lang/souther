@@ -66,6 +66,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("ComparisonCuttingOutsideDomain",
                 "whole/whole/RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS");
         table.put("ComparisonBetweenPositions", "whole/whole/UNSUPPORTED_PARTITION_SHAPE");
+        // Its own word beside the one above, because what a reader does about it differs: a rule
+        // between two positions is waiting on a class about the pair, and a rule about what the
+        // values at one come to has nothing to wait for — the position has no class from it and
+        // its border is drawn.
+        table.put("ComparisonOverARun", "whole/whole/RULE_ABOUT_A_RUN");
         return table;
     }
 
@@ -238,6 +243,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonBetweenPositions(),
+                new BlockReason.ComparisonOverARun(),
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.RecursiveExpansion(
                         souther.compiler.types.TypeSymbols.declared(
