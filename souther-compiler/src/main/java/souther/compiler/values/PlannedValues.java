@@ -135,6 +135,52 @@ public sealed interface PlannedValues<A> {
         };
     }
 
+    /**
+     * What a rule left standing at each position, and what stopped this reading taking it in.
+     *
+     * <p>Bookkeeping about the rules and not about the values, so it is here rather than on the
+     * other side of {@link #resolve}: a caller answering for which rule stopped where is asking
+     * about what was read, and that is known as soon as it is read. What resolve adds is the one
+     * reason that is about the answer and not about a rule.
+     */
+    default Map<A, List<UnreadReason>> standing() {
+        return switch (this) {
+            case Choice<A> it -> union(it.left().standing(), it.right().standing());
+            case Settled<A> it -> it.standing();
+        };
+    }
+
+    /** Whether a rule was left unread anywhere in this reading — see {@link AdmissibleValues}. */
+    default boolean dropped() {
+        return switch (this) {
+            case Choice<A> it -> it.left().dropped() || it.right().dropped();
+            case Settled<A> it -> it.dropped();
+        };
+    }
+
+    /**
+     * The positions this reading narrowed, which is what a reader asking what it took in is asking.
+     *
+     * <p>Free, and no allowance is touched: a position was narrowed where what it holds is not
+     * every value, and a description says which of those it is by being one shape or another.
+     */
+    default Set<A> adoptedAt() {
+        Set<A> out = new LinkedHashSet<>();
+        adoptedIn(this).forEach(atom -> {
+            if (!(at(atom) instanceof AdmittedPlan.Everything)) {
+                out.add(atom);
+            }
+        });
+        return out;
+    }
+
+    private static <A> Set<A> adoptedIn(PlannedValues<A> of) {
+        return switch (of) {
+            case Choice<A> it -> both(adoptedIn(it.left()), adoptedIn(it.right()));
+            case Settled<A> it -> adopted(it);
+        };
+    }
+
     /** Whether nothing satisfies these rules, so far as that is settled. */
     default boolean isBottom() {
         return emptiness() == Emptiness.EMPTY;
@@ -298,7 +344,12 @@ public sealed interface PlannedValues<A> {
         if (there == Emptiness.EMPTY) {
             return besideDead(this, other);
         }
-        // And where neither is settled, the question waits. Both branches are kept whole, since
+        // Both standing, and settled to be: the choice is the one a finished reading makes, and
+        // waiting would put off a question that already has an answer.
+        if (here == Emptiness.NONEMPTY && there == Emptiness.NONEMPTY) {
+            return joinedLive(other, apart);
+        }
+        // And where it is not settled, the question waits. Both branches are kept whole, since
         // which of them survives decides what the other one owes.
         return new Choice<>(this, other, apart);
     }
@@ -455,7 +506,7 @@ public sealed interface PlannedValues<A> {
      * <p>So a reading that has arrived has no decision left in it. Nothing downstream builds a
      * machine, and nothing downstream is holding a description of an answer as though it were one.
      */
-    default AdmissibleValues<A> resolve(Realizer by) {
+    default AdmissibleValues<A> resolve(Allowance<A> by) {
         return switch (this) {
             case Choice<A> it -> {
                 // What the question was waiting for: whether either branch admits anything. Asked
@@ -480,7 +531,7 @@ public sealed interface PlannedValues<A> {
         };
     }
 
-    private static <A> AdmissibleValues<A> resolved(Settled<A> of, Realizer by) {
+    private static <A> AdmissibleValues<A> resolved(Settled<A> of, Allowance<A> by) {
         Set<A> gaveUp = new LinkedHashSet<>();
         Map<A, ValueSet> perPosition = realized(of.perPosition(), by, gaveUp);
         Map<A, ValueSet> guaranteed = promised(of.guaranteed(), by);
@@ -490,7 +541,8 @@ public sealed interface PlannedValues<A> {
         };
         return new AdmissibleValues<>(held, perPosition,
                 alsoStanding(of.standing(), gaveUp), of.dropped(),
-                guaranteed, promise(of.defaultGuaranteed(), by), of.guaranteedTogether(),
+                guaranteed, promised(of.defaultGuaranteed(), by.elsewhere()),
+                of.guaranteedTogether(),
                 of.tangled(), PlannedValues.both(of.widened(), gaveUp));
     }
 
@@ -502,7 +554,7 @@ public sealed interface PlannedValues<A> {
      * every box goes, nothing satisfies the rules.
      */
     private static <A> AdmissibleValues.Held<A> alternatives(PlannedHeld.Alternatives<A> boxes,
-                                                             Realizer by, Set<A> gaveUp) {
+                                                             Allowance<A> by, Set<A> gaveUp) {
         Set<AdmissibleValues.Box<A>> live = new LinkedHashSet<>();
         Set<PlannedHeld.Box<A>> standing = new LinkedHashSet<>();
         for (PlannedHeld.Box<A> box : boxes.boxes()) {
@@ -523,7 +575,7 @@ public sealed interface PlannedValues<A> {
         for (A atom : named) {
             AdmittedPlan plan = AdmittedPlan.joining(
                     standing.stream().map(box -> box.get(atom)).toList());
-            Realization made = by.of(plan);
+            Realization made = by.realizer(atom).of(plan);
             if (!made.isExact()) {
                 gaveUp.add(atom);
             }
@@ -536,11 +588,11 @@ public sealed interface PlannedValues<A> {
 
     /** Each position's description as the set it comes to, the ones nobody could build widened to
      *  every value and written down as such. */
-    private static <A> Map<A, ValueSet> realized(Map<A, AdmittedPlan> of, Realizer by,
+    private static <A> Map<A, ValueSet> realized(Map<A, AdmittedPlan> of, Allowance<A> by,
                                                  Set<A> gaveUp) {
         Map<A, ValueSet> out = new LinkedHashMap<>();
         of.forEach((atom, plan) -> {
-            Realization made = by.of(plan);
+            Realization made = by.realizer(atom).of(plan);
             if (!made.isExact()) {
                 gaveUp.add(atom);
             }
@@ -557,13 +609,13 @@ public sealed interface PlannedValues<A> {
      * not build shrinks to none. Nothing is recorded: a reader short of a guarantee has been told
      * no more than the truth, and the reasons below are about the upper bound.
      */
-    private static <A> Map<A, ValueSet> promised(Map<A, AdmittedPlan> of, Realizer by) {
+    private static <A> Map<A, ValueSet> promised(Map<A, AdmittedPlan> of, Allowance<A> by) {
         Map<A, ValueSet> out = new LinkedHashMap<>();
-        of.forEach((atom, plan) -> out.put(atom, promise(plan, by)));
+        of.forEach((atom, plan) -> out.put(atom, promised(plan, by.realizer(atom))));
         return out;
     }
 
-    private static ValueSet promise(AdmittedPlan plan, Realizer by) {
+    private static ValueSet promised(AdmittedPlan plan, Realizer by) {
         Realization made = by.of(plan);
         return made.isExact() ? made.upperBound() : ValueSet.NONE;
     }

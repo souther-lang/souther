@@ -61,12 +61,13 @@ final class Realizer {
     /**
      * What all of them admit.
      *
-     * <p>The written values first, wherever the plan holds any. What a meet with them leaves is a
-     * subset of what they name, so the whole answer is settled by asking each of finitely many
-     * values whether the rest admit it — and asking is free, whatever the rest are. This is the
-     * cheap proof, and it is exact: nothing is approximated by taking it.
+     * <p>The written values first, wherever the plan holds any. A meet with them is a question
+     * about the values they name, asked of each — free whatever the other side is, and exact.
+     * Everything after it is a meet with what that left, which is those values again.
      *
-     * <p>Everything else is met as languages, which is where the allowance goes.
+     * <p>So a plan holding one written set costs nothing however many languages are beside it, and
+     * the languages meet each other only where nothing was written. That is the whole of the
+     * choosing: it is read off the plan and is the same for the same plan.
      */
     private Realization met(java.util.Set<AdmittedPlan> parts) {
         List<AdmittedPlan> rest = new ArrayList<>();
@@ -78,12 +79,12 @@ final class Realizer {
                 rest.add(each);
             }
         }
-        // Only where the written values are named. A denial is every value but these, and which
-        // ones it does admit is not a list to ask about — so a meet with one of those is built like
-        // any other.
-        if (written instanceof ValueSet.Finite named) {
-            return keptOf(named, rest);
-        }
+        // The written values first, and that is the whole of the trick. A meet with them is a
+        // question about the values they name — asked of each, which builds nothing whatever the
+        // other side is — so the answer to all of it is settled without a machine. Folded in the
+        // order the parts arrived, the two languages would meet each other first wherever the
+        // author wrote them first, and the same rules would cost a product one way round and
+        // nothing the other.
         ValueSet out = written;
         for (AdmittedPlan each : rest) {
             Realization one = of(each);
@@ -101,37 +102,6 @@ final class Realizer {
             out = met.set();
         }
         return new Realization.Exact(out);
-    }
-
-    /**
-     * Which of {@code written}'s values every one of {@code rest} admits.
-     *
-     * <p>Asked of each value, so nothing is built. A plan is realized to answer it — the parts of
-     * {@code rest} are patterns and meets of them — but each answer is asked one string at a time,
-     * and a language that was built for one value is kept for the next.
-     */
-    private Realization keptOf(ValueSet.Finite written, List<AdmittedPlan> rest) {
-        java.util.Set<Value> left = new java.util.LinkedHashSet<>();
-        for (Value value : written.values()) {
-            boolean everywhere = true;
-            for (AdmittedPlan each : rest) {
-                Realization one = of(each);
-                // A part this could not build is a part nobody knows the answer of, so neither is
-                // the meet. Kept as admitted, the answer would be the values the parts this could
-                // build agree on, said as though the rules had left them.
-                if (!(one instanceof Realization.Exact it)) {
-                    return one;
-                }
-                if (!it.set().has(value)) {
-                    everywhere = false;
-                    break;
-                }
-            }
-            if (everywhere) {
-                left.add(value);
-            }
-        }
-        return new Realization.Exact(ValueSet.oneOf(left));
     }
 
     private Realization joined(java.util.Set<AdmittedPlan> parts) {

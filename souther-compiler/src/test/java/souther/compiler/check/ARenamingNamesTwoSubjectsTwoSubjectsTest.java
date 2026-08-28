@@ -115,8 +115,8 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void aSubjectHeldByTwoDomainsIsRenamedOnce() {
         ConstraintState<FactSubject> both = ConstraintState.<FactSubject>top()
                 .taking(ONLY_IN_FACTS, true)
-                .takingValuesRead(AdmissibleValues.at(ONLY_IN_FACTS, ValueSet.just(Value.text("A"))),
-                        souther.compiler.values.Sets.ofAdmittedValues());
+                .takingValuesRead(
+                        AdmissibleValues.at(ONLY_IN_FACTS, ValueSet.just(Value.text("A"))));
         java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
 
         ConstraintState<String> said = both.renamed(
@@ -134,8 +134,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
                         new OrderedInterval(Endpoint.inclusive(Count.of(6)),
                                 Endpoint.inclusive(Count.of(2)))))
                 .takingValuesRead(
-                        AdmissibleValues.at(ONLY_IN_VALUES, ValueSet.just(Value.text("A"))),
-                        souther.compiler.values.Sets.ofAdmittedValues())
+                        AdmissibleValues.at(ONLY_IN_VALUES, ValueSet.just(Value.text("A"))))
                 .taking(LinearForm.<FactSubject>atom(ONLY_IN_NUMBERS)
                                 .minus(LinearForm.<FactSubject>constant(BigDecimal.valueOf(3))),
                         Rel.LE, Map.of(ONLY_IN_NUMBERS, souther.compiler.numeric.Granularity.DISCRETE));

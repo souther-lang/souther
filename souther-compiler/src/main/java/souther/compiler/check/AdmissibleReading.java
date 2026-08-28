@@ -7,8 +7,9 @@ import souther.compiler.regex.PatternParser;
 import souther.compiler.regex.PatternRead;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
-import souther.compiler.values.AdmissibleValues;
-import souther.compiler.values.Sets;
+import souther.compiler.values.AdmittedPlan;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.PlannedValues;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -39,7 +40,7 @@ import java.util.Set;
  * the values can be written out ({@link ValueUniverse}) and is kept as a denial where they cannot,
  * so nothing reaches emptiness except through values this had in hand.
  */
-final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubject>> {
+final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject>> {
 
     private final Terms terms;
     private final Denotations at;
@@ -58,37 +59,37 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * admits. It is the reading's and not a leaf's, so a clause read here and a rule met with it
      * afterwards ({@code InvariantChecker}) spend from the same purse.
      */
-    private final Sets<FactSubject> sets;
+    private final Allowance<FactSubject> allowed;
 
     private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                              Symbols symbols, Alternatives alternatives, Sets<FactSubject> sets) {
+                              Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
         this.terms = terms;
         this.at = at;
         this.byName = byName;
         this.symbols = symbols;
         this.alternatives = alternatives;
-        this.sets = sets;
+        this.allowed = allowed;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
     static AdmissibleReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                                Symbols symbols, Alternatives alternatives, Sets<FactSubject> sets) {
-        return new AdmissibleReading(terms, at, byName, symbols, alternatives, sets);
+                                Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
+        return new AdmissibleReading(terms, at, byName, symbols, alternatives, allowed);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
-    Sets<FactSubject> sets() {
-        return sets;
+    Allowance<FactSubject> allowed() {
+        return allowed;
     }
 
     @Override
-    public AdmissibleValues<FactSubject> nothingSaid() {
-        return AdmissibleValues.top();
+    public PlannedValues<FactSubject> nothingSaid() {
+        return PlannedValues.top();
     }
 
     @Override
-    public AdmissibleValues<FactSubject> both(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
-        return one.meet(other, sets);
+    public PlannedValues<FactSubject> both(PlannedValues<FactSubject> one, PlannedValues<FactSubject> other) {
+        return one.meet(other);
     }
 
     /**
@@ -99,9 +100,9 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * a model written two ways would be read two ways.
      */
     @Override
-    public AdmissibleValues<FactSubject> either(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
+    public PlannedValues<FactSubject> either(PlannedValues<FactSubject> one, PlannedValues<FactSubject> other) {
         return alternatives == Alternatives.APART
-                ? one.joinApart(other, sets) : one.join(other, sets);
+                ? one.joinApart(other) : one.join(other);
     }
 
     /**
@@ -114,13 +115,13 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * a position an author had written a format for came out admitting every string there is.
      */
     @Override
-    public AdmissibleValues<FactSubject> leaf(Core e, boolean positive) {
+    public PlannedValues<FactSubject> leaf(Core e, boolean positive) {
         if (e instanceof Core.Binary b && (b.op() == BinOp.EQ || b.op() == BinOp.NE)) {
             // Which of the two it states, once the denials above have been counted: `/=` denied
             // states the equality, and `==` denied denies it.
             return comparison(b, (b.op() == BinOp.EQ) == positive);
         }
-        AdmissibleValues<FactSubject> matched = pattern(e, positive);
+        PlannedValues<FactSubject> matched = pattern(e, positive);
         return matched != null ? matched : unreadable(e);
     }
 
@@ -135,7 +136,7 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * the one place a reading gives up stays where it is: what a rule this could not read costs is
      * worked out there, and a second answer to it here would be a second account of the same thing.
      */
-    private AdmissibleValues<FactSubject> pattern(Core e, boolean states) {
+    private PlannedValues<FactSubject> pattern(Core e, boolean states) {
         if (!(e instanceof Core.PreservedCall call) || call.args().size() != 2
                 || !(call.operation() instanceof ValueName.Stdlib.Operation operation)
                 || symbols.kernelOf(operation) != Kernel.STRING_MATCHES) {
@@ -153,20 +154,21 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
         if (!(PatternParser.read(written) instanceof PatternRead.Read read)) {
             return null;
         }
-        Sets.Composed made = states ? sets.matching(position, read.syntax())
-                : sets.notMatching(position, read.syntax());
-        // And where the set was not built, the position is left standing with the reason for it —
-        // which is the same shape as any other rule this reading could not turn into values, and a
-        // different reason, because this one was followed to the end.
-        return made.gaveUp()
-                ? AdmissibleValues.unreadable(Set.of(position),
+        ValueSet made = states ? allowed.matching(position, read.syntax())
+                : allowed.notMatching(position, read.syntax());
+        // And where this pattern's own machine was more than a rule is allowed, the position is
+        // left standing with that as its reason. About this rule and naming it, which is what an
+        // author can act on — the other way a pattern can cost too much is what a position's rules
+        // come to between them, and that names no rule and is answered where they are put together.
+        return made == null
+                ? PlannedValues.unreadable(Set.of(position),
                         UnreadReason.EXACT_VALUES_TOO_COSTLY)
-                : AdmissibleValues.at(position, made.set());
+                : PlannedValues.at(position, AdmittedPlan.of(made));
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */
-    private AdmissibleValues<FactSubject> comparison(Core.Binary b, boolean states) {
-        AdmissibleValues<FactSubject> read = sided(b.left(), b.right(), states);
+    private PlannedValues<FactSubject> comparison(Core.Binary b, boolean states) {
+        PlannedValues<FactSubject> read = sided(b.left(), b.right(), states);
         if (read == null) {
             // `"A" == value` says what `value == "A"` says.
             read = sided(b.right(), b.left(), states);
@@ -190,8 +192,8 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * ordering comparison and an equality answer alike — written per shape, {@code <} fell through
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
-    private AdmissibleValues<FactSubject> unreadable(Core e) {
-        return AdmissibleValues.unreadable(names(e), relatesTwoPositions(e)
+    private PlannedValues<FactSubject> unreadable(Core e) {
+        return PlannedValues.unreadable(names(e), relatesTwoPositions(e)
                 ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
     }
 
@@ -209,11 +211,12 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
      * where they are not those. */
-    private AdmissibleValues<FactSubject> sided(Core where, Core what, boolean states) {
+    private PlannedValues<FactSubject> sided(Core where, Core what, boolean states) {
         FactSubject position = positionIn(where);
         Type type = position == null ? null : byName.get(position);
         Value value = type == null ? null : valueOf(what);
-        return value == null ? null : AdmissibleValues.at(position, admits(value, states, type));
+        return value == null ? null
+                : PlannedValues.at(position, AdmittedPlan.of(admits(value, states, type)));
     }
 
     /** The position {@code e} is, or null where it is not one of the positions being read for. */

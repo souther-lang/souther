@@ -120,7 +120,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         return ConstraintState.<FactSubject>top().takingValuesRead(
                 AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
                         .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))),
-                                sets), sets);
+                                sets));
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {

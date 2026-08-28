@@ -693,8 +693,8 @@ public final class InvariantChecker {
             // another pay into the same machine. Made per position inside — a complicated rule at
             // one position may not spend what a plain one at another was going to need, or which of
             // the two went unanswered would turn on the order they were written in.
-            souther.compiler.values.Sets<FactSubject> sets =
-                    souther.compiler.values.Sets.ofAdmittedValues();
+            souther.compiler.values.Allowance<FactSubject> allowed =
+                    souther.compiler.values.Allowance.ofAdmittedValues();
             Map<RuleRef, Map<Core, Set<FactSubject>>> adoptedBy = new LinkedHashMap<>();
             for (Written each : written) {
                 // A reading of its own per clause, so what it says it adopted is this clause's and not
@@ -702,7 +702,7 @@ public final class InvariantChecker {
                 // has: a clause the readings took in whole sat beside one they could not, and the
                 // position-wide account said both had gone unread.
                 StatedByClauses one = StatedByClauses
-                        .readingOf(c.terms, at, positions, symbols, alternatives, sets)
+                        .readingOf(c.terms, at, positions, symbols, alternatives, allowed)
                         .read(each.clause(), true,
                                 (part, said) -> adoptedBy
                                         .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>())
@@ -713,8 +713,14 @@ public final class InvariantChecker {
                 // position and hearing whichever clause reached it.
                 one.adopted().forEach(position -> took.record(each.from(), position));
                 took.stoppedBy(each.from(), one.values());
-                stated = stated.meet(one, sets);
+                stated = stated.meet(one);
             }
+            // And now that every rule about this value has been said, what its positions admit is
+            // worked out. Once, and here: a position's answer is met out of every clause that
+            // reached it, so anything built before the last of them arrived would be built out of
+            // less than the rules say — and which of two ways of writing the same rules was
+            // affordable would be a fact about the writing.
+            AdmissibleValues<FactSubject> values = stated.values().resolve(allowed);
             // What was counted bounds what was built, which is the whole of why counting before
             // reading is enough. It is an induction and its steps are held where they are taken —
             // a leaf is one alternative, a choice holds at most the sum and a conjunction at most
@@ -726,15 +732,15 @@ public final class InvariantChecker {
             // assertion because it is about this compiler and not about the model, and because a
             // throw would be caught by the fail-open above and leave the reading silently dropped.
             assert alternatives == Alternatives.MERGED
-                    || heldApart(stated.values()) <= expansion
-                    : "a reading of " + named.name() + " expanded to " + heldApart(stated.values())
+                    || heldApart(values) <= expansion
+                    : "a reading of " + named.name() + " expanded to " + heldApart(values)
                             + " alternatives past a counted " + expansion;
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
                     new PartsRead(readBy, adoptedBy));
             ConstraintState<FactSubject> constraints = k.constraints()
-                    .takingValuesRead(stated.values(), sets)
+                    .takingValuesRead(values)
                     .taking(stated.ordered());
             // How each atom's values are spaced, kept so that settling one afterwards states the
             // equality the same way this does. A count is a whole number of things whatever the

@@ -33,12 +33,13 @@ import java.util.Set;
  * A branch impossible only by an arithmetic relation between two positions is one nothing here can
  * drop, and giving those two a reading of alternatives is its own change with its own reason.
  */
-record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
+record StatedByClauses(souther.compiler.values.PlannedValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
                        Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder) {
 
     /** Nothing read, so nothing ruled out. */
     static StatedByClauses top() {
-        return new StatedByClauses(AdmissibleValues.top(), OrderedIntervals.top(),
+        return new StatedByClauses(souther.compiler.values.PlannedValues.top(),
+                OrderedIntervals.top(),
                 Adoption.nothing(), Adoption.nothing());
     }
 
@@ -70,8 +71,8 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
     static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
                              Symbols symbols, Alternatives alternatives,
-                             souther.compiler.values.Sets<FactSubject> sets) {
-        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, alternatives, sets),
+                             souther.compiler.values.Allowance<FactSubject> allowed) {
+        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, alternatives, allowed),
                 OrderedReading.of(terms, at, byName, symbols), terms, at, byName);
     }
 
@@ -90,8 +91,8 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
     }
 
     /** Both holding at once, {@code sets} being what the answer's allowance is spent from. */
-    StatedByClauses meet(StatedByClauses other, souther.compiler.values.Sets<FactSubject> sets) {
-        return new StatedByClauses(values.meet(other.values, sets), ordered.meet(other.ordered),
+    StatedByClauses meet(StatedByClauses other) {
+        return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered),
                 byValues.both(other.byValues), byOrder.both(other.byOrder));
     }
 
@@ -125,7 +126,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
          */
         @Override
         public StatedByClauses leaf(Core e, boolean positive) {
-            AdmissibleValues<FactSubject> said = values.leaf(e, positive);
+            souther.compiler.values.PlannedValues<FactSubject> said = values.leaf(e, positive);
             OrderedIntervals<FactSubject> range = ordered.leaf(e, positive);
             Set<FactSubject> mentions = mentioned(e);
             return new StatedByClauses(said, range,
@@ -159,7 +160,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
 
         @Override
         public StatedByClauses both(StatedByClauses one, StatedByClauses other) {
-            return one.meet(other, values.sets());
+            return one.meet(other);
         }
 
         /**

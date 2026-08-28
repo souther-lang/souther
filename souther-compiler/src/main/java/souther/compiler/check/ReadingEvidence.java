@@ -110,7 +110,7 @@ final class ReadingEvidence {
      * that cover it came back with no reason at all, and an accounting with the decision from one
      * question and the reason from the other has a seam to fill.
      */
-    void stoppedBy(RuleRef rule, AdmissibleValues<FactSubject> read) {
+    void stoppedBy(RuleRef rule, souther.compiler.values.PlannedValues<FactSubject> read) {
         Map<FactSubject, List<UnreadReason>> here =
                 stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>());
         read.standing().forEach((position, why) -> here.merge(position, why,
