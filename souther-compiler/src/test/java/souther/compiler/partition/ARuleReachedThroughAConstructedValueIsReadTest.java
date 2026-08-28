@@ -2,13 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -62,50 +57,22 @@ class ARuleReachedThroughAConstructedValueIsReadTest {
         assertEquals(oneLineEach, read);
     }
 
-    /** What the measure made of a behavior whose body is {@code body}: its classes, and what it
-     *  could not read. */
-    static String reading(String body) {
-        String source = """
+    private static String reading(String body) {
+        return MeasuredBehavior.reading("""
                 module g
 
                 data Big = { threshold: Int }
-                data Outer = { big: Big }
                 data Yen = Int
                 data Yes
                 data No
 
-                data AtMost = { threshold: Int }
-                data Whatever
-                data Reason = AtMost | Whatever
-
-                let reaches (n: Int, reason: Reason): Bool =
-                    match reason with
-                        | AtMost { threshold } -> n >= threshold
-                        | Whatever             -> true
-
                 let bigOne (n: Int) = Big { threshold = 100000 }
-                let bigOf (t: Int) = Big { threshold = t }
-                let outerOf (t: Int) = Outer { big = Big { threshold = t } }
-                let chooseBig (c: Bool) =
-                    if c then Big { threshold = 100000 } else Big { threshold = 200000 }
 
                 behavior classify : (n: Int) -> Yes | No
                 let classify (n) = %s
 
                 example classify
                     | "one" : (1) -> No
-                """.formatted(body);
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        AdequacyReport.BehaviorReport behavior = AdequacyReport.of(compilation)
-                .modules().get(0).behaviors().stream()
-                .filter(each -> each.name().equals("classify")).findFirst().orElseThrow();
-        return "[" + behavior.partition().axes().stream()
-                .flatMap(axis -> axis.classes().stream())
-                .collect(Collectors.joining(", "))
-                + "] unread [" + behavior.partition().notRead().stream()
-                .map(each -> each.at() + " " + each.reason())
-                .collect(Collectors.joining(", ")) + "]";
+                """.formatted(body), "classify");
     }
 }

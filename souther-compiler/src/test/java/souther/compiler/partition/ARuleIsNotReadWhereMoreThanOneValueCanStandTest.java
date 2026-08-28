@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static souther.compiler.partition.ARuleReachedThroughAConstructedValueIsReadTest.reading;
 
 /**
  * Where more than one value can stand at a position, no rule is read off any of them.
@@ -96,5 +95,33 @@ class ARuleIsNotReadWhereMoreThanOneValueCanStandTest {
                         let ks = [ AtMost { threshold = 100000 }, Whatever ]
                         if List.any((k) -> reaches(n, k), ks) then Yes else No
                     }"""));
+    }
+
+    private static String reading(String body) {
+        return MeasuredBehavior.reading("""
+                module g
+
+                data Big = { threshold: Int }
+                data Yes
+                data No
+
+                data AtMost = { threshold: Int }
+                data Whatever
+                data Reason = AtMost | Whatever
+
+                let chooseBig (c: Bool) =
+                    if c then Big { threshold = 100000 } else Big { threshold = 200000 }
+
+                let reaches (n: Int, reason: Reason): Bool =
+                    match reason with
+                        | AtMost { threshold } -> n >= threshold
+                        | Whatever             -> true
+
+                behavior classify : (n: Int) -> Yes | No
+                let classify (n) = %s
+
+                example classify
+                    | "one" : (1) -> No
+                """.formatted(body), "classify");
     }
 }

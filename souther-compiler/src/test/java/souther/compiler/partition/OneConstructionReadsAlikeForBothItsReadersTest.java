@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,12 +77,12 @@ class OneConstructionReadsAlikeForBothItsReadersTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
-        assertEquals(List.of("throughARecord: n/x < 100, n/100 <= x",
-                        "throughANewtype: n/x < 100, n/100 <= x"),
+        assertEquals(Map.of("throughARecord", "n/x < 100, n/100 <= x",
+                        "throughANewtype", "n/x < 100, n/100 <= x"),
                 AdequacyReport.of(compilation).modules().get(0).behaviors().stream()
-                        .map(behavior -> behavior.name() + ": " + behavior.partition().axes()
-                                .stream().flatMap(axis -> axis.classes().stream())
-                                .collect(Collectors.joining(", ")))
-                        .toList());
+                        .collect(Collectors.toMap(AdequacyReport.BehaviorReport::name,
+                                behavior -> behavior.partition().axes().stream()
+                                        .flatMap(axis -> axis.classes().stream())
+                                        .collect(Collectors.joining(", ")))));
     }
 }
