@@ -247,7 +247,13 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),
                     Set.of("no_axis_derived"),
-                    souther.compiler.query.PartitionDerivation.class),
+                    souther.compiler.query.PartitionDerivation.class,
+                    // Not one of this measure's own reasons: an input the rules leave empty is a
+                    // fact about the behavior, and every measure of that input gives it. Named on
+                    // each surface that admits it rather than inferred from its being shared —
+                    // which measures publish a word is what a vocabulary is for, and a type sitting
+                    // beside them says nothing about that.
+                    souther.compiler.query.NoFeasibleInput.class),
             // The vocabularies a reason is written in are not here. Which words a surface of the
             // document admits is decided by the capabilities its producers hold, and each is held
             // against those in `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce` — a list here of
@@ -258,7 +264,8 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "boundariesMeasure", "properties",
                             "reason"),
                     Set.of("no_lines_derived"),
-                    souther.compiler.query.BoundaryDerivation.class),
+                    souther.compiler.query.BoundaryDerivation.class,
+                    souther.compiler.query.NoFeasibleInput.class),
             Vocabulary.of("partition.axes[].reason",
                     List.of("$defs", "partition", "properties", "axes", "items", "properties",
                             "reason"),
@@ -548,6 +555,65 @@ class EverySchemaWordIsAccountedForTest {
                                 new souther.compiler.types.CoverageOrigin("m", 0, 0,
                                         souther.compiler.types.CoverageConstruct.IF)))),
                 allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
+    }
+
+    /**
+     * And every reason a measure can be unavailable for is registered with some field.
+     *
+     * <p>The other direction of the test below, and it takes a different hole. That one asks whether
+     * every field of the schema has somebody saying where its words come from; this asks whether
+     * every producer of a word has been given a field to say it in. A reason nobody registered is in
+     * neither list, so both passed while the compiler wrote a word its own schema refused.
+     *
+     * <p>What let that happen is where a vocabulary gets its sources: a measure's reasons are the
+     * types nested in it, and {@link souther.compiler.query.NoFeasibleInput} is nested in no measure
+     * because more than one measure gives it. So it was a producer with no surface, and neither list
+     * had a place to notice.
+     *
+     * <p>Held over the <em>types</em> rather than over the words. Two reasons may spell one word —
+     * that is what a shared field is — so a check that a word turns up somewhere passes for a reason
+     * that got its spelling by coincidence, which is the orphan this is here to catch.
+     *
+     * <p>Only the reasons for a measure that does not apply. Something read and unavailable is a
+     * state of this compiler's reading, and a document says what it can about it under the keys it
+     * has; being unable to measure is not by itself something a version promises a word for.
+     */
+    @Test
+    void everyReasonAMeasureDoesNotApplyForIsRegisteredWithSomeField() {
+        Set<Class<?>> registered = new LinkedHashSet<>();
+        for (Vocabulary each : VOCABULARIES) {
+            registered.addAll(each.source());
+        }
+
+        List<String> unregistered = new ArrayList<>();
+        for (Class<?> arm : armsOf(souther.compiler.query.NotApplicableReason.class)) {
+            if (!registered.contains(arm)) {
+                unregistered.add(arm.getSimpleName());
+            }
+        }
+
+        assertEquals(List.of(), unregistered,
+                "a reason no field of the schema was told about, so the compiler can write a word"
+                        + " the shipped schema refuses");
+    }
+
+    /**
+     * The reasons a sealed interface stands for, which are its leaves and not its permitted names.
+     *
+     * <p>A permitted type may be sealed in turn, and an intermediate is not something a document
+     * carries — what a report writes is a constant, so what has to have been registered is what a
+     * constant is of.
+     */
+    private static List<Class<?>> armsOf(Class<?> of) {
+        Class<?>[] permitted = of.getPermittedSubclasses();
+        if (permitted == null) {
+            return List.of(of);
+        }
+        List<Class<?>> out = new ArrayList<>();
+        for (Class<?> each : permitted) {
+            out.addAll(armsOf(each));
+        }
+        return out;
     }
 
     /** Every enumerated field of the schema is either held above or named as the exception. */
