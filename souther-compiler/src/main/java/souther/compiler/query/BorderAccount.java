@@ -125,7 +125,13 @@ public record BorderAccount(GenerationScope scope,
     public SequencedMap<BorderObligationPoint, Unmet> unmet() {
         SequencedMap<BorderObligationPoint, Unmet> out = new LinkedHashMap<>();
         resolved.forEach((at, answer) -> {
-            if (answer.resolution() instanceof PointResolution.Unresolved _) {
+            // The lines the declarations own, and not a body's own. A sentence here says what is
+            // owed and who owes it, and what a line is owed at is written on the quantity the rule
+            // named — which a clause has and a comparison in a body has not: what it was drawn on is
+            // the term each reading met it at, and there is one of those per reading. A body's line
+            // is said where the lines it drew are said, at each of the places it was drawn.
+            if (!answer.owedByTheBody()
+                    && answer.resolution() instanceof PointResolution.Unresolved _) {
                 out.put(at, unmet(answer));
             }
         });
