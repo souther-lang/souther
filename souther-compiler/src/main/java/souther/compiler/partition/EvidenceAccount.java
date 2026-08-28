@@ -1,10 +1,8 @@
 package souther.compiler.partition;
 
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What became of each thing the rules said, across the stage that turns it into a measure.
@@ -57,28 +55,50 @@ final class EvidenceAccount {
      *  {@link Disposition.Measured} can ask the evidence what it should have left behind. */
     private record Answered(LineEvidence what, Disposition how) {}
 
-    private final Set<LineEvidence.FiledEvidenceId> owed = new LinkedHashSet<>();
+    private final Map<LineEvidence.FiledEvidenceId, LineEvidence> owed = new LinkedHashMap<>();
     private final Map<LineEvidence.FiledEvidenceId, Answered> answered = new LinkedHashMap<>();
 
+    /**
+     * The evidence this stage was handed, and the one thing about it this has to establish rather
+     * than assume.
+     *
+     * <p><b>That the identity tells the pieces apart.</b> Everything below counts by
+     * {@link LineEvidence#id}, so two pieces sharing one is one entry here — and then the piece that
+     * went missing is the one the other answered for. An account whose denominator is short before
+     * any work happens reports a complete measure over evidence it never held, which is the sentence
+     * this whole type exists to refuse.
+     *
+     * <p>Checked where the input is taken and not where two of them meet. A check that fires only
+     * when both arrive assumes what it is meant to establish: the case it has to catch is exactly
+     * the one where the second never comes.
+     *
+     * <p>The same piece handed over twice is one piece. What that would say about the stage is
+     * nothing, and nothing here counts arrivals.
+     */
     EvidenceAccount(List<LineEvidence> evidence) {
-        evidence.forEach(each -> owed.add(each.id()));
+        for (LineEvidence each : evidence) {
+            LineEvidence already = owed.put(each.id(), each);
+            if (already != null && !already.equals(each)) {
+                throw new IllegalStateException("two pieces of evidence are called " + each.id()
+                        + ": " + already + " and " + each
+                        + " — an account that cannot tell them apart has one denominator for two");
+            }
+        }
     }
 
     void disposedOf(LineEvidence what, Disposition how) {
-        Answered already = answered.put(what.id(), new Answered(what, how));
-        if (already == null) {
-            return;
+        // Held against what was handed over rather than against whatever else was disposed of. The
+        // identity is one to one over the input, so a piece arriving here under an id belonging to
+        // another is a piece this stage was never given.
+        LineEvidence given = owed.get(what.id());
+        if (given != null && !given.equals(what)) {
+            throw new IllegalStateException("this stage disposed of " + what
+                    + " under the name of " + given);
         }
-        if (!already.how().equals(how)) {
+        Answered already = answered.put(what.id(), new Answered(what, how));
+        if (already != null && !already.how().equals(how)) {
             throw new IllegalStateException("what became of " + what.id()
                     + " was said twice, as " + already.how() + " and as " + how);
-        }
-        // And that the two are one piece of evidence, which the identity says and this is what
-        // checks it. Two pieces sharing a rule and a number while parting the position's values in
-        // different places would be one entry here, with whichever came last behind it.
-        if (!already.what().equals(what)) {
-            throw new IllegalStateException("two pieces of evidence share " + what.id() + ": "
-                    + already.what() + " and " + what);
         }
     }
 
@@ -139,7 +159,7 @@ final class EvidenceAccount {
 
     /** That this stage said what became of everything it was handed. */
     private void everyPieceWasDisposedOf() {
-        List<LineEvidence.FiledEvidenceId> lost = owed.stream()
+        List<LineEvidence.FiledEvidenceId> lost = owed.keySet().stream()
                 .filter(each -> !answered.containsKey(each)).toList();
         if (!lost.isEmpty()) {
             throw new IllegalStateException(
@@ -148,7 +168,7 @@ final class EvidenceAccount {
                             + " is what this account exists to refuse");
         }
         List<LineEvidence.FiledEvidenceId> strangers = answered.keySet().stream()
-                .filter(each -> !owed.contains(each)).toList();
+                .filter(each -> !owed.containsKey(each)).toList();
         if (!strangers.isEmpty()) {
             throw new IllegalStateException(
                     "this stage said what became of evidence it was not handed: " + strangers);

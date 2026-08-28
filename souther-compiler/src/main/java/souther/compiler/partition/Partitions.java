@@ -62,10 +62,20 @@ public final class Partitions {
      *                whatever was written about it — and an axis is re-pointed at another number as
      *                a body's rules are read, which would carry a question about one number onto
      *                another
-     * @param axes    the positions this behavior is measured at, in parameter order. Every position
-     *                the model divides is one of them: what a behavior is measured at is settled by
-     *                what its types say and by what its body compares, and a count of positions is
-     *                not a measure of what any of that costs (see this package's documentation)
+     * @param positions the locations of this behavior's input this phase answers for, in the order
+     *                the reading found them. Beside the measures and not derived from them: what a
+     *                reading of a location came to, where the walk stopped and what the location is
+     *                left with are true of it once however many numbers measure it, and the only
+     *                other way to reach one is to walk the measures and put them back together —
+     *                which is a rule about which measure answers for the location, invented once
+     *                per reader
+     * @param axes    the measures made of those locations, in the order the rules name the numbers.
+     *                A location is measured at as many numbers as the rules name of it, so this is
+     *                not a list of positions and its length is not one: {@code Time.hour(slot.at)}
+     *                and {@code Time.minute(slot.at)} are two of these at one location. What a
+     *                behavior is measured at is settled by what its types say and by what its body
+     *                compares, and a count of either is not a measure of what any of that costs
+     *                (see this package's documentation)
      * @param between the lines drawn between two positions, which divide neither of them
      * @param along   the lines drawn on one position, by the axis they are on. Every measurable axis
      *                has an entry, and an axis that is not measurable has no lines to have one for

@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
-import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 
@@ -66,29 +65,21 @@ public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<Partiti
                 NarrowedBounds.NOTHING);
     }
 
-    /** The position's type, which is what a value read here is of. Not the term's: a string is
-     *  measured at how long it is, and what stands at the location is still a string. */
+    /**
+     * The position's type, which is what a value read here is of. Not the term's: a string is
+     * measured at how long it is, and what stands at the location is still a string.
+     *
+     * <p>One of two things read off {@link #at} here, with {@link #path}. Both are about the
+     * measure — where it reads from and what stands there — and everything else the position's
+     * account holds is asked of the account, in the open. What its reading came to, where the walk
+     * stopped and what it is left with are true of the location once however many numbers measure
+     * it, and a measure that answered them would let any reader ask a location's question through
+     * whichever measure it happened to hold.
+     */
     public Type type() {
         return at.type();
     }
 
-    /** What the reading of this position left behind that nothing later takes away. Beside the
-     *  questions and not among them — a position whose rules were never enumerated raises no
-     *  question and is not one whose rules were all accounted for, and an empty list says the
-     *  second (issue #791). */
-    public ReadingResidue residue() {
-        return at.residue();
-    }
-
-    /** Where nothing has answered for this position yet, what the structural reading found. */
-    public StructuralInspection.Continuation pending() {
-        return at.pending();
-    }
-
-    /** What the position is left with where the local reading gave it no axis. */
-    public LeftAtThePosition leftWith() {
-        return at.leftWith();
-    }
 
     /**
      * A position nothing has answered for yet, and what the readings of it found.

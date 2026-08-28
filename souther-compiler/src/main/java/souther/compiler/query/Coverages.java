@@ -449,7 +449,7 @@ final class Coverages {
         // different question, and borrowing it left a reader with a sentence that named neither
         // (issue #842).
         PartitionEvidence.AxisCoverage.Reading read = new PartitionEvidence.AxisCoverage.Reading(
-                axis.residue().rulesLeftUnread().isEmpty()
+                axis.at().residue().rulesLeftUnread().isEmpty()
                         ? PartitionEvidence.AxisCoverage.Reach.EVERY_RULE
                         : PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
                 // Of the questions standing at this position, the ones this measure is the reader
