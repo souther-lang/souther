@@ -24,7 +24,9 @@ import java.util.Map;
  * learns a new shape, the reading narrows with nothing saying so.
  *
  * <p>So the relation is read where it stands and carried by binding. What survives the rewrite is
- * the binding: it renames nothing, so a fact keyed this way is as true after it as before. Nothing
+ * the binding: it renames nothing, so a fact keyed this way is as true after it as before. What does
+ * mint bindings is a body being copied, and there the fact is carried across the copy's own renaming
+ * rather than surviving on its own ({@link ElementProvenance.CopyableFactKind}). Nothing
  * here is recovered by matching one tree against another, and no identity is invented for the
  * purpose — {@link BindingId} already tells one occurrence from another, which is exactly what a
  * helper expanded at two call sites needs and exactly what the construct an author wrote must not be
