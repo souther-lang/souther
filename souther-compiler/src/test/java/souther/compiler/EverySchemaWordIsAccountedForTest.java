@@ -248,15 +248,18 @@ class EverySchemaWordIsAccountedForTest {
                             "reason"),
                     Set.of("no_axis_derived"),
                     souther.compiler.query.PartitionDerivation.class),
-            // Written once and referred to twice: a position's reading and a rule left unread are
-            // the same question asked of two things, and two copies of the words would be two
-            // places for one of them to gain a word the other does not have.
-            // `depth_limit` is beside them and is retired. The reading stopped after a count of
-            // steps and said so, and documents of this version carry the word — so it stays here,
-            // where what stops the reading is now the path returning to a declaration it had
-            // already opened.
-            new Vocabulary("notReadReason",
-                    List.of("$defs", "notReadReason"),
+            // Every word a document writes for a reason, held here where the whole of the
+            // vocabulary is. What a surface of the document may carry is narrower than this and is
+            // held where the reasons it can reach are known
+            // (`WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce`) — asked here as well, this
+            // would be a second list of which word belongs where, kept by hand.
+            //
+            // `depth_limit` is among them and is retired. The reading stopped after a count of
+            // steps and said so, and documents of this version carry the word — so it stays, where
+            // what stops the reading is now the path returning to a declaration it had already
+            // opened.
+            new Vocabulary("questionStoppedReason",
+                    List.of("$defs", "questionStoppedReason"),
                     Set.of("depth_limit"),
                     souther.compiler.partition.UndividedPosition.Reason.class),
             // And `no_lines_derived` likewise.
@@ -565,6 +568,12 @@ class EverySchemaWordIsAccountedForTest {
         for (Vocabulary each : VOCABULARIES) {
             held.add("/" + String.join("/", each.at()));
         }
+        // The words an entry about a position may carry, which is narrower than the vocabulary
+        // above. Held against the reasons a position's readings can reach rather than against an
+        // enum, in `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce` — what makes it narrower is
+        // which reasons those surfaces are fed from, and a list of words here would say the same
+        // thing without saying why.
+        held.add("/$defs/notReadReason");
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
         held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
@@ -689,10 +698,37 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
+    /**
+     * The words a field is constrained to, however the schema spells the constraint.
+     *
+     * <p>A list of them, or a vocabulary written as another one and the words it adds. The second
+     * is how a surface that admits everything another admits and one word besides says so, and
+     * reading only the first would hold such a field against nothing.
+     */
     private static Set<String> allowedAt(JsonNode schema, List<String> at) {
+        return wordsOf(schema, nodeAt(schema, at));
+    }
+
+    private static Set<String> wordsOf(JsonNode schema, JsonNode node) {
         Set<String> out = new LinkedHashSet<>();
-        for (JsonNode each : nodeAt(schema, at).get("enum")) {
-            out.add(each.asString());
+        if (node.has("enum")) {
+            for (JsonNode each : node.get("enum")) {
+                out.add(each.asString());
+            }
+        }
+        if (node.has("const")) {
+            out.add(node.get("const").asString());
+        }
+        if (node.has("anyOf")) {
+            for (JsonNode each : node.get("anyOf")) {
+                out.addAll(wordsOf(schema, each));
+            }
+        }
+        if (node.has("$ref")) {
+            String ref = node.get("$ref").asString();
+            assertTrue(ref.startsWith("#/"), "a reference this cannot follow: " + ref);
+            out.addAll(wordsOf(schema,
+                    nodeAt(schema, List.of(ref.substring(2).split("/")))));
         }
         return out;
     }

@@ -2,6 +2,9 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.partition.ReportedReason;
 
@@ -10,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Every way a reading comes back without a line, and what each of them leaves behind, in one table.
@@ -224,6 +228,77 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonBetweenPositions());
+    }
+
+    /**
+     * A surface of the document admits the words the reasons reaching it can be projected to.
+     *
+     * <p>Two surfaces and two vocabularies. An entry about a position is written from the reasons a
+     * position's readings hold — a rule that came to no line, and a stop at the position itself —
+     * and a question's is written from those and from the reasons that are about a rule and neither
+     * of those. So the second vocabulary is the first and one word more, and which word is not a
+     * choice: it is what the reasons outside those two capabilities project to.
+     *
+     * <p>Held as the difference between the two, on both sides. The schema said them with one
+     * definition while the two sets were equal, and a word added to it was a word an entry about a
+     * position could carry with nothing able to produce it — the type had just been arranged so
+     * that it could not. A vocabulary per surface says which, and this says why.
+     */
+    @Test
+    void eachSurfaceAdmitsTheWordsItsOwnReasonsReach() throws Exception {
+        JsonNode schema = schema();
+
+        java.util.Set<String> onlyAQuestion = new java.util.LinkedHashSet<>(
+                words(schema, "questionStoppedReason"));
+        onlyAQuestion.removeAll(words(schema, "notReadReason"));
+
+        java.util.Set<String> reachedByARuleAlone = new java.util.LinkedHashSet<>(
+                projected(theOtherReasons()));
+        reachedByARuleAlone.removeAll(projected(everyRuleWithoutALine()));
+        reachedByARuleAlone.removeAll(projected(everyStopAtAPosition()));
+
+        assertEquals(reachedByARuleAlone, onlyAQuestion,
+                "what one surface admits and the other does not is what its own reasons reach");
+    }
+
+    /** The words {@code these} come to, which is what a document writes for each of them. */
+    private static java.util.Set<String> projected(List<? extends BlockReason> these) {
+        return these.stream().map(each -> ReportedReason.of(each).name())
+                .map(java.lang.String::toLowerCase)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    /** The words the schema allows at one of its definitions, following what it is written as. */
+    private static java.util.Set<String> words(JsonNode schema, String def) {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        JsonNode node = schema.get("$defs").get(def);
+        assertNotNull(node, "the schema has no " + def);
+        if (node.has("enum")) {
+            node.get("enum").forEach(each -> out.add(each.asString()));
+        }
+        if (node.has("anyOf")) {
+            for (JsonNode each : node.get("anyOf")) {
+                if (each.has("const")) {
+                    out.add(each.get("const").asString());
+                }
+                if (each.has("$ref")) {
+                    out.addAll(words(schema,
+                            each.get("$ref").asString().substring("#/$defs/".length())));
+                }
+            }
+        }
+        return out;
+    }
+
+    private static JsonNode schema() throws Exception {
+        try (java.io.InputStream in = souther.compiler.report.AdequacyReport.class
+                .getResourceAsStream(
+                        souther.compiler.report.AdequacyReport.SCHEMA_RESOURCE)) {
+            assertNotNull(in, "the schema ships beside the compiler");
+            return JsonMapper.builder().build().readTree(
+                    new java.lang.String(in.readAllBytes(),
+                            java.nio.charset.StandardCharsets.UTF_8));
+        }
     }
 
     /** One of each reason that is in neither capability the two lists above are of. */
