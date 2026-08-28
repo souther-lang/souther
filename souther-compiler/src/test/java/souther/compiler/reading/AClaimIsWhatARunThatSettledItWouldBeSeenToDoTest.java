@@ -15,6 +15,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Scopes;
 
 import java.lang.reflect.Constructor;
@@ -171,7 +172,7 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
         private final Object instance;
         private final Method apply;
 
-        Behavior(Map<String, byte[]> classes, String module, String name) {
+        Behavior(Map<String, ClassFileImage> classes, String module, String name) {
             assertNotNull(classes, "the model under test compiles");
             ClassLoader loader = new MemoryClassLoader(classes,
                     AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest.class.getClassLoader());

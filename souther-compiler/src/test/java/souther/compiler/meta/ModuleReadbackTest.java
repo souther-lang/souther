@@ -6,6 +6,7 @@ import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -25,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ModuleReadbackTest {
 
-    private static ReadableModule readBack(String moduleName, Map<String, byte[]> classes) {
+    private static ReadableModule readBack(String moduleName, Map<String, ClassFileImage> classes) {
         return assertInstanceOf(ReadableModule.class, assertInstanceOf(Readback.Ready.class,
-                ModuleReadback.read(moduleName, new ClassFileDeclarations(classes::get), DefaultStdlib.get().names())).value());
+                ModuleReadback.read(moduleName, new ClassFileDeclarations(ModulePath.of(classes)::bytes), DefaultStdlib.get().names())).value());
     }
 
     /** Why a readback would not answer, as the arm rather than as a message it was raised with. */
@@ -87,7 +88,7 @@ class ModuleReadbackTest {
      * `let` that needed the other one is not part of what was published. */
     @Test
     void onlyTheImportsTheDeclarationsNameComeBack() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """, """
@@ -139,7 +140,7 @@ class ModuleReadbackTest {
      * (spec {@code [#a-published-signature-is-written-in-names-its-module-has]}). */
     @Test
     void aCompositionComesBackAsASignature() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module shop.pricing exposing ( Cart, Priced, quote )
                 data Cart = { n: Int }
                 data Priced = { total: Int }
@@ -197,7 +198,7 @@ class ModuleReadbackTest {
                 behavior sum : (l: Line) -> Total constructs Total, Money
                 let sum (l) = Total { amount = Money(l.item.unit.value * l.count) }
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(base, catalog, order));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(base, catalog, order));
 
         for (String name : List.of("shop.base", "shop.catalog", "shop.order")) {
             ReadableModule read = readBack(name, classes);
@@ -234,15 +235,16 @@ class ModuleReadbackTest {
     @Test
     void aNameThatIsNotACompiledModuleReadsAsNothing() {
         assertInstanceOf(Readback.NotReady.SaysNothing.class,
-                ModuleReadback.read("shared.money", new ClassFileDeclarations(Map.<String,
-                        byte[]>of()::get), DefaultStdlib.get().names()));
+                ModuleReadback.read("shared.money",
+                        new ClassFileDeclarations(ModulePath.EMPTY::bytes),
+                        DefaultStdlib.get().names()));
     }
 
     /** A module built against a boundary this compiler does not share is refused, rather than read
      * and misunderstood. */
     @Test
     void aModuleFromADifferentBoundaryIsRefused() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """);
@@ -264,7 +266,7 @@ class ModuleReadbackTest {
      */
     @Test
     void aModuleFromAnEarlierBoundaryIsRefusedToo() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.money exposing ( Amount, taxed )
                 data Amount = Int
                 let taxed (a: Amount) = Amount(a.value * 110 / 100)
@@ -284,7 +286,7 @@ class ModuleReadbackTest {
      * disagreement, rather than read and reported as an unresolved name inside a body nobody wrote. */
     @Test
     void aModuleCarryingAPublishedHelperIsRefusedAtADifferentBoundary() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.money exposing ( Amount, taxed )
                 data Amount = Int
                 let taxed (a: Amount) = Amount(a.value * 110 / 100)
@@ -318,7 +320,7 @@ class ModuleReadbackTest {
      */
     @Test
     void oneWhoseHeaderNamesAnotherModuleIsNotTheModuleThatWasAskedFor() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """);
@@ -379,7 +381,7 @@ class ModuleReadbackTest {
      */
     @Test
     void aJarWritingTheOlderBehaviorMemberIsRefusedAtItsOwnBoundaryAndNotAtThisOne() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.ledger exposing ( Entry, record )
                 data Entry = { amount: Int }
                 behavior record : (e: Entry) -> Entry
@@ -397,8 +399,8 @@ class ModuleReadbackTest {
 
     /** {@code classes} as a compiler that wrote {@code injected} rather than {@code implementation}
      *  published them, at {@code boundary}. */
-    private static PublishedClasses asItWasWritten(Map<String, byte[]> classes, int boundary) {
-        ClassFileDeclarations read = new ClassFileDeclarations(classes::get);
+    private static PublishedClasses asItWasWritten(Map<String, ClassFileImage> classes, int boundary) {
+        ClassFileDeclarations read = new ClassFileDeclarations(ModulePath.of(classes)::bytes);
         return binaryName -> {
             if (!(read.of(binaryName)
                     instanceof PublishedClasses.Carried.Declared(
@@ -418,9 +420,9 @@ class ModuleReadbackTest {
     }
 
     private static PublishedClasses viewing(
-            Map<String, byte[]> classes,
+            Map<String, ClassFileImage> classes,
             java.util.function.UnaryOperator<PublishedClasses.SoutherModuleView> as) {
-        ClassFileDeclarations read = new ClassFileDeclarations(classes::get);
+        ClassFileDeclarations read = new ClassFileDeclarations(ModulePath.of(classes)::bytes);
         return binaryName -> {
             if (!(read.of(binaryName)
                     instanceof PublishedClasses.Carried.Declared(

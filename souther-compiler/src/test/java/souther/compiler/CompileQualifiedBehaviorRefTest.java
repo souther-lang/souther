@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,7 @@ class CompileQualifiedBehaviorRefTest {
 
     @Test
     void aStageMayNameItsBehaviorThroughItsModule() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(UP, """
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(UP, """
                 module d exposing ( Out, flow : Out )
                 data Out = { n: Int }
                 behavior plus : (m: up.Mid) -> Out constructs Out
@@ -76,7 +77,7 @@ class CompileQualifiedBehaviorRefTest {
     /** The injected field keeps the bare name, so the Java surface is what it was. */
     @Test
     void aRequiresMayNameItsBehaviorThroughItsModule() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(LOOKUP, """
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(LOOKUP, """
                 module d exposing ( Out, run )
                 data Out = { n: Int }
                 behavior run : (i: up2.In) -> Out constructs Out depends on up2.lookup

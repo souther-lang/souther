@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -177,7 +179,7 @@ class RunnerTest {
      */
     @Test
     void refusesAPipelineWhoseStageIsAnotherModulesInjectedBehavior() throws Exception {
-        java.util.Map<String, byte[]> published = souther.compiler.Compiler.compile("""
+        java.util.Map<String, ClassFileImage> published = souther.compiler.Compiler.compile("""
                 module app.a exposing ( In, Mid, f )
                 data In = { v: Int }
                 data Mid = { v: Int }
@@ -192,7 +194,7 @@ class RunnerTest {
                 """);
         Runner.RunException e = assertThrows(Runner.RunException.class,
                 () -> Runner.run(file, "flow", "{\"v\": 1}", new java.util.ArrayList<>(),
-                        published::get));
+                        souther.compiler.meta.ModulePath.of(published)));
         assertTrue(e.getMessage().contains("no implementation"), e.getMessage());
     }
 

@@ -32,6 +32,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
@@ -65,14 +66,14 @@ public final class Output {
      * One module's classes, with its declarations stamped on. The declarations go on before anything
      * loads a class, so what a jar carries is the same bytes this compile checked.
      */
-    public record Classes(String name) implements Key<Map<String, byte[]>> {
+    public record Classes(String name) implements Key<Map<String, ClassFileImage>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, byte[]>> compute(Db db) {
+        public Answer<Map<String, ClassFileImage>> compute(Db db) {
             Inputs in = inputs(db, name);
             if (in == null) {
                 return Answer.absent();
@@ -85,7 +86,7 @@ public final class Output {
                         in.callees(), in.requirements(), in.checked(), in.compositions(),
                         in.dischargeClauses(), in.shapes(), in.checks(), in.standingCalls());
                 stamp(db, emitted);
-                return Answer.of(Ordered.map(emitted.byBinaryName()));
+                return Answer.of(emitted.seal());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -245,16 +246,16 @@ public final class Output {
      * what makes an example of a module that reaches it fail to load rather than run against
      * something that was never checked.
      */
-    public record All() implements Key<Map<String, byte[]>> {
+    public record All() implements Key<Map<String, ClassFileImage>> {
         @Override
-        public Answer<Map<String, byte[]>> compute(Db db) {
+        public Answer<Map<String, ClassFileImage>> compute(Db db) {
             List<String> declared = db.ask(new Front.Declared()).value();
-            Map<String, byte[]> all = new LinkedHashMap<>();
+            Map<String, ClassFileImage> all = new LinkedHashMap<>();
             if (declared == null) {
                 return Answer.of(Map.of());
             }
             for (String name : declared) {
-                Map<String, byte[]> classes = db.ask(new Classes(name)).value();
+                Map<String, ClassFileImage> classes = db.ask(new Classes(name)).value();
                 if (classes != null) {
                     all.putAll(classes);
                 }
@@ -305,29 +306,28 @@ public final class Output {
      * The classes an evaluation of one module's code loads: its own, and those of every module it
      * reaches.
      *
-     * <p>Not {@link All}. A module's classes are a map of arrays, and arrays compare by identity, so
-     * regenerating a module always counts as a change — and a key that read every module's classes
-     * would be recomputed by an edit anywhere in the workspace, however far from it. Reading only
-     * what it reaches is what keeps an edit to one module from re-running the examples of every
-     * other one.
+     * <p>Not {@link All}. What a module comes out as changes whenever anything its generation reads
+     * changes, and {@link All} reads every module's — so a key built on it is recomputed by an edit
+     * anywhere in the workspace, however far from what the edit was about. Reading only what it
+     * reaches is what keeps an edit to one module from re-running the examples of every other one.
      */
-    public record Linked(String name) implements Key<Map<String, byte[]>> {
+    public record Linked(String name) implements Key<Map<String, ClassFileImage>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, byte[]>> compute(Db db) {
+        public Answer<Map<String, ClassFileImage>> compute(Db db) {
             List<String> reaches = db.ask(new Reaches(name)).value();
             if (reaches == null) {
                 return Answer.of(Map.of());
             }
-            Map<String, byte[]> linked = new LinkedHashMap<>();
+            Map<String, ClassFileImage> linked = new LinkedHashMap<>();
             // Furthest first, so the module being evaluated is put on last: a name two of them
             // generate is the near one's, which is the order All puts them in as well.
             for (int i = reaches.size() - 1; i >= 0; i--) {
-                Map<String, byte[]> classes = db.ask(new Classes(reaches.get(i))).value();
+                Map<String, ClassFileImage> classes = db.ask(new Classes(reaches.get(i))).value();
                 if (classes != null) {
                     linked.putAll(classes);
                 }
@@ -383,8 +383,7 @@ public final class Output {
                         instrumentation);
                 Classes.stamp(db, name, emitted);
                 // The classes and what they implement, from the one emission that decided both.
-                return Answer.of(new EvaluationArtifact(Ordered.map(emitted.byBinaryName()),
-                        emitted.implemented()));
+                return Answer.of(new EvaluationArtifact(emitted.seal(), emitted.implemented()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             } catch (IllegalStateException _) {
@@ -439,7 +438,7 @@ public final class Output {
                 return Answer.absent();
             }
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            Map<String, byte[]> linked = new LinkedHashMap<>();
+            Map<String, ClassFileImage> linked = new LinkedHashMap<>();
             GeneratedImplementations implemented = null;
             // Furthest first, so the module being evaluated is put on last, as Linked does.
             for (int i = reaches.size() - 1; i >= 0; i--) {
@@ -481,7 +480,7 @@ public final class Output {
 
     /** The class loader compile-time code runs against: this compilation's classes over the ones the
      * projects it depends on already built. */
-    static ClassLoader loader(Db db, Map<String, byte[]> classes) {
+    static ClassLoader loader(Db db, Map<String, ClassFileImage> classes) {
         ModulePath path = db.ask(new Front.Path()).value();
         ClassLoader parent = path == null ? Output.class.getClassLoader()
                 : path.loader(Output.class.getClassLoader());
@@ -501,14 +500,14 @@ public final class Output {
      * the same name on the path.
      */
     public static ClassFileDeclarations declarationsRead(Db db) {
-        Map<String, byte[]> generated = db.ask(new All()).value();
+        Map<String, ClassFileImage> generated = db.ask(new All()).value();
         ModulePath path = db.ask(new Front.Path()).value();
         return new ClassFileDeclarations(binaryName -> {
-            byte[] here = generated == null ? null : generated.get(binaryName);
-            if (here != null || path == null) {
-                return here;
+            ClassFileImage here = generated == null ? null : generated.get(binaryName);
+            if (here != null) {
+                return here.bytes();
             }
-            return path.bytes(binaryName);
+            return path == null ? null : path.bytes(binaryName);
         });
     }
 

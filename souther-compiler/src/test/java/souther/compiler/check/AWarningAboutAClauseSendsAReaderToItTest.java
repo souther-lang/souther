@@ -241,7 +241,7 @@ class AWarningAboutAClauseSendsAReaderToItTest {
      */
     @Test
     void aClauseOfAPublishedModuleIsNotPointedAt() {
-        ModulePath path = Compiler.compileModules(List.of(DECLARING))::get;
+        ModulePath path = ModulePath.of(Compiler.compileModules(List.of(DECLARING)));
         List<InvariantChecker.Said> said = java.util.Collections.synchronizedList(
                 new java.util.ArrayList<>());
         List<Diagnostic> warnings;

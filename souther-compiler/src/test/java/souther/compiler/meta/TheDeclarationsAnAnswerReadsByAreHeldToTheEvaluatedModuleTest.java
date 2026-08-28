@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import java.util.List;
@@ -1013,9 +1014,9 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     /** The classes one build of a model spread over several sources emits. */
     private static PublishedClasses declarationsOf(List<String> sources) {
         Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
-        Map<String, byte[]> classes = compiled.db().ask(new Output.All()).value();
+        Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
         assertEquals(List.of(), diagnosed(compiled), "the model this is measured against compiles");
-        return new ClassFileDeclarations(classes::get);
+        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
     }
 
     /**
@@ -1028,9 +1029,9 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      */
     private static PublishedClasses declarationsOf(String source) {
         Compilation compiled = Compilation.ofSource(source, "Main");
-        Map<String, byte[]> classes = compiled.db().ask(new Output.All()).value();
+        Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
         assertEquals(List.of(), diagnosed(compiled), "the model this is measured against compiles");
-        return new ClassFileDeclarations(classes::get);
+        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
     }
 
     /** What a compile refused, as codes — nothing, for every model measured here.

@@ -2,6 +2,7 @@ package souther.bench;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.runtime.Behavior;
@@ -42,7 +43,7 @@ final class Generated {
         Corpus corpus = Corpus.load("runtime");
         Compilation compilation = corpus.compile();
         corpus.check(compilation);
-        Map<String, byte[]> classes = compilation.classes();
+        Map<String, ClassFileImage> classes = compilation.classes();
         ClassLoader loader = new MemoryClassLoader(classes, Generated.class.getClassLoader());
 
         Behavior<Object, Object> sumAll = behavior(loader, "SumAll");

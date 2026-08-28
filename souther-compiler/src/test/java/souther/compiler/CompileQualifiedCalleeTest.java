@@ -5,6 +5,7 @@ import souther.compiler.diag.Primary;
 import souther.compiler.diag.msg.NameMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import java.util.List;
 import java.util.Map;
@@ -37,7 +38,7 @@ class CompileQualifiedCalleeTest {
             data Amount = Int invariant value >= 0
             """;
 
-    private static Map<String, byte[]> compile(String... srcs) {
+    private static Map<String, ClassFileImage> compile(String... srcs) {
         return Compiler.compileModules(List.of(srcs));
     }
 
@@ -99,7 +100,7 @@ class CompileQualifiedCalleeTest {
      *  bound, so nothing in it is a namespace and no fold is attempted. */
     @Test
     void aChainRootedAtABindingIsReadsAllTheWayDown() throws Exception {
-        Map<String, byte[]> classes = compile("""
+        Map<String, ClassFileImage> classes = compile("""
                 module demo exposing ( In, Out, go )
                 data Inner = { n: Int }
                 data Mid = { inner: Inner }
@@ -201,7 +202,7 @@ class CompileQualifiedCalleeTest {
      *  its parts, so the pipe and the call reach the same answer for the same spelling. */
     @Test
     void aPipeToAQualifiedNameIsTheSameCallAsWritingIt() throws Exception {
-        Map<String, byte[]> classes = compile("""
+        Map<String, ClassFileImage> classes = compile("""
                 module demo exposing ( In, Out, go )
                 data In = { s: String }
                 data Out = { t: String, u: String }

@@ -1,6 +1,7 @@
 package souther.compiler.meta;
 
 import souther.compiler.Compiler;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -48,17 +49,17 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
     /** {@code binaryName}'s class with its annotations rewritten. */
     private static PublishedClasses withMetadata(String binaryName,
                                                  UnaryOperator<List<Annotation>> as) {
-        Map<String, byte[]> classes = new java.util.LinkedHashMap<>(Compiler.compile(SOURCE));
+        Map<String, ClassFileImage> classes = new java.util.LinkedHashMap<>(Compiler.compile(SOURCE));
         ClassFile cf = ClassFile.of();
-        ClassModel model = cf.parse(classes.get(binaryName));
+        ClassModel model = cf.parse(classes.get(binaryName).bytes());
         List<Annotation> had = new ArrayList<>();
         model.findAttribute(Attributes.runtimeInvisibleAnnotations())
                 .ifPresent(a -> had.addAll(a.annotations()));
-        classes.put(binaryName, cf.transformClass(model, ClassTransform
+        classes.put(binaryName, ClassFileImage.of(cf.transformClass(model, ClassTransform
                 .dropping(a -> a instanceof RuntimeInvisibleAnnotationsAttribute)
                 .andThen(ClassTransform.endHandler(b -> b.with(
-                        RuntimeInvisibleAnnotationsAttribute.of(as.apply(had)))))));
-        return new ClassFileDeclarations(classes::get);
+                        RuntimeInvisibleAnnotationsAttribute.of(as.apply(had))))))));
+        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
     }
 
     /** A member the schema declares with no default, and the writer always writes. */
@@ -251,7 +252,7 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
     /** And the metadata this compiler does write is read. */
     @Test
     void whatThisCompilerWritesIsRead() {
-        PublishedClasses classes = new ClassFileDeclarations(Compiler.compile(SOURCE)::get);
+        PublishedClasses classes = new ClassFileDeclarations(ModulePath.of(Compiler.compile(SOURCE))::bytes);
 
         PublishedClasses.Carried.Declared read = assertInstanceOf(
                 PublishedClasses.Carried.Declared.class, classes.of("shared.money.Amount"));

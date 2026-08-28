@@ -19,6 +19,8 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.Scopes;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Shapes;
 
 import javax.tools.ToolProvider;
@@ -307,7 +309,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
     }
 
 
-    private static Map<String, byte[]> compiled(String model) {
+    private static Map<String, ClassFileImage> compiled(String model) {
         Compilation c = Compilation.ofSource(model, "Main");
         return c.db().ask(new Output.All()).value();
     }
@@ -364,8 +366,8 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
 
     /** What the module's rows are written for, as this compile emitted it. */
     private static java.util.function.Supplier<PublishedClasses> declarationsOf(Compilation c) {
-        Map<String, byte[]> classes = c.db().ask(new Output.All()).value();
-        return () -> new ClassFileDeclarations(classes::get);
+        Map<String, ClassFileImage> classes = c.db().ask(new Output.All()).value();
+        return () -> new ClassFileDeclarations(ModulePath.of(classes)::bytes);
     }
 
     /**
@@ -376,19 +378,19 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
      * its loader has, and a loader that serves classes and not resources would leave the reading with
      * nothing to read.
      */
-    private static Object builtElsewhere(Map<String, byte[]> generated, String source)
+    private static Object builtElsewhere(Map<String, ClassFileImage> generated, String source)
             throws Exception {
         return builtElsewhere(generated, source, "example/todo/FindTodoImpl.java",
                 "example.todo.FindTodoImpl");
     }
 
-    private static Object builtElsewhere(Map<String, byte[]> generated, String source,
+    private static Object builtElsewhere(Map<String, ClassFileImage> generated, String source,
                                          String written, String named) throws Exception {
         Path classes = Files.createTempDirectory("souther-bound");
-        for (Map.Entry<String, byte[]> e : generated.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> e : generated.entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
-            Files.write(at, e.getValue());
+            Files.write(at, e.getValue().bytes());
         }
         Path java = classes.resolve(written);
         Files.createDirectories(java.getParent());

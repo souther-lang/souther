@@ -16,6 +16,7 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.diag.SourceNames;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 
@@ -151,14 +152,14 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
      * another project imports it by, so a build downstream would go on importing a module that is
      * no longer written anywhere.
      */
-    private static void write(Map<String, byte[]> classes, Path outputDirectory, Path stateDirectory)
-            throws IOException {
+    private static void write(Map<String, ClassFileImage> classes, Path outputDirectory,
+                              Path stateDirectory) throws IOException {
         Set<String> written = new LinkedHashSet<>();
-        for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
             String relative = entry.getKey().replace('.', '/') + ".class";
             Path file = outputDirectory.resolve(relative);
             Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue());
+            Files.write(file, entry.getValue().bytes());
             written.add(relative);
         }
         remove(generatedBefore(stateDirectory), written, outputDirectory);

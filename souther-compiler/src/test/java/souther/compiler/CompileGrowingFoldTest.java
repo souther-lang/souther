@@ -42,7 +42,8 @@ class CompileGrowingFoldTest {
      *  one leave one builder behind. */
     private int callsTo(String src, String method) {
         int calls = 0;
-        for (byte[] bytes : Compiler.compile(src).values()) {
+        for (byte[] bytes : Compiler.compile(src).values().stream()
+                .map(souther.compiler.jvm.ClassFileImage::bytes).toList()) {
             for (java.lang.classfile.MethodModel m : java.lang.classfile.ClassFile.of()
                     .parse(bytes).methods()) {
                 if (m.code().isEmpty()) {

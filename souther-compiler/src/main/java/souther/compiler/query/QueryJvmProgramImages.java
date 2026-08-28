@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.execute.jvm.JvmProgramImage;
 import souther.compiler.execute.jvm.JvmProgramImages;
 import souther.compiler.generated.EvaluationArtifact;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.observe.ArmObservation;
 
 import java.util.Map;
@@ -29,7 +30,7 @@ final class QueryJvmProgramImages implements JvmProgramImages {
 
     @Override
     public ClassLoader compileTimeLoader(String module) {
-        Map<String, byte[]> classes = db.ask(new Output.Linked(module)).value();
+        Map<String, ClassFileImage> classes = db.ask(new Output.Linked(module)).value();
         return classes == null ? null : Output.loader(db, classes);
     }
 

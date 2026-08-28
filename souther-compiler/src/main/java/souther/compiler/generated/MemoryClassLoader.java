@@ -1,23 +1,29 @@
 package souther.compiler.generated;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * Loads freshly generated classes from an in-memory binary-name → bytecode map, delegating anything
- * unknown to the parent loader. Used to run generated code without writing {@code .class} files:
- * the compiler's compile-time {@code $Ctfe.check} evaluation, the rows an {@code example} states,
- * and the behavior {@code souther run} drives. None of the three is the reason it exists — it is
- * how a compilation's classes become classes at all.
+ * Loads freshly generated classes from an in-memory binary-name → class-file map, delegating
+ * anything unknown to the parent loader. Used to run generated code without writing {@code .class}
+ * files: the compiler's compile-time {@code $Ctfe.check} evaluation, the rows an {@code example}
+ * states, and the behavior {@code souther run} drives. None of the three is the reason it exists —
+ * it is how a compilation's classes become classes at all.
+ *
+ * <p>Holds the classes as what they are and asks for their octets where the JVM is handed them. A
+ * loader keeping a map of arrays would be the compilation's classes back in a form anything holding
+ * the map could write into, for as long as the loader lives — which is longer than any of them.
  */
 public final class MemoryClassLoader extends ClassLoader {
 
-    private final Map<String, byte[]> classes;
+    private final Map<String, ClassFileImage> classes;
     /** Classes defined on the fly (a multi-argument fake's base subclass; issue #57), cached so a name
      * is never defined twice — which would be a {@code LinkageError}. */
     private final Map<String, Class<?>> defined = new java.util.concurrent.ConcurrentHashMap<>();
 
-    public MemoryClassLoader(Map<String, byte[]> classes, ClassLoader parent) {
+    public MemoryClassLoader(Map<String, ClassFileImage> classes, ClassLoader parent) {
         super(parent);
         this.classes = classes;
     }
@@ -61,10 +67,11 @@ public final class MemoryClassLoader extends ClassLoader {
         if (onTheFly != null) {
             return onTheFly;
         }
-        byte[] b = classes.get(name);
-        if (b == null) {
+        ClassFileImage image = classes.get(name);
+        if (image == null) {
             throw new ClassNotFoundException(name);
         }
+        byte[] b = image.bytes();
         return defineClass(name, b, 0, b.length);
     }
 

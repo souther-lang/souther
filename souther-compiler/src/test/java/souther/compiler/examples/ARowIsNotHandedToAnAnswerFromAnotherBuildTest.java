@@ -18,6 +18,8 @@ import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -326,7 +328,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     /** The classes one build of {@code source} emits, read for what they were stamped with. */
     private static PublishedClasses declarationsOf(String source) {
         Compilation compiled = Compilation.ofSource(source, "Main");
-        Map<String, byte[]> classes = compiled.db().ask(new Output.All()).value();
-        return new ClassFileDeclarations(classes::get);
+        Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
+        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
     }
 }

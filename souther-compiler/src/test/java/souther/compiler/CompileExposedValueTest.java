@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -126,8 +127,8 @@ class CompileExposedValueTest {
      * the jar, and a value is substituted from that like any other. */
     @Test
     void aValueCrossesAProjectBoundary() throws Exception {
-        Map<String, byte[]> classes = Compiler.compile(UPSTREAM);
-        ModulePath path = classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compile(UPSTREAM);
+        ModulePath path = ModulePath.of(classes);
 
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
                 module app.billing exposing ( Receipt, bill )

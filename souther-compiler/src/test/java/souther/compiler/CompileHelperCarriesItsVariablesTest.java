@@ -1,13 +1,13 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -382,11 +382,11 @@ class CompileHelperCarriesItsVariablesTest {
                 let count (xs) = List.length(xs)
                 let go (r) = Out { n = count(r.value) }
                 """;
-        Map<String, byte[]> first = Compiler.compile(src);
-        Map<String, byte[]> second = Compiler.compile(src);
+        Map<String, ClassFileImage> first = Compiler.compile(src);
+        Map<String, ClassFileImage> second = Compiler.compile(src);
         assertEquals(first.keySet(), second.keySet());
         for (String name : first.keySet()) {
-            assertArrayEquals(first.get(name), second.get(name), name + " differs between two reads");
+            assertEquals(first.get(name), second.get(name), name + " differs between two reads");
         }
     }
 

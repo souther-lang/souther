@@ -10,6 +10,7 @@ import souther.compiler.meta.PublishedClasses;
 import souther.compiler.meta.ReadableModule;
 import souther.compiler.meta.Readback;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -322,13 +323,14 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
      */
     @Test
     void oneWhoseDeclarationsClassCarriesMetadataThatCannotBeRead() {
-        Map<String, byte[]> built = Compiler.compile("""
+        Map<String, ClassFileImage> built = Compiler.compile("""
                 module lib.pub exposing ( Held )
                 data Held = String
                 """);
 
+        ModulePath path = ModulePath.of(built);
         bothAreSaidOnTheSource(binaryName -> binaryName.equals("lib.pub.Held")
-                ? NOT_A_CLASS_FILE : built.get(binaryName));
+                ? NOT_A_CLASS_FILE : path.bytes(binaryName));
     }
 
     /**
@@ -341,14 +343,15 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
      */
     @Test
     void oneWhoseMetadataIsRefusedAfterItsClassFileParses() {
-        Map<String, byte[]> built = Compiler.compile("""
+        Map<String, ClassFileImage> built = Compiler.compile("""
                 module lib.pub exposing ( Held )
                 data Held = String
                 """);
-        byte[] lazily = readableUntilAsked(built.get("lib.pub.$Module"));
+        byte[] lazily = readableUntilAsked(built.get("lib.pub.$Module").bytes());
 
+        ModulePath path = ModulePath.of(built);
         bothAreSaidOnTheSource(binaryName -> binaryName.equals("lib.pub.$Module")
-                ? lazily : built.get(binaryName));
+                ? lazily : path.bytes(binaryName));
     }
 
     /**
@@ -514,12 +517,12 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
     /** Reading one that is fine still answers a module, with its import lines read. */
     @Test
     void oneThisCompilerCanReadComesBackReady() {
-        Map<String, byte[]> built = Compiler.compile("""
+        Map<String, ClassFileImage> built = Compiler.compile("""
                 module lib.ok exposing ( Held )
                 data Held = String
                 """);
         var readback = ModuleReadback.read("lib.ok",
-                ((ModulePath) built::get).declarations(), DefaultStdlib.get().names());
+                ModulePath.of(built).declarations(), DefaultStdlib.get().names());
 
         assertEquals("lib.ok",
                 assertInstanceOf(ReadableModule.class,

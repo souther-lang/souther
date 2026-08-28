@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.Compiler;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -78,7 +79,7 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
     /** The module that declares the clause carries it, and carries it whoever ends up calling it. */
     @Test
     void theDeclaringModuleCarriesTheCheck() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(DECLARING, CALLING));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(DECLARING, CALLING));
 
         assertTrue(classes.containsKey("up.Fetch$Ensures"),
                 "the clause is `up`'s, so the class holding it is: " + classes.keySet());
@@ -115,8 +116,8 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
                 decidedByDown(new ValueName.Behavior("up", "fetch")),
                 "`down` has not decided about `up.fetch`, rather than decided there is no check");
 
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(DECLARING, CALLING));
-        assertEquals(0, checksOf(classes.get("down.Use$Impl"), "up/Fetch$Ensures"),
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(DECLARING, CALLING));
+        assertEquals(0, checksOf(classes.get("down.Use$Impl").bytes(), "up/Fetch$Ensures"),
                 "and so emits nothing for it — which follows from the decision above");
     }
 
@@ -155,7 +156,7 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
      *  what says the difference above is the module boundary and not the shape of the call. */
     @Test
     void theSameCallWithinOneModuleIsCheckedAtItsCrossing() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module up
 
                 data Amount = Int
@@ -168,7 +169,7 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
                 let use (a, fetch) = fetch(a)
                 """);
 
-        assertEquals(1, checksOf(classes.get("up.Use$Impl"), "up/Fetch$Ensures"),
+        assertEquals(1, checksOf(classes.get("up.Use$Impl").bytes(), "up/Fetch$Ensures"),
                 "one module, one checker, one crossing");
     }
 }

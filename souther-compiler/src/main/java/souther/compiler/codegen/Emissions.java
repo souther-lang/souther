@@ -1,11 +1,13 @@
 package souther.compiler.codegen;
 
 import souther.compiler.generated.GeneratedImplementations;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.jvm.SoutherJvmAbi;
 
 import java.lang.classfile.ClassFile;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -24,6 +26,13 @@ import java.util.Set;
  * §no-two-declarations-become-one-class). This says the same thing at the one place both are true of,
  * so a naming scheme changed later cannot bring the silence back.
  *
+ * <p><b>Where the bytes stop being writable.</b> A class is built, instrumented and written onto
+ * here, and all of that is one array being replaced by another. {@link #seal} is where that ends:
+ * what it answers with is the classes as values, and every way of writing refuses afterwards. So the
+ * one boundary between the mutable thing and the value is a call somebody makes, rather than an
+ * order of statements a later stamping step can be appended after — and nothing hands out the map
+ * underneath, because a caller holding that could write past the refusal.
+ *
  * <p>A caller says which {@link GeneratedClass} it is emitting, not what that class is called. The two
  * are not the same question and cannot be one key: {@code BridgeCase("m", a.Foo)} and
  * {@code BridgeCase("m", b.Foo)} are different identities that this ABI spells the same, and keying on
@@ -40,12 +49,25 @@ public final class Emissions {
     /** Which module these were emitted for, so a set with nothing of a kind in it still says whose
      *  it is. */
     private final String module;
+    /** What was handed out, once there is such a thing. */
+    private Map<String, ClassFileImage> sealed;
 
     public Emissions(String module) {
         this.module = module;
     }
 
+    /** That these are still being written, said where the writing is asked for. */
+    private void stillOpen(String writing) {
+        if (sealed != null) {
+            throw new IllegalStateException("the classes of " + module
+                    + " have been handed over as values, so " + writing + " would change what a"
+                    + " reader already holds; everything written onto a class is written before"
+                    + " they are sealed");
+        }
+    }
+
     public void put(GeneratedClass generated, byte[] bytes) {
+        stillOpen("emitting another class");
         JvmClassName name = SoutherJvmAbi.nameOf(generated);
         Emission held = byName.get(name);
         if (held != null) {
@@ -106,6 +128,7 @@ public final class Emissions {
      * never what it is.
      */
     public void rewrite(GeneratedClass generated, java.util.function.UnaryOperator<byte[]> rewriting) {
+        stillOpen("rewriting a class");
         JvmClassName name = SoutherJvmAbi.nameOf(generated);
         Emission held = byName.get(name);
         if (held == null) {
@@ -144,11 +167,25 @@ public final class Emissions {
         return new GeneratedImplementations(module, behaviors);
     }
 
-    /** What the compilation hands on: a class loader and a file path want the binary name, and by
-     *  here every one of them came from the ABI. */
-    public Map<String, byte[]> byBinaryName() {
-        Map<String, byte[]> out = new LinkedHashMap<>();
-        byName.forEach((name, emission) -> out.put(name.binaryName(), emission.bytes()));
-        return out;
+    /**
+     * The classes as values, under the binary name each is emitted as — what the compilation hands
+     * on, and the end of the writing.
+     *
+     * <p>By the binary name because that is what asks for a class: a loader, and a path to write it
+     * at. By here every one of them came from the ABI.
+     *
+     * <p>Built once. Asked a second time this answers with what it answered the first time rather
+     * than reading the arrays again, so what a reader was handed cannot come to differ from what
+     * the next reader is handed — and an array still reachable from somewhere inside cannot reach
+     * either of them.
+     */
+    public Map<String, ClassFileImage> seal() {
+        if (sealed == null) {
+            Map<String, ClassFileImage> out = new LinkedHashMap<>();
+            byName.forEach((name, emission) ->
+                    out.put(name.binaryName(), ClassFileImage.of(emission.bytes())));
+            sealed = Collections.unmodifiableMap(out);
+        }
+        return sealed;
     }
 }

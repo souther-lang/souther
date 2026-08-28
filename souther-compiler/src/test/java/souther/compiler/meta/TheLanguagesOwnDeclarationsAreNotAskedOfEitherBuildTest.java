@@ -6,6 +6,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
 import souther.compiler.diag.Severity;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import java.util.ArrayList;
@@ -216,11 +217,11 @@ class TheLanguagesOwnDeclarationsAreNotAskedOfEitherBuildTest {
 
     private static PublishedClasses declarationsOf(String source) {
         Compilation compiled = Compilation.ofSource(source, "Main");
-        Map<String, byte[]> classes = compiled.db().ask(new Output.All()).value();
+        Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
         assertEquals(List.of(), compiled.diagnostics().values().stream().flatMap(List::stream)
                         .filter(d -> d.diagnostic().severity() == Severity.ERROR)
                         .map(d -> String.valueOf(d.diagnostic().code())).toList(),
                 "the model this is measured against compiles");
-        return new ClassFileDeclarations(classes::get);
+        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
     }
 }

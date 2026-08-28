@@ -8,6 +8,8 @@ import souther.compiler.meta.Agreement;
 import souther.compiler.meta.DeclarationAgreement;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.meta.ModuleReadback;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.Readback;
 
 import java.util.List;
@@ -65,7 +67,7 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
      */
     @Test
     void twoBuildsImportingOneCompiledModuleAgree() {
-        Map<String, byte[]> onThePath = Compiler.compile(SHARED);
+        Map<String, ClassFileImage> onThePath = Compiler.compile(SHARED);
 
         Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(ROOT, onThePath), declarationsOf(ROOT, onThePath), DefaultStdlib.get());
@@ -75,8 +77,8 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
     }
 
     /** What a compile of {@code source} against {@code path} can read declarations of. */
-    private static PublishedClasses declarationsOf(String source, Map<String, byte[]> path) {
-        Compilation compiled = Compilation.ofSources(List.of(source), path::get);
+    private static PublishedClasses declarationsOf(String source, Map<String, ClassFileImage> path) {
+        Compilation compiled = Compilation.ofSources(List.of(source), ModulePath.of(path));
         compiled.db().ask(new Output.All());
         org.junit.jupiter.api.Assertions.assertEquals(List.of(),
                 compiled.diagnostics().values().stream().flatMap(List::stream)

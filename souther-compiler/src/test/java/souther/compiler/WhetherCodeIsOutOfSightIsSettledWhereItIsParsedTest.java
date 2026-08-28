@@ -12,6 +12,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModuleReadback;
 import souther.compiler.meta.ReadableModule;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.Readback;
 
 import org.junit.jupiter.api.Test;
@@ -68,7 +69,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
      */
     @Test
     void everyPositionOfAModuleReadOffThePathIsOutOfSight() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module lib.rule exposing ( Code )
 
                 data Code = Int
@@ -77,7 +78,8 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         ReadableModule read = assertInstanceOf(ReadableModule.class,
                 assertInstanceOf(Readback.Ready.class,
                         ModuleReadback.read("lib.rule",
-                                ((souther.compiler.meta.ModulePath) classes::get).declarations(), DefaultStdlib.get().names()),
+                                souther.compiler.meta.ModulePath.of(classes).declarations(),
+                                DefaultStdlib.get().names()),
                         "the module was published and is on the path").value());
 
         List<SourcePos> positions = new ArrayList<>();

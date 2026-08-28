@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CompileBehaviorByNameTest {
 
-    private static Map<String, byte[]> classes(String source) {
+    private static Map<String, ClassFileImage> classes(String source) {
         return Compiler.compile(source);
     }
 
@@ -121,7 +122,7 @@ class CompileBehaviorByNameTest {
     /** A behavior another module declares, bound to a {@code let} in the module that imports it. */
     @Test
     void anImportedBehaviorIsBoundToALetAndHandedOver() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( twice )
 
                 behavior twice : (n: Int) -> Int
@@ -162,7 +163,8 @@ class CompileBehaviorByNameTest {
                     let f = twice
                     Out { ys = List.map(f, i.xs) }
                 }
-                """).get(Emitted.impl("demo", "go")), java.nio.charset.StandardCharsets.ISO_8859_1);
+                """).get(Emitted.impl("demo", "go")).bytes(),
+                java.nio.charset.StandardCharsets.ISO_8859_1);
 
         assertTrue(bound.contains("demo/Twice"), "the expansion does not reach `demo.Twice`");
     }
@@ -274,7 +276,8 @@ class CompileBehaviorByNameTest {
 
     /** Which behavior classes the emitted body of {@code demo.go} references. */
     private static List<String> reached(String up, String demo) {
-        String impl = new String(Compiler.compileModules(List.of(up, demo)).get(Emitted.impl("demo", "go")),
+        String impl = new String(Compiler.compileModules(List.of(up, demo))
+                .get(Emitted.impl("demo", "go")).bytes(),
                 java.nio.charset.StandardCharsets.ISO_8859_1);
         return Stream.of("demo/Twice", "up/Twice").filter(impl::contains).toList();
     }

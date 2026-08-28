@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
 import souther.runtime.Behavior;
 
 import org.junit.jupiter.api.Test;
@@ -58,7 +59,7 @@ class CompileBindTest {
 
     @Test
     void generatesAnAbstractBaseAndBindFactory() throws Exception {
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(MODULE));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(MODULE));
         classes.put("demo.FindMemberImpl", compileSubclass(classes, "demo.FindMemberImpl", IMPL_SRC));
 
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -83,13 +84,14 @@ class CompileBindTest {
     }
 
     /** Compiles {@code source} against the generated classes and returns the class bytes. */
-    private static byte[] compileSubclass(Map<String, byte[]> generated, String className, String source)
+    private static ClassFileImage compileSubclass(Map<String, ClassFileImage> generated,
+                                                  String className, String source)
             throws Exception {
         java.nio.file.Path classesDir = Files.createTempDirectory("souther-gen");
-        for (Map.Entry<String, byte[]> e : generated.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> e : generated.entrySet()) {
             java.nio.file.Path p = classesDir.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(p.getParent());
-            Files.write(p, e.getValue());
+            Files.write(p, e.getValue().bytes());
         }
         java.nio.file.Path srcFile = classesDir.resolve(className.replace('.', '/') + ".java");
         Files.writeString(srcFile, source);
@@ -101,6 +103,7 @@ class CompileBindTest {
         if (rc != 0) {
             throw new IllegalStateException("javac failed for " + className + " (rc=" + rc + ")");
         }
-        return Files.readAllBytes(outDir.resolve(className.replace('.', '/') + ".class"));
+        return ClassFileImage.of(
+                Files.readAllBytes(outDir.resolve(className.replace('.', '/') + ".class")));
     }
 }

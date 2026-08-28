@@ -3,6 +3,8 @@ package souther.compiler.codegen;
 import souther.compiler.Compiler;
 import souther.compiler.core.Kernel;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassFile;
@@ -100,8 +102,8 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
     @Test
     void noEmittedCodeRunsADecimalOperationOnBigDecimalItself() {
         Set<String> byTheBackend = new TreeSet<>();
-        for (Map.Entry<String, byte[]> emitted : Compiler.compile(MODULE).entrySet()) {
-            for (MethodModel method : ClassFile.of().parse(emitted.getValue()).methods()) {
+        for (Map.Entry<String, ClassFileImage> emitted : Compiler.compile(MODULE).entrySet()) {
+            for (MethodModel method : ClassFile.of().parse(emitted.getValue().bytes()).methods()) {
                 if (!(method.code().orElse(null) instanceof CodeModel body)) {
                     continue;
                 }

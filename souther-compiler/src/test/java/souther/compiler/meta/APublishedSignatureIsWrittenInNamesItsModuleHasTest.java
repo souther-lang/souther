@@ -5,6 +5,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.types.TypeSymbols;
 
 import org.junit.jupiter.api.Test;
@@ -84,7 +85,7 @@ class APublishedSignatureIsWrittenInNamesItsModuleHasTest {
      *  it travelled with, so its own names mean there what they meant here. */
     @Test
     void whatIsPublishedIsReadBackAsTheSameDeclaration() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(PRICING, """
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(PRICING, """
                 module shop.bare exposing ( Done, checkout : Done )
                 import shop.pricing ( Cart, Priced, quote )
                 data Done = { total: Int }
@@ -95,13 +96,13 @@ class APublishedSignatureIsWrittenInNamesItsModuleHasTest {
 
         // A second project, holding only the classes: it reads shop.bare's declarations back and
         // types a call against them, which is the round trip the published text exists for.
-        Map<String, byte[]> downstream = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> downstream = Compiler.compileModules(List.of("""
                 module app exposing ( run )
                 import shop.bare ( Done, checkout )
                 import shop.pricing ( Cart )
                 behavior run : (c: Cart) -> Done
                 let run (c) = checkout(c)
-                """), classes::get);
+                """), ModulePath.of(classes));
 
         assertTrue(downstream.containsKey("app.Run"),
                 "app typed against what shop.bare published; got " + downstream.keySet());
@@ -137,10 +138,10 @@ class APublishedSignatureIsWrittenInNamesItsModuleHasTest {
     }
 
     private static String computedSignature(List<String> modules, String binaryName) {
-        Map<String, byte[]> classes = Compiler.compileModules(modules);
-        byte[] bytes = classes.get(binaryName);
-        assertTrue(bytes != null, binaryName + " was not generated; got " + classes.keySet());
-        for (RuntimeInvisibleAnnotationsAttribute attr : ClassFile.of().parse(bytes)
+        Map<String, ClassFileImage> classes = Compiler.compileModules(modules);
+        ClassFileImage image = classes.get(binaryName);
+        assertTrue(image != null, binaryName + " was not generated; got " + classes.keySet());
+        for (RuntimeInvisibleAnnotationsAttribute attr : ClassFile.of().parse(image.bytes())
                 .findAttributes(java.lang.classfile.Attributes.runtimeInvisibleAnnotations())) {
             for (Annotation a : attr.annotations()) {
                 if (a.className().stringValue().endsWith("SoutherBehavior;")) {

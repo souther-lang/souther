@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Compilation;
 
 
@@ -24,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class CompileTypeVariableTest {
 
     /** Compiles a core (reserved-namespace) module, which the user-facing guard would reject. */
-    private static Map<String, byte[]> compileCore(String src) {
+    private static Map<String, ClassFileImage> compileCore(String src) {
         Compilation compilation = Compilation.ofCoreSource(src);
         compilation.answerEverything();
         CompileException failed = compilation.failure();

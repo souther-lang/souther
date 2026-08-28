@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -42,7 +44,7 @@ class ARuleReachingAQuantifierGetsTheFoldItBecomesTest {
             """;
 
     /** Every emitted class, loaded — which is where the JVM verifies each method it holds. */
-    private static Class<?> loadingAll(Map<String, byte[]> classes, String named) {
+    private static Class<?> loadingAll(Map<String, ClassFileImage> classes, String named) {
         BytesClassLoader loader = new BytesClassLoader(classes,
                 ARuleReachingAQuantifierGetsTheFoldItBecomesTest.class.getClassLoader());
         for (String name : classes.keySet()) {
@@ -59,7 +61,7 @@ class ARuleReachingAQuantifierGetsTheFoldItBecomesTest {
     /** And emits the fold, which is the method the expanded rule holds a call to. */
     @Test
     void andEmitsTheFoldTheRuleExpandedTo() throws Exception {
-        Map<String, byte[]> classes = Compiler.compile(ONLY_FROM_A_RULE);
+        Map<String, ClassFileImage> classes = Compiler.compile(ONLY_FROM_A_RULE);
         Class<?> fns = loadingAll(classes, "quantified.$Fns");
 
         Method fold = fns.getDeclaredMethod("List$foldFrom",

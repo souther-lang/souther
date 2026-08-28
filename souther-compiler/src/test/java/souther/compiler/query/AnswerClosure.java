@@ -234,18 +234,6 @@ final class AnswerClosure {
         return new Observation(Detector.TWO_ANSWERS_COMPARED, scenario);
     }
 
-    /**
-     * The classes a module compiled to, kept as the arrays they came out as.
-     *
-     * <p>What it wants is a way of holding bytes that is settled all the way down: something that
-     * says what it is by what the bytes say, holding them where nothing reading it meets an array
-     * again. Written as a value with an array inside, the array is what a walk arrives at one step
-     * further along, which is this place moved rather than struck off.
-     */
-    private static final Reading BYTES = new Reading("BYTES", MISSING_EQUALITY,
-            "what a class is is its bytes, so what lets a module whose classes came out the same "
-                    + "leave its readers alone is holding them as something that says so");
-
     /** The library this compiler ships, reached wherever a compilation holds it. */
     private static final Reading STDLIB = new Reading("STDLIB", MISSING_EQUALITY,
             "a value, and here for a reason the others are not: one is built per process and every "
@@ -370,23 +358,9 @@ final class AnswerClosure {
                 Set.of(met));
     }
 
-    private static Known bytes(String question, Locus.Step... steps) {
-        return new Known(at(question, "byte[]", steps), BYTES, BOTH_EVERYWHERE);
-    }
-
     private static final String Q = "souther.compiler.query.";
 
     private static final List<Known> KNOWN = List.of(
-            bytes(Q + "Output$All", m(ANSWER, "value"), VALUE),
-            bytes(Q + "Output$Classes", m(ANSWER, "value"), VALUE),
-            bytes(Q + "Output$Evaluated", m(ANSWER, "value"),
-                    m("souther.compiler.generated.EvaluationArtifact", "classes"), VALUE),
-            bytes(Q + "Output$EvaluationLinked", m(ANSWER, "value"),
-                    m("souther.compiler.generated.EvaluationArtifact", "classes"), VALUE),
-            // The one of the five a module on its own does not reach: nothing is linked against
-            // where there is nothing to link against.
-            new Known(at(Q + "Output$Linked", "byte[]", m(ANSWER, "value"), VALUE), BYTES,
-                    Set.of(walked(Scenario.VALID_CORPUS), compared(Scenario.VALID_CORPUS))),
             new Known(at(Q + "Names$ModuleScope", Q + "Db",
                     m(ANSWER, "value"), m("souther.compiler.check.Scoping$Scoped", "values"), m("souther.compiler.check.Resolve$Values", "elsewhere"),
                     m("souther.compiler.check.Scoping$OfTheUniverse", "universe"), m("souther.compiler.query.CompilationUniverse", "db")),
@@ -453,12 +427,6 @@ final class AnswerClosure {
     /** One arm of a sum, which a walk of types takes all of. */
     private static TypePath.Step arm(String named) {
         return new TypePath.Step.Arm(named);
-    }
-
-    /** The classes a module compiled to, held by the name each is emitted under. */
-    private static KnownDeclared classes(String question, TypePath.Step... steps) {
-        return new KnownDeclared(declared(question, "byte[]", steps), BYTES,
-                Traversal.Why.AN_ARRAY);
     }
 
     /** One way down, and then another. */
@@ -541,13 +509,6 @@ final class AnswerClosure {
 
     private static List<KnownDeclared> everyDeclaredPlace() {
         List<KnownDeclared> out = new java.util.ArrayList<>(List.of(
-            classes(Q + "Output$All", MAP_VALUE),
-            classes(Q + "Output$Classes", MAP_VALUE),
-            classes(Q + "Output$Linked", MAP_VALUE),
-            classes(Q + "Output$Evaluated",
-                    part("souther.compiler.generated.EvaluationArtifact", "classes"), MAP_VALUE),
-            classes(Q + "Output$EvaluationLinked",
-                    part("souther.compiler.generated.EvaluationArtifact", "classes"), MAP_VALUE),
             new KnownDeclared(declared(Q + "Front$Library", "souther.compiler.stdlib.Stdlib"),
                     STDLIB, Traversal.Why.SAYS_NOTHING_OF_ITSELF),
             new KnownDeclared(declared(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",

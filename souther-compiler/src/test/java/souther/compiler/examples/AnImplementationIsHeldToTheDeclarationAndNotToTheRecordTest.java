@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import javax.tools.ToolProvider;
@@ -314,17 +315,17 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
                 .orElseThrow(() -> new AssertionError("no row named `" + name + "`"));
     }
 
-    private static Map<String, byte[]> compiled(String model) {
+    private static Map<String, ClassFileImage> compiled(String model) {
         return Compilation.ofSource(model, "Main").db().ask(new Output.All()).value();
     }
 
-    private static Object builtElsewhere(Map<String, byte[]> generated, String source)
+    private static Object builtElsewhere(Map<String, ClassFileImage> generated, String source)
             throws Exception {
         Path classes = Files.createTempDirectory("souther-contract");
-        for (Map.Entry<String, byte[]> e : generated.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> e : generated.entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
-            Files.write(at, e.getValue());
+            Files.write(at, e.getValue().bytes());
         }
         Path java = classes.resolve("example/todo/FindTodoImpl.java");
         Files.createDirectories(java.getParent());

@@ -9,6 +9,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Shapes;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.report.AdequacyReport;
 
 import java.lang.classfile.ClassFile;
@@ -77,11 +78,12 @@ class ABehaviorNobodyHasWrittenYetIsNotAnInjectionTargetTest {
      */
     @Test
     void nothingIsEmittedForJavaToExtend() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(OWED));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(OWED));
 
         assertFalse(classes.containsKey(Emitted.impl("example.owed", "outer")),
                 "no implementation was written, so none is emitted");
-        var outer = ClassFile.of().parse(classes.get(Emitted.behaviorInterface("example.owed", "outer")));
+        var outer = ClassFile.of()
+                .parse(classes.get(Emitted.behaviorInterface("example.owed", "outer")).bytes());
         assertTrue(outer.flags().has(java.lang.reflect.AccessFlag.INTERFACE),
                 "an unwritten behavior is not an abstract base a Java implementation extends");
     }

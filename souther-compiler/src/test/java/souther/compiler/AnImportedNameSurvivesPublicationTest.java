@@ -4,6 +4,7 @@ import souther.compiler.check.Resolve;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -51,8 +52,8 @@ class AnImportedNameSurvivesPublicationTest {
             """;
 
     private static ModulePath published(String source) {
-        Map<String, byte[]> classes = Compiler.compile(source);
-        return classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compile(source);
+        return ModulePath.of(classes);
     }
 
     @Test
@@ -98,20 +99,23 @@ class AnImportedNameSurvivesPublicationTest {
      *  way — a dependency of a dependency is not read under weaker rules. */
     @Test
     void aModuleReachedThroughAnotherOnThePathReadsBack() {
-        Map<String, byte[]> base = Compiler.compile(BARE);
-        Map<String, byte[]> mid = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> base = Compiler.compile(BARE);
+        Map<String, ClassFileImage> mid = Compiler.compileModules(List.of("""
                 module lib.doc exposing ( Doc )
                 import lib.text ( Title )
 
                 data Doc = { title: Title }
-                """), base::get);
+                """), ModulePath.of(base));
 
-        Map<String, byte[]> app = Compiler.compileModules(List.of("""
+        // The near module over the one it was built against, which is the order a path is read in.
+        Map<String, ClassFileImage> reached = new java.util.LinkedHashMap<>(base);
+        reached.putAll(mid);
+        Map<String, ClassFileImage> app = Compiler.compileModules(List.of("""
                 module app.uses
                 import lib.doc ( Doc )
 
                 data Page = { doc: Doc }
-                """), name -> mid.containsKey(name) ? mid.get(name) : base.get(name));
+                """), ModulePath.of(reached));
 
         assertTrue(app.containsKey("app.uses.Page"));
     }

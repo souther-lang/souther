@@ -10,6 +10,7 @@ import souther.compiler.coverage.Probe;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.jvm.ClassFileImage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,7 +59,8 @@ public final class RowTrial {
      *              search's problem to stop rather than an author's to be told about
      */
     public static RowTrials over(souther.compiler.check.Prepared.Examples module,
-                              Symbols symbols, Map<String, byte[]> classes, ClassLoader parent,
+                              Symbols symbols, Map<String, ClassFileImage> classes,
+                              ClassLoader parent,
                               Map<String, Hir.FnDef> values, GeneratedImplementations generated,
                               EvaluationPolicy steps) {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);

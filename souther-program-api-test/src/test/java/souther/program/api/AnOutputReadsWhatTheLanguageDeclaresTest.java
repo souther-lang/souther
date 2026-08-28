@@ -15,6 +15,7 @@ import souther.compiler.program.DeclaredBy;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.types.TypeSymbols;
 
 import org.junit.jupiter.api.Test;
@@ -124,13 +125,13 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
      */
     @Test
     void everyIdentityAProgramReachesIsOneItAnswersFor() {
-        Map<String, byte[]> classes = Compiler.compile(PUBLISHED);
+        Map<String, ClassFileImage> classes = Compiler.compile(PUBLISHED);
         // Both programs, because the two worlds a declaration can come from besides this
         // compilation's own are one each, and a walk over either alone would hold while the other
         // went unanswered.
         CheckedProgram language = CheckedProgram.of(List.of(ROUNDS));
         CheckedProgram dependency =
-                CheckedProgram.of(List.of(IMPORTS), (ModulePath) classes::get);
+                CheckedProgram.of(List.of(IMPORTS), ModulePath.of(classes));
 
         // What each of them reaches, said out loud. A walk that quietly reached nothing would hold
         // here exactly as one that reached everything, and the second of these is a name this
@@ -232,8 +233,8 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
     }
 
     private static ModulePath dependency() {
-        Map<String, byte[]> classes = Compiler.compile(PUBLISHED);
-        return classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compile(PUBLISHED);
+        return ModulePath.of(classes);
     }
 
     /** The declaration whose field the behavior called {@code named} reads. */

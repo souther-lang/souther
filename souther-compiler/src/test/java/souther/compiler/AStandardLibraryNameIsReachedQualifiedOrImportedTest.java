@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.check.StdlibLoader;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -175,12 +176,12 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
         // Resolution answers what a bare name means, with the imports consulted last; every pass
         // after it reads the answer. So the two spellings of one call generate the same code —
         // except `$Module`, which records the imports as they were written for a reader of the jar.
-        Map<String, byte[]> qualified = Compiler.compile(QUALIFIED);
-        Map<String, byte[]> imported = Compiler.compile(IMPORTED);
+        Map<String, ClassFileImage> qualified = Compiler.compile(QUALIFIED);
+        Map<String, ClassFileImage> imported = Compiler.compile(IMPORTED);
 
         assertEquals(qualified.keySet(), imported.keySet());
         List<String> differing = qualified.keySet().stream()
-                .filter(name -> !java.util.Arrays.equals(qualified.get(name), imported.get(name)))
+                .filter(name -> !qualified.get(name).equals(imported.get(name)))
                 .toList();
         assertEquals(List.of(Emitted.declarations("demo")), differing,
                 "only the class that records what was written differs");

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import javax.tools.ToolProvider;
@@ -109,18 +110,18 @@ class ARuleThatMatchesOnAnOptionalStillEstablishesAnAnswererTest {
     // --- harness ---------------------------------------------------------------------------------
 
     private static BoundExamples boundTo(String implementation) throws Exception {
-        Map<String, byte[]> generated =
+        Map<String, ClassFileImage> generated =
                 Compilation.ofSource(MODEL, "Main").db().ask(new Output.All()).value();
         return SoutherExamples.ofSource(MODEL).bind(builtElsewhere(generated, implementation));
     }
 
-    private static Object builtElsewhere(Map<String, byte[]> generated, String source)
+    private static Object builtElsewhere(Map<String, ClassFileImage> generated, String source)
             throws Exception {
         Path classes = Files.createTempDirectory("souther-optional-contract");
-        for (Map.Entry<String, byte[]> e : generated.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> e : generated.entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
-            Files.write(at, e.getValue());
+            Files.write(at, e.getValue().bytes());
         }
         Path java = classes.resolve("probe/opt/PickImpl.java");
         Files.createDirectories(java.getParent());

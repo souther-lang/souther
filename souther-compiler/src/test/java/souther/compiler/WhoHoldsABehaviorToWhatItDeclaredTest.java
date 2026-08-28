@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassFile;
@@ -99,28 +101,30 @@ class WhoHoldsABehaviorToWhatItDeclaredTest {
 
     @Test
     void aBodiedBehaviorChecksItselfOnceWhereItAnswers() {
-        Map<String, byte[]> classes = Compiler.compile(BODIED);
+        Map<String, ClassFileImage> classes = Compiler.compile(BODIED);
 
-        assertEquals(1, checksIn(classes.get("demo.Twice$Impl"), "apply", "demo/Twice$Ensures"),
+        assertEquals(1, checksIn(classes.get("demo.Twice$Impl").bytes(), "apply",
+                "demo/Twice$Ensures"),
                 "its own `apply` is the door every application goes through");
-        assertEquals(0, checksIn(classes.get("demo.Twice$Impl"), "apply$body", "demo/Twice$Ensures"),
+        assertEquals(0, checksIn(classes.get("demo.Twice$Impl").bytes(), "apply$body",
+                "demo/Twice$Ensures"),
                 "and the body is what is being held, not where the holding is written");
     }
 
     /** A caller emits nothing: what it calls holds itself, whatever door the caller came in by. */
     @Test
     void acallerOfABodiedBehaviorEmitsNoCheck() {
-        Map<String, byte[]> classes = Compiler.compile(BODIED);
+        Map<String, ClassFileImage> classes = Compiler.compile(BODIED);
 
-        assertEquals(0, checksOf(classes.get("demo.TwiceOver$Impl"), "demo/Twice$Ensures"),
+        assertEquals(0, checksOf(classes.get("demo.TwiceOver$Impl").bytes(), "demo/Twice$Ensures"),
                 "`twice` is checked by `twice`, in none of this class's methods");
     }
 
     @Test
     void anInjectedBehaviorIsCheckedAtTheCrossingByWhoeverCallsIt() {
-        Map<String, byte[]> classes = Compiler.compile(INJECTED);
+        Map<String, ClassFileImage> classes = Compiler.compile(INJECTED);
 
-        assertEquals(1, checksOf(classes.get("demo.Use$Impl"), "demo/Fetch$Ensures"),
+        assertEquals(1, checksOf(classes.get("demo.Use$Impl").bytes(), "demo/Fetch$Ensures"),
                 "the answer enters the domain here, so this is where it is held");
     }
 
@@ -139,7 +143,7 @@ class WhoHoldsABehaviorToWhatItDeclaredTest {
     /** A behavior stating nothing has no class and no call. */
     @Test
     void aBehaviorThatDeclaresNothingIsHeldNowhere() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module demo
 
                 data Amount = Int
@@ -149,6 +153,6 @@ class WhoHoldsABehaviorToWhatItDeclaredTest {
                 """);
 
         assertFalse(classes.containsKey("demo.Echo$Ensures"));
-        assertEquals(0, checksOf(classes.get("demo.Echo$Impl"), "demo/Echo$Ensures"));
+        assertEquals(0, checksOf(classes.get("demo.Echo$Impl").bytes(), "demo/Echo$Ensures"));
     }
 }

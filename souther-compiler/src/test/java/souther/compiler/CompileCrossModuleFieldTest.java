@@ -3,6 +3,8 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,7 +36,7 @@ class CompileCrossModuleFieldTest {
 
     @Test
     void aBehaviorReadsAFieldOfAnImportedData() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(A, B));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(A, B));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Object req = Codecs.decoded(loader, "b.申請",
@@ -66,7 +68,7 @@ class CompileCrossModuleFieldTest {
 
     @Test
     void spreadingAnImportedDataReadsItsFieldsThroughAccessors() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(BASE, DERIVED));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(BASE, DERIVED));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Object base = Codecs.decoded(loader, "base_m.Base", Map.of("a", "A", "b", "B"));

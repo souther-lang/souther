@@ -196,7 +196,7 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
         for (var e : souther.compiler.Compiler.compileModules(List.of(SHARED)).entrySet()) {
             Path at = published.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
-            Files.write(at, e.getValue());
+            Files.write(at, e.getValue().bytes());
         }
         Path model = dir.resolve("app.sou");
         Files.writeString(model, MODEL);
@@ -301,7 +301,7 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
         for (var e : souther.compiler.Compiler.compileModules(models).entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
-            Files.write(at, e.getValue());
+            Files.write(at, e.getValue().bytes());
         }
         Path java = classes.resolve(pkg.replace('.', '/') + "/" + named + ".java");
         Files.createDirectories(java.getParent());

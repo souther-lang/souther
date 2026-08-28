@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -93,7 +95,7 @@ class CompileNestedSumTest {
      */
     @Test
     void aLeafReachesTheNestedArmOfAJavaSwitch() throws Exception {
-        Map<String, byte[]> classes = new java.util.HashMap<>(Compiler.compile(MODULE));
+        Map<String, ClassFileImage> classes = new java.util.HashMap<>(Compiler.compile(MODULE));
         classes.put("demo.ReadBearer", Subclasses.compile(classes, "demo.ReadBearer", """
                 package demo;
                 public final class ReadBearer {

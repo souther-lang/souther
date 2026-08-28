@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.jvm.ClassFileImage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -224,7 +225,7 @@ class CompileFunctionValueFlowTest {
                 sameShape(Compiler.compile(shadowed("y"))));
     }
 
-    private static java.util.Set<String> sameShape(Map<String, byte[]> classes) {
+    private static java.util.Set<String> sameShape(Map<String, ClassFileImage> classes) {
         return classes.keySet();
     }
 }

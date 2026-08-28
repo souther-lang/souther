@@ -16,6 +16,7 @@ import souther.compiler.diag.Primary;
 import souther.compiler.diag.ReportContext;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WhereCodeIsWritten;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
@@ -58,7 +59,7 @@ public final class Compilation {
     /** The loader over the classes as they were when it was made, and those classes — held so that
      *  {@link #loader()} can tell whether the one it has is still a loader over what there is. */
     private ClassLoader loader;
-    private Map<String, byte[]> loadedClasses;
+    private Map<String, ClassFileImage> loadedClasses;
 
     private Compilation() {
         // Read now, so this compilation is held to what the settings said when it started rather than
@@ -215,8 +216,8 @@ public final class Compilation {
     }
 
     /** Every class this compilation generated. */
-    public Map<String, byte[]> classes() {
-        Map<String, byte[]> all = db.ask(new Output.All()).value();
+    public Map<String, ClassFileImage> classes() {
+        Map<String, ClassFileImage> all = db.ask(new Output.All()).value();
         return all == null ? Map.of() : all;
     }
 
@@ -241,15 +242,25 @@ public final class Compilation {
      * loader that is kept and not one layer of it.
      *
      * <p>Kept against the classes rather than for the life of this compilation, because an edit
-     * makes a different program. {@link #classes()} answers with the map it answered with before
-     * until something a generation reads changes, and with a new one after, so this follows that
-     * answer rather than deciding for itself when a compilation is settled — which it never has to
-     * be, nothing here running until something asks. A loader held across an edit would be one that
-     * cannot see it, which is the first fault the other way round.
+     * makes a different program. A loader held across an edit would be one that cannot see it,
+     * which is the first fault the other way round.
+     *
+     * <p><b>Same classes means the same class files, not the same map.</b> An edit that recompiles
+     * a module to what it already was leaves a program nothing about has changed, and a loader made
+     * afresh over it would divide every type in it from the values already made under the first —
+     * which is this method's whole fault, reached by a route nobody edited anything to reach.
+     * Asking the map by which object it is would answer that question with where the answer came
+     * from, which is the mistake {@link ClassFileImage} exists to stop one level down. Being the
+     * same map is a shortcut and never the reason.
+     *
+     * <p>What decides this is the classes and nothing else, because a compilation's module path is
+     * settled where it is made and never after. Were one ever able to be given another path, its
+     * parent loader would move under classes that had not, and what a loader is kept against would
+     * have to be the two of them together.
      */
     public ClassLoader loader() {
-        Map<String, byte[]> classes = classes();
-        if (loader == null || loadedClasses != classes) {
+        Map<String, ClassFileImage> classes = classes();
+        if (loader == null || !(loadedClasses == classes || loadedClasses.equals(classes))) {
             // Built before either field is written, so a build that threw leaves this holding what it
             // held before rather than the classes it did not manage to make a loader for. Recording
             // them first would leave the two saying different things, and the next ask would read

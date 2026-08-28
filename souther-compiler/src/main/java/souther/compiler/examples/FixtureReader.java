@@ -16,6 +16,7 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
@@ -93,7 +94,7 @@ public final class FixtureReader {
 
     /** A way to build values against this module's generated classes, without any rows to run. */
     public static BoundaryValues constructing(souther.compiler.check.Prepared.Examples module, Symbols symbols,
-                                            Map<String, byte[]> classes, ClassLoader parent,
+                                            Map<String, ClassFileImage> classes, ClassLoader parent,
                                             Map<String, Hir.FnDef> values) {
         // A reader is the whole of it. There are no rows, so nothing runs on a worker and no budget is
         // read; what a behavior takes and what stands in for what it depends on are not questions about

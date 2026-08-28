@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.DecoderKind;
 import org.junit.jupiter.api.Test;
 
@@ -105,7 +106,7 @@ class CompileSpecChapter23Test {
 
     @Test
     void theChapter23ModelCompiles() {
-        Map<String, byte[]> classes = Compiler.compile(MODULE);
+        Map<String, ClassFileImage> classes = Compiler.compile(MODULE);
         assertTrue(classes.containsKey("example.businesstrip.事前承認する"));
         assertTrue(classes.containsKey(Emitted.decoder("example.businesstrip", "出張申請", DecoderKind.VALUE)), "the state sum derives a decoder");
         assertTrue(classes.containsKey("example.businesstrip.現在時刻"), "the clock gets a Java base class");
@@ -125,7 +126,7 @@ class CompileSpecChapter23Test {
      */
     @Test
     void approvalRequiresTheApplicantsManager() throws Exception {
-        Map<String, byte[]> classes = new java.util.HashMap<>(Compiler.compile(MODULE));
+        Map<String, ClassFileImage> classes = new java.util.HashMap<>(Compiler.compile(MODULE));
         classes.put("example.businesstrip.固定時刻", Subclasses.compile(classes,
                 "example.businesstrip.固定時刻", """
                         package example.businesstrip;

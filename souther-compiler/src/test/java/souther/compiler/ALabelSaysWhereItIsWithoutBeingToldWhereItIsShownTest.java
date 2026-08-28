@@ -12,6 +12,8 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Db;
 
 import org.junit.jupiter.api.Test;
@@ -129,7 +131,7 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
     @Test
     void twoClausesOfOneModuleOutOfSightAreSaidOnce() {
         Compilation c = Compilation.ofSources(List.of(CONSTRUCTING),
-                Compiler.compile(DECLARING_TWO)::get);
+                ModulePath.of(Compiler.compile(DECLARING_TWO)));
         c.answerEverything();
         Diagnostic d = theWarning(c);
 
@@ -187,14 +189,14 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
     // --- the fixtures ---------------------------------------------------------------------------
 
     private static Compilation offThePath() {
-        Map<String, byte[]> path = Compiler.compile(DECLARING);
-        Compilation c = Compilation.ofSources(List.of(CONSTRUCTING), path::get);
+        Map<String, ClassFileImage> path = Compiler.compile(DECLARING);
+        Compilation c = Compilation.ofSources(List.of(CONSTRUCTING), ModulePath.of(path));
         c.answerEverything();
         return c;
     }
 
     private static Compilation inOneCompile() {
-        Compilation c = Compilation.ofSources(List.of(IN_ONE_COMPILE), Map.<String, byte[]>of()::get);
+        Compilation c = Compilation.ofSources(List.of(IN_ONE_COMPILE), ModulePath.EMPTY);
         c.answerEverything();
         return c;
     }

@@ -5,6 +5,8 @@ import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Compilation;
 import souther.compiler.check.BoundaryInput;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -142,7 +144,7 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
      */
     @Test
     void aTypeAnImportedModuleDeclaresBuilds() {
-        java.util.Map<String, byte[]> library = Compiler.compile("""
+        java.util.Map<String, ClassFileImage> library = Compiler.compile("""
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """);
@@ -155,7 +157,7 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
                 let place (a) = Out { n = a.value }
                 example place
                   | "an imported type in a fixture" : (Amount(5)) -> Out { n = 5 }
-                """), library::get));
+                """), ModulePath.of(library)));
     }
 
     /**

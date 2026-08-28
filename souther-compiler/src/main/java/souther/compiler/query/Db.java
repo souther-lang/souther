@@ -39,11 +39,12 @@ import java.util.Set;
  * builds against what a module declares, not against its bodies. Both are maps of records, and
  * {@code IncrementalCompilationTest} pins both.
  *
- * <p>It does not hold everywhere. A module's classes are a {@code Map<String, byte[]>}, and arrays
- * compare by identity, so regenerating them always counts as a change — and every module's examples
- * read every module's classes. Comparing the bytes would not help: after a real edit they differ.
- * What would is for an example to depend on the classes it reaches rather than on all of them,
- * which is per-definition work and not here.
+ * <p>A module's classes carry it too. Each is a {@link souther.compiler.jvm.ClassFileImage}, which
+ * is what its bytes say, so a module regenerated to what it already was leaves the examples that
+ * load it alone. What that does not reach is an example of one module and an edit to another it
+ * merely imports: the classes it is run against are the ones its module reaches, so they change
+ * when any of those does. Narrowing that to the classes an example actually loads is per-definition
+ * work and is not here.
  *
  * <p>Two rules run through the rest of them, and an answer can break either one.
  *

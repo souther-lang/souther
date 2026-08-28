@@ -17,6 +17,8 @@ import souther.compiler.query.Db;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Primary;
 import souther.compiler.diag.WhereCodeIsWritten;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.ModuleReadback;
 
 import org.junit.jupiter.api.Test;
@@ -47,25 +49,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
     /** A module compiled against {@code path}, as its own project's build produced it. */
-    private static Map<String, byte[]> built(String source, Map<String, byte[]> path) {
-        return Compiler.compileModules(List.of(source), path::get);
+    private static Map<String, ClassFileImage> built(String source, Map<String, ClassFileImage> path) {
+        return Compiler.compileModules(List.of(source), ModulePath.of(path));
     }
 
-    private static Map<String, byte[]> and(Map<String, byte[]> one, Map<String, byte[]> other) {
-        Map<String, byte[]> both = new java.util.LinkedHashMap<>(one);
+    private static Map<String, ClassFileImage> and(Map<String, ClassFileImage> one, Map<String, ClassFileImage> other) {
+        Map<String, ClassFileImage> both = new java.util.LinkedHashMap<>(one);
         both.putAll(other);
         return both;
     }
 
-    private static Compilation reading(String source, Map<String, byte[]> path) {
-        Compilation compilation = Compilation.ofSources(List.of(source), path::get);
+    private static Compilation reading(String source, Map<String, ClassFileImage> path) {
+        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.of(path));
         compilation.answerEverything();
         return compilation;
     }
 
     /** A module holding one thing out of another, as its own project's build produced it. */
-    private static Map<String, byte[]> holding(String name, String type, String from,
-                                               String imported, Map<String, byte[]> path) {
+    private static Map<String, ClassFileImage> holding(String name, String type, String from,
+                                               String imported, Map<String, ClassFileImage> path) {
         return built("""
                 module %s exposing ( %s )
                 import %s ( %s )
@@ -75,7 +77,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
     }
 
     /** The classes of {@code lib.deep}, which every path here leaves out. */
-    private static Map<String, byte[]> deep() {
+    private static Map<String, ClassFileImage> deep() {
         return Compiler.compile("""
                 module lib.deep exposing ( Deep )
                 data Deep = String
@@ -83,7 +85,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
     }
 
     /** The declaring project's build of {@code lib.held}, which needs {@code lib.deep}. */
-    private static Map<String, byte[]> held() {
+    private static Map<String, ClassFileImage> held() {
         return built("""
                 module lib.held exposing ( Held )
                 import lib.deep ( Deep )
@@ -142,8 +144,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void oneReachedThroughAnotherIsSaidAtTheImportThatLedThere() {
-        Map<String, byte[]> held = held();
-        Map<String, byte[]> front = built("""
+        Map<String, ClassFileImage> held = held();
+        Map<String, ClassFileImage> front = built("""
                 module lib.front exposing ( Front )
                 import lib.held ( Held )
 
@@ -230,7 +232,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 import lib.held ( Held )
 
                 data B = { held: Held }
-                """), held()::get);
+                """), ModulePath.of(held()));
         compilation.answerEverything();
 
         Map<SourceId, List<Located>> byId = compilation.diagnostics();
@@ -250,13 +252,13 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void aRouteFoundAfterTheModuleWasReadCountsToo() {
-        Map<String, byte[]> shared = built("""
+        Map<String, ClassFileImage> shared = built("""
                 module lib.shared exposing ( Shared )
                 import lib.deep ( Deep )
 
                 data Shared = { deep: Deep }
                 """, deep());
-        Map<String, byte[]> between = built("""
+        Map<String, ClassFileImage> between = built("""
                 module lib.between exposing ( Between )
                 import lib.shared ( Shared )
 
@@ -273,7 +275,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 import lib.between ( Between )
 
                 data B = { between: Between }
-                """), and(shared, between)::get);
+                """), ModulePath.of(and(shared, between)));
         compilation.answerEverything();
 
         Map<SourceId, List<Located>> byId = compilation.diagnostics();
@@ -292,16 +294,16 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void routesOfDifferentLengthsBothReachWhatTheyMeetOver() {
-        Map<String, byte[]> leaf = Compiler.compile("""
+        Map<String, ClassFileImage> leaf = Compiler.compile("""
                 module lib.leaf exposing ( Leaf )
                 data Leaf = String
                 """);
-        Map<String, byte[]> meeting = holding("lib.meeting", "Meeting", "lib.leaf", "Leaf", leaf);
-        Map<String, byte[]> shortWay = holding("lib.short", "Short", "lib.meeting", "Meeting",
+        Map<String, ClassFileImage> meeting = holding("lib.meeting", "Meeting", "lib.leaf", "Leaf", leaf);
+        Map<String, ClassFileImage> shortWay = holding("lib.short", "Short", "lib.meeting", "Meeting",
                 and(meeting, leaf));
-        Map<String, byte[]> middle = holding("lib.middle", "Middle", "lib.meeting", "Meeting",
+        Map<String, ClassFileImage> middle = holding("lib.middle", "Middle", "lib.meeting", "Meeting",
                 and(meeting, leaf));
-        Map<String, byte[]> longWay = holding("lib.long", "Long", "lib.middle", "Middle",
+        Map<String, ClassFileImage> longWay = holding("lib.long", "Long", "lib.middle", "Middle",
                 and(middle, and(meeting, leaf)));
 
         // everything but the leaf, so what is missing is under the module the two routes meet at
@@ -315,7 +317,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 import lib.long ( Long )
 
                 data B = { x: Long }
-                """), and(and(meeting, shortWay), and(middle, longWay))::get);
+                """), ModulePath.of(and(and(meeting, shortWay), and(middle, longWay))));
         compilation.answerEverything();
 
         Map<SourceId, List<Located>> byId = compilation.diagnostics();
@@ -333,8 +335,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void twoModulesNeedingTheSameAbsentOneAreTwoFindings() {
-        Map<String, byte[]> left = holding("lib.left", "Left", "lib.deep", "Deep", deep());
-        Map<String, byte[]> right = holding("lib.right", "Right", "lib.deep", "Deep", deep());
+        Map<String, ClassFileImage> left = holding("lib.left", "Left", "lib.deep", "Deep", deep());
+        Map<String, ClassFileImage> right = holding("lib.right", "Right", "lib.deep", "Deep", deep());
 
         Compilation compilation = Compilation.ofSources(List.of("""
                 module app.a exposing ( A )
@@ -346,7 +348,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 import lib.right ( Right )
 
                 data B = { x: Right }
-                """), and(left, right)::get);
+                """), ModulePath.of(and(left, right)));
         compilation.answerEverything();
 
         Set<String> saidAbout = new LinkedHashSet<>();
@@ -471,18 +473,18 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      * A published module whose two fields name {@code first} and {@code second}, built against a
      * dependency that had them and put on the path beside one that no longer does.
      */
-    private static Map<String, byte[]> twiceNaming(String first, String second) {
-        Map<String, byte[]> withThem = Compiler.compile("""
+    private static Map<String, ClassFileImage> twiceNaming(String first, String second) {
+        Map<String, ClassFileImage> withThem = Compiler.compile("""
                 module lib.deep exposing ( Deep, Other )
                 data Deep = String
                 data Other = String
                 """);
-        Map<String, byte[]> twice = built("""
+        Map<String, ClassFileImage> twice = built("""
                 module lib.twice exposing ( Twice )
                 data Twice = { a: %s, b: %s }
                 """.formatted(first, second), withThem);
         // the dependency is rebuilt without either, so both field types fail to resolve
-        Map<String, byte[]> withoutThem = Compiler.compile("""
+        Map<String, ClassFileImage> withoutThem = Compiler.compile("""
                 module lib.deep exposing ( Gone )
                 data Gone = String
                 """);

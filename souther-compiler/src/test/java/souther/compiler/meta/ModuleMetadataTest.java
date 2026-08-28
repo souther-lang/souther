@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import souther.compiler.Emitted;
 import souther.compiler.Compiler;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +46,7 @@ class ModuleMetadataTest {
 
     @Test
     void aDataCarriesTheDeclarationThatDeclaredIt() {
-        Map<String, byte[]> classes = Compiler.compile(UP);
+        Map<String, ClassFileImage> classes = Compiler.compile(UP);
 
         assertEquals("""
                 // what a payment is worth
@@ -56,7 +57,7 @@ class ModuleMetadataTest {
 
     @Test
     void aBehaviorCarriesItsSignatureAndWhereItsBodyComesFrom() {
-        Map<String, byte[]> classes = Compiler.compile(UP);
+        Map<String, ClassFileImage> classes = Compiler.compile(UP);
 
         Annotation charge = annotation(classes, "shared.money.Charge", "SoutherBehavior");
         assertEquals("""
@@ -70,7 +71,7 @@ class ModuleMetadataTest {
      * worked out again from what is published, because the `let` that decides is not. */
     @Test
     void aBehaviorWithNoLetCarriesWhichOfTheTwoStatesItIsIn() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.ledger exposing ( Entry, record, audited )
                 data Entry = { amount: Int }
                 behavior record : (e: Entry) -> Entry
@@ -88,7 +89,7 @@ class ModuleMetadataTest {
 
     @Test
     void theModuleClassNamesWhatToRead() {
-        Map<String, byte[]> classes = Compiler.compile(UP);
+        Map<String, ClassFileImage> classes = Compiler.compile(UP);
 
         Annotation module = annotation(classes, Emitted.declarations("shared.money"), "SoutherModule");
         assertEquals("shared.money", string(module, "name"));
@@ -103,7 +104,7 @@ class ModuleMetadataTest {
      * invariant reaches is the module's own business and stays behind. */
     @Test
     void onlyTheHelpersAnInvariantReachesAreCarried() {
-        Map<String, byte[]> classes = Compiler.compile(UP);
+        Map<String, ClassFileImage> classes = Compiler.compile(UP);
 
         assertEquals(List.of("let withinCap (n: Int) = n <= 1000000"),
                 strings(annotation(classes, Emitted.declarations("shared.money"), "SoutherModule"),
@@ -114,7 +115,7 @@ class ModuleMetadataTest {
      *  helper it happens to be spelled like is not one this declaration needs. */
     @Test
     void aParameterSpelledLikeAHelperDoesNotCarryIt() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shadow.helper exposing ( echo )
 
                 let positive (n: Int) = n > 0
@@ -138,7 +139,7 @@ class ModuleMetadataTest {
      */
     @Test
     void aParameterSpelledLikeABehaviorDoesNotCarryItsImplementation() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shadow.impl exposing ( echo )
 
                 behavior calculate : (x: Int) -> Int
@@ -160,7 +161,7 @@ class ModuleMetadataTest {
     /** A helper a clause really calls is carried, since a reader cannot read the clause without it. */
     @Test
     void theHelperAClauseCallsIsCarried() {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module carries.helper exposing ( echo )
 
                 let doubled (n: Int) = n * 2
@@ -195,7 +196,7 @@ class ModuleMetadataTest {
      */
     @Test
     void aValueOnlyAnAttachedFileDeclaresIsNotCarried() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module beside.rows exposing ( Amount, echo )
 
                 data Amount = { n: Int }
@@ -222,7 +223,7 @@ class ModuleMetadataTest {
      * the computed one is written out and the stages stay behind. */
     @Test
     void aCompositionPublishesTheSignatureItComputesTo() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module shop.pricing exposing ( Cart, Priced, quote )
                 data Cart = { n: Int }
                 data Priced = { total: Int }
@@ -243,11 +244,11 @@ class ModuleMetadataTest {
                         + " its own");
     }
 
-    private static Annotation annotation(Map<String, byte[]> classes, String binaryName,
+    private static Annotation annotation(Map<String, ClassFileImage> classes, String binaryName,
                                          String simpleAnnotationName) {
-        byte[] bytes = classes.get(binaryName);
-        assertTrue(bytes != null, binaryName + " was not generated; got " + classes.keySet());
-        for (RuntimeInvisibleAnnotationsAttribute attr : ClassFile.of().parse(bytes)
+        ClassFileImage image = classes.get(binaryName);
+        assertTrue(image != null, binaryName + " was not generated; got " + classes.keySet());
+        for (RuntimeInvisibleAnnotationsAttribute attr : ClassFile.of().parse(image.bytes())
                 .findAttributes(java.lang.classfile.Attributes.runtimeInvisibleAnnotations())) {
             for (Annotation a : attr.annotations()) {
                 if (a.className().stringValue().endsWith("/" + simpleAnnotationName + ";")) {
