@@ -63,7 +63,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      * them outside what it answers — where building nothing is the right answer and reading nothing
      * back proves nothing.
      */
-    private static List<Long> answerable(NumericTerm term) {
+    private static List<Long> answerable(NumericTerm.FromOnePosition term) {
         List<Long> out = new ArrayList<>();
         for (long each : new long[] {0, 1, 3, 7, 12, 23, 28, 31}) {
             if (term.intrinsicBounds().admits(Count.of(each))) {
@@ -235,7 +235,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      */
     @Test
     void theOrderAValueIsReadOnIsNotTheOrderItsAnswerIsMeasuredOn() {
-        NumericTerm hour = term("Time", "hour");
+        NumericTerm.FromOnePosition hour = term("Time", "hour");
         assertEquals(Count.of(13),
                 number(hour.read(new ObservedValue.Temporal("13:00:00"), AS_AN_HOUR)));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
@@ -350,7 +350,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     }
 
     /** A term for an operation, taken of what that operation's own signature says it takes. */
-    private static NumericTerm term(String module, String name) {
+    private static NumericTerm.FromOnePosition term(String module, String name) {
         ValueName.Stdlib operation = ValueName.Stdlib.operation(module, name);
         NumericTerm.TakenOf made =
                 NumericTerm.TakenOf.of(operation, AT, sourceOf(operation), SYMBOLS);

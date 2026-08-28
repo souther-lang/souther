@@ -46,7 +46,7 @@ public sealed interface FilingCoordinate {
 
         @Override
         public TermPath path() {
-            return term.path();
+            return term.subjectPath();
         }
 
         @Override

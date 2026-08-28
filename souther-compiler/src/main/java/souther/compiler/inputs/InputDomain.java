@@ -559,9 +559,11 @@ public final class InputDomain {
         return ordersOf(term, symbols).observed();
     }
 
-    /** Both ends of one term, taken together from the one reading of where it sits. */
+    /** Both ends of one term, taken together from the one reading of where it sits. Read from the
+     *  subject and not from a position the term divides: what a term's orders follow from is what
+     *  stands where the number comes from. */
     public TermOrders ordersOf(NumericTerm term, Symbols symbols) {
-        return term.ordersAt(typeAt(term.path(), symbols), symbols);
+        return term.ordersAt(typeAt(term.subjectPath(), symbols), symbols);
     }
 
     /**
@@ -1229,7 +1231,8 @@ public final class InputDomain {
             stated = List.of();
         }
         boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
-        NumericTerm term = bySize ? NumericTerm.TakenOf.of(taken, path, type, symbols)
+        NumericTerm.FromOnePosition term = bySize
+                ? NumericTerm.TakenOf.of(taken, path, type, symbols)
                 : new NumericTerm.ValueOf(path);
         if (term == null) {
             throw new IllegalStateException(
@@ -1250,8 +1253,14 @@ public final class InputDomain {
         AdmissibleSet admitted = placed.admits(path);
         // A record's rule relates the numbers its fields hold, so it reaches the term that is one of
         // them and no other: a cap on a field says nothing about how long the string beside it is.
-        NarrowedBounds projected = term instanceof NumericTerm.ValueOf ? placed.at(path)
-                : NarrowedBounds.NOTHING;
+        //
+        // Exhaustive, with no `default`. Whether a clause of the record reaches a number is asked
+        // per kind of number, so one added is a question put here rather than an arm that takes
+        // whichever answer it was not named in.
+        NarrowedBounds projected = switch (term) {
+            case NumericTerm.ValueOf _ -> placed.at(path);
+            case NumericTerm.TakenOf _ -> NarrowedBounds.NOTHING;
+        };
         // Two questions of one pair of readings, and they do not have one answer. What the term's
         // values can be is every rule about it intersected; where it is divided is only where its
         // own type draws a line, because a clause relating two fields is not a partition of one.

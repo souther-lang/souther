@@ -65,6 +65,12 @@ public final class ReportedReason {
                     UndividedPosition.Reason.UNRESOLVED_CASE_PAIRING;
             case BlockReason.ComparisonBetweenPositions _ ->
                     UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+            // Its own word, because what a reader does about it is different. A rule between two
+            // positions is waiting on a class about the pair; a rule about what a run comes to has
+            // nothing to wait for — the model divides no position by it, and its border is already
+            // drawn.
+            case BlockReason.ComparisonOverARun _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_A_RUN;
             // The same word, from the other reading of the same rule. What a document promises its
             // reader is which kind of thing stopped the derivation, and a relation between two
             // positions is one kind of thing whether the reading that met it was drawing a line or

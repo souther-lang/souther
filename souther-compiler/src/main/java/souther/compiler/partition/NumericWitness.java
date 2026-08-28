@@ -57,9 +57,10 @@ final class NumericWitness {
      *           a position no value is chosen at here, and the whole assignment is refused rather
      *           than made without it
      */
-    static Map<NumericTerm, Place> of(SearchRegion within, List<NumericTerm> terms,
-                                      Function<NumericTerm, Carrier> on) {
-        Map<NumericTerm, Place> standing = new LinkedHashMap<>();
+    static Map<NumericTerm.FromOnePosition, Place> of(
+            SearchRegion within, List<NumericTerm.FromOnePosition> terms,
+            Function<NumericTerm, Carrier> on) {
+        Map<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
         return walk(within, terms, 0, on, standing) ? standing : null;
     }
 
@@ -70,13 +71,14 @@ final class NumericWitness {
      * that leaves the rest nothing is stepped past here, where there is still another to try, and
      * not reported once every position has been given one.
      */
-    private static boolean walk(SearchRegion within, List<NumericTerm> terms, int at,
+    private static boolean walk(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
+                                int at,
                                 Function<NumericTerm, Carrier> on,
-                                Map<NumericTerm, Place> standing) {
+                                Map<NumericTerm.FromOnePosition, Place> standing) {
         if (at == terms.size()) {
             return true;
         }
-        NumericTerm term = terms.get(at);
+        NumericTerm.FromOnePosition term = terms.get(at);
         Carrier carrier = on.apply(term);
         NumericDomain.Bounds runs = within.runsBetween(term);
         if (carrier == null || runs == null) {

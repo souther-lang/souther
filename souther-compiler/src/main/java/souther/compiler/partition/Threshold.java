@@ -23,7 +23,7 @@ import souther.compiler.numeric.Place;
  *                in an {@code ensures}. Both leave values a row can write either side; what differs
  *                is what meeting the line takes, and that is the origin's to answer
  */
-public record Threshold(NumericTerm term, Seam parts, boolean valueBelongsBelow,
+public record Threshold(NumericTerm.FromOnePosition term, Seam parts, boolean valueBelongsBelow,
                         OriginRef origin) {
 
     /**
@@ -48,6 +48,6 @@ public record Threshold(NumericTerm term, Seam parts, boolean valueBelongsBelow,
     /** Where the value this line is drawn on sits. Not what the line is drawn on: that is
      * {@link #term()}, and two terms can be taken of one location. */
     public TermPath path() {
-        return term.path();
+        return term.position();
     }
 }

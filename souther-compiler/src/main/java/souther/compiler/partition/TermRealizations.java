@@ -78,14 +78,16 @@ final class TermRealizations {
      * <p>Answered without building anything, because the readers that ask are deciding whether to
      * try. What a value looks like is {@link #at}'s and costs what it costs.
      */
-    static boolean onlyOneValueAnswersIt(NumericTerm term) {
+    static boolean onlyOneValueAnswersIt(NumericTerm.FromOnePosition term) {
         return switch (term) {
             // The number is the value, so it is the one value there is.
             case NumericTerm.ValueOf _ -> true;
             case NumericTerm.TakenOf taken -> switch (taken.takenAs()) {
                 // Every container of that many answers it, every time within that hour does, and
-                // every date in that year falls in it.
-                case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ -> false;
+                // every date in that year falls in it. So does every container adding up to a
+                // total: one element at the whole of it, or two that come to it between them.
+                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _,
+                     TakenAs.PartOfTime _, TakenAs.PartOfDate _ -> false;
             };
         };
     }
@@ -99,7 +101,8 @@ final class TermRealizations {
      * of a location is the number written at it, and a number an operation answered is met by
      * whatever answers it.
      */
-    static Realization at(NumericTerm term, Type sourceType, TermOrders orders, Place answer,
+    static Realization at(NumericTerm.FromOnePosition term, Type sourceType, TermOrders orders,
+                          Place answer,
                           Symbols symbols, ReadingPolicy policy) {
         if (sourceType == null) {
             return new Realization.BuiltNone(
@@ -134,6 +137,15 @@ final class TermRealizations {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
             case TakenAs.HowManyItHolds _ -> holding(sourceType, answer, symbols, policy);
+            // Nothing here writes a container adding up to a given total, and saying so is the arm.
+            // A row would be composed by choosing how many elements and what each holds, which is a
+            // search over the elements rather than a value written at a position, and the point
+            // stays owed with `NOTHING_COMPOSES_ONE` beside it until something does it. Answered
+            // with one element carrying the whole total, the rules the elements are under would go
+            // unasked — and a row offered at an edge it does not stand on is what this file's one
+            // promise refuses.
+            case TakenAs.TheSumOfWhatItHolds _ -> new Realization.BuiltNone(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
             // the same mistake the reading makes in the other direction, which is why the pair

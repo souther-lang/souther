@@ -41,8 +41,9 @@ public sealed interface Position permits ReadPosition {
      *  writes it as. */
     TypeView view();
 
-    /** Which number this position is measured at: what it holds, or what its rules take of it. */
-    NumericTerm term();
+    /** Which number this position is measured at: what it holds, or what its rules take of it.
+     *  Answered by this position, since that is where the reading found it. */
+    NumericTerm.FromOnePosition term();
 
     /** What every rule reaching the position leaves its numbers, or null where nothing bounds them.
      *  Not where it is divided: a cap the record alone imposes stops the values without drawing a

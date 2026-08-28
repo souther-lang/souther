@@ -22,8 +22,15 @@ public sealed interface Realization {
      * <p>Keyed by the term and not by the path it is under. A count taken of a location and the
      * location's own content sit at one path and are not one thing to write: four is not what goes
      * at a position bounded on its length, it is four characters somebody has to choose.
+     *
+     * <p>And keyed by a number one position answers, because that is what a search can settle. What
+     * this holds is an assignment — somewhere a row is asked to hold a value — so a number read
+     * from anywhere but a single place has nothing to be assigned here, whatever else may be true
+     * of it. Such a number can stand in a form a border is drawn on and be read off a row; what it
+     * cannot be is an entry in this map, and the type is where that is said rather than at whichever
+     * reader noticed.
      */
-    record Found(Map<NumericTerm, Place> fixing) implements Realization {
+    record Found(Map<NumericTerm.FromOnePosition, Place> fixing) implements Realization {
 
         public Found {
             fixing = Map.copyOf(fixing);

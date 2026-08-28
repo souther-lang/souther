@@ -32,7 +32,8 @@ import souther.compiler.numeric.Place;
  *                          values either side of it. An equality says nothing about ranges: what it
  *                          distinguishes is the value from every other value
  */
-record ComparedLine(NumericTerm term, Place value, souther.compiler.inputs.TermOrders orders,
+record ComparedLine(NumericTerm.FromOnePosition term, Place value,
+                    souther.compiler.inputs.TermOrders orders,
                     boolean valueBelongsBelow, boolean holdsAtTheValue, boolean singles) {
 
     /**
@@ -60,7 +61,7 @@ record ComparedLine(NumericTerm term, Place value, souther.compiler.inputs.TermO
             value = named == null ? null : named.order().literalOf(comparison.left(), symbols);
             op = mirrored(op);
         }
-        NumericTerm term = named == null ? null : named.term();
+        NumericTerm.FromOnePosition term = named == null ? null : named.term().atOnePosition();
         souther.compiler.inputs.TermOrders orders = named == null ? null : named.orders();
         if (term == null || value == null) {
             // Nothing here is a position against a value this carrier writes, and there is nothing
@@ -92,7 +93,11 @@ record ComparedLine(NumericTerm term, Place value, souther.compiler.inputs.TermO
         if (read == null) {
             return null;
         }
-        NumericTerm term = read.oneCoordinate();
+        // The one position it cuts, where a single place answers that number. A quantity read from
+        // somewhere else draws its line without dividing any position, and is a quantity of its own.
+        NumericTerm coordinate = read.oneCoordinate();
+        NumericTerm.FromOnePosition term =
+                coordinate == null ? null : coordinate.atOnePosition();
         // The position's own order, not the order of whichever operand it was written beside. The
         // reading two methods up asks the same question of the same place, and `10 >= a + 1` names
         // the position on the right.

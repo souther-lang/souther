@@ -75,7 +75,7 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
      */
     public static PlacementSeed of(TermPath root, NumericTerm term, RuleRef by,
                                    RuleCitation cited) {
-        RuleAddress address = RuleAddress.of(root, term.path());
+        RuleAddress address = RuleAddress.of(root, term.subjectPath());
         if (address == null) {
             return null;
         }
@@ -83,6 +83,12 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
             case NumericTerm.ValueOf _ -> new FieldDomains.CoordinateKind.OfItsOwnValue();
             case NumericTerm.TakenOf taken ->
                     new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(taken.operation());
+            // The operation likewise, since what a rule about this number is about is what the
+            // operation answered. That it answered it over a run rather than of one value is not a
+            // difference a rule of the value the run is under can name: no clause of a record is
+            // written about what its elements come to.
+            case NumericTerm.TakenOver over ->
+                    new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(over.operation());
         }), by, cited);
     }
 

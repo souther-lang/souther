@@ -135,9 +135,16 @@ enum Question {
     ACCUMULATION("whether it accumulates what its container holds, and from what through what") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            Type result = signature.result();
-            return result != null && signature.params().stream().anyMatch(
-                    t -> result.equals(Type.elementOfAContainer(t)));
+            // Some argument, which is what a range is: an operation is asked this where any of its
+            // arguments could be the one it walks. Which one it does walk is the fact's to name,
+            // and whether the signature bears that out is asked of the same relation where the
+            // declaration is bound ({@link DischargeRules#resultIsElementOf}).
+            for (int i = 0; i < signature.params().size(); i++) {
+                if (DischargeRules.resultIsElementOf(signature, i)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         @Override
@@ -541,8 +548,16 @@ enum Question {
     READING("which representation reads the number it answers") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            // Or one whose answer is what its argument holds and is left open by the declaration.
+            // Drawn on the result alone, an operation declared as `(List<'a>) -> 'a` was asked
+            // nothing — and it answers a number wherever its elements are numbers, so a rule
+            // written on one had no reading named anywhere. Drawn without the second half, a walk
+            // declared to answer a string is asked which representation reads the number it
+            // answers, and the range picks up operations the subject is not about.
             return signature.params().size() == 1
-                    && NumericAnswers.in(signature.result()) != null;
+                    && (NumericAnswers.in(signature.result()) != null
+                            || (DischargeRules.resultIsElementOf(signature, 0)
+                                    && NumericAnswers.answerIsLeftToTheCall(signature.result())));
         }
 
         @Override

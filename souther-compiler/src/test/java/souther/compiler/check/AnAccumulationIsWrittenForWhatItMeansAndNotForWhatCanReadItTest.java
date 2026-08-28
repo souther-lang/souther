@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.semantics.Accumulation;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -44,14 +45,14 @@ class AnAccumulationIsWrittenForWhatItMeansAndNotForWhatCanReadItTest {
 
     @Test
     void whatEachAccumulatesIsWhatItStartsFromAndTheStepItRepeats() {
-        assertEquals(new Accumulations.Accumulation(
-                        Accumulations.Identity.ZERO, Accumulations.Combine.ADD),
+        assertEquals(new Accumulation(
+                        Accumulation.Identity.ZERO, Accumulation.Combine.ADD),
                 Accumulations.of(op("List", "sum")));
-        assertEquals(new Accumulations.Accumulation(
-                        Accumulations.Identity.ONE, Accumulations.Combine.MULTIPLY),
+        assertEquals(new Accumulation(
+                        Accumulation.Identity.ONE, Accumulation.Combine.MULTIPLY),
                 Accumulations.of(op("List", "product")));
-        assertEquals(new Accumulations.Accumulation(
-                        Accumulations.Identity.EMPTY, Accumulations.Combine.APPEND),
+        assertEquals(new Accumulation(
+                        Accumulation.Identity.EMPTY, Accumulation.Combine.APPEND),
                 Accumulations.of(op("List", "concat")),
                 "a list of lists is joined from the empty list through the same append two lists"
                         + " are joined by");
@@ -59,8 +60,8 @@ class AnAccumulationIsWrittenForWhatItMeansAndNotForWhatCanReadItTest {
 
     @Test
     void aStringIsAccumulatedAsAListIsAndIsWrittenDownAsOne() {
-        assertEquals(new Accumulations.Accumulation(
-                        Accumulations.Identity.EMPTY, Accumulations.Combine.APPEND),
+        assertEquals(new Accumulation(
+                        Accumulation.Identity.EMPTY, Accumulation.Combine.APPEND),
                 Accumulations.of(op("String", "concat")),
                 "the library states String.concat as join(\"\", xs), and what it means does not"
                         + " depend on there being a check that can read it");

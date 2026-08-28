@@ -180,6 +180,18 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         UNSUPPORTED_PARTITION_SHAPE,
         /**
+         * The rule draws its line on a number taken over a run of this position's values, so it
+         * divides none of them.
+         *
+         * <p>Its own word and not the shape above. Nothing here is between two positions and
+         * nothing is missing: the rule is read, its border is drawn, and the number it is about is
+         * what the values at this place come to rather than any one of them. Two of them either
+         * side of a total are on the line as surely as one is, so the position has no class this
+         * rule drew — and a reader told the rule relates two positions would go looking for a pair
+         * that is not there.
+         */
+        RULE_ABOUT_A_RUN,
+        /**
          * The input returns here to a declaration it has already been through, and what is under
          * this position was not read again.
          *

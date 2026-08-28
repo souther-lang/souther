@@ -114,6 +114,9 @@ final class OperationFactBinder {
                                 "what every answer of it has a value for");
                 case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
                         DischargeRules.holdTakenOf(stdlib, declared, each.operation(), taken.how());
+                case OperationFact.AccumulatesItsContainer accumulates ->
+                        DischargeRules.holdAccumulation(stdlib, each.operation(),
+                                accumulates.container());
                 case OperationFact.ComputesANumber computes ->
                         DischargeRules.holdNumericResult(stdlib, each.operation(), computes.result());
                 case OperationFact.IsDefinedByCases defined ->

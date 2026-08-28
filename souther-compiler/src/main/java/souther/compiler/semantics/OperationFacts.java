@@ -248,6 +248,25 @@ public final class OperationFacts {
             about("Set", "insert", noSmallerThan(at(1))),
             about("Map", "insert", noSmallerThan(at(2))),
 
+            // The operations that answer what a container holds accumulated, and what walking one
+            // comes to. `List.concat` and `String.concat` are here beside the two numeric ones
+            // because they are the same shape said of other values: a list of lists joined from the
+            // empty list, a list of strings joined from the empty string — which the library states
+            // as `join("", xs)` itself.
+            //
+            // `String.join` is in range and is not one of these. A separator stands between
+            // elements and not before the first, so what the walk does at an element depends on
+            // whether anything came before it, and an identity with a step over two values of one
+            // type has nowhere to keep that.
+            about("List", "sum",
+                    accumulates(at(0), Accumulation.Identity.ZERO, Accumulation.Combine.ADD)),
+            about("List", "product",
+                    accumulates(at(0), Accumulation.Identity.ONE, Accumulation.Combine.MULTIPLY)),
+            about("List", "concat",
+                    accumulates(at(0), Accumulation.Identity.EMPTY, Accumulation.Combine.APPEND)),
+            about("String", "concat",
+                    accumulates(at(0), Accumulation.Identity.EMPTY, Accumulation.Combine.APPEND)),
+
             // Where a predicate reads its container, and which shapes of construction carry its
             // statement there.
             about("List", "all", reads(CONTAINER, ElementShape.PERMUTES, ElementShape.SUBSET)),
@@ -439,6 +458,22 @@ public final class OperationFacts {
         // union and nothing else.
         out.addAll(saysNothing(OperationSubject.READING, op("String", "toInt"),
                 op("String", "toDecimal")));
+
+        // And the walk that multiplies what its container holds. It answers a number at every call
+        // its elements are numbers at, and what reads a number is one account at a time: the
+        // account for a walk that adds is read off that walk, and a walk that multiplies would need
+        // its own — how a total is read off a row and what containers come to a given one are not
+        // the sum's answers with the step changed.
+        //
+        // The joins are not here, and are not in range either. What `String.concat` answers is
+        // declared to be a string, so there is no number for a representation to read and nothing
+        // to be silent about; `List.concat` answers a list and is read by the body the language
+        // writes out, which is about that list.
+        //
+        // Said rather than left out. This is in range by the shape of its declaration, so an
+        // absence here is an operation nobody has answered for, which is what the range exists to
+        // find.
+        out.addAll(saysNothing(OperationSubject.READING, op("List", "product")));
         return List.copyOf(out);
     }
 
@@ -502,6 +537,15 @@ public final class OperationFacts {
 
     private static OperationFact takenAs(TakenAs how) {
         return new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(how);
+    }
+
+    /** The answer is what {@code container} holds, started from {@code identity} and carried
+     *  through {@code combine}. */
+    private static OperationFact accumulates(ArgumentRef container,
+                                             Accumulation.Identity identity,
+                                             Accumulation.Combine combine) {
+        return new OperationFact.AccumulatesItsContainer(container,
+                new Accumulation(identity, combine));
     }
 
     private static OperationFact meansSizeOf(String module, String size) {
@@ -693,15 +737,76 @@ public final class OperationFacts {
         return Index.SILENCES.getOrDefault(subject, java.util.Set.of());
     }
 
-    /** What {@code operation} takes of the one value it is given, or null where the number it
-     *  answers is not taken of one value. */
-    public static TakenAs takenAs(ValueName operation) {
-        return Index.TAKEN_AS.get(operation);
+    /** What walking {@code operation}'s container comes to, or null where it accumulates nothing —
+     *  including where the name is no operation of the library. */
+    public static Accumulation accumulation(ValueName operation) {
+        OperationFact.AccumulatesItsContainer stated = Index.ACCUMULATES.get(operation);
+        return stated == null ? null : stated.how();
     }
 
-    /** The operations that answer a number taken of the one value they are given. */
+    /** Which argument {@code operation} accumulates, or null where it accumulates nothing. */
+    public static ArgumentRef accumulatedContainer(ValueName operation) {
+        OperationFact.AccumulatesItsContainer stated = Index.ACCUMULATES.get(operation);
+        return stated == null ? null : stated.container();
+    }
+
+    /** The operations that answer what a container holds accumulated. */
+    public static java.util.Set<ValueName> accumulates() {
+        return Index.ACCUMULATES.keySet();
+    }
+
+    /**
+     * What {@code operation} takes of the one value it is given, or null where the number it
+     * answers is not taken of one value.
+     *
+     * <p>Declared, or read off the walk where the operation is one. An accumulation over one
+     * container already says what the answer is — start from this, carry that — so an arm declared
+     * beside it would be the same sentence in a second vocabulary, and the two would be free to
+     * disagree about what a sum is. What is read here is that statement put as a way of taking a
+     * number.
+     *
+     * <p>Only the walk that adds. A join carries an identity and a step as much as a sum does and
+     * answers a string; a product carries them and answers a number this measure has no reading
+     * for. What is derived is one account and not the family, so the reading a term gets is one
+     * something here can carry out — and a walk of another kind arriving is a walk nothing here
+     * claims to read.
+     *
+     * <p>Nothing here about how many arguments the operation takes. A number taken of the one value
+     * an operation is given is taken of one, and that is held where every taking is held to its
+     * declaration — so a walk that adds over a container beside other arguments stops the
+     * compilation rather than arriving as a term about whichever argument was written first.
+     */
+    public static TakenAs takenAs(ValueName operation) {
+        TakenAs declared = Index.TAKEN_AS.get(operation);
+        return declared != null ? declared : theSumItAccumulates(operation);
+    }
+
+    /** The sum arm where {@code operation} is a walk that adds up what it holds, or null. */
+    private static TakenAs theSumItAccumulates(ValueName operation) {
+        Accumulation walk = accumulation(operation);
+        return walk != null
+                && walk.identity() == Accumulation.Identity.ZERO
+                && walk.combine() == Accumulation.Combine.ADD
+                ? new TakenAs.TheSumOfWhatItHolds() : null;
+    }
+
+    /**
+     * The operations that answer a number taken of the one value they are given.
+     *
+     * <p>The ones {@link #takenAs} answers for, which is not the same as the ones an account is
+     * declared of: a walk that adds up a container is read as one and its account is that walk.
+     * Answered off the declarations alone, this set and the accessor beside it would disagree about
+     * an operation, and every reader of the set — what a question is asked of, what a check
+     * enumerates — would be missing whichever operations the accessor derives.
+     */
     public static java.util.Set<ValueName> answersANumberTakenOfItsArgument() {
-        return Index.TAKEN_AS.keySet();
+        java.util.Set<ValueName> out = new java.util.LinkedHashSet<>(Index.TAKEN_AS.keySet());
+        Index.ACCUMULATES.keySet().forEach(operation -> {
+            if (takenAs(operation) != null) {
+                out.add(operation);
+            }
+        });
+        return java.util.Set.copyOf(out);
     }
 
     /**
@@ -765,6 +870,9 @@ public final class OperationFacts {
         private static final Map<ValueName, TakenAs> TAKEN_AS =
                 index(OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven.class,
                         OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven::how);
+
+        private static final Map<ValueName, OperationFact.AccumulatesItsContainer> ACCUMULATES =
+                index(OperationFact.AccumulatesItsContainer.class, each -> each);
 
         private static final java.util.Set<ValueName> EVERY_ANSWER_HAS_A_SOURCE =
                 stating(OperationFact.EveryAnswerItCanGiveHasASourceValue.class);

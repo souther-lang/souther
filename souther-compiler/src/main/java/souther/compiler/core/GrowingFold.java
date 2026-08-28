@@ -365,6 +365,40 @@ public final class GrowingFold {
                 nd -> Core.mapChildren(nd, child -> piped(child, outer, refused)));
     }
 
+    /**
+     * The binding an element arrives under in a walk this pass emitted, or null where {@code e} is
+     * not one.
+     *
+     * <p><b>A binding and nothing else.</b> What is read here is the emitted walk's own contract —
+     * it takes a step over what it has so far and one element, and the element arrives as the
+     * second of the step's parameters — and what comes back is the identity that binding has. The
+     * step's body is not read, and neither is what it appends: a rewritten form is no evidence of
+     * where elements came from, and reading one as though it were is how the set of walks a reader
+     * can follow becomes a consequence of an optimisation.
+     *
+     * <p>So this answers where to look and never what was found. What the elements of such a walk
+     * are is a fact proved where the operation that made it still stood and carried by that
+     * binding; recovering the binding is a lookup into it, and recovering it proves nothing on its
+     * own. A walk an author wrote by hand reaches here as readily as one a {@code map} became, and
+     * for it the lookup finds nothing — which is the true answer.
+     */
+    public static souther.compiler.types.BindingId elementBindingOf(Core e) {
+        // Through a `let`, which is what a value is: what an expression comes to is what its body
+        // comes to, and the bindings on the way are read where they are read. That is the ordinary
+        // meaning of a binding and not a shape this pass left — the walk is what it wraps.
+        if (e instanceof Core.LetIn let) {
+            return elementBindingOf(let.body());
+        }
+        if (!(e instanceof Core.Call call)
+                || (call.fn() != BUILD && call.fn() != MAP_BUILD)
+                || call.args().isEmpty()
+                || !(call.args().get(0) instanceof Core.Block step)
+                || step.params().size() != 2) {
+            return null;
+        }
+        return step.params().get(1).binding();
+    }
+
     /** The step with its appends turned into adds, or null when the step does something else with the
      *  accumulator. A {@code let} the checker put around the step binds a captured value and is kept
      *  where it stands. */

@@ -31,7 +31,8 @@ public sealed interface Standing {
      * to say, and both are answered by the same search: a place the carrier names that the criterion
      * accepts.
      */
-    record OfOneCoordinate(NumericTerm term, Carrier of, Criterion where) implements Standing {}
+    record OfOneCoordinate(NumericTerm.FromOnePosition term, Carrier of, Criterion where)
+            implements Standing {}
 
     /**
      * Two positions on one carrier, standing the criterion's number of that carrier's steps apart.
@@ -44,7 +45,8 @@ public sealed interface Standing {
      * satisfies and the pair a search happens to find is a witness rather than the item: written
      * here, one row on the line would name every other row on it a different item.
      */
-    record OfTwoOnOneCarrier(NumericTerm on, NumericTerm against, Carrier of, Criterion where)
+    record OfTwoOnOneCarrier(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition against,
+                             Carrier of, Criterion where)
             implements Standing {}
 
     /**

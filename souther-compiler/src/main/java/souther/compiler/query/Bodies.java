@@ -1955,7 +1955,7 @@ public final class Bodies {
                 return Answer.of(new CheckedBody(
                         GrowingFold.rewrite(core, scope.value().theWalk()),
                         souther.compiler.check.ElementBindings.of(core,
-                                body.value().provenance()),
+                                body.value().provenance(), scope.value()),
                         // Who owns the rule each fork decides by, read off the declarations that
                         // wrote them. Read here because here is where the declarations are: after
                         // expansion a fork carries the argument the call site put in and says

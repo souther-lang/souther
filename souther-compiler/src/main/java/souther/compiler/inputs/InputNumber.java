@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.types.Type;
 
 /**
  * Which number of a behavior's input an expression names, or nothing where it names none.
@@ -38,14 +39,77 @@ public final class InputNumber {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
             TermPath of = reads.pathOf(measured.of(), symbols);
-            // Null where the call names a location the operation is not taken of, which a guard can
-            // write and the type checker has already refused elsewhere. Answered here as "no
-            // number", which is what every reader of one is ready for.
-            return of == null ? null : NumericTerm.TakenOf.of(measured.operation(), of,
-                    reads.read().typeAt(of, symbols), symbols);
+            if (of != null) {
+                return NumericTerm.TakenOf.of(measured.operation(), of,
+                        reads.read().typeAt(of, symbols), symbols);
+            }
+            // A location the operation is not taken of, or a value standing at none. The second is
+            // a walk's answer, and a number over the values it walked is a term of its own where
+            // those values are read from a place.
+            return overARun(measured, reads, symbols);
         }
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
+    }
+
+    /**
+     * The number {@code measured} takes over the values a walk was given, or null where those
+     * values are not read from a place.
+     *
+     * <p>Three answers have to be in hand, and each is somebody else's. That the walk answers one
+     * value per element of what it was given is a fact about the operation that handed the closure
+     * its elements, proved before the tree was rewritten. Where in an element the answer stands is
+     * what the closure came to, read once and kept as the way there. And which position the
+     * elements are at is the reading of the input's, as it is for every other term.
+     *
+     * <p>What the walk itself supplies is the element's binding and nothing more. The form it has
+     * now is what a rewrite left, so it is asked for an identity and not for a meaning: reading the
+     * answer off the shape would make the walks a rule can be written over a consequence of which
+     * ones that rewrite happens to recognise, and a walk an author wrote by hand would be read as
+     * a {@code map}.
+     *
+     * <p>The walk is met under whatever name is in scope, and what a name stands for is asked of
+     * the reading that owns the question ({@link InputReads#meaningOf}) rather than read off the
+     * tree. A model of any size binds the mapped list before totalling it, and a route that walked
+     * only the expression as written would answer one thing for
+     * {@code List.sum(List.map(f, xs))} and another for the same rule with a name in the middle —
+     * which is a `let` changing what a model means. The environment the value was given in comes
+     * with it, so what is read of the walk afterwards is read where the walk stands.
+     *
+     * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
+     * rather than a rule the model does not state — and is reported as one.
+     */
+    private static NumericTerm overARun(NumericMeasures.Measured measured, InputReads reads,
+                                        Symbols symbols) {
+        Core walk = measured.of();
+        InputReads where = reads;
+        // By the bindings met, so a name that came round to itself stops rather than being followed
+        // again. Bindings are added on the way down and each tells itself from every other, so this
+        // is the shape of the tree saying so and not a depth somebody chose.
+        java.util.Set<souther.compiler.types.BindingId> met = new java.util.HashSet<>();
+        while (walk instanceof Core.Read read) {
+            if (!met.add(read.binding())
+                    || !(where.meaningOf(read, symbols) instanceof ReadMeaning.Through through)) {
+                return null;
+            }
+            walk = through.value();
+            where = through.at();
+        }
+        souther.compiler.types.BindingId element =
+                souther.compiler.core.GrowingFold.elementBindingOf(walk);
+        if (element == null) {
+            return null;
+        }
+        ElementProjection answered = where.elements().projectionAt(element);
+        TermPath at = where.elementAt(element, symbols);
+        if (answered == null || at == null) {
+            return null;
+        }
+        TermPath under = answered.from(at);
+        Type stands = where.read().typeAt(under, symbols);
+        return stands == null ? null
+                : NumericTerm.TakenOver.of(measured.operation(),
+                        new RunSource.ProjectedOccurrences(under), stands, symbols);
     }
 
     /** The number a comparison is about, from whichever side names one. */

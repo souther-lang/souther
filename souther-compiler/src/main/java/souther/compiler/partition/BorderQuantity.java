@@ -42,7 +42,8 @@ public sealed interface BorderQuantity {
      * values. A line here divides the position into classes, which is why this one has an axis and
      * the others do not.
      */
-    record OfACoordinate(AxisId axis, NumericTerm term, TermOrders of) implements BorderQuantity {
+    record OfACoordinate(AxisId axis, NumericTerm.FromOnePosition term, TermOrders of)
+            implements BorderQuantity {
 
         public OfACoordinate {
             if (axis == null || term == null || of == null) {
@@ -61,10 +62,14 @@ public sealed interface BorderQuantity {
             return List.of(term);
         }
 
+        /** Null where the number it moved to is answered by no single position: what this quantity
+         *  is is one position's own values, so a move that leaves it without one leaves it
+         *  something else. */
         @Override
         public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
-            return term.equals(from)
-                    ? new OfACoordinate(new AxisId(axis.behavior(), to.toString()), to, orders)
+            NumericTerm.FromOnePosition landed = to.atOnePosition();
+            return term.equals(from) && landed != null
+                    ? new OfACoordinate(new AxisId(axis.behavior(), to.toString()), landed, orders)
                     : null;
         }
 
@@ -80,7 +85,7 @@ public sealed interface BorderQuantity {
             // measured on. The two are one carrier for a position's own content and part for a term
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
-            return switch (term.read(row.at(term.path()), of)) {
+            return switch (term.read(row.at(term.position()), of)) {
                 case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
@@ -157,7 +162,8 @@ public sealed interface BorderQuantity {
      * arithmetic form over both positions and is read as {@link OverAForm}, whose coefficients are
      * where a conversion between two orders is written.
      */
-    record Apart(String behavior, NumericTerm on, NumericTerm against,
+    record Apart(String behavior, NumericTerm.FromOnePosition on,
+                 NumericTerm.FromOnePosition against,
                  Map<NumericTerm, TermOrders> carriers) implements BorderQuantity {
 
         @Override
@@ -170,8 +176,14 @@ public sealed interface BorderQuantity {
             if (!on.equals(from) && !against.equals(from)) {
                 return null;
             }
-            NumericTerm here = on.equals(from) ? to : on;
-            NumericTerm there = against.equals(from) ? to : against;
+            // A distance is between two positions, so a move that leaves either end answered by no
+            // single position leaves the pair something a distance is not.
+            NumericTerm.FromOnePosition landed = to.atOnePosition();
+            if (landed == null) {
+                return null;
+            }
+            NumericTerm.FromOnePosition here = on.equals(from) ? landed : on;
+            NumericTerm.FromOnePosition there = against.equals(from) ? landed : against;
             // A distance runs between two positions, and a name standing at more than one can bring
             // the two ends of one together. Answered here, because what a caller has in hand is a
             // name that moved and not a pair it chose.
@@ -281,9 +293,9 @@ public sealed interface BorderQuantity {
             // Each on its own order. Read on one order for the pair, a position written back
             // differently from the other was read as a value it does not hold — a date read as a
             // whole number is no number at all, and the row stood at nothing (#1018).
-            NumericTerm.Reading here = on.read(row.at(on.path()), carriers.get(on));
+            NumericTerm.Reading here = on.read(row.at(on.subjectPath()), carriers.get(on));
             NumericTerm.Reading there =
-                    against.read(row.at(against.path()), carriers.get(against));
+                    against.read(row.at(against.subjectPath()), carriers.get(against));
             if (here instanceof NumericTerm.Reading.Missing
                     || there instanceof NumericTerm.Reading.Missing) {
                 return Stands.UNREADABLE;
@@ -499,9 +511,17 @@ public sealed interface BorderQuantity {
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
                 // Each on its own order. Read on one order for the whole form, a position written
                 // back differently from its neighbour was read as a value it does not hold.
-                NumericTerm.Reading read =
-                        each.getKey().read(row.at(each.getKey().path()),
-                                on.get(each.getKey()));
+                //
+                // And each asked for what its own number is of: one value where a place answers the
+                // term, every value where the term is over a run of them. Asked for one either way,
+                // a total would be read off whichever element the row's reading happened to pick.
+                TermOrders orders = on.get(each.getKey());
+                NumericTerm.Reading read = switch (each.getKey()) {
+                    case NumericTerm.FromOnePosition one ->
+                            one.read(row.at(one.position()), orders);
+                    case NumericTerm.TakenOver over ->
+                            over.readOver(row.everyValueAt(over.subjectPath()), orders);
+                };
                 if (read instanceof NumericTerm.Reading.Missing) {
                     return Stands.UNREADABLE;
                 }
@@ -688,6 +708,20 @@ public sealed interface BorderQuantity {
      *  off it. Handed in rather than reached for: which rows there are and how a value is found in
      *  one belong to the measure, and a quantity only asks what stands at a path. */
     interface Observation {
+
+        /** The one value standing at {@code path}, for a number taken of what is there. */
         ObservedValue at(TermPath path);
+
+        /**
+         * Every value standing at {@code path}, for a number taken over a run of them.
+         *
+         * <p>Beside {@link #at} and not instead of it. What a row holds at a place inside a
+         * sequence is as many values as it wrote, and which question is being asked decides what to
+         * do with them: a rule relating two positions is about one element and picks, and a rule
+         * about what they add up to is about all of them and does not. Answered by one method, the
+         * caller that wanted one would be handed a list to choose from and the choosing would move
+         * to whoever asked — which is the reading of a row being made twice.
+         */
+        java.util.List<ObservedValue> everyValueAt(TermPath path);
     }
 }

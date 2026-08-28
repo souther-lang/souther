@@ -1322,6 +1322,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " chosen";
             case UNSUPPORTED_PARTITION_SHAPE ->
                     "it relates two positions rather than dividing one";
+            case RULE_ABOUT_A_RUN ->
+                    "it is about what the values here come to rather than about any one of them,"
+                            + " so it draws its line and divides none of them";
             case RULE_ABOUT_A_DERIVED_VALUE ->
                     "it is about a value made from this one, and what it says about the values here"
                             + " is not worked out";

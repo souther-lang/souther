@@ -70,7 +70,7 @@ public sealed interface InputQuestion {
     default TermPath path() {
         return switch (this) {
             case AboutAPosition it -> it.path();
-            case AboutANumber it -> it.term().path();
+            case AboutANumber it -> it.term().subjectPath();
         };
     }
 

@@ -32,7 +32,11 @@ import java.util.List;
  * beside the report rather than taken out of the count — a claim the rules bear out has already
  * left, because the reading these classes come from is what took it out.
  *
- * @param term    the number this axis is of: a location's own content, or something taken of it
+ * @param term    the number this axis is of: a location's own content, or something taken of it.
+ *                Answered by one input position and held as such, because that is what an axis is:
+ *                a run of classes over the values of a number a row can be asked for somewhere. A
+ *                number read from a run of a sequence has no such place, so it draws a line without
+ *                dividing anything and never arrives here
  * @param at      the position the number is read from, and what this phase is left answering for
  *                there. Pointed at rather than copied out, because a position carries as many of
  *                these axes as the rules name numbers of it and what is in there is true of the
@@ -47,7 +51,8 @@ import java.util.List;
  *                away from its line is a run of what these leave together, and the cuts alone are
  *                short of the lines that have no value
  */
-public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<PartitionClass> classes,
+public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount at,
+                   List<PartitionClass> classes,
                    List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
 
     public Axis {
@@ -59,9 +64,9 @@ public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<Partiti
         }
     }
 
-    public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                List<Cut> cuts) {
-        this(id, term, PositionAccount.at(id.behavior(), term.path(), type), classes, cuts,
+    public Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
+                List<PartitionClass> classes, List<Cut> cuts) {
+        this(id, term, PositionAccount.at(id.behavior(), term.position(), type), classes, cuts,
                 List.of(), NarrowedBounds.NOTHING);
     }
 
@@ -88,7 +93,7 @@ public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<Partiti
      * and only where none does is what was found here what a report says — an absence where every
      * reading ran to the end and found nothing, and what stopped one where it did not.
      */
-    public static Axis pendingAt(AxisId id, NumericTerm term, PositionAccount at) {
+    public static Axis pendingAt(AxisId id, NumericTerm.FromOnePosition term, PositionAccount at) {
         return new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
     }
 
@@ -100,7 +105,7 @@ public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<Partiti
      * and a caller rebuilding an axis from its parts drops whatever it does not think to name. What
      * the position came to is one field, so a rebuild names it or does not compile.
      */
-    public Axis measuredAt(AxisId id, NumericTerm term) {
+    public Axis measuredAt(AxisId id, NumericTerm.FromOnePosition term) {
         return new Axis(id, term, at, classes, cuts, parted, narrowed);
     }
 
@@ -113,7 +118,7 @@ public record Axis(AxisId id, NumericTerm term, PositionAccount at, List<Partiti
      * read off it. Not what the axis is: two terms can be taken of one location, and {@link #id()}
      * is the one that tells them apart. */
     public TermPath path() {
-        return term.path();
+        return term.position();
     }
 
     /**

@@ -11,11 +11,19 @@ import souther.compiler.types.Type;
  * inside the classification the arm is, which is what {@code inputs.NumericTerm.SizeOf} was and what
  * splitting it up is for (#1027).
  *
- * <p>What an arm does settle is a pair: reading the number off an observation of the value, and
- * building values that answer a given number. The two are one arm because they are one account of
- * the same operation read in two directions, and an arm added without both is an operation a
- * boundary can be found on and no row written for — a string counted in code points and written in
- * UTF-16 units is the same defect a size down.
+ * <p>What an arm settles is how the number is read off an observation of the value. Whether values
+ * answering a given number can be built is a second question, asked of the same account and
+ * answered where rows are composed ({@code partition.TermRealizations}) — and whether every number
+ * such an operation could answer has a value that gives it is a third, declared of the operation
+ * ({@code EveryAnswerItCanGiveHasASourceValue}).
+ *
+ * <p><b>Three questions and not one, so an arm may answer the first and not the second.</b> An
+ * account whose building nothing here does is an operation a boundary is found on and no row
+ * composed for, which is what {@code NOTHING_COMPOSES_ONE} says of a point; read as an obligation to
+ * write something, the arm added next would get whatever its author could make return a value, and
+ * a row offered at an edge it does not stand on is worse than no row. What must hold of what is
+ * built is one way round — every value built reads back as the number it was built for — and that
+ * is stated where the building is.
  *
  * <p>Neither direction is written here. This says which account it is; the reading is the reader's
  * ({@code inputs.NumericTerm}) and the building is the generator's ({@code partition}), for the same
@@ -46,6 +54,36 @@ public sealed interface TakenAs {
             return answered == Type.Prim.INT
                     && (source == Type.STRING || source instanceof Type.ListOf
                             || source instanceof Type.SetOf || source instanceof Type.MapOf);
+        }
+    }
+
+    /**
+     * What a container holds added up.
+     *
+     * <p>Not declared of an operation beside the walk it is. What {@code List.sum} does is stated
+     * once, as the accumulation it is — start from nought, carry addition — and this arm is that
+     * statement read as a way of taking a number. Written down a second time here, a sum would be
+     * nought and addition to whoever discharges a rule about it and something else to whoever
+     * measures one, with nothing bringing the two together to disagree.
+     *
+     * <p>Which is why the arm carries no arithmetic of its own. It says which account it is; what
+     * the account comes to is the accumulation's, and a reader wanting the identity or the step asks
+     * there.
+     *
+     * <p>Read off every element, so the number is what the values at the position add up to and not
+     * what any one of them is. A container holding nothing adds up to nought, which is the identity
+     * the walk starts from and not an absence.
+     */
+    record TheSumOfWhatItHolds() implements TakenAs {
+
+        @Override
+        public boolean takenOf(Type source, Type answered) {
+            // A container of what it answers, which is what carrying the answer so far through one
+            // step over two values of that type comes to. Nothing here about the elements being
+            // numbers: which of them this language admits is settled where a call is typed, and
+            // what may be read as a number is asked of the answer afterwards.
+            Type element = Type.elementOfAContainer(source);
+            return element != null && element.equals(answered);
         }
     }
 

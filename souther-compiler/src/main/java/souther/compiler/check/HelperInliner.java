@@ -349,6 +349,20 @@ public final class HelperInliner {
     /** Bindings holding the same elements as another binding, and bindings holding elements made
      *  from another's. Written where an expansion removes the operation that says so. */
     private final ElementProvenance.Builder provenance = new ElementProvenance.Builder();
+
+    /**
+     * The lambdas given to an operation that answers one of their results per element, and the
+     * binding of the container each walks.
+     *
+     * <p>Written where the operation is still there to be asked and read where the lambda is
+     * applied, which is the one binding the two ends have in common: the lambda is registered under
+     * it, and every application of it expands from there. Its own parameter — the name an element
+     * arrives under — does not exist yet at the first point and is what the second records.
+     *
+     * <p>Inside one expansion of one body, as everything here is. Nothing survives past
+     * {@link #provenance}, which is what carries the fact onwards.
+     */
+    private final Map<BindingId, BindingId> pointwise = new LinkedHashMap<>();
     /** Which rule each expansion was handed, by the parameter it was handed to. Read here for the
      *  same reason the element bindings are: this is where the call site still stands. */
     private final souther.compiler.coverage.SuppliedRules.Builder supplied =
@@ -1394,6 +1408,16 @@ public final class HelperInliner {
         Map<BindingId, Hir.Bound> unreduced = new LinkedHashMap<>();
         List<Hir.Bound> bound = new ArrayList<>();
         List<Hir.Given> given = new ArrayList<>();
+        // Where this call is the application of a lambda that answers one result per element of a
+        // container, the element arrives under the parameter being bound below. Read before the
+        // loop, since what it is about is the call and not any one argument.
+        BindingId walked = pointwise.get(appliedLambda(call));
+        // And where this call is the operation that hands such a lambda its elements, the two ends
+        // of that fact are among the arguments: the lambda is one and the container is another. Both
+        // are gathered as they are met and joined once the loop has them.
+        ArgumentRef mapsEach = ElementLineage.mapsEachElementOf(calleeOf(call));
+        BindingId theLambda = null;
+        BindingId theContainer = null;
         for (int i = 0; i < helper.params().size(); i++) {
             Hir.FnParam p = helper.params().get(i);
             Hir.Expr arg = args.get(i);
@@ -1463,6 +1487,12 @@ public final class HelperInliner {
                     stands(f.id(), ruleOf(lambda));
                     unreduced.put(f.id(),
                             new Hir.Bound(f, instantiated(p.type(), applied), lambda));
+                    // Only where the lambda takes the one value an element arrives as. A closure
+                    // given more — an index beside the element — answers about a pair, and one
+                    // answer per element says nothing about which of the two a projection is of.
+                    if (lambda.params().size() == 1) {
+                        theLambda = f.id();
+                    }
                 } else {
                     throw notAFunction(rawCall, p, i, arg);
                 }
@@ -1481,9 +1511,37 @@ public final class HelperInliner {
                 // time anything reads the tree, the operation is gone. Recorded here, which is the
                 // one place both ends are in hand.
                 elementsCameFrom(f, arg);
+                // The element this application walks arrives under this binding, and the fact that
+                // it does was proved where the operation handing it out still stood. What is
+                // recorded is the pair and no expression: what the closure answers is read off the
+                // tree afterwards, under the licence this gives.
+                if (walked != null) {
+                    provenance.projectsEachElementOf(f.id(), walked);
+                }
+                if (mapsEach != null
+                        && i == CallArguments.positionIn(mapsEach, calleeOf(call))) {
+                    theContainer = f.id();
+                }
             }
         }
+        // Both ends or neither. A lambda taking one value and a container the operation walks one
+        // answer per element of are one fact between them, and half of it licenses nothing.
+        if (theLambda != null && theContainer != null) {
+            pointwise.put(theLambda, theContainer);
+        }
         return new Arguments(subst, bound, given, unreduced);
+    }
+
+    /** The binding a lambda this call applies was registered under, or null where the call applies
+     *  something else. */
+    private static BindingId appliedLambda(Hir.Apply call) {
+        return call.answered() != null
+                && call.answered().denotes() instanceof ValueName.Local local ? local.id() : null;
+    }
+
+    /** What this call reaches, for a reader asking what the library declares of it. */
+    private static ValueName calleeOf(Hir.Apply call) {
+        return call.answered() == null ? null : call.answered().denotes();
     }
 
     /**

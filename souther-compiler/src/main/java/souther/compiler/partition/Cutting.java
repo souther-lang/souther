@@ -337,9 +337,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * partition a thing this compiler can write a boundary for rather than a thing the model
      * distinguishes (issue #880).
      */
-    NumericTerm dividedPosition() {
+    NumericTerm.FromOnePosition dividedPosition() {
         java.util.Map<NumericTerm, java.math.BigDecimal> direction = quantity().direction();
-        return direction.size() == 1 ? direction.keySet().iterator().next() : null;
+        // And only where one position answers that number. A quantity read from somewhere else
+        // divides no position however few terms it is over, so there is nothing here for a class
+        // to be a class of.
+        return direction.size() == 1
+                ? direction.keySet().iterator().next().atOnePosition() : null;
     }
 
     /**

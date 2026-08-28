@@ -99,7 +99,7 @@ class WhatASequenceHoldsIsAPositionTest {
     void theElementsOwnTypeStatesWhereItsValuesStop() {
         Position age = at("people[*].age");
         assertNotNull(age.ownEnds(), "the element's field carries the ends its own type states");
-        assertEquals("people[*].age", age.term().path().toString(),
+        assertEquals("people[*].age", age.term().position().toString(),
                 "and the term measured there is that position");
     }
 
