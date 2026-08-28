@@ -270,6 +270,10 @@ public record Seam(CutPosition at, Level below, Level above) {
      * reaching it. Both are one question and this is where it is answered — asked as the threshold
      * alone, a range that stops where the rule leaves off disagrees with it by exactly one count,
      * and asked as the side alone, an order that fills has no answer at all.
+     *
+     * <p>Null where the order names no value there and the line is not one of this quantity's levels
+     * either, which is a rule that wrote a multiple of the quantity and refuses its own threshold.
+     * There is nothing on that side to name, in the units a caller holding this is working in.
      */
     Level leaving(Towards side) {
         Level named = side == Towards.BELOW ? below : above;

@@ -327,7 +327,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
-        if (!reaches(target, within)) {
+        if (!reaches(cut,
+                Seam.of(space, cut, valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE),
+                satisfyingSide(origin), within)) {
             // Asked and answered by whoever holds the rule. Reaching here is that reader and this
             // one disagreeing about one line, which is not a state a model can put them in.
             throw new IllegalStateException(
@@ -388,21 +390,51 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * never negative, and a rule comparing one against a negative draws no line for anything to be
      * beside.
      *
-     * <p><b>Whether the line is outside what the rules leave, and not whether they leave its own
-     * value.</b> A bound's line stands at the very end of what the bound leaves, and a strict one on
-     * a carrier with no step stands at a value the position does not hold — the quantity comes
-     * arbitrarily close to it and never arrives, which is a line with values on one side of it and
-     * not a line nothing reaches. Asked as {@code admits}, the two were one answer: every strict
-     * bound on a {@code Decimal} was read as drawing no line, and a model whose every rule was one
-     * came back adequate on the strength of no measure at all (issue #1079).
+     * <p><b>Asked of the side the rule keeps, and of where it parts the values there.</b> A rule
+     * draws somewhere exactly when the values it keeps are values the rules leave — so what is asked
+     * is one place and not the whole line, and it is the place the rule leaves rather than the
+     * number it wrote. Asked at the number, a rule refusing its own threshold on a carrier that
+     * counts parts the values one step inside the range and reads as one cutting outside it; asked
+     * of both sides, a line beyond the range has the side it refuses pulled back inside and reads as
+     * one cutting within.
+     *
+     * <p>Which keeps a carrier with no step drawing. Such a rule names no value beside its line —
+     * the quantity comes arbitrarily close and never arrives — and what it keeps is the line itself,
+     * so the question is asked there and answered. Asked as whether the rules leave the line's own
+     * value, every strict bound on a {@code Decimal} was read as drawing no line, and a model whose
+     * every rule was one came back adequate on the strength of no measure at all.
      */
-    public static boolean reaches(BoundaryTarget target, NumericDomain.Bounds within) {
+    public static boolean reaches(Level cut, Seam parts, Towards kept,
+                                  NumericDomain.Bounds within) {
         if (within == null) {
             return true;
         }
-        Place at = placeOf(target.at());
+        // The line itself where the seam has nothing to name on that side in the quantity's own
+        // units, which is a rule that wrote a multiple of the quantity and refuses its threshold.
+        // The line is where the values part to within one step of the quantity either way, and a
+        // caller with no place to ask about has nothing better to ask about than that.
+        Level leaves = parts.leaving(kept);
+        return admits(within, leaves == null ? cut : leaves);
+    }
+
+    /** Whether {@code within} holds the value at {@code level}. */
+    private static boolean admits(NumericDomain.Bounds within, Level level) {
+        Place at = placeOf(level);
         return (within.min() == null || at.compareTo(within.min().at()) >= 0)
                 && (within.max() == null || at.compareTo(within.max().at()) <= 0);
+    }
+
+    /**
+     * Which way a rule is satisfied from its threshold, from the two things every rule records about
+     * its own line.
+     *
+     * <p>One derivation, asked by whoever holds the pair. A line is read off a cutting before any
+     * rule has been named for it and off that rule's origin afterwards, and the two carry the same
+     * two facts — worked out separately, a line would be satisfied one way while it was a cutting
+     * and the other way once it had an origin.
+     */
+    static Towards satisfyingSide(boolean holdsAtTheValue, boolean valueBelongsBelow) {
+        return holdsAtTheValue == valueBelongsBelow ? Towards.BELOW : Towards.ABOVE;
     }
 
     /**
@@ -707,6 +739,12 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         // does not, which is half the operators an author can write.
         Level leaves = Seam.of(space, cut,
                 valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE).leaving(kept);
+        // Nothing to hold the range against where the seam names no place in the quantity's units.
+        // The two readings are held against each other where both can say where the rule leaves
+        // off, and a check run on one of them alone would be this reading answering for the other.
+        if (leaves == null) {
+            return;
+        }
         if (end == null || !end.at().sameAs(placeOf(leaves))) {
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: " + origin.named());

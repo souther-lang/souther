@@ -240,7 +240,9 @@ sealed interface ComparisonAssessment {
         // The line and not one of its points. A rule drawing where the quantity never reaches
         // divides the position into nothing, and a reader told that the rule went unread would go
         // looking for a limit of this compiler that is not there.
-        if (!Border.reaches(cutting.target(), cutting.within())) {
+        if (!Border.reaches(cutting.at(), cutting.seam(),
+                Border.satisfyingSide(cutting.holdsAtTheValue(), cutting.valueBelongsBelow()),
+                cutting.within())) {
             return new OutsideTheDomain(cutting);
         }
         NumericTerm.FromOnePosition divided = cutting.dividedPosition();
