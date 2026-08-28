@@ -351,6 +351,56 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                     """));
 
     private static final List<Discharges> READ_AS_THEIR_ARGUMENT = List.of(
+            // The operations over counted carriers, each read as the form it answers in what it was
+            // given. A carrier's count is an internal coordinate and is not a number the model
+            // writes, and this check reasons over the coordinate — so a date's day is arithmetic
+            // here exactly as a whole number is.
+            new Discharges("Date.daysBetween", """
+                    module demo
+                    data Span = { from: Date, to: Date }
+                        invariant Date.daysBetween(from, to) >= 0
+                    behavior makeSpan : (d: Date) -> Span constructs Span
+                    let makeSpan (d) = Span { from = d, to = Date.addDays(3, d) }
+                    """),
+            new Discharges("Date.addDays", """
+                    module demo
+                    data Span = { from: Date, to: Date }
+                        invariant Date.daysBetween(from, to) <= 30
+                    behavior makeSpan : (d: Date) -> Span constructs Span
+                    let makeSpan (d) = Span { from = d, to = Date.addDays(10, d) }
+                    """),
+            new Discharges("DateTime.addMinutes", """
+                    module demo
+                    data Window = { opens: DateTime, closes: DateTime }
+                        invariant DateTime.minutesBetween(opens, closes) >= 30
+                    behavior makeWindow : (dt: DateTime) -> Window constructs Window
+                    let makeWindow (dt) = Window { opens = dt, closes = DateTime.addMinutes(30, dt) }
+                    """),
+            new Discharges("DateTime.addHours", """
+                    module demo
+                    data Window = { opens: DateTime, closes: DateTime }
+                        invariant DateTime.minutesBetween(opens, closes) >= 60
+                    behavior makeWindow : (dt: DateTime) -> Window constructs Window
+                    let makeWindow (dt) = Window { opens = dt, closes = DateTime.addHours(1, dt) }
+                    """),
+            new Discharges("DateTime.addDays", """
+                    module demo
+                    data Window = { opens: DateTime, closes: DateTime }
+                        invariant DateTime.minutesBetween(opens, closes) >= 1440
+                    behavior makeWindow : (dt: DateTime) -> Window constructs Window
+                    let makeWindow (dt) = Window { opens = dt, closes = DateTime.addDays(1, dt) }
+                    """),
+            // Two carriers' counts in one form, which is what the declaration's coefficients are
+            // for: a date-time's seconds are a day's worth of the date's days plus the time's
+            // seconds. Nothing here requires the parts to share one count space, and requiring it
+            // would refuse the conversions the library states.
+            new Discharges("DateTime.fromDateAndTime", """
+                    module demo
+                    data Stamp = { on: Date, at: DateTime }
+                        invariant at >= DateTime.fromDateAndTime(on, Time("00:00:00"))
+                    behavior makeStamp : (d: Date) -> Stamp constructs Stamp
+                    let makeStamp (d) = Stamp { on = d, at = DateTime.fromDateAndTime(d, Time("09:00:00")) }
+                    """),
             new Discharges("Decimal.fromInt", """
                     module demo
                     data Bad
