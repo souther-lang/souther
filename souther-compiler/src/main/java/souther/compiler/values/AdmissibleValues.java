@@ -2,6 +2,7 @@ package souther.compiler.values;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -639,6 +640,64 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         Set<B> out = new LinkedHashSet<>();
         of.forEach(position -> out.add(naming.apply(position)));
         return out;
+    }
+
+    /**
+     * Every one of them holding at once.
+     *
+     * <p><b>Two orders, and they are about different things.</b> What gets built first is settled
+     * by what the readings are ({@link PlanOrder}), so the same readings cost the same and come out
+     * exact or wide the same, whichever of them a caller happened to hold first. What is written
+     * down about them — which rules went unread at which position, in what order — stays the order
+     * they were read in, which is the order somebody wrote them.
+     *
+     * <p>Told apart because a reader uses them for different things. Folded in the order the
+     * reasons should be written in, the work turned on where the readings came from; ordered by
+     * content throughout, the reasons came out in an order nothing in the model accounts for and a
+     * report would list them by a rule of this compiler's.
+     *
+     * <p>Still pairwise, so what is built is one meet after another rather than all of them at
+     * once. Which pair is cheapest is a question about machines nobody has made, and the difference
+     * is what this can answer exactly out of one allowance — not what it answers.
+     */
+    public static <A> AdmissibleValues<A> metAll(List<AdmissibleValues<A>> readings,
+                                                 Allowance<A> sets) {
+        if (readings.isEmpty()) {
+            throw new IllegalArgumentException("a conjunction of no readings is top, said as top");
+        }
+        List<AdmissibleValues<A>> schedule = new ArrayList<>(readings);
+        schedule.sort(Comparator.comparing(PlanOrder::of));
+        AdmissibleValues<A> out = schedule.get(0);
+        for (AdmissibleValues<A> each : schedule.subList(1, schedule.size())) {
+            out = out.meet(each, sets);
+        }
+        return out.sayingWhatWasReadInTheOrderOf(readings);
+    }
+
+    /**
+     * The same reading, with what is said about each position written in the order these were read.
+     *
+     * <p>Only the writing down. Every reason here is one of theirs or one the meet added, and which
+     * they are does not change — what changes is that a reader is shown them in the order the rules
+     * were written rather than in the order the work happened to be done.
+     */
+    private AdmissibleValues<A> sayingWhatWasReadInTheOrderOf(List<AdmissibleValues<A>> read) {
+        Map<A, List<UnreadReason>> out = new LinkedHashMap<>();
+        read.forEach(each -> each.standing.forEach((atom, why) -> why.forEach(one -> put(out, atom, one))));
+        // And then the ones the meet itself added, which no reading arrived with.
+        standing.forEach((atom, why) -> why.forEach(one -> put(out, atom, one)));
+        Set<A> widened = new LinkedHashSet<>();
+        read.forEach(each -> widened.addAll(each.widened));
+        widened.addAll(this.widened);
+        return new AdmissibleValues<>(held, perPosition, out, dropped, guaranteed,
+                defaultGuaranteed, guaranteedTogether, tangled, widened);
+    }
+
+    private static <A> void put(Map<A, List<UnreadReason>> out, A atom, UnreadReason why) {
+        List<UnreadReason> all = out.computeIfAbsent(atom, _ -> new ArrayList<>());
+        if (!all.contains(why)) {
+            all.add(why);
+        }
     }
 
     /** Both readings holding at once. */

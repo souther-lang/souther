@@ -116,6 +116,52 @@ final class PlanOrder {
         parts.forEach(each -> write(each, out));
     }
 
+    /**
+     * How a whole reading is written, for a caller putting several of them in a work order.
+     *
+     * <p>The same rule one position's plan is ordered by, at the layer whose parts are readings:
+     * the states it holds first, so that the least of them are put together first, and then the
+     * whole of what it holds, so that two readings that differ are ordered and two that do not are
+     * one thing either way.
+     *
+     * <p><b>A work order and nothing else.</b> What a reading says, and the order the reasons in it
+     * are written down in, are the author's — this decides only which pair of sets is built first.
+     * Two positions printed alike would tie here, and a tie costs states rather than answers.
+     */
+    static String of(AdmissibleValues<?> reading) {
+        StringBuilder out = new StringBuilder();
+        out.append("%012d;".formatted(states(reading.perPosition().values())));
+        written(reading.perPosition(), out);
+        written(reading.guaranteed(), out);
+        write(reading.defaultGuaranteed(), out);
+        out.append(reading.dropped()).append(';').append(reading.guaranteedTogether()).append(';');
+        return out.toString();
+    }
+
+    private static long states(java.util.Collection<ValueSet> sets) {
+        long out = 0;
+        for (ValueSet each : sets) {
+            out = Math.min(ENOUGH, out + (each instanceof ValueSet.Matching it
+                    ? it.language().size() : 0));
+        }
+        return out;
+    }
+
+    /** Every position and what it holds, taken by name so that two readings are compared over the
+     *  same positions however either of them happens to be filed. */
+    private static void written(java.util.Map<?, ValueSet> at, StringBuilder out) {
+        out.append(at.size()).append(';');
+        at.entrySet().stream()
+                .map(each -> {
+                    StringBuilder one = new StringBuilder(String.valueOf(each.getKey()));
+                    one.append('=');
+                    write(each.getValue(), one);
+                    return one.toString();
+                })
+                .sorted()
+                .forEach(each -> out.append(each).append(';'));
+    }
+
     private static void write(ValueSet set, StringBuilder out) {
         switch (set) {
             case ValueSet.Finite it -> {

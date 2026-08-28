@@ -190,6 +190,17 @@ public final class Allowance<A> {
     }
 
     /**
+     * How much {@code atom} has left, for a caller holding this allowance to what it spent.
+     *
+     * <p>Not how a reader learns anything about a model. What each position came to and whether it
+     * is exact is in the reading; this is the number itself, for measuring that the same rules cost
+     * the same.
+     */
+    public int left(A atom) {
+        return meter(atom).left();
+    }
+
+    /**
      * The same allowance, filed under what {@code naming} calls each position.
      *
      * <p>One answer and not two. A reading renamed into another vocabulary is the same answer being

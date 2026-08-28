@@ -312,12 +312,10 @@ public final class ConjoinedAdmissibleValues<A> {
                     }
                 }
             }
-            // And then met in the order they arrived, which is the order they are held in.
-            AdmissibleValues<A> component = null;
-            for (int each : members) {
-                component = component == null ? of.get(each) : component.meet(of.get(each), sets);
-            }
-            out.add(component);
+            // And then met. Handed over in the order they arrived, which is the order what they
+            // say about each position is written down in; which of them is built first is settled
+            // in there, from what they are — see {@link AdmissibleValues#metAll}.
+            out.add(AdmissibleValues.metAll(members.stream().map(of::get).toList(), sets));
         }
         return out;
     }
