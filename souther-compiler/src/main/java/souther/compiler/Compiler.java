@@ -8,7 +8,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.Located;
-import souther.compiler.examples.Deadline;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Acceptance;
@@ -177,12 +177,12 @@ public final class Compiler {
         return compiled(source, defaultModuleName, warningsOut, measure, null, null, policy);
     }
 
-    /** As above, with what a row or a reading is given to finish within said outright — for a test
-     *  stating which work does not come back rather than timing it. */
+    /** As above, running the rows under an arrangement of the caller's — for a test stating which
+     *  work does not come back rather than timing it. */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut, Adequacy.Asked measure,
-                                java.time.Duration exampleBudget, Deadline deadline) {
-        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, deadline, null);
+                                java.time.Duration exampleBudget, JvmExampleDeadlines arrangement) {
+        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, arrangement, null);
     }
 
     /**
@@ -197,15 +197,15 @@ public final class Compiler {
 
     private static Compilation compiled(String source, String defaultModuleName,
                                         List<Located> warningsOut, Adequacy.Asked measure,
-                                        java.time.Duration exampleBudget, Deadline deadline,
+                                        java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                         EvaluationPolicy policy) {
         return driven(() -> compilingSource(source, defaultModuleName, warningsOut, measure,
-                exampleBudget, deadline, policy, ModulePath.EMPTY));
+                exampleBudget, arrangement, policy, ModulePath.EMPTY));
     }
 
     private static Compilation compilingSource(String source, String defaultModuleName,
                                                List<Located> warningsOut, Adequacy.Asked measure,
-                                               java.time.Duration exampleBudget, Deadline deadline,
+                                               java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                                EvaluationPolicy policy, ModulePath path) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName, path);
         // The terms first and the wait after, because the wait is one of them: said the other way
@@ -217,8 +217,8 @@ public final class Compiler {
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
         }
-        if (deadline != null) {
-            compilation.withDeadline(deadline);
+        if (arrangement != null) {
+            compilation.withJvmExampleDeadlines(arrangement);
         }
         compilation.measure(measure);
 
@@ -358,11 +358,11 @@ public final class Compiler {
         return linked(sources, path, warningsOut, measure, null, null, policy);
     }
 
-    /** As above, with what a row or a reading is given to finish within said outright. */
+    /** As above, running the rows under an arrangement of the caller's. */
     static Compilation compiledModules(List<String> sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure,
-                                       java.time.Duration exampleBudget, Deadline deadline) {
-        return linked(sources, path, warningsOut, measure, exampleBudget, deadline, null);
+                                       java.time.Duration exampleBudget, JvmExampleDeadlines arrangement) {
+        return linked(sources, path, warningsOut, measure, exampleBudget, arrangement, null);
     }
 
     private static Compilation linked(List<String> sources, ModulePath path,
@@ -372,15 +372,15 @@ public final class Compiler {
 
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure,
-                                      java.time.Duration exampleBudget, Deadline deadline,
+                                      java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                       EvaluationPolicy policy) {
         return driven(() -> linkingSources(sources, path, warningsOut, measure, exampleBudget,
-                deadline, policy));
+                arrangement, policy));
     }
 
     private static Compilation linkingSources(List<String> sources, ModulePath path,
                                               List<Located> warningsOut, Adequacy.Asked measure,
-                                              java.time.Duration exampleBudget, Deadline deadline,
+                                              java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                               EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(sources, path);
         // The terms first and the wait after, for the reason compilingSource gives.
@@ -390,8 +390,8 @@ public final class Compiler {
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
         }
-        if (deadline != null) {
-            compilation.withDeadline(deadline);
+        if (arrangement != null) {
+            compilation.withJvmExampleDeadlines(arrangement);
         }
         compilation.measure(measure);
 

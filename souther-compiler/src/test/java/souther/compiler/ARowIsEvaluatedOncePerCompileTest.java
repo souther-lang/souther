@@ -1,7 +1,8 @@
 package souther.compiler;
 
 import souther.compiler.examples.Deadline;
-import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.execute.jvm.JvmDeadlines;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -45,29 +46,33 @@ class ARowIsEvaluatedOncePerCompileTest {
     private static List<Deadline.Work> workOf(Adequacy.Asked measure) {
         List<Deadline.Work> given = new ArrayList<>();
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.withDeadline(recording(given));
+        compilation.withJvmExampleDeadlines(recording(given));
         compilation.measure(measure);
         compilation.answerEverything();
         return given;
     }
 
-    /** The build's deadline, with each piece of work written down as it is handed over. */
-    private static Deadline recording(List<Deadline.Work> into) {
-        Deadline inner = Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis());
-        return new Deadline() {
+    /** The build's own arrangement, with each piece of work written down as it is handed over. It
+     *  is asked for the wait this compilation was given, the way the build asks for it. */
+    private static JvmExampleDeadlines recording(List<Deadline.Work> into) {
+        JvmExampleDeadlines build = JvmDeadlines.onWorkers();
+        return outerTimeout -> {
+            Deadline inner = build.forThisCompile(outerTimeout);
+            return new Deadline() {
 
-            @Override
-            public long budgetMs() {
-                return inner.budgetMs();
-            }
-
-            @Override
-            public <T> Outcome<T> given(Work work, Callable<T> body) {
-                synchronized (into) {
-                    into.add(work);
+                @Override
+                public long budgetMs() {
+                    return inner.budgetMs();
                 }
-                return inner.given(work, body);
-            }
+
+                @Override
+                public <T> Outcome<T> given(Work work, Callable<T> body) {
+                    synchronized (into) {
+                        into.add(work);
+                    }
+                    return inner.given(work, body);
+                }
+            };
         };
     }
 

@@ -9,7 +9,7 @@ import java.util.concurrent.SynchronousQueue;
  * <p>A row is one thread's from beginning to end and has to be: what it spends is counted on that
  * thread ({@code EvaluationContext}), what it went through is collected there ({@code Probe}), and
  * how deep it may recurse is decided by the stack that thread was made with
- * ({@link Deadline#DEFAULT_WORKER_STACK_BYTES}). Splitting a row across two threads would take the
+ * ({@link CallerCrossingDeadlines}). Splitting a row across two threads would take the
  * counting apart, and running it on whatever thread called would put a model's recursion limit at
  * the mercy of the surrounding {@code -Xss}.
  *

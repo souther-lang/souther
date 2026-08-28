@@ -52,7 +52,7 @@ class AnEvaluationThatCouldNotAnswerIsNotTheModelsFaultTest {
     /** A compile whose row is said not to come back, rather than written so that it does not. */
     private static Compilation whoseRowDoesNotAnswer() {
         Compilation compilation = Compilation.ofSource(COMES_BACK, "Main");
-        compilation.withDeadline(DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("run")));
+        compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("run")));
         compilation.answerEverything();
         return compilation;
     }

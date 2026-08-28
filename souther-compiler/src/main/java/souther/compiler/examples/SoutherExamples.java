@@ -11,6 +11,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.execute.jvm.JvmExampleRuns;
 import souther.compiler.query.ExampleExecutions;
 import souther.compiler.query.Output;
@@ -139,9 +140,11 @@ public final class SoutherExamples {
         refuseIfItDoesNotCompile(compiled);
         // A row runs on a worker of this compile's own, so what it spends is counted on one thread
         // and how deep it may recurse is this compile's answer; what it hands outside runs on
-        // whoever called, because that is the world a supplied implementation answers out of.
-        compiled.withDeadline(
-                Deadline.crossingBackToTheCaller(Deadline.DEFAULT_WORKER_STACK_BYTES));
+        // whoever called, because that is the world a supplied implementation answers out of. The
+        // worker is made with the stack this JVM's settings ask for, which is the one answer to that
+        // and is read where a build reads it.
+        compiled.withJvmExampleDeadlines(
+                new CallerCrossingDeadlines(JvmDeadlines.workerStackFromSettings()));
         return new SoutherExamples(compiled);
     }
 

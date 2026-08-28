@@ -254,7 +254,8 @@ class CompileFakeTableWhereWrittenTest {
                 fake find
                     | (N(spin(1))) -> Found { n = N(1) }
                 """, "Main", warnings, souther.compiler.query.Adequacy.Asked.NOTHING,
-                null, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyTableOf("find"))));
+                DoesNotComeBack.WAIT,
+                DoesNotComeBack.overrunningOn(DoesNotComeBack.everyTableOf("find"))));
 
         List<Located> said = only("E1921", warnings);
         assertEquals(1, said.size(), warnings.toString());
@@ -266,7 +267,7 @@ class CompileFakeTableWhereWrittenTest {
         // The number is read off the wait this compile was given rather than written in, so the
         // line still holds if that wait changes. Ungrouped, which is how it is set.
         assertTrue(rendered(one).contains("Building the `fake find` table did not answer within "
-                        + DoesNotComeBack.BUDGET.toMillis() + "ms"),
+                        + DoesNotComeBack.WAIT.toMillis() + "ms"),
                 rendered(one));
         assertTrue(rendered(one).contains("not code this compile generated"),
                 "the hint says whose fault it is not: " + rendered(one));

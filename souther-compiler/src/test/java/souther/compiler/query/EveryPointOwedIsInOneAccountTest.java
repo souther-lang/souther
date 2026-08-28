@@ -271,7 +271,7 @@ class EveryPointOwedIsInOneAccountTest {
         // drew: meeting one of those takes writing the value and no comparison has to have run, so
         // a row that was read and stopped leaves it settled and a row nobody read does not.
         Compilation compilation = Compilation.ofSource(ONE_ROW_STOPS, "Main");
-        compilation.withDeadline(souther.compiler.DoesNotComeBack.overrunningOn(
+        compilation.withJvmExampleDeadlines(souther.compiler.DoesNotComeBack.overrunningOn(
                 souther.compiler.DoesNotComeBack.everythingAboutRowsOf("stalls")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
