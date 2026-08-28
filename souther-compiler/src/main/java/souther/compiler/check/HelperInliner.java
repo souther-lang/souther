@@ -1330,7 +1330,15 @@ public final class HelperInliner {
         // stamp says that is what it is doing, so nothing downstream reads the call as the place the
         // code is written.
         DeclaringCode declaring = whereTheBodyIs(call, helper);
-        Renaming renaming = new Renaming(arguments.subst(), new Copy(helper.writtenBody(), ours),
+        Copy copy = new Copy(helper.writtenBody(), ours);
+        // What was proved of the bindings this body has, said again of the ones the copy gives them.
+        // The body being copied is one already expanded — a lambda registered here is registered
+        // with its calls spliced in — so the operation that proved anything of it is gone from what
+        // is copied, and nothing downstream proves it again of the bindings the copy makes. Said
+        // here because this is where the whole renaming is in hand and nothing has been written from
+        // it yet.
+        provenance.carriedAcross(copy.renaming());
+        Renaming renaming = new Renaming(arguments.subst(), copy,
                 declaring == null ? null : call.pos().standingInFor(declaring),
                 declaring == null ? null : standingIn(call.region(), declaring));
         Hir.Expr body = inline(rename(helper.writtenBody(), renaming));   // expand nested helpers too
@@ -1849,6 +1857,12 @@ public final class HelperInliner {
         private Copy(Hir.Expr body, Hir.Binders binders) {
             eachBinder(body, binder ->
                     mine.put(binder.id(), binders.binder(binder.name(), binder.pos()).id()));
+        }
+
+        /** Which of the body's bindings became which of this copy's, for a reader whose question is
+         *  about the renaming itself rather than about any one name in it. */
+        Map<BindingId, BindingId> renaming() {
+            return mine;
         }
 
         /** This copy's binder for one the body has. The copy is this pass's writing, however much
