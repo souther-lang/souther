@@ -4143,7 +4143,8 @@ public final class Adequacy {
         public Answer<DeclaredBoundaries> compute(Db db) {
             Map<String, Measure<List<BorderAssessment>>> lines =
                     db.ask(new BoundaryReadings(name)).value();
-            if (lines == null) {
+            List<BorderObligationPointAssessment> points = db.ask(new Obligations(name)).value();
+            if (lines == null || points == null) {
                 // Nobody read this module's lines, so what its declarations are owed was not
                 // measured either. Answered as an account with no debts, that would be this module
                 // owing nothing — which is what a module whose every line is covered also answers.
@@ -4159,25 +4160,12 @@ public final class Adequacy {
                     went.put(behavior, read.weakening());
                 }
             });
-            Map<String, List<BorderAssessment>> readings = new LinkedHashMap<>();
-            lines.forEach((behavior, read) -> {
-                // Every reading, because which of them this module keeps an account of is a question
-                // about the points they owe and not about the lines they are readings of. A line
-                // another module wrote can be stopped where this module's declaration takes the
-                // position in, and the run beside it is then this module's to answer for — dropped
-                // here, that point was accounted nowhere at all.
-                //
-                // The lines a reading found, with how far it got carried above rather than here: a
-                // debt is made from the lines and is short of whatever finding them was short of.
-                readings.computeIfAbsent(behavior, _ -> new ArrayList<>())
-                        .addAll(read.made().orElseGet(List::of));
-            });
-            if (readings.isEmpty()) {
+            if (points.isEmpty()) {
                 return Answer.of(new DeclaredBoundaries(List.of(), went));
             }
-            // What names a line and where its declaration is are read from the declaration, and
-            // neither is something a debt can go without — so they are asked here, once, and their
-            // absence is this measure having no answer rather than a debt built without them.
+            // Where a declaration is, which is what an owner is named by and is no part of what the
+            // points are. Asked here, once, and its absence is this measure having no answer rather
+            // than a debt built without it.
             Symbols symbols = Names.derivedSymbols(db, name).value();
             souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
             if (symbols == null || policy == null) {
@@ -4189,15 +4177,14 @@ public final class Adequacy {
             // A run that stops at a body's own rule exists in that body and nowhere else, so no
             // declaration is owed a row inside it however the line beside it was written; and this
             // module keeps an account only where its own declarations are among what owes the
-            // point. Which points those are is the reading's own answer and is asked there: a module
-            // reading a line another module wrote and narrowing nothing about it owes nothing here,
-            // which is the dependency it carries rather than a debt.
-            for (BorderObligationPointAssessment debt : BorderObligationPointAssessment.across(
-                    readings, point -> axisOf(point.line(), declarations, symbols, policy))) {
+            // point. Which points those are is the reading's own answer, carried through the
+            // gathering: a module reading a line another module wrote and narrowing nothing about
+            // it owes nothing here, which is the dependency it carries rather than a debt.
+            for (BorderObligationPointAssessment debt : points) {
                 List<DeclaredDebt.Owner> owners = new ArrayList<>();
                 for (TypeSymbol.AtModule owner : debt.ownersIn(name)) {
                     owners.add(new DeclaredDebt.Owner(owner,
-                            read(declarations, owner, symbols, policy).at()));
+                            declarationRead(declarations, owner, symbols, policy).at()));
                 }
                 // A point this module keeps no account of: a row its own reading settled, which
                 // is that body's to write, or a line owed to declarations elsewhere. Left out here
@@ -4211,51 +4198,115 @@ public final class Adequacy {
             return Answer.of(new DeclaredBoundaries(out, went));
         }
 
-        /**
-         * What a debt's line is on, as the declaration wrote it.
-         *
-         * <p>The value a newtype wraps is written {@code value}, which is what the author writes in
-         * the clause. A coordinate spells an empty path as "the value", which is what it is called
-         * where a sentence says it rather than where a line is named.
-         *
-         * <p>A line no declaration drew has the rule's own name and no more. Where such a line is
-         * is the reading's answer and there are as many of those as there are positions carrying
-         * the rule, so a debt that took one of them would be named after a place it is not owed at.
-         */
-        private static String axisOf(souther.compiler.partition.BorderObligationId id,
-                                     Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
-                                     Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
-            TypeSymbol declaredOn = id.owedToTheDeclaration().orElse(null);
-            if (declaredOn == null) {
-                return id.named();
+    }
+
+    /**
+     * What a line is on, as the declaration wrote it.
+     *
+     * <p>The value a newtype wraps is written {@code value}, which is what the author writes in the
+     * clause. A coordinate spells an empty path as "the value", which is what it is called where a
+     * sentence says it rather than where a line is named.
+     *
+     * <p>A line no declaration drew has the rule's own name and no more. Where such a line is is
+     * the reading's answer and there are as many of those as there are positions carrying the rule,
+     * so a point named after one of them would be named after a place it is not owed at.
+     */
+    private static String axisOf(souther.compiler.partition.BorderObligationId id,
+                                 Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
+                                 Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
+        TypeSymbol declaredOn = id.owedToTheDeclaration().orElse(null);
+        if (declaredOn == null) {
+            return id.named();
+        }
+        souther.compiler.check.FieldDomains.Coordinate at =
+                declarationRead(read, declaredOn, symbols, policy)
+                        // Which line of the declaration this is, asked of the rule. Taken apart
+                        // here, a reader would be deciding which rules have a clause and a
+                        // conjunct, which is the rule's own answer.
+                        .at(id.declaredLine().orElseThrow());
+        // A clause whose end this could not read from the declaration has no form to print, and
+        // the rule's own name is the whole of what there is to call the line.
+        return at == null ? id.named() : written(at);
+    }
+
+    /** The declaration's own reading of its own rules, kept: it draws as many lines as its
+     *  clauses have ends, and each of them would otherwise read the declaration again. */
+    private static souther.compiler.check.DeclaredBorders declarationRead(
+            Map<TypeSymbol, souther.compiler.check.DeclaredBorders> kept, TypeSymbol declaredOn,
+            Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
+        return kept.computeIfAbsent(declaredOn,
+                each -> souther.compiler.check.DeclaredBorders.of(each, symbols, policy));
+    }
+
+    /** The coordinate as a line is named by, which spells the value a newtype wraps the way the
+     *  clause does. */
+    private static String written(souther.compiler.check.FieldDomains.Coordinate at) {
+        String where = at.path().isEmpty() ? "value" : at.path();
+        return at.kind() instanceof souther.compiler.check.FieldDomains
+                .CoordinateKind.OfWhatAnOperationAnswers taken
+                ? taken.operation() + "(" + where + ")" : where;
+    }
+
+    /**
+     * Every point this module's lines are owed a row at, with all the readings of each.
+     *
+     * <p>The one gathering of the readings, which every account of what is owed is a projection of.
+     * A line is read wherever the model carries the rule, and a row for it is owed once — so the
+     * readings of one point are what a search of it walks and a report's occurrences are, and two
+     * gatherings of them are two answers to how much work there is.
+     *
+     * <p>Whose each point is is carried through rather than asked here
+     * ({@link souther.compiler.partition.PointAttribution}), which is what makes this one gathering
+     * and not the declarations' one: {@link DeclaredBorders} keeps the account of the points this
+     * module's declarations own, and a behavior keeps the account of the points its own rules
+     * settled.
+     *
+     * <p>Nothing is composed. What building a row at a point came to is asked of
+     * {@link BoundarySearch}, one reading at a time and by whoever is offering a row — so what
+     * everybody pays for is the reading, and a request about one behavior spends nothing on the
+     * rest.
+     */
+    public record Obligations(String name)
+            implements Key<List<BorderObligationPointAssessment>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<BorderObligationPointAssessment>> compute(Db db) {
+            Map<String, Measure<List<BorderAssessment>>> lines =
+                    db.ask(new BoundaryReadings(name)).value();
+            if (lines == null) {
+                return Answer.absent();
             }
-            souther.compiler.check.FieldDomains.Coordinate at =
-                    read(read, declaredOn, symbols, policy)
-                            // Which line of the declaration this is, asked of the rule. Taken apart
-                            // here, a reader would be deciding which rules have a clause and a
-                            // conjunct, which is the rule's own answer.
-                            .at(id.declaredLine().orElseThrow());
-            // A clause whose end this could not read from the declaration has no form to print, and
-            // the rule's own name is the whole of what there is to call the line.
-            return at == null ? id.named() : written(at);
-        }
-
-        /** The declaration's own reading of its own rules, kept: it draws as many lines as its
-         *  clauses have ends, and each of them would otherwise read the declaration again. */
-        private static souther.compiler.check.DeclaredBorders read(
-                Map<TypeSymbol, souther.compiler.check.DeclaredBorders> kept, TypeSymbol declaredOn,
-                Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
-            return kept.computeIfAbsent(declaredOn,
-                    each -> souther.compiler.check.DeclaredBorders.of(each, symbols, policy));
-        }
-
-        /** The coordinate as a line is named by, which spells the value a newtype wraps the way the
-         *  clause does. */
-        private static String written(souther.compiler.check.FieldDomains.Coordinate at) {
-            String where = at.path().isEmpty() ? "value" : at.path();
-            return at.kind() instanceof souther.compiler.check.FieldDomains
-                    .CoordinateKind.OfWhatAnOperationAnswers taken
-                    ? taken.operation() + "(" + where + ")" : where;
+            Map<String, List<BorderAssessment>> readings = new LinkedHashMap<>();
+            // Every reading, because which account a point falls in is a question about the point
+            // and not about the lines it was found on. A line another module wrote can be stopped
+            // where this module's declaration takes the position in, and the run beside it is then
+            // this module's to answer for — dropped here, that point would be gathered nowhere.
+            //
+            // How far finding them got is carried by whoever keeps an account, not here: what is
+            // gathered is the points, and being short of some of them is a fact about the reading.
+            lines.forEach((behavior, read) ->
+                    readings.computeIfAbsent(behavior, _ -> new ArrayList<>())
+                            .addAll(read.made().orElseGet(List::of)));
+            if (readings.isEmpty()) {
+                return Answer.of(List.of());
+            }
+            // What names a line is read from the declaration that drew it, and it is not something
+            // a point can go without — so it is asked here, once, and its absence is this having no
+            // answer rather than points named by nothing.
+            Symbols symbols = Names.derivedSymbols(db, name).value();
+            souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
+            if (symbols == null || policy == null) {
+                return Answer.absent();
+            }
+            Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declarations =
+                    new LinkedHashMap<>();
+            return Answer.of(BorderObligationPointAssessment.across(readings,
+                    point -> axisOf(point.line(), declarations, symbols, policy)));
         }
     }
 
