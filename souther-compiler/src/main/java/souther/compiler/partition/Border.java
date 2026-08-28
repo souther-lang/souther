@@ -190,11 +190,18 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
     }
 
     /**
-     * The position this line is on, as a report names it.
+     * The left of the line, qualified by the behavior it is an input of, as a report indexes by.
      *
-     * <p>Asked of the shape of the line rather than of a field every shape was assumed to have. A
-     * line between two positions is on neither of them, and answering with one of the two would name
-     * a border after half of itself.
+     * <p>Asked of the shape of the line rather than of a field every shape was assumed to have,
+     * because what a line is drawn on is not always a position: a line between two positions is on
+     * neither of them and a line over a form is on none of them, and each shape says how it is
+     * named.
+     *
+     * <p><b>Not what tells one line from another.</b> A quantity over more than one position is
+     * named after the left of it, so every line from one position to a field of a sum has this same
+     * word — a heading a reader groups under, and half of a line where there are two. What says
+     * which line it is, is the whole of what it was drawn at ({@link #cut}); what a report writes to
+     * be read is {@link #label}, and what a document publishes beside this is the other end.
      */
     public String axis() {
         return cut.named();
