@@ -1,6 +1,7 @@
 package souther.compiler.values;
 
 import souther.compiler.regex.Language;
+import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.PatternSyntax;
 
@@ -71,24 +72,24 @@ public final class Sets<A> {
     }
 
     private final PatternPlan.Budget budget;
-    /** What each position has left, entered when it is first spent at. */
-    private final Map<A, int[]> left = new LinkedHashMap<>();
+    /** What each position is allowed and has spent, entered when it is first built at. */
+    private final Map<A, Meter> meters = new LinkedHashMap<>();
     /** The positions whose exact answer this stopped building, in the order they were found. */
     private final Set<A> spent = new LinkedHashSet<>();
     /**
-     * What a set belonging to no position has left, and whether it was spent.
+     * What a set belonging to no position is allowed, and whether it was given up on.
      *
      * <p>A reading holds one of those: what it guarantees at every position it holds no guarantee
      * for. It is not any position's, so it cannot be charged to one — a set standing for all of
      * them, put on the first position that happened to be met, would take the allowance of a
      * position whose own rules had not been read yet.
      */
-    private final int[] elsewhere;
+    private final Meter elsewhere;
     private boolean spentElsewhere;
 
     private Sets(PatternPlan.Budget budget) {
         this.budget = budget;
-        this.elsewhere = new int[] {budget.mostBuilt()};
+        this.elsewhere = budget.meter();
     }
 
     /** A fresh allowance for every position of one reading. */
@@ -107,9 +108,10 @@ public final class Sets<A> {
     /**
      * The positions whose exact answer was given up on, in the order they were found.
      *
-     * <p>Read by whoever is answering for the reading as a whole. What each of them left is already
-     * in the reading — a {@link Composed} said so where it happened — and this is the same fact
-     * gathered, for a caller that has to say whether the measurement finished.
+     * <p>Not how a reader learns of it. What each of them left is in the reading already — a
+     * {@link Composed} carried the widening and the shortfall to whoever asked, together, so
+     * neither can arrive without the other — and this is the same fact gathered, for holding the
+     * allowance to what it is supposed to do.
      */
     public Set<A> spent() {
         return Set.copyOf(spent);
@@ -125,16 +127,12 @@ public final class Sets<A> {
      */
     public <B> Sets<B> renamed(java.util.function.Function<A, B> naming) {
         Sets<B> out = new Sets<>(budget);
-        left.forEach((atom, purse) -> out.left.put(naming.apply(atom), purse));
+        // The meters themselves and not copies of them: what a position has spent is what it has
+        // spent, and two allowances for one answer would be the renaming buying it twice.
+        meters.forEach((atom, meter) -> out.meters.put(naming.apply(atom), meter));
         spent.forEach(atom -> out.spent.add(naming.apply(atom)));
-        out.elsewhere[0] = elsewhere[0];
         out.spentElsewhere = spentElsewhere;
         return out;
-    }
-
-    /** Whether anything at all was given up on, the set belonging to no position included. */
-    public boolean spentAnything() {
-        return spentElsewhere || !spent.isEmpty();
     }
 
     /**
@@ -147,19 +145,9 @@ public final class Sets<A> {
         return admitted(atom, PatternPlan.of(syntax));
     }
 
-    /** What {@code plan} comes to, out of what the position has left. */
+    /** What {@code plan} comes to, out of what the position is allowed. */
     private Composed admitted(A atom, PatternPlan plan) {
-        if (isSpent(atom)) {
-            return gaveUp(atom);
-        }
-        int[] purse = purse(atom);
-        Language made = plan.compile(
-                new PatternPlan.Budget(Math.min(budget.mostStates(), purse[0]), purse[0]));
-        if (made == null) {
-            return gaveUp(atom);
-        }
-        purse[0] -= made.size();
-        return new Composed(ValueSet.matching(made), false);
+        return built(atom, meter -> plan.compile(meter));
     }
 
     /**
@@ -212,12 +200,10 @@ public final class Sets<A> {
                 // a string the machine can be told to refuse, and the rest is untouched.
                 case ValueSet.Cofinite there -> {
                     Set<String> words = textsIn(there.excluded());
-                    yield built(atom, here.language().size() * (letters(words) + 2),
-                            most -> here.language().without(words, most));
+                    yield built(atom, meter -> here.language().without(words, meter));
                 }
                 case ValueSet.Matching there ->
-                        built(atom, (long) here.language().size() * there.language().size(),
-                                most -> here.language().and(there.language(), most));
+                        built(atom, meter -> here.language().and(there.language(), meter));
             };
         };
     }
@@ -246,8 +232,7 @@ public final class Sets<A> {
                 // words costs to add is the words.
                 case ValueSet.Finite there -> {
                     Set<String> words = textsIn(there.values());
-                    yield built(atom, here.language().size() + letters(words) + 2L,
-                            most -> here.language().with(words, most));
+                    yield built(atom, meter -> here.language().with(words, meter));
                 }
                 // Everything except what is excluded and the language does not hold. A value
                 // excluded there is admitted here where the language holds it, so it is excluded
@@ -255,9 +240,8 @@ public final class Sets<A> {
                 // of finitely many and builds nothing.
                 case ValueSet.Cofinite there -> exact(new ValueSet.Cofinite(
                         kept(there.excluded(), each -> !here.has(each))));
-                case ValueSet.Matching there -> built(atom,
-                        here.language().size() + there.language().size() + 2L,
-                        most -> here.language().or(there.language(), most));
+                case ValueSet.Matching there ->
+                        built(atom, meter -> here.language().or(there.language(), meter));
             };
         };
     }
@@ -286,29 +270,21 @@ public final class Sets<A> {
     }
 
     /**
-     * One machine, where what it will cost is within what the position has left.
+     * One machine, made out of what the position is allowed and counted as it is made.
      *
-     * <p>Asked before it is made and not after. A meet of two languages is the product of their
-     * states, and a caller that built it to find out how big it was would have paid the whole price
-     * of the answer it was deciding whether to afford.
+     * <p>What it will cost is not worked out here and is not worked out anywhere. A meet is at most
+     * the two sizes multiplied and is usually far less, so a caller deciding on that number refuses
+     * answers it could afford and charges for states nobody built. The meter says no at the state
+     * that would have been one too many ({@link Meter}), and what comes back here is either a
+     * language or nothing.
      */
-    private Composed built(A atom, long cost, java.util.function.IntFunction<Language> make) {
+    private Composed built(A atom, java.util.function.Function<Meter, Language> make) {
         if (isSpent(atom)) {
             return gaveUp(atom);
         }
-        int[] purse = purse(atom);
-        if (cost > purse[0] || cost > budget.mostStates()) {
-            return gaveUp(atom);
-        }
-        // What it may spend and not what it will: the machine put together costs what was counted
-        // above, and making it canonical is the rest of the price. Refused there too, since a
-        // language handed out short of canonical is one whose next question does the work.
-        Language made = make.apply(Math.min(budget.mostStates(), purse[0]));
-        if (made == null) {
-            return gaveUp(atom);
-        }
-        purse[0] -= made.size();
-        return new Composed(ValueSet.matching(made), false);
+        Language made = make.apply(meter(atom));
+        return made == null ? gaveUp(atom)
+                : new Composed(ValueSet.matching(made), false);
     }
 
     private Composed exact(ValueSet set) {
@@ -327,9 +303,8 @@ public final class Sets<A> {
 
     /** What {@code atom} has left to spend, the reading's own allowance where it names no
      *  position. */
-    private int[] purse(A atom) {
-        return atom == null ? elsewhere
-                : left.computeIfAbsent(atom, _ -> new int[] {budget.mostBuilt()});
+    private Meter meter(A atom) {
+        return atom == null ? elsewhere : meters.computeIfAbsent(atom, _ -> budget.meter());
     }
 
     /** Whether the exact answer here was already given up on. */
@@ -345,15 +320,6 @@ public final class Sets<A> {
                 out.add(text.value());
             }
         });
-        return out;
-    }
-
-    /** What a set of words costs to make a machine of, which is their letters. */
-    private static long letters(Set<String> words) {
-        long out = 0;
-        for (String each : words) {
-            out += each.codePointCount(0, each.length());
-        }
         return out;
     }
 

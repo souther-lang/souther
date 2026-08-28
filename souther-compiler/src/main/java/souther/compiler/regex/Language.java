@@ -44,17 +44,17 @@ public final class Language {
     }
 
     /**
-     * The same language, where the work of making it canonical is within {@code mostStates}.
+     * The same language, where making it canonical is within what {@code meter} allows.
      *
      * <p>Null and never a machine short of canonical. What is being decided is whether this
      * compiler can afford to answer exactly, and a half-made answer handed out is one whose next
      * question does the rest of the work somewhere nobody is counting.
      */
-    private static Language canonical(Automaton made, int mostStates) {
+    private static Language canonical(Automaton made, Meter meter) {
         if (made == null) {
             return null;
         }
-        Automaton one = made.canonical(mostStates);
+        Automaton one = made.canonical(meter);
         return one == null ? null : new Language(one);
     }
 
@@ -63,19 +63,19 @@ public final class Language {
         return machine.accepts(value);
     }
 
-    /** The strings both hold, or null where saying so exactly costs more than {@code mostStates}. */
-    public Language and(Language other, int mostStates) {
-        return canonical(machine.and(other.machine), mostStates);
+    /** The strings both hold, or null where making them ran past what {@code meter} allows. */
+    public Language and(Language other, Meter meter) {
+        return canonical(machine.and(other.machine, meter), meter);
     }
 
     /** The strings either holds, on the same terms. */
-    public Language or(Language other, int mostStates) {
-        return canonical(machine.or(other.machine), mostStates);
+    public Language or(Language other, Meter meter) {
+        return canonical(machine.or(other.machine, meter), meter);
     }
 
     /** The strings this does not hold, on the same terms. */
-    public Language not(int mostStates) {
-        return canonical(machine.not(), mostStates);
+    public Language not(Meter meter) {
+        return canonical(machine.not(meter), meter);
     }
 
     /**
@@ -128,22 +128,29 @@ public final class Language {
     }
 
     /**
-     * The same strings and these others, or null past {@code mostStates}.
+     * The same strings and these others, or null past what {@code meter} allows.
      *
      * <p>Takes the words themselves rather than a plan. What joining them costs is the words — a
      * set of them is a machine as big as their letters — but what the answer costs is what making
-     * it canonical costs, and that is a question about the two together. So this is bounded like
+     * it canonical costs, and that is a question about the two together. So this is metered like
      * every other way to a language.
      */
-    public Language with(java.util.Collection<String> words, int mostStates) {
-        return words.isEmpty() ? this
-                : canonical(machine.or(Automaton.ofWords(words)), mostStates);
+    public Language with(java.util.Collection<String> words, Meter meter) {
+        if (words.isEmpty()) {
+            return this;
+        }
+        Automaton theirs = Automaton.ofWords(words, meter);
+        return theirs == null ? null : canonical(machine.or(theirs, meter), meter);
     }
 
     /** The same strings less these, on the same terms. */
-    public Language without(java.util.Collection<String> words, int mostStates) {
-        return words.isEmpty() ? this
-                : canonical(machine.and(Automaton.ofWords(words).not()), mostStates);
+    public Language without(java.util.Collection<String> words, Meter meter) {
+        if (words.isEmpty()) {
+            return this;
+        }
+        Automaton theirs = Automaton.ofWords(words, meter);
+        Automaton left = theirs == null ? null : theirs.not(meter);
+        return left == null ? null : canonical(machine.and(left, meter), meter);
     }
 
     /** How many states hold it, which is what a caller answering for its work counts. */

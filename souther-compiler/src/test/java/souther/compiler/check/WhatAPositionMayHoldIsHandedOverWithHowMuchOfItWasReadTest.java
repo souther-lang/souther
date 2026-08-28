@@ -141,6 +141,42 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         wholly(ValueSet.just(A), read, FieldDomains.THE_VALUE);
     }
 
+    /**
+     * A pattern names the strings it accepts, and denied it names the ones it does not.
+     *
+     * <p>Both, because a denial of a form this follows is not a form this cannot follow. Asserted
+     * on the set rather than on a report: a denied pattern leaves no question standing either way,
+     * so a document says the same thing whether the rule was read or not, and a test written there
+     * would pass for a reading that had dropped it.
+     */
+    @Test
+    void aPatternNamesWhatItAcceptsAndDeniedWhatItDoesNot() {
+        AdmissibleSet stated = of("""
+                module demo
+
+                data Code = String
+                    invariant shape = String.matches("[a-z]+", value)
+                """, "Code").admits(FieldDomains.THE_VALUE);
+
+        assertEquals(AdmissibleSet.READ_IN_FULL, stated.completeness());
+        assertTrue(stated.approximation().has(Value.text("ab")));
+        assertFalse(stated.approximation().has(Value.text("A")));
+        assertFalse(stated.approximation().has(Value.text("")), "one letter at least");
+
+        AdmissibleSet denied = of("""
+                module demo
+
+                data Code = String
+                    invariant shape = Bool.not(String.matches("[a-z]+", value))
+                """, "Code").admits(FieldDomains.THE_VALUE);
+
+        assertEquals(AdmissibleSet.READ_IN_FULL, denied.completeness());
+        assertFalse(denied.approximation().has(Value.text("ab")), "what the pattern takes is out");
+        assertTrue(denied.approximation().has(Value.text("A")));
+        assertTrue(denied.approximation().has(Value.text("")),
+                "and the empty string, which the pattern does not accept");
+    }
+
     /** Alternatives name both, which is the distinction a model writes this way. */
     @Test
     void alternativesLeaveEveryValueTheyName() {

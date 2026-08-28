@@ -3,6 +3,7 @@ package souther.compiler.values;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.regex.Language;
+import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternParser;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.PatternRead;
@@ -55,9 +56,25 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
         return ValueSet.matching(language("(?:[0-9]{" + every + "})+"));
     }
 
-    /** How many states hold it, which is what a composition of it is charged. */
-    private static int states(ValueSet set) {
-        return assertInstanceOf(ValueSet.Matching.class, set).language().size();
+    /** More than anything here asks for, so that a measurement is of the work and not of a limit. */
+    private static final int PLENTY = 10_000_000;
+
+    /**
+     * What meeting these two actually takes, in states made.
+     *
+     * <p>Measured and never worked out. What a meet costs is not the sizes of its operands nor the
+     * size of what it comes to — the machine put together is larger than either, and making it
+     * canonical makes another — so an allowance set from arithmetic is one this test would never
+     * reach. Asked of the meter, which is the only thing that knows ({@link Meter}).
+     */
+    private static int costOfMeeting(ValueSet one, ValueSet other) {
+        Meter meter = new Meter(PLENTY, PLENTY);
+        assertNotNull(language(one).and(language(other), meter), "and it is built at all");
+        return PLENTY - meter.left();
+    }
+
+    private static Language language(ValueSet set) {
+        return assertInstanceOf(ValueSet.Matching.class, set).language();
     }
 
     /** An allowance of {@code inAll} states in all, no one machine being larger than the lot. */
@@ -78,33 +95,25 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
         ValueSet four = everyMultipleOf(4);
         ValueSet five = everyMultipleOf(5);
 
-        // What the two meets take, measured under an allowance nothing here could exhaust. The
-        // numbers below are read off the machines rather than worked out from the patterns: what a
-        // meet comes to is smaller than the product of its sides, and an allowance set from
-        // arithmetic on the patterns would be one this test never actually reached.
-        Sets<String> measuring = allowing(1_000_000);
-        ValueSet both = measuring.meet(HERE, three, four).set();
-        int firstSpends = states(both);
-        int secondNeeds = states(both) * states(five);
+        // What the two meets take, measured rather than reckoned.
+        ValueSet both = allowing(PLENTY).meet(HERE, three, four).set();
+        int first = costOfMeeting(three, four);
+        int second = costOfMeeting(both, five);
 
-        // Room for the second meet on its own, and one state short of room for it after the first
-        // has been paid for. So the only thing that can refuse it is what the first one spent.
-        Sets<String> sets = Sets.of(
-                new PatternPlan.Budget(1_000_000, secondNeeds + firstSpends - 1));
+        // Room for either meet on its own, and one state short of room for both. So the only thing
+        // that can refuse the second is what the first one spent.
+        Sets<String> sets = allowing(first + second - 1);
 
-        Sets.Composed first = sets.meet(HERE, three, four);
-        assertFalse(first.gaveUp(), "the first meet fits, which is what the allowance was set to");
-
-        Sets.Composed second = sets.meet(HERE, first.set(), five);
-        assertTrue(second.gaveUp(),
+        assertFalse(sets.meet(HERE, three, four).gaveUp(),
+                "the first meet fits, which is what the allowance was set to");
+        Sets.Composed met = sets.meet(HERE, both, five);
+        assertTrue(met.gaveUp(),
                 "and the second does not, once the first has been paid for out of the same purse");
-        assertEquals(ValueSet.ANY, second.set(), "what is left is every value, which is true");
+        assertEquals(ValueSet.ANY, met.set(), "what is left is every value, which is true");
 
         // The control, and what makes the sentence above about accumulation rather than about a
         // ceiling: the same allowance, untouched, builds the very meet it just refused.
-        assertFalse(Sets.<String>of(new PatternPlan.Budget(1_000_000,
-                        secondNeeds + firstSpends - 1))
-                        .meet(HERE, both, five).gaveUp(),
+        assertFalse(allowing(first + second - 1).meet(HERE, both, five).gaveUp(),
                 "the second meet is within the allowance where nothing has been spent from it");
     }
 
@@ -120,7 +129,7 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
         ValueSet three = everyMultipleOf(3);
         ValueSet four = everyMultipleOf(4);
         // Enough for one such meet and not for two, so that a shared purse would be seen.
-        Sets<String> sets = allowing(states(three) * states(four));
+        Sets<String> sets = allowing(costOfMeeting(three, four));
 
         assertFalse(sets.meet(HERE, three, four).gaveUp());
         assertFalse(sets.meet(THERE, three, four).gaveUp(),
@@ -142,7 +151,7 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
         ValueSet five = everyMultipleOf(5);
         // Enough for either pattern and not for what they come to, which is the whole point: each
         // was read, and it is the answer between them that was not built.
-        Sets<String> sets = allowing(states(four) + states(five));
+        Sets<String> sets = allowing(costOfMeeting(four, five) - 1);
 
         Sets.Composed made = sets.meet(HERE, four, five);
 
@@ -150,7 +159,6 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
         assertEquals(ValueSet.ANY, made.set());
         assertEquals(java.util.Set.of(HERE), sets.spent(),
                 "the position whose answer was not built, and nothing about either rule");
-        assertTrue(sets.spentAnything());
     }
 
     /**
@@ -189,7 +197,9 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
     void noOrderOfTheRulesLeavesADifferentAnswer() {
         List<ValueSet> rules =
                 List.of(everyMultipleOf(3), everyMultipleOf(4), everyMultipleOf(5));
-        int allowed = states(rules.get(0)) * states(rules.get(1)) + states(rules.get(2));
+        // Room for one of these meets and not for the two, so that some order is refused and the
+        // question is whether which one turns on the writing.
+        int allowed = costOfMeeting(rules.get(0), rules.get(1));
         List<String> came = new ArrayList<>();
 
         for (List<Integer> order : List.of(List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),

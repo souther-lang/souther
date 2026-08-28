@@ -28,6 +28,11 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
                 PatternParser.read(regex), regex).syntax());
     }
 
+    /** What one answer of a declaration is allowed, unspent. */
+    private static Meter allowed() {
+        return PatternPlan.Budget.OF_ADMITTED_VALUES.meter();
+    }
+
     private static Language language(String regex) {
         Language said = plan(regex).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
         assertNotNull(said, regex + " is one a rule may be answered about");
@@ -153,14 +158,14 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
         Language one = language("[0-9]{2}");
         Language two = language("[0-4][0-9]");
 
-        int allowed = PatternPlan.Budget.OF_ADMITTED_VALUES.mostStates();
-
-        assertFalse(one.and(two, allowed).isEmpty());
-        assertFalse(one.or(two, allowed).isEmpty());
-        assertTrue(one.and(one.not(allowed), allowed).isEmpty());
-        assertTrue(one.or(one.not(allowed), allowed).isEverything());
-        assertEquals("00", one.and(two, allowed).some());
-        assertTrue(one.and(two, allowed).has("40"));
+        // A meter each, since one is spent as it is used and what is under test here is the
+        // answers rather than what they cost between them.
+        assertFalse(one.and(two, allowed()).isEmpty());
+        assertFalse(one.or(two, allowed()).isEmpty());
+        assertTrue(one.and(one.not(allowed()), allowed()).isEmpty());
+        assertTrue(one.or(one.not(allowed()), allowed()).isEverything());
+        assertEquals("00", one.and(two, allowed()).some());
+        assertTrue(one.and(two, allowed()).has("40"));
     }
 
     /** A pattern outside the subset never reaches a plan, since a plan is made of what was read. */

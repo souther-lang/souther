@@ -67,8 +67,8 @@ final class Automaton {
      * pattern is worth this many states is a question about the answer being built, and nothing here
      * knows what that answer is for.
      */
-    static Automaton of(PatternSyntax syntax, int mostStates) {
-        Building building = new Building(mostStates);
+    static Automaton of(PatternSyntax syntax, Meter meter) {
+        Building building = new Building(meter.making());
         try {
             int start = building.state();
             int accept = building.build(syntax, start);
@@ -118,9 +118,13 @@ final class Automaton {
      * and a language met with them is the cheap operation rather than the one that has to be
      * counted.
      */
-    static Automaton ofWords(java.util.Collection<String> words) {
+    static Automaton ofWords(java.util.Collection<String> words, Meter meter) {
+        Meter.Making making = meter.making();
         List<List<Step>> steps = new ArrayList<>();
         List<int[]> free = new ArrayList<>();
+        if (!making.state()) {
+            return null;
+        }
         steps.add(new ArrayList<>());
         free.add(new int[0]);
         BitSet accepting = new BitSet();
@@ -130,6 +134,9 @@ final class Automaton {
             while (i < word.length()) {
                 int symbol = word.codePointAt(i);
                 i += Character.charCount(symbol);
+                if (!making.state()) {
+                    return null;
+                }
                 steps.add(new ArrayList<>());
                 free.add(new int[0]);
                 int made = steps.size() - 1;
@@ -149,8 +156,13 @@ final class Automaton {
      * <p>A new beginning that steps freely into both. Cheap: the states are the two machines'
      * together and one more, and nothing is copied.
      */
-    Automaton or(Automaton other) {
+    Automaton or(Automaton other, Meter meter) {
         int mine = size();
+        // What it will be: a beginning, and the two machines beside it. Asked before any of it is
+        // made, since knowing the size and allocating it anyway is the thing a limit is for.
+        if (!meter.making().states(1L + mine + other.size())) {
+            return null;
+        }
         List<List<Step>> steps = new ArrayList<>();
         List<int[]> free = new ArrayList<>();
         steps.add(new ArrayList<>());
@@ -178,8 +190,14 @@ final class Automaton {
      * both sizes are known before this is called, so a caller that has to answer for its work asks
      * them rather than being told afterwards.
      */
-    Automaton and(Automaton other) {
+    Automaton and(Automaton other, Meter meter) {
         int wide = other.size();
+        // The pairs, asked for before the first of them is made. This is the operation the whole
+        // allowance is about: two machines that cost nothing on their own have a product that is
+        // the two multiplied, and allocating it to find that out is paying the price to learn it.
+        if (!meter.making().states((long) size() * wide)) {
+            return null;
+        }
         int count = size() * wide;
         List<List<Step>> steps = new ArrayList<>(count);
         List<int[]> free = new ArrayList<>(count);
@@ -227,27 +245,35 @@ final class Automaton {
      * Everything it does not accept.
      *
      * <p>The one operation that has to make the machine deterministic first, because what a walk
-     * ends in has to be one answer before the answer can be turned over. Which is why it is here and
-     * not underneath everything else: emptiness and acceptance never need it, and a caller wanting
-     * to know whether a language is everything asks {@link #isEverything}, which stops at the first
-     * string it finds outside.
+     * ends in has to be one answer before the answer can be turned over. Acceptance never needs it,
+     * and neither do the two questions about holding nothing and holding everything: a language is
+     * kept as {@link #canonical}, where being deterministic has already been paid for, and both are
+     * read off the one state such a machine has.
      */
-    Automaton not() {
-        Subsets subsets = new Subsets();
-        List<List<Step>> steps = new ArrayList<>();
-        List<int[]> free = new ArrayList<>();
-        BitSet accepting = new BitSet();
-        for (int at = 0; at < subsets.count(); at++) {
-            steps.add(new ArrayList<>());
-            free.add(new int[0]);
-            if (!subsets.acceptingAt(at)) {
-                accepting.set(at);
+    Automaton not(Meter meter) {
+        try {
+            Subsets subsets = new Subsets(meter.making());
+            Meter.Making making = meter.making();
+            List<List<Step>> steps = new ArrayList<>();
+            List<int[]> free = new ArrayList<>();
+            BitSet accepting = new BitSet();
+            for (int at = 0; at < subsets.count(); at++) {
+                if (!making.state()) {
+                    return null;
+                }
+                steps.add(new ArrayList<>());
+                free.add(new int[0]);
+                if (!subsets.acceptingAt(at)) {
+                    accepting.set(at);
+                }
+                for (Subsets.Move each : subsets.movesFrom(at)) {
+                    steps.get(at).add(new Step(each.over(), each.to()));
+                }
             }
-            for (Subsets.Move each : subsets.movesFrom(at)) {
-                steps.get(at).add(new Step(each.over(), each.to()));
-            }
+            return new Automaton(steps, free, accepting);
+        } catch (TooMany _) {
+            return null;
         }
-        return new Automaton(steps, free, accepting);
     }
 
     /**
@@ -268,29 +294,28 @@ final class Automaton {
      * subsets were cut over is the labels the pattern happened to carry, and two ways of writing one
      * language cut it differently — gathered by where they lead, the runs are the language's own.
      */
-    Automaton canonical(int mostStates) {
-        Subsets subsets = new Subsets();
-        List<CodePoints> alphabet = subsets.alphabet();
-        List<int[]> table = new ArrayList<>();
-        BitSet accepting = new BitSet();
-        for (int at = 0; at < subsets.count(); at++) {
-            if (subsets.count() > mostStates) {
-                return null;
+    Automaton canonical(Meter meter) {
+        try {
+            Subsets subsets = new Subsets(meter.making());
+            List<CodePoints> alphabet = subsets.alphabet();
+            List<int[]> table = new ArrayList<>();
+            BitSet accepting = new BitSet();
+            for (int at = 0; at < subsets.count(); at++) {
+                if (subsets.acceptingAt(at)) {
+                    accepting.set(at);
+                }
+                int[] row = new int[alphabet.size()];
+                List<Subsets.Move> out = subsets.movesFrom(at);
+                for (int over = 0; over < row.length; over++) {
+                    row[over] = out.get(over).to();
+                }
+                table.add(row);
             }
-            if (subsets.acceptingAt(at)) {
-                accepting.set(at);
-            }
-            int[] row = new int[alphabet.size()];
-            List<Subsets.Move> out = subsets.movesFrom(at);
-            for (int over = 0; over < row.length; over++) {
-                row[over] = out.get(over).to();
-            }
-            table.add(row);
-        }
-        if (subsets.count() > mostStates) {
+            return numbered(table, smallest(table, accepting), accepting, alphabet,
+                    meter.making());
+        } catch (TooMany _) {
             return null;
         }
-        return numbered(table, smallest(table, accepting), accepting, alphabet);
     }
 
     /**
@@ -337,7 +362,7 @@ final class Automaton {
      * the order the subsets happened to be built in would make one language two machines.
      */
     private static Automaton numbered(List<int[]> table, int[] block, BitSet accepting,
-                                      List<CodePoints> alphabet) {
+                                      List<CodePoints> alphabet, Meter.Making making) {
         int[] renamed = new int[block.length];
         java.util.Arrays.fill(renamed, -1);
         int[] first = new int[block.length];
@@ -359,6 +384,9 @@ final class Automaton {
         List<int[]> free = new ArrayList<>();
         BitSet stops = new BitSet();
         for (int at = 0; at < order.size(); at++) {
+            if (!making.state()) {
+                throw new TooMany();
+            }
             int[] row = table.get(first[order.get(at)]);
             if (accepting.get(first[order.get(at)])) {
                 stops.set(at);
@@ -419,60 +447,13 @@ final class Automaton {
         return out;
     }
 
-    /** Whether it accepts nothing at all. */
-    boolean isEmpty() {
-        BitSet seen = closure(only(START));
-        BitSet frontier = seen;
-        while (!frontier.isEmpty()) {
-            if (frontier.intersects(accepting)) {
-                return false;
-            }
-            BitSet next = new BitSet();
-            for (int state = frontier.nextSetBit(0); state >= 0;
-                    state = frontier.nextSetBit(state + 1)) {
-                for (Step each : steps.get(state)) {
-                    if (!each.over().isEmpty()) {
-                        next.set(each.to());
-                    }
-                }
-            }
-            next = closure(next);
-            next.andNot(seen);
-            seen.or(next);
-            frontier = next;
-        }
-        // Every state a walk can be in has been in, and none of them is one it may stop at.
-        return true;
-    }
-
-    /**
-     * Whether it accepts every string there is.
-     *
-     * <p>Asked by walking the deterministic machine and stopping at the first place a walk could
-     * end outside the language. A language that is not everything usually says so within a step or
-     * two, and building the whole of the complement to ask the same question would pay for the worst
-     * case every time.
-     */
-    boolean isEverything() {
-        Subsets subsets = new Subsets();
-        for (int at = 0; at < subsets.count(); at++) {
-            if (!subsets.acceptingAt(at)) {
-                return false;
-            }
-            // Grown as it is walked. A symbol leading nowhere leads to the subset of no states,
-            // which accepts nothing — so the walk that ends outside the language is found by the
-            // line above rather than by a case of its own.
-            subsets.movesFrom(at);
-        }
-        return true;
-    }
-
     /**
      * One string it accepts, or null where it accepts none.
      *
      * <p>Total wherever there is anything to answer with. Which is what ties it to
-     * {@link #isEmpty}: a language that holds something and hands back nothing would be one whose
-     * emptiness two readers disagree about, and the one that produces values would be believed.
+     * {@link #holdsNothing}: a language that holds something and hands back nothing would be one
+     * whose emptiness two readers disagree about, and the one that produces values would be
+     * believed.
      *
      * <p>The shortest, and among the strings of that length one written out of symbols a source can
      * carry where there is one. Being writable is a preference and never a condition: it is about
@@ -658,7 +639,12 @@ final class Automaton {
         /** One step of the deterministic machine. */
         record Move(CodePoints over, int to) {}
 
-        Subsets() {
+        /** What making these deterministic states is charged to. Its own, because the subsets are
+         *  a machine — one this throws away, and one whose states were made all the same. */
+        private final Meter.Making making;
+
+        Subsets(Meter.Making making) {
+            this.making = making;
             cutTheAlphabet();
             at(closure(only(START)));
         }
@@ -706,6 +692,11 @@ final class Automaton {
             if (had != null) {
                 return had;
             }
+            // Where making a machine deterministic runs away with itself, and so where it is
+            // stopped. A subset already met costs nothing; a new one is a state.
+            if (!making.state()) {
+                throw new TooMany();
+            }
             int made = subsets.size();
             subsets.add(subset);
             moves.add(null);
@@ -745,16 +736,16 @@ final class Automaton {
     /** What a machine is while it is being made. */
     private static final class Building {
 
-        private final int mostStates;
+        private final Meter.Making making;
         private final List<List<Step>> steps = new ArrayList<>();
         private final List<List<Integer>> free = new ArrayList<>();
 
-        Building(int mostStates) {
-            this.mostStates = mostStates;
+        Building(Meter.Making making) {
+            this.making = making;
         }
 
         int state() {
-            if (steps.size() >= mostStates) {
+            if (!making.state()) {
                 throw new TooMany();
             }
             steps.add(new ArrayList<>());

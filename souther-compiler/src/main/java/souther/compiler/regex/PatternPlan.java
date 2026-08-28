@@ -42,6 +42,11 @@ public final class PatternPlan {
             }
         }
 
+        /** A meter that allows this much and has spent none of it. */
+        public Meter meter() {
+            return new Meter(mostStates, mostBuilt);
+        }
+
         /**
          * What the values one position finally admits are allowed to cost.
          *
@@ -128,62 +133,55 @@ public final class PatternPlan {
      * back may ask it anything, because the asking is what has already been paid for.
      */
     public Language compile(Budget budget) {
-        try {
-            int[] left = new int[] {budget.mostBuilt()};
-            // Made canonical here and not by whoever holds it. A language is the one machine that
-            // accepts its strings, and turning a machine into that one is the largest thing this
-            // does — left to the reader, it would happen inside whichever question was asked first,
-            // where there is no allowance and nobody counting.
-            return new Language(charged(
-                    built(step, budget, left).canonical(budget.mostStates()), budget, left));
-        } catch (TooMuch _) {
-            return null;
-        }
+        return compile(new Meter(budget.mostStates(), budget.mostBuilt()));
     }
 
     /**
-     * One step, with what is left of the plan's allowance.
+     * The same, spending {@code meter} — for a caller building more than this plan out of one
+     * allowance.
+     *
+     * <p>What is counted is what was made, and it is counted where it is made ({@link Meter}). This
+     * used to work out what each step would cost from the sizes of its operands, which is a guess
+     * about an implementation: a product is at most the two multiplied and is usually far less, so
+     * the guess refused answers this could afford and charged for states nobody built.
+     */
+    public Language compile(Meter meter) {
+        // Made canonical here and not by whoever holds it. A language is the one machine that
+        // accepts its strings, and turning a machine into that one is the largest thing this does —
+        // left to the reader, it would happen inside whichever question was asked first, where
+        // there is no allowance and nobody counting.
+        Automaton made = built(step, meter);
+        Automaton one = made == null ? null : made.canonical(meter);
+        return one == null ? null : new Language(one);
+    }
+
+    /**
+     * One step, or null where it ran past what the meter allows.
      *
      * <p>No {@code default}: a step added and not built stops the compile rather than arriving here
      * as whichever operation is nearest.
      */
-    private static Automaton built(Step step, Budget budget, int[] left) {
+    private static Automaton built(Step step, Meter meter) {
         return switch (step) {
-            case Step.Of it -> charged(Automaton.of(it.syntax(), budget.mostStates()), budget, left);
-            case Step.Both it -> charged(built(it.one(), budget, left)
-                    .and(built(it.other(), budget, left)), budget, left);
-            case Step.Either it -> charged(built(it.one(), budget, left)
-                    .or(built(it.other(), budget, left)), budget, left);
+            case Step.Of it -> Automaton.of(it.syntax(), meter);
+            case Step.Both it -> both(built(it.one(), meter), built(it.other(), meter), meter);
+            case Step.Either it -> {
+                Automaton one = built(it.one(), meter);
+                Automaton other = built(it.other(), meter);
+                yield one == null || other == null ? null : one.or(other, meter);
+            }
             // What one holds and the other does not, which is the one step that has to make a
-            // machine deterministic. Charged as everything else is: the complement is a machine and
-            // its states are what it costs.
+            // machine deterministic. The complement is a machine and its states are what it costs,
+            // counted as they are made like everything else.
             case Step.Less it -> {
-                Automaton mine = built(it.one(), budget, left);
-                Automaton theirs = charged(built(it.other(), budget, left).not(), budget, left);
-                yield charged(mine.and(theirs), budget, left);
+                Automaton mine = built(it.one(), meter);
+                Automaton theirs = built(it.other(), meter);
+                yield both(mine, theirs == null ? null : theirs.not(meter), meter);
             }
         };
     }
 
-    /** The machine, once what it cost has been taken off what the plan had left. */
-    private static Automaton charged(Automaton made, Budget budget, int[] left) {
-        if (made == null || made.size() > budget.mostStates()) {
-            throw new TooMuch();
-        }
-        left[0] -= made.size();
-        if (left[0] < 0) {
-            throw new TooMuch();
-        }
-        return made;
-    }
-
-    /** More than the plan was allowed, carried to the one place that answers for it. */
-    private static final class TooMuch extends RuntimeException {
-
-        private static final long serialVersionUID = 1L;
-
-        TooMuch() {
-            super(null, null, false, false);
-        }
+    private static Automaton both(Automaton one, Automaton other, Meter meter) {
+        return one == null || other == null ? null : one.and(other, meter);
     }
 }

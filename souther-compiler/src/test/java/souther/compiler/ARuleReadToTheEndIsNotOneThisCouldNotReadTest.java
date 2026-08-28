@@ -232,8 +232,8 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      * And a clause nothing here takes apart, which is what a limit of this compiler looks like.
      *
      * <p>Here the question standing is the truth: what the clause says about the values was never
-     * read, so what the position may hold is not known to have been read either. The four above
-     * are what this one has to stay different from.
+     * read, so what the position may hold is not known to have been read either. The six above are
+     * what this one has to stay different from.
      */
     @Test
     void aClauseNothingReadsIsAQuestionNobodyAnswered() {

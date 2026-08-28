@@ -89,8 +89,11 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
         return List.copyOf(out);
     }
 
-    /** How many states a pattern of this size is allowed, which is not what this test is about. */
-    private static final int PLENTY = 100_000;
+    /** More than anything here asks for, unspent. A meter is spent as it is used, so each
+     *  construction gets its own and what is measured is the language rather than the allowance. */
+    private static Meter plenty() {
+        return new Meter(100_000, 10_000_000);
+    }
 
     @Test
     void everyPatternAcceptsWhatTheEngineAccepts() {
@@ -99,7 +102,7 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
             PatternRead said = PatternParser.read(regex);
             PatternSyntax syntax =
                     assertInstanceOf(PatternRead.Read.class, said, regex).syntax();
-            Automaton machine = Automaton.of(syntax, PLENTY);
+            Automaton machine = Automaton.of(syntax, plenty());
             assertNotNull(machine, regex + " is small enough to build");
 
             java.util.regex.Pattern engine = java.util.regex.Pattern.compile(regex);
@@ -145,8 +148,8 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
         PatternSyntax big = assertInstanceOf(PatternRead.Read.class,
                 PatternParser.read("[0-9]{5000}")).syntax();
 
-        org.junit.jupiter.api.Assertions.assertNull(Automaton.of(big, 100));
-        assertNotNull(Automaton.of(big, PLENTY), "and it is built where there is room");
+        org.junit.jupiter.api.Assertions.assertNull(Automaton.of(big, new Meter(100, 100)));
+        assertNotNull(Automaton.of(big, plenty()), "and it is built where there is room");
     }
 
     private static String written(String value) {
