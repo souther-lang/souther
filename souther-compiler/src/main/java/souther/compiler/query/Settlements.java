@@ -230,17 +230,17 @@ public record Settlements(List<OfferItem> requested,
             offering.declared().resolved().forEach((point, answer) -> {
                 OfferItem item = new OfferItem.APointOfALine(point);
                 switch (answer.resolution()) {
-                    case DeclarationResolution.Generated(var by, var row) -> {
+                    case PointResolution.Generated(var by, var row) -> {
                         requested.add(item);
                         composedFor.put(item, RowKey.of(by, row));
                     }
                     // Asked for and nothing came of it, which is still a thing this run is short of
                     // — and something else may stand there, which is what makes it worth asking.
-                    case DeclarationResolution.Unresolved _ -> requested.add(item);
+                    case PointResolution.Unresolved _ -> requested.add(item);
                     // Not asked for at all: a row already stands there, or nothing measured it. A
                     // point in nobody's way is not work this run offers, and holding it here would
                     // let a candidate be the only offer for it.
-                    case DeclarationResolution.NoSearch _ -> { }
+                    case PointResolution.NoSearch _ -> { }
                 }
             });
         }
@@ -300,7 +300,7 @@ public record Settlements(List<OfferItem> requested,
     private record OneBehavior(String behavior, BehaviorInputs where, List<Axis> axes, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
                                List<Generator.ClassOwed> classes, List<Generator.ArmOwed> arms,
-                               Map<OfferItem.APointOfALine, DeclarationResolution> resolved,
+                               Map<OfferItem.APointOfALine, PointResolution> resolved,
                                Map<OfferItem.APointOfALine, List<AtAPoint>> reads) {
 
         /**
@@ -329,7 +329,7 @@ public record Settlements(List<OfferItem> requested,
             if (read == null) {
                 return null;
             }
-            Map<OfferItem.APointOfALine, DeclarationResolution> resolved = new LinkedHashMap<>();
+            Map<OfferItem.APointOfALine, PointResolution> resolved = new LinkedHashMap<>();
             Map<OfferItem.APointOfALine, List<AtAPoint>> reads = new LinkedHashMap<>();
             // Its own account, where this run asked it for rows and nowhere else. Whether the
             // search was made is what `searched` says, and asking for it here would make it: the
@@ -358,12 +358,12 @@ public record Settlements(List<OfferItem> requested,
                     // its readings and not one reading's: a point a written row stands at is owed
                     // and is nobody's work, and counted here a candidate standing there would be
                     // its only offer and could never be dropped.
-                    DeclarationResolution came = DeclarationResolver.resolveAt(point.said(),
+                    PointResolution came = PointResolver.resolveAt(point.said(),
                             point.owed(), List.copyOf(point.met().keySet()),
                             reading -> Adequacy.readingOf(db, module,
                                     new GenerationScope.Behavior(behavior), point, point.role(),
                                     reading));
-                    if (!(came instanceof DeclarationResolution.NoSearch)) {
+                    if (!(came instanceof PointResolution.NoSearch)) {
                         resolved.put(item, came);
                     }
                 }
@@ -418,7 +418,7 @@ public record Settlements(List<OfferItem> requested,
             // that composed it — which for a point of this behavior's own line is this one, since
             // every reading of such a point is a reading in the body that drew it.
             resolved.forEach((item, came) -> {
-                if (came instanceof DeclarationResolution.Generated(var by, var row)) {
+                if (came instanceof PointResolution.Generated(var by, var row)) {
                     out.put(item, RowKey.of(by, row));
                 }
             });

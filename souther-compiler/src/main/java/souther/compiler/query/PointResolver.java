@@ -11,10 +11,16 @@ import java.util.function.Function;
 /**
  * Which reading of an authored line composes the one row it is owed.
  *
- * <p>A row at a line is composed by walking one behavior's inputs, and a line an {@code invariant}
- * drew is owed once over every behavior carrying the type — so this is a search over the readings
- * and not a fold of them (issue #1076). What it does is walk them in the order the module declares
- * them and stop at the first that composed a row.
+ * <p>A row at a line is composed by walking one behavior's inputs, and a line is read wherever the
+ * model carries the rule — so this is a search over the readings and not a fold of them (issue
+ * #1076). What it does is walk them in the order the module declares them and stop at the first that
+ * composed a row.
+ *
+ * <p><b>Whose the line is makes no difference here.</b> A clause of a {@code data} is read once per
+ * position of every behavior carrying the type; a guard on a name the cases of a sum spread is read
+ * once under each case of one behavior's own input. Either way the readings ask the same of a row
+ * and any one of them that composes one answers the point, and either way taking a reading instead
+ * of searching them is offering whatever that reading came to.
  *
  * <p><b>Nothing here asks anything.</b> What each reading holds is handed in, so what was searched
  * and what may be concluded from it are two pieces of code rather than one. The conclusions — a row
@@ -25,7 +31,7 @@ import java.util.function.Function;
  * caller happened to have paid for are not the readings this request is about, and a resolver that
  * enumerated them would answer differently depending on the order the requests arrived in.
  */
-public final class DeclarationResolver {
+public final class PointResolver {
 
     /**
      * What one reading of a line holds, as the walk finds it.
@@ -82,16 +88,16 @@ public final class DeclarationResolver {
      *                 and what a search of each came to is a fact about that position
      * @param held     what each of them holds, asked in that order and only as far as the walk gets
      */
-    public static DeclarationResolution resolveAt(String said, ItemAssessment.Owed owed,
+    public static PointResolution resolveAt(String said, ItemAssessment.Owed owed,
                                                   List<Reading> readings,
                                                   Function<Reading, ReadingEvidence> held) {
         if (!owed.worthSearching()) {
             // The measurement's own answer and not a search that came back empty. A point a row
             // already stands at is work that is done, and one nothing measured is not known to be
             // work at all — searched anyway, both would put a specific row in front of an author.
-            return new DeclarationResolution.NoSearch(owed.hasRowWitness()
-                    ? DeclarationResolution.Cause.A_ROW_ALREADY_STANDS
-                    : DeclarationResolution.Cause.NOTHING_MEASURED);
+            return new PointResolution.NoSearch(owed.hasRowWitness()
+                    ? PointResolution.Cause.A_ROW_ALREADY_STANDS
+                    : PointResolution.Cause.NOTHING_MEASURED);
         }
         SequencedMap<Reading, SearchCoverage.ReadingSearch> walked = new LinkedHashMap<>();
         for (Reading reading : readings) {
@@ -105,7 +111,7 @@ public final class DeclarationResolver {
                         case ItemAssessment.Attempt.Built(var row, var _, var _) ->
                                 // The line is answered. Which reading answered it is where the row
                                 // goes and not what the answer is.
-                                { return new DeclarationResolution.Generated(
+                                { return new PointResolution.Generated(
                                         reading.behavior(), row); }
                         case ItemAssessment.Attempt.Unresolved(var why, var _, var _) ->
                                 walked.put(reading,
@@ -123,8 +129,8 @@ public final class DeclarationResolver {
                 }
             }
         }
-        return new DeclarationResolution.Unresolved(new SearchCoverage(readings, walked));
+        return new PointResolution.Unresolved(new SearchCoverage(readings, walked));
     }
 
-    private DeclarationResolver() {}
+    private PointResolver() {}
 }

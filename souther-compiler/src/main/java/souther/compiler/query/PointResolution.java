@@ -10,13 +10,14 @@ import souther.compiler.partition.Generator;
  * is one answer (issue #1076). Composed per reading, the same authored line was handed to an author
  * as four things to write.
  *
- * <p><b>The row's behavior is where it was composed and not who owes it.</b> What owes the row is
- * the declaration that drew the line. A behavior carrying the type is a reading in whose terms the
+ * <p><b>The row's behavior is where it was composed and not who owes it.</b> Who owes it is whose
+ * rules settled the point ({@link souther.compiler.partition.PointAttribution}) — the declaration
+ * that drew the line, or the body that did. Where it was composed is a reading in whose terms the
  * row can be written, and which of them managed it is a fact about this run: another one may manage
  * it after an edit that did not touch the line. So it is carried as provenance, for the block the
  * row goes in, and nothing reads ownership off it.
  */
-public sealed interface DeclarationResolution {
+public sealed interface PointResolution {
 
     /**
      * A row stands at the line, written in one reading's terms.
@@ -26,7 +27,7 @@ public sealed interface DeclarationResolution {
      * are — so a row standing at one reading's point stands at the line. Which reading it came from
      * is not part of the answer to whether the line can be written.
      */
-    record Generated(String composedBy, Generator.GeneratedRow row) implements DeclarationResolution {
+    record Generated(String composedBy, Generator.GeneratedRow row) implements PointResolution {
 
         public Generated {
             if (composedBy == null || row == null) {
@@ -45,7 +46,7 @@ public sealed interface DeclarationResolution {
      * be one of them standing for the rest, chosen by the order the walk happened to take. What the
      * line itself settles, if anything, is {@link SearchCoverage#provesTheLineCannotBeWritten}.
      */
-    record Unresolved(SearchCoverage coverage) implements DeclarationResolution {
+    record Unresolved(SearchCoverage coverage) implements PointResolution {
 
         public Unresolved {
             if (coverage == null) {
@@ -60,7 +61,7 @@ public sealed interface DeclarationResolution {
      * <p>Apart from a search that found nothing, and the difference is not a matter of degree: those
      * readings were looked at and this point was not, because looking would tell nobody anything.
      */
-    record NoSearch(Cause cause) implements DeclarationResolution {
+    record NoSearch(Cause cause) implements PointResolution {
 
         public NoSearch {
             if (cause == null) {

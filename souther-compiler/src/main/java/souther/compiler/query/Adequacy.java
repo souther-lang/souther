@@ -1658,7 +1658,7 @@ public final class Adequacy {
             String said = debt.said();
             resolved.put(debt.point(),
                     new DeclaredRows.Answer(said, owed.subject().named(),
-                            DeclarationResolver.resolveAt(said, debt.owed(),
+                            PointResolver.resolveAt(said, debt.owed(),
                                     List.copyOf(debt.met().keySet()),
                                     reading -> readingOf(db, module, scope, debt, debt.role(),
                                             reading))));
@@ -1734,17 +1734,17 @@ public final class Adequacy {
      * rules reaching it, the values its decoder took. Folded to one answer per behavior, the second
      * position's was dropped and which one survived was whichever the search walked first.
      */
-    static DeclarationResolver.ReadingEvidence readingOf(
+    static PointResolver.ReadingEvidence readingOf(
             Db db, String module, GenerationScope scope, BorderObligationPointAssessment debt,
             souther.compiler.partition.PointRole role,
             BorderObligationPointAssessment.Reading reading) {
         if (!scope.admits(reading.behavior())) {
-            return new DeclarationResolver.ReadingEvidence.OutOfScope();
+            return new PointResolver.ReadingEvidence.OutOfScope();
         }
         List<BorderAssessment> searched =
                 db.ask(new BoundarySearch(module, reading.behavior())).value();
         if (searched == null) {
-            return new DeclarationResolver.ReadingEvidence.NoAnswer();
+            return new PointResolver.ReadingEvidence.NoAnswer();
         }
         // The same line, found in the search's own reading of this behavior by the line itself. A
         // border is a value, so this is the reading the debt was made from and not one that happens
@@ -1763,7 +1763,7 @@ public final class Adequacy {
             throw new IllegalStateException("nothing was searched for at " + debt.said()
                     + ", which the line says is worth searching, at " + reading);
         }
-        return new DeclarationResolver.ReadingEvidence.Searched(here.attempt());
+        return new PointResolver.ReadingEvidence.Searched(here.attempt());
     }
 
     /** The same, with a value composed at every point worth one — which is a request, and costs what

@@ -7,7 +7,7 @@ import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.DeclarationResolution;
+import souther.compiler.query.PointResolution;
 import souther.compiler.query.DeclaredRows;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.SearchCoverage;
@@ -210,18 +210,18 @@ class EveryFindingHasAGenerationDispositionTest {
     @Test
     void aGenerationNarrowedToOneBehaviorAnswersFromWhatThatBehaviorSearched() {
         Compilation compilation = compiled(NARROWED);
-        List<DeclarationResolution> atHeld = drawnBy(resolved(compilation, "example.narrowed",
+        List<PointResolution> atHeld = drawnBy(resolved(compilation, "example.narrowed",
                 new GenerationScope.Behavior("held")), "Code");
-        List<DeclarationResolution> atAnywhere = drawnBy(resolved(compilation, "example.narrowed",
+        List<PointResolution> atAnywhere = drawnBy(resolved(compilation, "example.narrowed",
                 new GenerationScope.Behavior("anywhere")), "Code");
 
         assertFalse(atHeld.isEmpty(), "the line is owed at both, so both are asked about");
         assertFalse(atAnywhere.isEmpty(), "the line is owed at both, so both are asked about");
         assertTrue(atAnywhere.stream()
-                        .anyMatch(each -> each instanceof DeclarationResolution.Generated),
+                        .anyMatch(each -> each instanceof PointResolution.Generated),
                 "the search of `anywhere` composed a row at the line: " + atAnywhere);
         assertTrue(atHeld.stream()
-                        .noneMatch(each -> each instanceof DeclarationResolution.Generated),
+                        .noneMatch(each -> each instanceof PointResolution.Generated),
                 "and the search of `held` composed none, whatever `anywhere` did: " + atHeld);
     }
 
@@ -232,7 +232,7 @@ class EveryFindingHasAGenerationDispositionTest {
      * {@code Narrow} says about its own field is a line too, and a reading that can compose nothing
      * at {@code Code}'s line composes one at that.
      */
-    private static List<DeclarationResolution> drawnBy(DeclaredRows rows, String declaredOn) {
+    private static List<PointResolution> drawnBy(DeclaredRows rows, String declaredOn) {
         return rows.resolved().entrySet().stream()
                 .filter(each -> each.getKey().line().owedToTheDeclaration()
                         .map(on -> on.name().equals(declaredOn)).orElse(false))
@@ -250,13 +250,13 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     @Test
     void aLineTheFirstReadingComposesNothingAtIsSearchedAtTheNext() {
-        List<DeclarationResolution> atCode = drawnBy(
+        List<PointResolution> atCode = drawnBy(
                 resolved(compiled(HELD_FIRST), "example.held", new GenerationScope.Module()), "Code");
 
         assertFalse(atCode.isEmpty(), "the model under test has a line owed at both");
         assertEquals(List.of("anywhere"), atCode.stream()
-                        .filter(each -> each instanceof DeclarationResolution.Generated)
-                        .map(each -> ((DeclarationResolution.Generated) each).composedBy())
+                        .filter(each -> each instanceof PointResolution.Generated)
+                        .map(each -> ((PointResolution.Generated) each).composedBy())
                         .distinct().toList(),
                 "the walk went past the reading that composed nothing, and the row is written in"
                         + " the terms of the one that did: " + atCode);
@@ -281,7 +281,7 @@ class EveryFindingHasAGenerationDispositionTest {
                 "one answer per point of a line");
         assertEquals(rows.resolved().values().stream()
                         .filter(each -> each.resolution()
-                                instanceof DeclarationResolution.Generated).count(),
+                                instanceof PointResolution.Generated).count(),
                 rows.rowsByCarrier().values().stream().mapToLong(List::size).sum(),
                 "and one row per answer that composed one");
     }
@@ -303,8 +303,8 @@ class EveryFindingHasAGenerationDispositionTest {
     void aWalkThatCouldNotSeeEveryReadingDoesNotSettleTheLine() {
         List<SearchCoverage> narrowed = drawnBy(resolved(compiled(NARROWED), "example.narrowed",
                 new GenerationScope.Behavior("held")), "Code").stream()
-                .filter(each -> each instanceof DeclarationResolution.Unresolved)
-                .map(each -> ((DeclarationResolution.Unresolved) each).coverage()).toList();
+                .filter(each -> each instanceof PointResolution.Unresolved)
+                .map(each -> ((PointResolution.Unresolved) each).coverage()).toList();
 
         assertFalse(narrowed.isEmpty(), "the reading this asked about composed nothing");
         assertTrue(narrowed.stream().noneMatch(SearchCoverage::walkedEveryReading),
@@ -355,8 +355,8 @@ class EveryFindingHasAGenerationDispositionTest {
         List<SearchCoverage> coverage = drawnBy(
                 resolved(compiled(TWICE), "example.twice", new GenerationScope.Module()), "Code")
                 .stream()
-                .filter(each -> each instanceof DeclarationResolution.Unresolved)
-                .map(each -> ((DeclarationResolution.Unresolved) each).coverage()).toList();
+                .filter(each -> each instanceof PointResolution.Unresolved)
+                .map(each -> ((PointResolution.Unresolved) each).coverage()).toList();
 
         assertFalse(coverage.isEmpty(), "the model under test composes nothing at the line");
         for (SearchCoverage each : coverage) {
@@ -418,7 +418,7 @@ class EveryFindingHasAGenerationDispositionTest {
                 new java.util.LinkedHashMap<>();
         resolved(compiled(EITHER_END), "example.ends", new GenerationScope.Module()).resolved()
                 .forEach((at, answer) -> {
-                    if (answer.resolution() instanceof DeclarationResolution.Generated(var by, var _)
+                    if (answer.resolution() instanceof PointResolution.Generated(var by, var _)
                             && at.line().owedToTheDeclaration()
                                     .map(on -> on.name().equals("Code")).orElse(false)) {
                         composers.put(at, by);
@@ -436,10 +436,10 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     /** Which reading composed each row, in the order the points were resolved. */
-    private static List<String> composedBy(List<DeclarationResolution> resolutions) {
+    private static List<String> composedBy(List<PointResolution> resolutions) {
         return resolutions.stream()
-                .filter(each -> each instanceof DeclarationResolution.Generated)
-                .map(each -> ((DeclarationResolution.Generated) each).composedBy())
+                .filter(each -> each instanceof PointResolution.Generated)
+                .map(each -> ((PointResolution.Generated) each).composedBy())
                 .distinct().toList();
     }
 

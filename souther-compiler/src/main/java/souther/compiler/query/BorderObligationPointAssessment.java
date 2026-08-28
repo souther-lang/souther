@@ -248,7 +248,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      *
      * <p><b>Not the row a point is offered.</b> A row is offered once for a point, and which reading
      * composes it is a search over the readings rather than a fold of them ({@link
-     * DeclarationResolver}): the row here is written in one behavior's terms and choosing it as the
+     * PointResolver}): the row here is written in one behavior's terms and choosing it as the
      * one to offer would be choosing a representative, which is the mistake this whole value exists
      * to undo. What it is here for is that a value at the point was built, which is evidence the
      * point exists.

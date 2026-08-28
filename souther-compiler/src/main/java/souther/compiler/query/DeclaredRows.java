@@ -47,7 +47,7 @@ public record DeclaredRows(GenerationScope scope,
      *               what tells two lines apart that a reader would otherwise see written the same
      *               way: what a newtype wraps is spelled {@code value} in every declaration
      */
-    public record Answer(String said, String owedBy, DeclarationResolution resolution) {
+    public record Answer(String said, String owedBy, PointResolution resolution) {
 
         public Answer {
             if (said == null || owedBy == null || resolution == null) {
@@ -75,7 +75,7 @@ public record DeclaredRows(GenerationScope scope,
     public SequencedMap<String, List<Generator.GeneratedRow>> rowsByCarrier() {
         SequencedMap<String, List<Generator.GeneratedRow>> out = new LinkedHashMap<>();
         resolved.forEach((_, answer) -> {
-            if (answer.resolution() instanceof DeclarationResolution.Generated(var by, var row)) {
+            if (answer.resolution() instanceof PointResolution.Generated(var by, var row)) {
                 out.computeIfAbsent(by, _ -> new ArrayList<>()).add(row);
             }
         });
@@ -101,7 +101,7 @@ public record DeclaredRows(GenerationScope scope,
     public SequencedMap<BorderObligationPoint, Unmet> unmet() {
         SequencedMap<BorderObligationPoint, Unmet> out = new LinkedHashMap<>();
         resolved.forEach((at, answer) -> {
-            if (answer.resolution() instanceof DeclarationResolution.Unresolved _) {
+            if (answer.resolution() instanceof PointResolution.Unresolved _) {
                 out.put(at, unmet(answer));
             }
         });
@@ -122,7 +122,7 @@ public record DeclaredRows(GenerationScope scope,
      * would have to be kept in step by whoever called.
      */
     static Unmet unmet(Answer answer) {
-        if (!(answer.resolution() instanceof DeclarationResolution.Unresolved(var coverage))) {
+        if (!(answer.resolution() instanceof PointResolution.Unresolved(var coverage))) {
             throw new IllegalStateException(
                     "what is left to say about a point a row was composed at, or none was looked"
                             + " for at: " + answer.resolution());
@@ -252,10 +252,10 @@ public record DeclaredRows(GenerationScope scope,
             out.add(new Adequacy.GenerationDisposition(finding,
                     java.util.Optional.of(new OfferItem.APointOfALine(at)),
                     switch (answer.resolution()) {
-                case DeclarationResolution.Generated(var _, var row) ->
+                case PointResolution.Generated(var _, var row) ->
                         new GenerationOutcome.Generated(List.of(row));
-                case DeclarationResolution.Unresolved _ -> cannot(unmet(answer));
-                case DeclarationResolution.NoSearch(var cause) -> throw new IllegalStateException(
+                case PointResolution.Unresolved _ -> cannot(unmet(answer));
+                case PointResolution.NoSearch(var cause) -> throw new IllegalStateException(
                         "a finding at a point nothing was looked for at, which the measurement says"
                                 + " needs nothing looked for: " + at + " " + cause);
             }));

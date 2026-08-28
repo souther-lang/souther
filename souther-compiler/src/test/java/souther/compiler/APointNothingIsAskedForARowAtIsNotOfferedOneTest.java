@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.DeclarationResolution;
+import souther.compiler.query.PointResolution;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
 import souther.compiler.query.Composition;
@@ -146,7 +146,7 @@ class APointNothingIsAskedForARowAtIsNotOfferedOneTest {
 
         boolean sawOne = false;
         for (var each : declared.resolved().entrySet()) {
-            if (each.getValue().resolution() instanceof DeclarationResolution.NoSearch _) {
+            if (each.getValue().resolution() instanceof PointResolution.NoSearch _) {
                 sawOne = true;
                 assertFalse(asked.contains(each.getKey()),
                         "nothing was looked for at " + each.getKey() + ", so it is not an item");
