@@ -74,7 +74,8 @@ sealed interface ComparisonAssessment {
      * @param value    the value of the position the classes meet at, or null where the position
      *                 holds none there
      */
-    record AtAPosition(Cutting cutting, NumericTerm position, Place value, Places places)
+    record AtAPosition(Cutting cutting, NumericTerm.FromOnePosition position, Place value,
+                       Places places)
             implements ComparisonAssessment {
 
         public AtAPosition {
@@ -201,7 +202,7 @@ sealed interface ComparisonAssessment {
         if (!Border.reaches(cutting.target(), cutting.within())) {
             return new OutsideTheDomain(cutting);
         }
-        NumericTerm divided = cutting.dividedPosition();
+        NumericTerm.FromOnePosition divided = cutting.dividedPosition();
         if (divided == null) {
             // Named by the comparison that drew it, which is the one thing about such a place this
             // compiler can always say exactly. It is on no position, and writing it out would be as

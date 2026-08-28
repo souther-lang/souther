@@ -283,7 +283,7 @@ final class ReadQuantities implements Quantities {
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
     private InputAtom.Named called(NumericTerm term) {
-        TermPath root = rootOf(term.path());
+        TermPath root = rootOf(term.subjectPath());
         FieldDomains.Coordinate at = coordinateOf(root, term);
         return new InputAtom.Named(root.toString(), at.path(), at.kind());
     }
@@ -351,7 +351,7 @@ final class ReadQuantities implements Quantities {
         // would depend on whether the walk that reads this input reached the place the term sits
         // at, and a count under more steps than that walk goes down would lose the floor every
         // count has.
-        Position at = byPath.get(term.path());
+        Position at = byPath.get(term.subjectPath());
         souther.compiler.check.Carrier carrier =
                 term.answeredOn(at == null ? null : at.type(), symbols);
         return carrier == null ? null : carrier.spacing();
@@ -499,9 +499,9 @@ final class ReadQuantities implements Quantities {
      * nor could check it: a path is a location and the declarations are what say what is at one.
      */
     private NumericTerm held(NumericTerm term) {
-        if (rootOf(term.path()) == null) {
+        if (rootOf(term.subjectPath()) == null) {
             throw new IllegalArgumentException(
-                    "`" + term.path() + "` is under nothing this behavior takes, so there is"
+                    "`" + term.subjectPath() + "` is under nothing this behavior takes, so there is"
                             + " nothing here to answer about " + term);
         }
         return term;
@@ -517,7 +517,7 @@ final class ReadQuantities implements Quantities {
             // counts were asked about.
             // Only where one value was fixed there. A position fixed at two settles nothing the
             // declarations could be told, and what it contradicts is said here rather than by them.
-            if (root.equals(rootOf(term.path())) && at.isOne()) {
+            if (root.equals(rootOf(term.subjectPath())) && at.isOne()) {
                 out.put(coordinateOf(root, term), at.least());
             }
         });
@@ -535,7 +535,7 @@ final class ReadQuantities implements Quantities {
         // magnitude of a number at the same path are two quantities, and a flag brought them to one
         // name — so a guard bounding one would have been read against the clauses written about the
         // other (#1027).
-        String spelled = term.path().stepsSpelledUnder(root);
+        String spelled = term.subjectPath().stepsSpelledUnder(root);
         return switch (term) {
             case NumericTerm.ValueOf _ -> FieldDomains.Coordinate.value(spelled);
             case NumericTerm.TakenOf taken ->
@@ -593,7 +593,7 @@ final class ReadQuantities implements Quantities {
      * stops.
      */
     private NumericDomain.Bounds ownOf(NumericTerm term) {
-        Position at = byPath.get(term.path());
+        Position at = byPath.get(term.subjectPath());
         return at != null && term.equals(at.term()) ? at.numericDomain() : null;
     }
 

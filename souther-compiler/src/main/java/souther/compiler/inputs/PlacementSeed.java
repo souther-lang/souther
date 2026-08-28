@@ -75,7 +75,7 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
      */
     public static PlacementSeed of(TermPath root, NumericTerm term, RuleRef by,
                                    RuleCitation cited) {
-        RuleAddress address = RuleAddress.of(root, term.path());
+        RuleAddress address = RuleAddress.of(root, term.subjectPath());
         if (address == null) {
             return null;
         }

@@ -78,7 +78,7 @@ final class TermRealizations {
      * <p>Answered without building anything, because the readers that ask are deciding whether to
      * try. What a value looks like is {@link #at}'s and costs what it costs.
      */
-    static boolean onlyOneValueAnswersIt(NumericTerm term) {
+    static boolean onlyOneValueAnswersIt(NumericTerm.FromOnePosition term) {
         return switch (term) {
             // The number is the value, so it is the one value there is.
             case NumericTerm.ValueOf _ -> true;
@@ -99,7 +99,8 @@ final class TermRealizations {
      * of a location is the number written at it, and a number an operation answered is met by
      * whatever answers it.
      */
-    static Realization at(NumericTerm term, Type sourceType, TermOrders orders, Place answer,
+    static Realization at(NumericTerm.FromOnePosition term, Type sourceType, TermOrders orders,
+                          Place answer,
                           Symbols symbols, ReadingPolicy policy) {
         if (sourceType == null) {
             return new Realization.BuiltNone(

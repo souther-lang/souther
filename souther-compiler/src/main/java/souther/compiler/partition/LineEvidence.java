@@ -19,8 +19,9 @@ import souther.compiler.inputs.NumericTerm;
  */
 public sealed interface LineEvidence {
 
-    /** The number this is about. */
-    NumericTerm at();
+    /** The number this is about, which one position answers: evidence divides a position, and a
+     *  number no single place answers divides none. */
+    NumericTerm.FromOnePosition at();
 
     /** The rule that said it. */
     OriginRef by();
@@ -41,7 +42,7 @@ public sealed interface LineEvidence {
     record Divides(Threshold line) implements LineEvidence {
 
         @Override
-        public NumericTerm at() {
+        public NumericTerm.FromOnePosition at() {
             return line.term();
         }
 
@@ -61,7 +62,7 @@ public sealed interface LineEvidence {
     record Singles(GuardThresholds.Guards.Singled point) implements LineEvidence {
 
         @Override
-        public NumericTerm at() {
+        public NumericTerm.FromOnePosition at() {
             return point.term();
         }
 
@@ -73,7 +74,7 @@ public sealed interface LineEvidence {
 
     /** What one filed piece of evidence is called: the rule that said it and the number it was
      *  filed at. Not a count of how many times anything reached it. */
-    record FiledEvidenceId(OriginRef by, NumericTerm at) {}
+    record FiledEvidenceId(OriginRef by, NumericTerm.FromOnePosition at) {}
 
     /**
      * The lines among {@code evidence}, for a reader that wants only those.

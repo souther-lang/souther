@@ -2348,7 +2348,7 @@ public final class Generator {
      */
     public static BoundaryAttempt probeFixing(Subject subject, String label,
                                               java.util.function.Function<NumericTerm, Carrier> on,
-                                              Map<NumericTerm, Place> fixing,
+                                              Map<NumericTerm.FromOnePosition, Place> fixing,
                                               Reachability.Reaching reaching, CandidateCheck check) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
@@ -2365,8 +2365,8 @@ public final class Generator {
         // declarations leave and the first from what reaches the border, and only one of them was
         // about the row being written.
         Standing where = alsoOnTheWay(subject, fixing, reaching);
-        Map<NumericTerm, Place> standing = where.at();
-        for (Map.Entry<NumericTerm, Place> each : standing.entrySet()) {
+        Map<NumericTerm.FromOnePosition, Place> standing = where.at();
+        for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
             // The order this position is written back on, which is the position's own. Handed one
             // order for the whole fixing, a form over positions written back differently wrote each
             // of them as a value of whichever order the quantity happened to answer with.
@@ -2390,7 +2390,7 @@ public final class Generator {
                         new UnresolvedCombination(List.of(label), edge.reason()),
                         where.unrepresented());
             }
-            TermPath at = each.getKey().path();
+            TermPath at = each.getKey().position();
             // Two terms at one path is one location asked for two things at once — a string of a
             // length and the string itself — and what a row writes at a location is one value. The
             // fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
@@ -2426,7 +2426,7 @@ public final class Generator {
             CandidateCheck certified =
                     certifying(check, subject, p, standing, builtOn, uncertified);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            for (NumericTerm term : standing.keySet()) {
+            for (NumericTerm.FromOnePosition term : standing.keySet()) {
                 // A position the way also narrows is not fixed at a value here. What has to hold of
                 // it is one thing said two ways — a place the item asks for, and a case the way
                 // says the value turned out to be — and one location is decided once: the narrowing
@@ -2434,9 +2434,9 @@ public final class Generator {
                 // is accepted ({@link #certifying}). Handed over as both, it is a position with two
                 // accounts, which is what {@link ConstructionPlan} refuses and what it is right to
                 // refuse.
-                if (term.path().head().equals(head)
-                        && reaching.requirements().at(term.path()) == null) {
-                    here.put(term.path(), decided.at(term.path()));
+                if (term.position().head().equals(head)
+                        && reaching.requirements().at(term.position()) == null) {
+                    here.put(term.position(), decided.at(term.position()));
                 }
             }
             Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(), certified);
@@ -2488,42 +2488,52 @@ public final class Generator {
      * those is a row that cannot be written, and each is a row this composes the way it did before
      * the way was carried here at all.
      */
-    private static Standing alsoOnTheWay(Subject subject, Map<NumericTerm, Place> fixing,
+    private static Standing alsoOnTheWay(Subject subject,
+                                         Map<NumericTerm.FromOnePosition, Place> fixing,
                                          Reachability.Reaching reaching) {
-        Map<NumericTerm, Place> out = new LinkedHashMap<>(fixing);
+        Map<NumericTerm.FromOnePosition, Place> out = new LinkedHashMap<>(fixing);
         List<ReachabilityGap.Uncomposed> unrepresented = new ArrayList<>();
         java.util.Set<TermPath> taken = new java.util.LinkedHashSet<>();
-        fixing.keySet().forEach(term -> taken.add(term.path()));
+        fixing.keySet().forEach(term -> taken.add(term.position()));
         souther.compiler.inputs.SearchRegion here = reaching.region();
-        for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+        for (Map.Entry<NumericTerm.FromOnePosition, Place> each : fixing.entrySet()) {
             if (each.getValue() instanceof Count count) {
                 here = here.given(each.getKey(), count);
             }
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
-            List<NumericTerm> owing = new ArrayList<>();
+            List<NumericTerm.FromOnePosition> owing = new ArrayList<>();
             boolean shared = false;
+            boolean placeable = true;
             for (NumericTerm term : cut.cut().form().coefs().keySet()) {
                 // This very number already stands somewhere: the item asked for it, or an earlier
                 // cut did. Nothing to place, and the cut is answered at it either way.
                 if (out.containsKey(term)) {
                     continue;
                 }
+                // A number no single position answers. What is composed here is a value written
+                // somewhere, so there is nowhere to put one — the cut goes unrepresented for the
+                // same reason a cut whose positions nothing composed a value for does.
+                NumericTerm.FromOnePosition at = term.atOnePosition();
+                if (at == null) {
+                    placeable = false;
+                    break;
+                }
                 // Another number taken at the same location. A row writes one value where a
                 // location is, and that one value would have to answer both — a string of a length
                 // and the string itself is the shape of it. Nothing here composes a value to two
                 // numbers at once, so the cut is one this could not put a value under.
-                if (taken.contains(term.path())) {
+                if (taken.contains(at.position())) {
                     shared = true;
                     break;
                 }
-                owing.add(term);
+                owing.add(at);
             }
             // The whole cut at once, because a cut over two positions is one statement about the
             // pair: which values one of them may take depends on what the other took, and a value
             // chosen for the first without asking is right about its own run and wrong about the
             // pair as often as not.
-            Map<NumericTerm, Place> standing = shared ? null
+            Map<NumericTerm.FromOnePosition, Place> standing = shared || !placeable ? null
                     : NumericWitness.of(here, owing, term -> carrierOf(subject, term));
             if (standing == null) {
                 unrepresented.add(new ReachabilityGap.Uncomposed(cut, shared
@@ -2531,11 +2541,11 @@ public final class Generator {
                         : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
                 continue;
             }
-            for (Map.Entry<NumericTerm, Place> each : standing.entrySet()) {
+            for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
                 if (each.getValue() instanceof Count count) {
                     here = here.given(each.getKey(), count);
                 }
-                taken.add(each.getKey().path());
+                taken.add(each.getKey().position());
                 out.put(each.getKey(), each.getValue());
             }
         }
@@ -2551,7 +2561,8 @@ public final class Generator {
      * arrive there, and an account of the attempt that did not say so would have an author reading
      * "no row was seen reaching it" beside a way that says everything on it was taken in.
      */
-    private record Standing(Map<NumericTerm, Place> at, List<ReachabilityGap.Uncomposed> unrepresented) {}
+    private record Standing(Map<NumericTerm.FromOnePosition, Place> at,
+                            List<ReachabilityGap.Uncomposed> unrepresented) {}
 
     /**
      * The order a number taken at a position of this subject is measured on, or null where the
@@ -2568,7 +2579,7 @@ public final class Generator {
      * it is counted on the operation's.
      */
     private static Carrier carrierOf(Subject subject, NumericTerm term) {
-        Type declared = subject.inputs().declaredAt(term.path());
+        Type declared = subject.inputs().declaredAt(term.subjectPath());
         return declared == null ? null : term.answeredOn(declared, subject.symbols());
     }
 
@@ -2597,7 +2608,7 @@ public final class Generator {
      *                tells a search that ran out of candidates from one that certified none
      */
     private static CandidateCheck certifying(CandidateCheck check, Subject subject, int parameter,
-                                             Map<NumericTerm, Place> fixing,
+                                             Map<NumericTerm.FromOnePosition, Place> fixing,
                                              Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn,
                                              boolean[] refused) {
         return (at, candidate) -> {
@@ -2607,8 +2618,8 @@ public final class Generator {
             if (at != parameter || !(built instanceof CandidateCheck.Built.Value(var observed))) {
                 return built;
             }
-            for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
-                if (!subject.parameters().get(parameter).equals(each.getKey().path().head())) {
+            for (Map.Entry<NumericTerm.FromOnePosition, Place> each : fixing.entrySet()) {
+                if (!subject.parameters().get(parameter).equals(each.getKey().position().head())) {
                     continue;
                 }
                 String elsewhere = readsElsewhere(subject, parameter, observed, each.getKey(),
@@ -2639,7 +2650,8 @@ public final class Generator {
      */
     private static String readsElsewhere(Subject subject, int parameter,
                                          souther.compiler.observe.ObservedValue observed,
-                                         NumericTerm term, Place at, souther.compiler.inputs.TermOrders on) {
+                                         NumericTerm.FromOnePosition term, Place at,
+                                         souther.compiler.inputs.TermOrders on) {
         if (on == null) {
             return null;
         }
@@ -2649,7 +2661,7 @@ public final class Generator {
                 java.util.Collections.nCopies(subject.parameters().size(), null));
         row.set(parameter, observed);
         List<souther.compiler.observe.ObservedValue> values =
-                subject.inputs().valuesAt(row, term.path());
+                subject.inputs().valuesAt(row, term.position());
         if (values == null || values.isEmpty()) {
             return null;
         }
@@ -2677,7 +2689,8 @@ public final class Generator {
      *                      collapsing the two searches into one changed nothing, and removing it is
      *                      its own answer to give
      */
-    private static Edge edgeAt(Subject subject, Carrier carrier, NumericTerm term, Place at,
+    private static Edge edgeAt(Subject subject, Carrier carrier,
+                               NumericTerm.FromOnePosition term, Place at,
                                boolean besideAnother) {
         // A number met by several values can offer only one of them beside a second position being
         // fixed as well. Whether it is met by several is the realization's question and not the kind
@@ -2704,8 +2717,13 @@ public final class Generator {
         // parameter. What a position is declared to be is the inputs' to say, and a walk of its own
         // that stopped at the parameter left a condition above a line over a field as one nothing
         // could put a value under.
-        Type declared = term instanceof NumericTerm.TakenOf ? null
-                : subject.inputs().declaredAt(term.path());
+        // Exhaustive over the numbers one position answers, with no `default`. What each of them
+        // writes at the position is a different thing, so a number of a new kind is one this has to
+        // be told about rather than one that takes whichever answer the condition left it on.
+        Type declared = switch (term) {
+            case NumericTerm.ValueOf _ -> subject.inputs().declaredAt(term.position());
+            case NumericTerm.TakenOf _ -> null;
+        };
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
@@ -4159,7 +4177,8 @@ public final class Generator {
      * the search records as settled is the one and not the other. The one question here the variant
      * genuinely settles, and asked of the variant.
      */
-    private static Edge edgeFrom(TermRealizations.Realization made, NumericTerm term, Place at,
+    private static Edge edgeFrom(TermRealizations.Realization made,
+                                 NumericTerm.FromOnePosition term, Place at,
                                  souther.compiler.inputs.TermOrders on) {
         Place settled = switch (term) {
             case NumericTerm.ValueOf _ -> at;

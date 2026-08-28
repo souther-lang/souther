@@ -103,7 +103,7 @@ public final class GuardThresholds {
          * of these — asked for the value beside the line instead, a rule that names no whole number
          * would have put the number beside it in a class it does not satisfy.
          */
-        public record Singled(NumericTerm term, Place value, OriginRef origin) {
+        public record Singled(NumericTerm.FromOnePosition term, Place value, OriginRef origin) {
             public Singled {
                 if (value == null) {
                     throw new IllegalArgumentException(
@@ -441,7 +441,7 @@ public final class GuardThresholds {
             case AffineReading.OfAComparison.Cuts cuts -> {
                 java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
                 for (NumericTerm atom : cuts.read().form().coefs().keySet()) {
-                    over.add(atom.path());
+                    over.add(atom.subjectPath());
                 }
                 return new UnreadComparison.Quantity.Over<>(over);
             }

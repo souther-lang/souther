@@ -26,8 +26,11 @@ import souther.compiler.types.ValueName;
  * rule the model had not written. The discharge procedure has always kept them apart (spec
  * §invariant-discharge-terms); this is the same separation on the side that measures.
  *
- * <p><b>Two variants, and they are the only two there are.</b> Whether the number is what a location
- * holds or what an operation answered of it is a fact about the shape of the term. Which operation,
+ * <p><b>Two variants under one capability.</b> Both of the terms there are today are answered by a
+ * single position of the input, and that is what {@link FromOnePosition} says — the capability a
+ * reader needs before it may draw a line, classify what stands somewhere, or ask a search to write a
+ * value. Whether such a number is what a location holds or what an operation answered of it is a
+ * fact about the shape of the term. Which operation,
  * and therefore what its answer is measured by, where it runs, how it is read off a row and what
  * values answer a given number, are facts about the operation and are declared where those are
  * ({@code semantics.OperationFacts}). A variant per operation would put each of those answers back
@@ -40,14 +43,41 @@ import souther.compiler.types.ValueName;
  * operation. An operation added to the language is read by everything here without a line being
  * written for it.
  */
-public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.TakenOf {
+public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
+
+    /**
+     * A number a row can be asked for at one place, because one value stands there.
+     *
+     * <p>What separates these from a number read from somewhere else is not how many values the
+     * operation looks at — a count reads every element of what it is given — but whether the term
+     * is answered by one position of the input. That is the whole of what an axis, a threshold and
+     * a search for a row need, and it is a capability rather than a shape: a reader that has one of
+     * these may act on the position, and a reader holding a bare {@link NumericTerm} may not.
+     */
+    sealed interface FromOnePosition extends NumericTerm permits ValueOf, TakenOf {
+
+        /**
+         * The single input position this term is read from.
+         *
+         * <p>Not a claim that the number itself stands there. {@code Time.hour(slot.at)} is
+         * answered from {@code slot.at} and no hour is written at it; what is written there is a
+         * time. What the position gives is somewhere a row can be asked to hold a value, which is
+         * what every reader of this method is doing with it.
+         */
+        TermPath position();
+
+        @Override
+        default TermPath subjectPath() {
+            return position();
+        }
+    }
 
     /** The number a location holds: a numeric parameter, a field of one, a numeric newtype's value. */
-    record ValueOf(TermPath path) implements NumericTerm {
+    record ValueOf(TermPath position) implements FromOnePosition {
 
         @Override
         public String toString() {
-            return path.toString();
+            return position.toString();
         }
     }
 
@@ -84,10 +114,10 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
      * type that is asked, and {@link #read} applies the account to the observation without asking
      * again.
      */
-    final class TakenOf implements NumericTerm {
+    final class TakenOf implements FromOnePosition {
 
         private final ValueName.Stdlib operation;
-        private final TermPath path;
+        private final TermPath position;
 
         /**
          * Built only where the operation and what stands at the location have been put to the one
@@ -103,10 +133,10 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
          * this package rather than of the term — and this package's own tests were already going
          * round it (#1027).
          */
-        private TakenOf(ValueName.Stdlib operation, TermPath path) {
+        private TakenOf(ValueName.Stdlib operation, TermPath position) {
             this.operation = java.util.Objects.requireNonNull(operation,
                     "a taken number is taken by an operation");
-            this.path = java.util.Objects.requireNonNull(path, "and taken of somewhere");
+            this.position = java.util.Objects.requireNonNull(position, "and taken of somewhere");
         }
 
         /**
@@ -128,7 +158,7 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
          * <p>Asked of what the names wrap, since a name around a list is still a list — the same
          * reach {@link Carrier#ofValue} takes, and taken here so that no caller takes it itself.
          */
-        public static TakenOf of(ValueName.Stdlib operation, TermPath path, Type at,
+        public static TakenOf of(ValueName.Stdlib operation, TermPath position, Type at,
                                  Symbols symbols) {
             TakenAs how = OperationFacts.takenAs(operation);
             Type answers = NumericAnswers.typeOf(operation, symbols);
@@ -136,7 +166,7 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
                 return null;
             }
             return how.takenOf(souther.compiler.check.TypeOps.base(at, symbols), answers)
-                    ? new TakenOf(operation, path) : null;
+                    ? new TakenOf(operation, position) : null;
         }
 
         /** The operation whose answer this term is. */
@@ -145,11 +175,11 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
         }
 
         @Override
-        public TermPath path() {
-            return path;
+        public TermPath position() {
+            return position;
         }
 
-        /** What this operation takes of the value at {@link #path()}. Never null: one of these
+        /** What this operation takes of the value at {@link #position()}. Never null: one of these
          *  cannot be built for an operation that declares none. */
         public TakenAs takenAs() {
             return OperationFacts.takenAs(operation);
@@ -159,23 +189,51 @@ public sealed interface NumericTerm permits NumericTerm.ValueOf, NumericTerm.Tak
         @Override
         public boolean equals(Object other) {
             return other instanceof TakenOf taken
-                    && operation.equals(taken.operation) && path.equals(taken.path);
+                    && operation.equals(taken.operation) && position.equals(taken.position);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, path);
+            return java.util.Objects.hash(operation, position);
         }
 
         @Override
         public String toString() {
-            return operation.qualified() + "(" + path + ")";
+            return operation.qualified() + "(" + position + ")";
         }
     }
 
-    /** Where the value this is taken of sits. Never the identity of the term: two terms can be taken
-     * of one location, and reading one as the other is what this type exists to stop. */
-    TermPath path();
+    /**
+     * Where the subject of this number is read or reported from.
+     *
+     * <p>Not a position at which this term may be divided. What a reader may do with this is go and
+     * look — read the values, ask what the declarations put there, send an author to it — and none
+     * of those is drawing a line. A term whose values come from a run of a sequence answers here as
+     * readily as one answered by a single place, and only the second of them has a position a class
+     * can be a class of ({@link FromOnePosition#position}).
+     *
+     * <p>Never the identity of the term either: two terms can be read from one location, and
+     * reading one as the other is what this type exists to stop.
+     */
+    TermPath subjectPath();
+
+    /**
+     * This number where one input position answers it, or null where no single place does.
+     *
+     * <p>The one place the capability is asked. Every reader that goes on to draw a line, classify
+     * what stands somewhere or ask a search for a value needs it, and each of them working it out
+     * from what kind of term it is holding is as many readings of one question as there are
+     * readers — of which the day a term of a new kind arrives, some would say yes.
+     *
+     * <p>Exhaustive over the terms there are, with no {@code default}. A kind added is one this
+     * question is answered for rather than one that falls to whichever side the last reader's
+     * condition happened to leave it on.
+     */
+    default FromOnePosition atOnePosition() {
+        return switch (this) {
+            case FromOnePosition at -> at;
+        };
+    }
 
     /**
      * The same number, of what stands at {@code other} — or null where this operation and what

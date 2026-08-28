@@ -30,7 +30,7 @@ import java.util.Set;
  *                 a widening can hand it back and so that a distinction this position does not have
  *                 can be told from one the rules refused
  */
-record ReadPosition(TermPath path, TypeView view, NumericTerm term,
+record ReadPosition(TermPath path, TypeView view, NumericTerm.FromOnePosition term,
                     NumericDomain.Bounds numericDomain, DeclaredBounds.Bounds ownEnds,
                     NarrowedBounds narrowedEnds, NumericDomain.Bounds rangeLeft,
                     boolean nothingExists,

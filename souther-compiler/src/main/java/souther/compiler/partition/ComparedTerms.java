@@ -49,7 +49,7 @@ import java.util.Map;
  *                       as one position against another. A number and not a count of steps: an order
  *                       with no smallest step still holds its values a distance apart
  */
-record ComparedTerms(NumericTerm on, NumericTerm against,
+record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition against,
                      Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers,
                      Count stepsApart) {
 
@@ -66,15 +66,18 @@ record ComparedTerms(NumericTerm on, NumericTerm against,
             GuardThresholds.Named on = GuardThresholds.namedBy(comparison.left(), reads, symbols);
             GuardThresholds.Named against =
                     GuardThresholds.namedBy(comparison.right(), reads, symbols);
+            // A distance runs between two positions, so each side has to be a number one answers.
+            NumericTerm.FromOnePosition here = on == null ? null : on.term().atOnePosition();
+            NumericTerm.FromOnePosition there =
+                    against == null ? null : against.term().atOnePosition();
             Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers =
-                    on == null || against == null ? null
-                            : aDistanceBetween(on.term(), on.orders(),
-                                    against.term(), against.orders());
+                    here == null || there == null ? null
+                            : aDistanceBetween(here, on.orders(), there, against.orders());
             if (carriers != null) {
                 // The subject is the one the author wrote on the left, which the canonical form
                 // keeps too. Which of the two a line is named by is not something to derive where
                 // the source settles it: `charge > ceiling` is a line about the charge.
-                return new ComparedTerms(on.term(), against.term(), carriers, Count.ZERO);
+                return new ComparedTerms(here, there, carriers, Count.ZERO);
             }
         }
         return null;
@@ -129,8 +132,15 @@ record ComparedTerms(NumericTerm on, NumericTerm against,
         if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
             return null;
         }
-        NumericTerm[] two = read.twoCoordinates();
-        if (two == null) {
+        NumericTerm[] pair = read.twoCoordinates();
+        if (pair == null) {
+            return null;
+        }
+        // Both of them numbers a position answers, since a distance is between two positions.
+        NumericTerm.FromOnePosition[] two = {
+            pair[0].atOnePosition(), pair[1].atOnePosition(),
+        };
+        if (two[0] == null || two[1] == null) {
             return null;
         }
         // The orders come from the reading of the declarations, the way they do above. A term the

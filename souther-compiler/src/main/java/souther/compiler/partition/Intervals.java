@@ -184,7 +184,8 @@ final class Intervals {
      * not the second: five is not what is written at the position, a string of five characters is,
      * and which values carry a count is asked of what builds them rather than settled here.
      */
-    static List<PartitionClass> classesOf(List<Band> runs, NumericTerm of, Type type,
+    static List<PartitionClass> classesOf(List<Band> runs, NumericTerm.FromOnePosition of,
+                                          Type type,
                                           ReadingPolicy policy,
                                           Symbols symbols, Endpoint min, Endpoint max) {
         // What the counts in a label stand for. A day count is a carrier and never a name for the
@@ -217,8 +218,14 @@ final class Intervals {
 
     /** What the range is a range of, in the words a reader of the report has: the operation where
      *  the number is what one answered, and the position's own value otherwise. */
-    private static String measureOf(NumericTerm of) {
-        return of instanceof NumericTerm.TakenOf taken ? taken.operation().qualified() : "value";
+    private static String measureOf(NumericTerm.FromOnePosition of) {
+        // Exhaustive, with no `default`. What a range is a range of is a word per kind of number,
+        // so a kind added is one a reader has to be given a word for rather than one that arrives
+        // under whichever word the condition left it on.
+        return switch (of) {
+            case NumericTerm.TakenOf taken -> taken.operation().qualified();
+            case NumericTerm.ValueOf _ -> "value";
+        };
     }
 
     /**
@@ -246,13 +253,20 @@ final class Intervals {
      * one's. Asked of it rather than answered here, so that this says a range has no representative
      * only when the thing that builds them has none to give.
      */
-    private static List<FixtureTemplate> standingIn(NumericTerm of, Place inside, Type type,
+    private static List<FixtureTemplate> standingIn(NumericTerm.FromOnePosition of, Place inside,
+                                                    Type type,
                                                     ReadingPolicy policy,
                                                     Carrier carrier, Symbols symbols) {
-        if (of instanceof NumericTerm.ValueOf) {
-            FixtureTemplate standing = Witnesses.wrapped(type,
-                    FixtureTemplate.on(carrier, inside, symbols.scope()::reach), symbols);
-            return standing == null ? List.of() : List.of(standing);
+        // Exhaustive, with no `default`. What a value reading as this number looks like is a
+        // different construction per kind of number, so a kind added is one this has to be told
+        // how to build for rather than one that falls to whichever branch it was not named in.
+        switch (of) {
+            case NumericTerm.ValueOf _ -> {
+                FixtureTemplate standing = Witnesses.wrapped(type,
+                        FixtureTemplate.on(carrier, inside, symbols.scope()::reach), symbols);
+                return standing == null ? List.of() : List.of(standing);
+            }
+            case NumericTerm.TakenOf _ -> { }
         }
         int size = CountDomain.asCount(inside);
         if (size < 0) {

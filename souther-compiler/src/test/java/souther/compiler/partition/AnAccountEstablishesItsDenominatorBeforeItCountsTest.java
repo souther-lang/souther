@@ -30,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
 
-    private static final NumericTerm AT = new NumericTerm.ValueOf(TermPath.of("r").then("cost"));
+    private static final NumericTerm.FromOnePosition AT =
+            new NumericTerm.ValueOf(TermPath.of("r").then("cost"));
 
     /**
      * Two pieces of evidence called one name are refused where they are handed over.

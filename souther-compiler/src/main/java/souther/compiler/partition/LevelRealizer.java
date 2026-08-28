@@ -95,7 +95,7 @@ public final class LevelRealizer {
             if (at == null) {
                 continue;
             }
-            Map<NumericTerm, Place> fixing = new LinkedHashMap<>();
+            Map<NumericTerm.FromOnePosition, Place> fixing = new LinkedHashMap<>();
             fixing.put(two.on(), at);
             fixing.put(two.against(), common);
             if (found(fixing, within) instanceof Realization.Found made) {
@@ -186,8 +186,20 @@ public final class LevelRealizer {
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms =
-                AffineReading.ordered(over.form());
+        List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms =
+                new java.util.ArrayList<>();
+        for (Map.Entry<NumericTerm, java.math.BigDecimal> each
+                : AffineReading.ordered(over.form())) {
+            NumericTerm.FromOnePosition at = each.getKey().atOnePosition();
+            // What a search hands back is an assignment: somewhere a row is asked to hold a value.
+            // A form over a number no single position answers has nothing here to assign, and that
+            // is a row this composed none of rather than a level the rules refuse.
+            if (at == null) {
+                return new Realization.Unknown(
+                        Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+            }
+            terms.add(Map.entry(at, each.getValue()));
+        }
         boolean bounded = true;
         for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
             Search search = new Search(terms, over.on(), within);
@@ -293,7 +305,7 @@ public final class LevelRealizer {
      */
     private final class Search {
 
-        private final List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms;
+        private final List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms;
         /**
          * The order each position is read and written on, in the order the terms are walked.
          *
@@ -328,7 +340,7 @@ public final class LevelRealizer {
         private int taken;
         private int asked;
 
-        Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms,
+        Search(List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms,
                Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within) {
             this.terms = terms;
             this.carriers = new Carrier[terms.size()];
@@ -366,8 +378,8 @@ public final class LevelRealizer {
          * nowhere, and a map with nothing under a key is a row somebody is offered with a position
          * missing from it.
          */
-        Map<NumericTerm, Place> fixing() {
-            Map<NumericTerm, Place> out = new LinkedHashMap<>();
+        Map<NumericTerm.FromOnePosition, Place> fixing() {
+            Map<NumericTerm.FromOnePosition, Place> out = new LinkedHashMap<>();
             for (int i = 0; i < terms.size(); i++) {
                 if (at[i] == null) {
                     throw new IllegalStateException(
@@ -829,7 +841,7 @@ public final class LevelRealizer {
      * the rules are already known to refuse, offered as a row and then reported as though the point
      * had nothing at it.
      */
-    private Realization found(Map<NumericTerm, Place> fixing,
+    private Realization found(Map<NumericTerm.FromOnePosition, Place> fixing,
                               souther.compiler.inputs.SearchRegion within) {
         return theRulesHaveNotRefused(fixing, within)
                 ? new Realization.Found(fixing)
@@ -857,7 +869,7 @@ public final class LevelRealizer {
      * about the values in it. Anything more would be a claim about an order this reading does not
      * reach.
      */
-    private boolean theRulesHaveNotRefused(Map<NumericTerm, Place> fixing,
+    private boolean theRulesHaveNotRefused(Map<? extends NumericTerm, Place> fixing,
                                            souther.compiler.inputs.SearchRegion within) {
         Map<NumericTerm, Count> counted = new LinkedHashMap<>();
         fixing.forEach((term, at) -> {

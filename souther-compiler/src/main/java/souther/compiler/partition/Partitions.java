@@ -14,7 +14,6 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -325,12 +324,12 @@ public final class Partitions {
      * <p>In the order the rules were read, so that what a report lists and what a search enumerates
      * are in the order an author wrote them.
      */
-    private static List<NumericTerm> numbersMeasuring(Axis axis, List<LineEvidence> evidence,
-                                                      EvidenceAccount account) {
-        NumericTerm declared = axis.term();
+    private static List<NumericTerm.FromOnePosition> numbersMeasuring(
+            Axis axis, List<LineEvidence> evidence, EvidenceAccount account) {
+        NumericTerm.FromOnePosition declared = axis.term();
         List<LineEvidence> here = evidence.stream()
-                .filter(each -> each.at().path().equals(axis.path())).toList();
-        List<NumericTerm> numbers = new ArrayList<>();
+                .filter(each -> each.at().position().equals(axis.path())).toList();
+        List<NumericTerm.FromOnePosition> numbers = new ArrayList<>();
         for (LineEvidence each : here) {
             if (!numbers.contains(each.at())) {
                 numbers.add(each.at());
@@ -357,7 +356,7 @@ public final class Partitions {
      * route through this would be a second answer to what a rule about a number comes to.
      */
     private static void measureAt(List<Axis> out, List<Measured> measured, Axis axis,
-                                  NumericTerm term, List<LineEvidence> evidence,
+                                  NumericTerm.FromOnePosition term, List<LineEvidence> evidence,
                                   souther.compiler.inputs.Quantities reading, Symbols symbols,
                                   ReadingPolicy policy,
                                   souther.compiler.check.PathReachability.Answers arrives,
@@ -682,12 +681,13 @@ public final class Partitions {
         List<Measured> measured = new ArrayList<>();
         EvidenceAccount account = new EvidenceAccount(evidence);
         for (Axis axis : base.axes()) {
-            List<NumericTerm> numbers = numbersMeasuring(axis, evidence, account);
+            List<NumericTerm.FromOnePosition> numbers =
+                    numbersMeasuring(axis, evidence, account);
             if (numbers.isEmpty()) {
                 keep(out, measured, axis, null, rules);
                 continue;
             }
-            for (NumericTerm term : numbers) {
+            for (NumericTerm.FromOnePosition term : numbers) {
                 AxisId id = term.equals(axis.term()) ? axis.id()
                         : AxisId.of(axis.id().behavior(), term);
                 measureAt(out, measured, axis.measuredAt(id, term), term, evidence, reading,
@@ -855,28 +855,6 @@ public final class Partitions {
     }
 
     /**
-     * The one term a body draws lines on at {@code path}, or null where it draws none or draws them
-     * on more than one.
-     *
-     * <p>More than one is left alone rather than picked between. A position carrying two axes is a
-     * shape this can hold and nothing yet produces, and choosing one of them here would silently
-     * drop the other's lines.
-     */
-    private static NumericTerm soleTermAt(List<Threshold> thresholds, TermPath path) {
-        NumericTerm found = null;
-        for (Threshold each : thresholds) {
-            if (!each.term().path().equals(path)) {
-                continue;
-            }
-            if (found != null && !found.equals(each.term())) {
-                return null;
-            }
-            found = each.term();
-        }
-        return found;
-    }
-
-    /**
      * What the rules leave one term, including a term an axis only took on here.
      *
      * <p>Which numbers a position is measured at is not settled by the reading of the declarations
@@ -1033,7 +1011,7 @@ public final class Partitions {
                 rulesWithoutALine.add(each);
             }
         }
-        NumericTerm term = position.term();
+        NumericTerm.FromOnePosition term = position.term();
         AxisId id = AxisId.of(behavior, term);
         switch (LocalInspection.of(position, symbols, policy)) {
             case LocalPartition.Divided divided -> {

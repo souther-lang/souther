@@ -100,24 +100,37 @@ public final class LinesWhereTheyFall {
     }
 
 
-    /** The same piece of evidence, measured at {@code at}. */
+    /**
+     * The same piece of evidence, measured at {@code at}.
+     *
+     * <p>Evidence divides a position, so the number it moved to answers one. What a name is filed
+     * at is a field of a value and a term is taken at it the way it was taken where it was written,
+     * so a move that left the number answered by no single place would be this compiler
+     * contradicting the reading that produced the evidence.
+     */
     private static LineEvidence measuredAt(LineEvidence evidence, NumericTerm at) {
+        NumericTerm.FromOnePosition here = at.atOnePosition();
+        if (here == null) {
+            throw new IllegalStateException(
+                    "`" + evidence.at() + "` divides a position and was filed at `" + at
+                            + "`, which no single position answers");
+        }
         return switch (evidence) {
             case LineEvidence.Divides(Threshold line) ->
-                    new LineEvidence.Divides(thresholdAt(line, at));
+                    new LineEvidence.Divides(thresholdAt(line, here));
             case LineEvidence.Singles(GuardThresholds.Guards.Singled point) ->
-                    new LineEvidence.Singles(singledAt(point, at));
+                    new LineEvidence.Singles(singledAt(point, here));
         };
     }
 
     /** The same threshold, measured at {@code at}. */
-    private static Threshold thresholdAt(Threshold each, NumericTerm at) {
+    private static Threshold thresholdAt(Threshold each, NumericTerm.FromOnePosition at) {
         return new Threshold(at, each.parts(), each.valueBelongsBelow(), each.origin());
     }
 
     /** The same singled-out value, measured at {@code at}. */
     private static GuardThresholds.Guards.Singled singledAt(GuardThresholds.Guards.Singled each,
-                                                            NumericTerm at) {
+                                                            NumericTerm.FromOnePosition at) {
         return new GuardThresholds.Guards.Singled(at, each.value(), each.origin());
     }
 
@@ -203,7 +216,7 @@ public final class LinesWhereTheyFall {
      */
     private static WhereTheNameStands standingOf(InputDomain inputs, NumericTerm term,
                                                  Symbols symbols, OriginRef origin) {
-        TermPath path = term.path();
+        TermPath path = term.subjectPath();
         if (inputs.at(path) != null) {
             return new WhereTheNameStands.AsWritten(term);
         }

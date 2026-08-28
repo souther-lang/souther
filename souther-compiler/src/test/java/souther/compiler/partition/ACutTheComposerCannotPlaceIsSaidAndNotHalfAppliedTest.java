@@ -102,7 +102,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                 "the item's own number here is one taken of the location");
 
         Generator.BoundaryAttempt attempt = composing(length, Count.of(4),
-                cut(new NumericTerm.ValueOf(length.term().path())));
+                cut(new NumericTerm.ValueOf(length.term().position())));
 
         assertEquals(1, attempt.unrepresented().size(),
                 "one location, two numbers, and nothing composes a value to both: "

@@ -29,7 +29,7 @@ class ACutSaysWhatItDividesAndWhereTest {
 
     private static final Carrier WHOLE = new Carrier.Whole();
 
-    private static NumericTerm term(String name) {
+    private static NumericTerm.FromOnePosition term(String name) {
         return new NumericTerm.ValueOf(TermPath.of(name));
     }
 
