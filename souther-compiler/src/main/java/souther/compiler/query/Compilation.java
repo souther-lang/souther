@@ -53,8 +53,18 @@ public final class Compilation {
      * shape of holding something for a backend, and a second one would want the name.
      */
     private final JvmProgramImages jvmProgramImages = new QueryJvmProgramImages(db);
-    /** And what it runs them under, one of it for the same reason: the run that decides whether the
-     *  rows hold and the run a Java binding drives are held to one compilation's answer. */
+    /**
+     * And what this compilation's own rows are run under.
+     *
+     * <p>Not one of it for the reason the images are one of them. What every run of these rows has
+     * to agree on is the program and the terms: two runs against different classes are not two runs
+     * of one model, and two runs under different limits do not say one thing about it. How a run
+     * keeps those terms is that run's, and a run outside the compile keeps them differently because
+     * it is somewhere else — a row a Java binding drives reaches an implementation that answers out
+     * of the caller's world, which no row this compile decides does. So this is the compile's
+     * arrangement and not the compilation's only one, and a caller running rows of its own brings
+     * the arrangement its world needs rather than taking this over.
+     */
     private final ChosenJvmExampleDeadlines jvmExampleDeadlines = new ChosenJvmExampleDeadlines();
     /** Which source each id was, for a caller that identifies sources by index. */
     private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
@@ -99,19 +109,6 @@ public final class Compilation {
      */
     public JvmProgramImages jvmProgramImages() {
         return jvmProgramImages;
-    }
-
-    /**
-     * What the JVM runs this compilation's rows under, for the same caller. Reached the same way
-     * and for the same reason: a binding that ran the rows under a deadline of its own making would
-     * not be running them the way this compilation says.
-     *
-     * <p>Asking settles it. A caller reading this is about to run rows with it, and an arrangement
-     * named after rows have been run is one the answers already given were not worked out under —
-     * which is the same staleness {@link Db#running} refuses a second execution over.
-     */
-    public JvmExampleDeadlines jvmExampleDeadlines() {
-        return jvmExampleDeadlines.inUse();
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.

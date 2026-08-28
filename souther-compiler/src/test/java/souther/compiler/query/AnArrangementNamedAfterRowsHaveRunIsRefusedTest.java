@@ -66,21 +66,6 @@ class AnArrangementNamedAfterRowsHaveRunIsRefusedTest {
         assertEquals(Disposition.INCOMPLETE, onlyRowOf(compilation).disposition());
     }
 
-    /**
-     * And what a caller is handed to run rows with is the arrangement, not the thing that holds it.
-     *
-     * <p>Handed the holder, a caller could give it back and leave the choice reading itself. There
-     * is no such value to give back.
-     */
-    @Test
-    void whatACallerIsHandedIsTheArrangementAndNotTheChoice() {
-        Compilation compilation = Compilation.ofSource(ONE_ROW, "Main");
-
-        assertThrows(IllegalStateException.class,
-                () -> compilation.withJvmExampleDeadlines(compilation.jvmExampleDeadlines()),
-                "reading it is running rows with it, so nothing may be said after");
-    }
-
     private static RowOutcome onlyRowOf(Compilation compilation) {
         SourceId sourceId = compilation.exampleSourcesOf("example.twice").getFirst();
         List<RowOutcome> rows = compilation.db()

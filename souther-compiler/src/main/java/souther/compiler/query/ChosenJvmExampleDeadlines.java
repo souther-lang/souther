@@ -32,7 +32,7 @@ final class ChosenJvmExampleDeadlines implements JvmExampleDeadlines {
     /** What a build runs on until something says otherwise. */
     private JvmExampleDeadlines chosen = JvmDeadlines.onWorkers();
 
-    /** Whether anything has run a row under {@link #chosen} or been handed it to run one with. */
+    /** Whether a row has been run under {@link #chosen}. */
     private boolean answeredWith;
 
     /**
@@ -54,18 +54,6 @@ final class ChosenJvmExampleDeadlines implements JvmExampleDeadlines {
                     + " worked out again for another");
         }
         chosen = arrangement;
-    }
-
-    /**
-     * What this compilation runs its rows under, for a caller running some of them itself.
-     *
-     * <p>The arrangement and not this. A caller handed this could give it back through
-     * {@code withJvmExampleDeadlines}, and the choice would then be the thing that reads the choice;
-     * there is no such value to hand back if what leaves here is what was chosen.
-     */
-    JvmExampleDeadlines inUse() {
-        answeredWith = true;
-        return chosen;
     }
 
     @Override

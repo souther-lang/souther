@@ -136,15 +136,6 @@ public final class SoutherExamples {
     }
 
     private static SoutherExamples settled(Compilation compiled) {
-        // Before anything is asked, because it is how this compilation's rows are run and not a
-        // thing to change once some of them have been. A row runs on a worker of this compile's own,
-        // so what it spends is counted on one thread and how deep it may recurse is this compile's
-        // answer; what it hands outside runs on whoever called, because that is the world a supplied
-        // implementation answers out of. Said afterwards, the rows a compile runs to decide whether
-        // the model holds would have run under one arrangement and the rows a binding drives under
-        // another, and the second would not be reached by the answers already given.
-        compiled.withJvmExampleDeadlines(
-                new CallerCrossingDeadlines(JvmDeadlines.workerStackFromSettings()));
         compiled.db().ask(new Output.All());
         refuseIfItDoesNotCompile(compiled);
         return new SoutherExamples(compiled);
@@ -205,9 +196,13 @@ public final class SoutherExamples {
             throw new IllegalStateException("`" + module + "` did not check, so it has no rows to"
                     + " run");
         }
+        // The program is the compilation's and the terms are the compilation's; how this run keeps
+        // them is this run's. A row driven from here reaches an implementation that answers out of
+        // the caller's world, which the compile's own rows do not, and an arrangement is how a run
+        // is run rather than what it is held to.
         return new BoundExamples(module, asked.rows(),
                 JvmExampleRuns.evaluating(compilation.jvmProgramImages(), asked,
-                        compilation.jvmExampleDeadlines()
+                        new CallerCrossingDeadlines(JvmDeadlines.workerStackFromSettings())
                                 .forThisCompile(asked.policy().outerTimeout()),
                         Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))),
                 bound);

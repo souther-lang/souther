@@ -124,6 +124,36 @@ public final class WhatWasCompiled {
         return false;
     }
 
+    /**
+     * Every class that calls {@code method} on {@code on}.
+     *
+     * <p>For a rule about who may do something rather than about who may name a type. A call is in
+     * the caller's constant pool whatever it is spelled like at the call site, and a lambda's body
+     * is compiled into the class that wrote it, so a caller cannot get out of this by writing the
+     * call somewhere shorter.
+     */
+    public static Set<String> callersOf(Class<?> on, String method) {
+        ClassDesc owner = on.describeConstable().orElseThrow();
+        Set<String> found = new LinkedHashSet<>();
+        for (String each : classes()) {
+            ConstantPool pool = parse(each).constantPool();
+            for (int i = 1; i < pool.size(); i++) {
+                PoolEntry entry;
+                try {
+                    entry = pool.entryByIndex(i);
+                } catch (Exception _) {
+                    continue;
+                }
+                if (entry instanceof java.lang.classfile.constantpool.MemberRefEntry asCall
+                        && asCall.owner().asSymbol().equals(owner)
+                        && asCall.name().stringValue().equals(method)) {
+                    found.add(each);
+                }
+            }
+        }
+        return found;
+    }
+
     /** Every type {@code name} names — what it implements, calls, holds, catches or hands over. */
     public static Set<String> typesNamedBy(String name) {
         Set<String> named = new LinkedHashSet<>();
