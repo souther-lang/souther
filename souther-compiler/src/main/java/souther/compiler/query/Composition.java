@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import souther.compiler.partition.Generator;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,11 +28,12 @@ import java.util.SequencedMap;
  * @param request  what was asked for, which is what settles which rows are here
  * @param rows     one entry per behavior with rows, in the order they were asked about
  * @param searched what each behavior's own search came to, keyed the way a report keys them
- * @param declared what the module's declarations are owed, or null where the request asked for no
- *                 boundary rows — which is not the same as a request that asked and found none
+ * @param account every point of a line this request answers for, whosever it is — a body's own and
+ *                 its declarations' alike — or null where the request asked for no boundary rows,
+ *                 which is not the same as a request that asked and found none
  */
 public record Composition(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rows,
-                          SequencedMap<String, Adequacy.Filling> searched, DeclaredRows declared) {
+                          SequencedMap<String, Adequacy.Filling> searched, BorderAccount account) {
 
     public Composition {
         rows = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rows));
@@ -53,22 +53,19 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
      * them.
      *
      * @param generated one filling per behavior, keyed the way a report keys them
-     * @param declared  the rows the module's declarations are owed, or null where the request asked
+     * @param account  the rows the module's declarations are owed, or null where the request asked
      *                  for no boundary rows. One row per point of a line however many behaviors
      *                  carry the type, and under the behavior whose reading composed it
      */
     public static Composition composed(OfferingRequest request,
                                     Map<String, Adequacy.Filling> generated,
-                                    DeclaredRows declared) {
-        Map<String, List<Generator.GeneratedRow>> owed = declared == null
-                ? Map.of() : declared.rowsByCarrier();
+                                    BorderAccount account) {
+        Map<String, List<Generator.GeneratedRow>> owed = account == null
+                ? Map.of() : account.rowsByCarrier();
         SequencedMap<String, Map<RowKey, OfferedRow>> byBehavior = new LinkedHashMap<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             take(byBehavior, behavior.getKey(), behavior.getValue().composed().rows(),
-                    request.boundaries()
-                            ? atTheLines(behavior.getValue().boundaries().rows(),
-                                    owed.get(behavior.getKey()))
-                            : List.of());
+                    request.boundaries() ? atTheLines(owed.get(behavior.getKey())) : List.of());
         }
         // A behavior with nothing of its own to fill can still be the one reading that composed the
         // row a declaration is owed. Left out, that row would be resolved and then dropped on the
@@ -80,7 +77,7 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
         }
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         byBehavior.forEach((behavior, here) -> out.put(behavior, List.copyOf(here.values())));
-        return new Composition(request, out, new LinkedHashMap<>(generated), declared);
+        return new Composition(request, out, new LinkedHashMap<>(generated), account);
     }
 
     /** One behavior's rows, joined onto whatever it already offers. */
@@ -103,26 +100,25 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
     }
 
     /**
-     * The rows at one behavior's lines: the ones its own readings are owed, and the ones a
-     * declaration is owed that this behavior's reading composed.
+     * The rows at one behavior's lines, which are the ones the account resolved under it.
      *
-     * <p>Two sources and one list, because they are one kind of row — a value standing at a line —
-     * and what tells them apart is who owes the line rather than anything a reader of the block
-     * would act on. Where they coincide the block offers one row, which is what it already does for
-     * two of a behavior's own lines that meet.
+     * <p>One source, whoever owes the line. A row at a point is what a search over every reading of
+     * that point composed, and the account is where that search is made.
+     *
+     * <p><b>And not what the behavior's own boundary search built beside it.</b> That search builds
+     * at each place a line was met, so a line read at two positions of one behavior comes back with
+     * a row at each — a form of two positions gets one putting the value at the first and one
+     * putting it at the second, for one point of one declaration's line. A point is one row to
+     * write, so the second of them is a piece of work nobody is owed, and the two roads differ in
+     * nothing else: every other row either produces is the same row for the same point under the
+     * same behavior.
      *
      * <p>Public because it is a question and not a step of the layout: what is offered at one
      * behavior's lines is what a reader of the block beside that behavior sees, and it is asked
-     * elsewhere. Written twice, the two would come apart the day either half of the join moved.
+     * elsewhere.
      */
-    public static List<Generator.GeneratedRow> atTheLines(List<Generator.GeneratedRow> own,
-                                                          List<Generator.GeneratedRow> owed) {
-        if (owed == null || owed.isEmpty()) {
-            return own;
-        }
-        List<Generator.GeneratedRow> out = new ArrayList<>(own);
-        out.addAll(owed);
-        return List.copyOf(out);
+    public static List<Generator.GeneratedRow> atTheLines(List<Generator.GeneratedRow> owed) {
+        return owed == null ? List.of() : List.copyOf(owed);
     }
 
     /** How many pieces of work this holds, which is what a block says at the top of it. */
@@ -151,6 +147,6 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
                 out.put(behavior, left);
             }
         });
-        return new Offering(request, out, searched, declared, answered);
+        return new Offering(request, out, searched, account, answered);
     }
 }

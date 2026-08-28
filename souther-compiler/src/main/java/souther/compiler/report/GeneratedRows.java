@@ -9,7 +9,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.DeclaredRows;
+import souther.compiler.query.BorderAccount;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
 import souther.compiler.query.Offering;
@@ -125,10 +125,10 @@ public final class GeneratedRows {
      * that does not support it.
      */
     private static void declarations(StringBuilder out, Offering offering) {
-        DeclaredRows declared = offering.declared();
+        BorderAccount account = offering.account();
         java.util.Set<String> said = new java.util.LinkedHashSet<>();
-        for (Map.Entry<souther.compiler.partition.BorderObligationPoint, DeclaredRows.Unmet> each
-                : declared.unmet().entrySet()) {
+        for (Map.Entry<souther.compiler.partition.BorderObligationPoint, BorderAccount.Unmet> each
+                : account.unmet().entrySet()) {
             // Nothing about a point one of the rows above stands at. What is left to write is what
             // this says, and a line telling a person no row was composed for something they are
             // being handed a row for is work that is not left.
@@ -138,7 +138,7 @@ public final class GeneratedRows {
             switch (each.getValue()) {
                 // Said once, of the line, and in the declaration's own words. What each reading
                 // proved it of is not repeated: they agree, which is what let this be said at all.
-                case DeclaredRows.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
+                case BorderAccount.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
                         say(out, said, String.format(
                                 "// no row can be written at `%s` owed by `%s`: every reading of the"
                                         + " line was searched and the rules leave no value at it%n",
@@ -146,20 +146,20 @@ public final class GeneratedRows {
                 // One line per reading, because they are not one fact: a reading whose rules leave
                 // nothing at its own position and one whose search stopped are different news, and
                 // a line carrying whichever came first would carry the order the walk took.
-                case DeclaredRows.Unmet.WhatTheReadingsCameTo(var _, var asked, var came) ->
+                case BorderAccount.Unmet.WhatTheReadingsCameTo(var _, var asked, var came) ->
                         came.forEach(at -> say(out, said, switch (at) {
-                            case DeclaredRows.At.Searched(var reading, var why) -> String.format(
+                            case BorderAccount.At.Searched(var reading, var why) -> String.format(
                                     "// no row for `%s` in `%s`: %s%n", why.subject(),
                                     reading.behavior(), saidOf(why));
                             // Said, because a reading that was asked about and could not be
                             // searched is a thing that happened to this run. Left out, a reader
                             // sees the readings that answered and no sign that another was asked.
-                            case DeclaredRows.At.CouldNotBeSearched(var reading) -> String.format(
+                            case BorderAccount.At.CouldNotBeSearched(var reading) -> String.format(
                                     "// no row for `%s` in `%s`: the lines of that behavior could"
                                             + " not be searched, so nothing was looked for at it%n",
                                     asked, reading.behavior());
                         }));
-                case DeclaredRows.Unmet.NothingWasSearched(var owedBy, var asked) ->
+                case BorderAccount.Unmet.NothingWasSearched(var owedBy, var asked) ->
                         say(out, said, String.format(
                                 "// no row for `%s` owed by `%s`: %s%n", asked, owedBy,
                                 why(Generator.UnresolvedCombination.Reason
@@ -179,7 +179,7 @@ public final class GeneratedRows {
                            SourceNameResolver names) {
         String module = offering.request().module();
         boolean boundaries = offering.request().boundaries();
-        DeclaredRows declared = offering.declared();
+        BorderAccount account = offering.account();
         // Written once and then read three times — printed, counted, and asked whether there is
         // anything to answer. Counting the candidates instead gives a number about work a reader
         // cannot see, and asking the candidates whether the block holds a hole prints the line
@@ -204,7 +204,7 @@ public final class GeneratedRows {
         // through it and appended the rest itself would be a second place that knows what a block
         // holds, and the one that forgot would print rows with nothing said about the work beside
         // them.
-        if (declared != null) {
+        if (account != null) {
             declarations(out, offering);
         }
         // The count leaves with the text. It was worked out here and thrown away, and the one
@@ -534,9 +534,18 @@ public final class GeneratedRows {
                 case GenerationOutcome.NotSupported none -> say(out, said,
                         String.format("// nothing offers a row for `%s` in `%s`: %s%n",
                                 about(each.finding()), behavior, none.reason().said()));
-                // Filtered out above, and listed here so that the switch stays exhaustive: a
-                // fourth answer added later has to be given words rather than falling silently
-                // into whichever arm a default would have put it in.
+                // Said rather than passed over, because the report counts this coordinate among
+                // what is missing and no row is offered for it. Left out, an author reads a gap
+                // above and no account of why nothing was written for it; the account is that the
+                // line it is a coordinate of is owed one row and has one — written already, or
+                // composed at another of the line's positions and offered above.
+                case GenerationOutcome.ObligationAlreadySettled _ -> say(out, said,
+                        String.format("// no row offered for `%s` in `%s`: this line is answered"
+                                + " by a row elsewhere%n",
+                                about(each.finding()), behavior));
+                // Filtered out above, and listed here so that the switch stays exhaustive: an
+                // answer added later has to be given words rather than falling silently into
+                // whichever arm a default would have put it in.
                 case GenerationOutcome.NotApplicable _ -> { }
             }
         }

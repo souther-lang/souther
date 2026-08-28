@@ -7,32 +7,44 @@ import souther.compiler.partition.Generator;
  *
  * <p>One of these per point, however many readings the line has. A row at the line shows something
  * about the type, and one row anywhere shows it — so the work is one piece and the answer about it
- * is one answer (issue #1076). Composed per reading, the same authored line was handed to an author
- * as four things to write.
+ * is one answer. Composed per reading, one authored line is handed to an author as four things to
+ * write.
  *
- * <p><b>The row's behavior is where it was composed and not who owes it.</b> What owes the row is
- * the declaration that drew the line. A behavior carrying the type is a reading in whose terms the
+ * <p><b>The row's behavior is where it was composed and not who owes it.</b> Who owes it is whose
+ * rules settled the point ({@link souther.compiler.partition.PointAttribution}) — the declaration
+ * that drew the line, or the body that did. Where it was composed is a reading in whose terms the
  * row can be written, and which of them managed it is a fact about this run: another one may manage
  * it after an edit that did not touch the line. So it is carried as provenance, for the block the
  * row goes in, and nothing reads ownership off it.
  */
-public sealed interface DeclarationResolution {
+public sealed interface PointResolution {
 
     /**
      * A row stands at the line, written in one reading's terms.
      *
-     * <p>The first reading the request walked that composed one, which is enough: what the two
-     * points against a line ask is the same at every reading of it — checked where a debt's demands
-     * are — so a row standing at one reading's point stands at the line. Which reading it came from
-     * is not part of the answer to whether the line can be written.
+     * <p>The first reading the request walked that composed one, which is enough for the line: what
+     * the two points against a line ask is the same at every reading of it — checked where a debt's
+     * demands are — so a row standing at one reading's point stands at the line.
+     *
+     * <p>Which reading composed it is carried all the same, because not every reader is asking
+     * about the line. A row is written in the terms of the position it was composed at, so a reader
+     * asking what stands at one coordinate is asking whether that coordinate is this one — and told
+     * only the behavior, two positions of one behavior come back indistinguishable and the row
+     * written for one is offered as the answer at the other.
      */
-    record Generated(String composedBy, Generator.GeneratedRow row) implements DeclarationResolution {
+    record Generated(BorderObligationPointAssessment.Reading at, Generator.GeneratedRow row)
+            implements PointResolution {
 
         public Generated {
-            if (composedBy == null || row == null) {
-                throw new IllegalArgumentException("a row was composed by walking some behavior's"
+            if (at == null || row == null) {
+                throw new IllegalArgumentException("a row was composed by walking some position's"
                         + " inputs, and this is neither");
             }
+        }
+
+        /** Which behavior's inputs were walked, which is where the row belongs. */
+        public String composedBy() {
+            return at.behavior();
         }
     }
 
@@ -45,7 +57,7 @@ public sealed interface DeclarationResolution {
      * be one of them standing for the rest, chosen by the order the walk happened to take. What the
      * line itself settles, if anything, is {@link SearchCoverage#provesTheLineCannotBeWritten}.
      */
-    record Unresolved(SearchCoverage coverage) implements DeclarationResolution {
+    record Unresolved(SearchCoverage coverage) implements PointResolution {
 
         public Unresolved {
             if (coverage == null) {
@@ -60,7 +72,7 @@ public sealed interface DeclarationResolution {
      * <p>Apart from a search that found nothing, and the difference is not a matter of degree: those
      * readings were looked at and this point was not, because looking would tell nobody anything.
      */
-    record NoSearch(Cause cause) implements DeclarationResolution {
+    record NoSearch(Cause cause) implements PointResolution {
 
         public NoSearch {
             if (cause == null) {

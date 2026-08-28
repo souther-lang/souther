@@ -172,6 +172,120 @@ class AdequacyLensTest {
     }
 
     /**
+     * A guard on a name every case of a sum spreads, with the rows written under one of them.
+     *
+     * <p>The line is read once per case and owes one row, so rows under {@code P} settle all four of
+     * its points — and {@code T}'s coordinates go on being counted, because a report counts a line
+     * at each position it was read at. Nothing is left to write and there are findings all the same.
+     */
+    private static final String SPREAD_URI = "file:///spread.sou";
+
+    private static final String SETTLED_UNDER_ONE_CASE = """
+            module spread
+
+            data Base = { deadline: Int }
+            data P = { ...Base, x: Int }
+            data T = { ...Base, y: Int }
+            data Req = P | T
+
+            data Ok
+            data No
+
+            behavior check : (r: Req) -> Ok | No
+
+            let check (r) = {
+                guard r.deadline > 10 else No
+                Ok
+            }
+
+            example check
+                | "on"   : (P { deadline = 11, x = 0 }) -> Ok
+                | "off"  : (P { deadline = 10, x = 0 }) -> No
+                | "in"   : (P { deadline = 12, x = 0 }) -> Ok
+                | "out"  : (P { deadline = 9, x = 0 }) -> No
+                | "tOn"  : (T { deadline = 11, y = 0 }) -> Ok
+                | "tOff" : (T { deadline = 10, y = 0 }) -> No
+            """;
+
+    private static final String PRODUCER_URI = "file:///producer.sou";
+
+    private static final String CARRIER_URI = "file:///carrier.sou";
+
+    /** The module that writes the rule, and so owns the line its {@code invariant} draws. */
+    private static final String PRODUCER = """
+            module example.producer exposing ( Cap )
+
+            data Cap = Int
+                invariant floor = value >= 0
+            """;
+
+    /** A module that only carries the imported type: it reads the line at its own position and owes
+     *  a row at none of its points, because the declaration that drew it is somewhere else. The ON
+     *  point of that line is one this module reads, has no row at, and does not answer for. */
+    private static final String CARRIER = """
+            module example.carrier
+
+            import example.producer (Cap)
+
+            data Holds = { c: Cap }
+
+            behavior take : (h: Holds) -> Int
+            let take (h) = 1
+
+            example take
+                | "x" : (Holds { c = Cap(1) }) -> 1
+            """;
+
+    /**
+     * Neither client is offered rows for a line another module answers for.
+     *
+     * <p>A module carrying an imported type reads that type's lines wherever it takes the position
+     * in, and the rows for them are written where the declaration is. So a coordinate of one is
+     * something this module is short of and nothing it can be asked to write.
+     *
+     * <p>The same two clients and a second way to tell them apart. Read as work, the offer is made
+     * and the search behind it leaves the point out, so a client that comes back for the edit is
+     * handed nothing — and one that wanted it at once was never shown the offer.
+     */
+    @Test
+    void neitherClientIsOfferedRowsForALineAnotherModuleAnswersFor() {
+        Map<String, String> documents = Map.of(PRODUCER_URI, PRODUCER, CARRIER_URI, CARRIER);
+
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, true)
+                        .codeActions(CARRIER_URI, CARRIER, on(6), graphOf(documents)),
+                "a client that comes back for the edit is offered nothing");
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, false)
+                        .codeActions(CARRIER_URI, CARRIER, on(6), graphOf(documents)),
+                "and neither is one that wants it now");
+    }
+
+    /**
+     * Neither client is offered rows where there are none to write.
+     *
+     * <p>What the handshake settles is when the rows are worked out and never whether the offer is
+     * made, so the two clients answer alike or the contract is only kept by the one that pays for it
+     * up front.
+     *
+     * <p>The state that tells them apart is a finding standing at a coordinate of a line another
+     * position already answered. Read off the findings, the deferred client is offered rows and gets
+     * none when it comes back; the eager client composes first and offers nothing. What is owed is
+     * the question, and a line owed no row is no work whichever coordinate a report counted it at.
+     */
+    @Test
+    void neitherClientIsOfferedRowsWhereTheLinesAreAnsweredAlready() {
+        Map<String, String> documents = Map.of(SPREAD_URI, SETTLED_UNDER_ONE_CASE);
+
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, true)
+                        .codeActions(SPREAD_URI, SETTLED_UNDER_ONE_CASE, on(10),
+                                graphOf(documents)),
+                "a client that comes back for the edit is offered nothing");
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, false)
+                        .codeActions(SPREAD_URI, SETTLED_UNDER_ONE_CASE, on(10),
+                                graphOf(documents)),
+                "and neither is one that wants it now");
+    }
+
+    /**
      * The offer on a behavior's declaration writes the block `--generate` prints.
      *
      * <p>Commented out and with every answer left open, for the same reason the command's output is:

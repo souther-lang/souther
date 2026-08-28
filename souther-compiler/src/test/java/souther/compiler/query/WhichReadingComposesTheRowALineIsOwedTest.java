@@ -45,15 +45,15 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void theFirstReadingThatComposedARowAnswers() {
         List<String> asked = new java.util.ArrayList<>();
-        DeclarationResolution resolved = DeclarationResolver.resolveAt(SAID, owed(),
+        PointResolution resolved = PointResolver.resolveAt(owed(),
                 List.of(at("held"), at("anywhere"), at("further")), reading -> {
                     asked.add(reading.behavior());
                     return searched(reading.behavior().equals("held")
                             ? notComposed() : built(reading.behavior()));
                 });
 
-        assertInstanceOf(DeclarationResolution.Generated.class, resolved);
-        assertEquals("anywhere", ((DeclarationResolution.Generated) resolved).composedBy(),
+        assertInstanceOf(PointResolution.Generated.class, resolved);
+        assertEquals("anywhere", ((PointResolution.Generated) resolved).composedBy(),
                 "the second reading composed one, and the first composing nothing is not the line"
                         + " composing nothing");
         assertEquals(List.of("held", "anywhere"), asked,
@@ -64,7 +64,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void theReadingsAreWalkedInTheOrderTheyWereGiven() {
         List<String> asked = new java.util.ArrayList<>();
-        DeclarationResolver.resolveAt(SAID, owed(),
+        PointResolver.resolveAt(owed(),
                 List.of(at("a"), at("b"), at("c")), reading -> {
                     asked.add(reading.behavior());
                     return searched(notComposed());
@@ -82,12 +82,12 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void aWalkThatComposedNothingAccountsForEveryReading() {
-        DeclarationResolution resolved = DeclarationResolver.resolveAt(SAID, owed(),
+        PointResolution resolved = PointResolver.resolveAt(owed(),
                 List.of(at("here"), at("elsewhere")),
                 reading -> reading.behavior().equals("here") ? searched(notComposed())
-                        : new DeclarationResolver.ReadingEvidence.OutOfScope());
+                        : new PointResolver.ReadingEvidence.OutOfScope());
 
-        SearchCoverage coverage = assertInstanceOf(DeclarationResolution.Unresolved.class, resolved)
+        SearchCoverage coverage = assertInstanceOf(PointResolution.Unresolved.class, resolved)
                 .coverage();
         assertEquals(List.of(at("here"), at("elsewhere")), List.copyOf(coverage.came().keySet()));
         assertInstanceOf(SearchCoverage.ReadingSearch.Attempted.class,
@@ -187,15 +187,15 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                         unasked, new SearchCoverage.ReadingSearch.OutOfScope()),
                 List.of(answered, silent, unasked));
 
-        DeclaredRows.Unmet unmet = DeclaredRows.unmet(new DeclaredRows.Answer(SAID, "Code",
-                new DeclarationResolution.Unresolved(coverage)));
+        BorderAccount.Unmet unmet = BorderAccount.unmet("Code", SAID,
+                new PointResolution.Unresolved(coverage));
 
-        List<DeclaredRows.At> came = assertInstanceOf(
-                DeclaredRows.Unmet.WhatTheReadingsCameTo.class, unmet).came();
-        assertEquals(List.of(answered, silent), came.stream().map(DeclaredRows.At::reading).toList(),
+        List<BorderAccount.At> came = assertInstanceOf(
+                BorderAccount.Unmet.WhatTheReadingsCameTo.class, unmet).came();
+        assertEquals(List.of(answered, silent), came.stream().map(BorderAccount.At::reading).toList(),
                 "the reading that answered and the one that could not be searched");
-        assertInstanceOf(DeclaredRows.At.Searched.class, came.get(0));
-        assertInstanceOf(DeclaredRows.At.CouldNotBeSearched.class, came.get(1));
+        assertInstanceOf(BorderAccount.At.Searched.class, came.get(0));
+        assertInstanceOf(BorderAccount.At.CouldNotBeSearched.class, came.get(1));
     }
 
     /**
@@ -231,7 +231,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void aPointARowAlreadyStandsAtIsNotSearchedFor() {
-        DeclarationResolution resolved = DeclarationResolver.resolveAt(SAID,
+        PointResolution resolved = PointResolver.resolveAt(
                 new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
                         new Measurement.Complete<>(new ItemAssessment.Coverage.Hit()),
                         ItemAssessment.WritabilityProjection.PROVEN, null),
@@ -239,8 +239,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                     throw new AssertionError("nothing is searched at a point a row stands at");
                 });
 
-        assertEquals(new DeclarationResolution.NoSearch(
-                DeclarationResolution.Cause.A_ROW_ALREADY_STANDS), resolved);
+        assertEquals(new PointResolution.NoSearch(
+                PointResolution.Cause.A_ROW_ALREADY_STANDS), resolved);
     }
 
     private static SearchCoverage coverageOf(Map<Reading, SearchCoverage.ReadingSearch> came,
@@ -267,8 +267,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                 ItemAssessment.WritabilityProjection.PROVEN, null);
     }
 
-    private static DeclarationResolver.ReadingEvidence searched(ItemAssessment.Attempt attempt) {
-        return new DeclarationResolver.ReadingEvidence.Searched(attempt);
+    private static PointResolver.ReadingEvidence searched(ItemAssessment.Attempt attempt) {
+        return new PointResolver.ReadingEvidence.Searched(attempt);
     }
 
     private static ItemAssessment.Attempt built(String carrier) {

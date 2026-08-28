@@ -2,13 +2,12 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
 import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
-import souther.compiler.query.OwedBoundaryPoint;
 import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlements;
 import souther.compiler.partition.BorderObligationPoint;
@@ -61,30 +60,73 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
             let tally (worked) = over(worked) + also(worked)
             """;
 
+    /**
+     * A point of one line owed twice is two items, and what tells them apart is the far side.
+     *
+     * <p>The declaration is owed a run beside each of its ends, and the run stops at whichever
+     * helper's line reaches the position — two of them, at one value. Same line, same role, two
+     * things to be told about, which is what {@link souther.compiler.partition.RegionBasis}
+     * carries.
+     */
     @Test
     void aPointOwedTwiceIsTwoItemsOfTheOffering() {
         Compilation compilation = compiled();
-        List<BorderAssessment> edges = compilation.db()
-                .ask(new Adequacy.BoundarySearch("example.stops", "tally")).value();
-        assertNotNull(edges, "the model under test is measured");
-        List<OwedBoundaryPoint> account = OwedBoundaryPoint.across(edges);
-        assertTrue(account.size() > OwedBoundaryPoint.oneForEachPoint(account).at().size(),
-                "the model under test owes some point more than once: " + account);
+        Settlements table = Settlements.of(compilation.db(), composed(compilation));
+
+        Map<String, Set<BorderObligationPoint>> byLineAndRole = new LinkedHashMap<>();
+        for (BorderObligationPoint point : pointsOf(table)) {
+            byLineAndRole.computeIfAbsent(point.line() + " " + point.role(),
+                    _ -> new LinkedHashSet<>()).add(point);
+        }
+        assertTrue(byLineAndRole.values().stream().anyMatch(at -> at.size() > 1),
+                "a point of this model is owed more than once: " + byLineAndRole);
+    }
+
+    /**
+     * Every open point is one item, and nothing else is.
+     *
+     * <p>The whole of what an offering is asked. A point is one piece of work however many readings
+     * of the line there are and whoever owes it, so the items are the points this module answers
+     * for that the measurement says are worth looking for — one apiece.
+     *
+     * <p>Written as the two sets rather than as a count, which holds while a point this dropped is
+     * made up for by one it invented.
+     */
+    @Test
+    void everyOpenPointIsOneItemAndNothingElseIs() {
+        Compilation compilation = compiled();
+        List<BorderObligationPointAssessment> points = compilation.db()
+                .ask(new Adequacy.Obligations("example.stops",
+                        new souther.compiler.query.GenerationScope.Module())).value();
+        assertNotNull(points, "the model under test is measured");
+
+        Set<BorderObligationPoint> open = new LinkedHashSet<>();
+        for (BorderObligationPointAssessment each : points) {
+            // What this module answers for. A line owed to declarations elsewhere is one its values
+            // are held to and somebody else's to write a row at.
+            boolean here = !each.ownersIn("example.stops").isEmpty() || each.owedToTheReading();
+            if (here && each.owed().worthSearching()) {
+                open.add(each.point());
+            }
+        }
+        assertFalse(open.isEmpty(), "the model under test leaves points to look for");
 
         Settlements table = Settlements.of(compilation.db(), composed(compilation));
+        assertEquals(open, new LinkedHashSet<>(pointsOf(table)),
+                "every open point is asked about, once");
+        assertEquals(pointsOf(table).size(), new LinkedHashSet<>(pointsOf(table)).size(),
+                "and no point is asked about twice: " + pointsOf(table));
+    }
+
+    /** The points the offering was asked about, in the order it asks them. */
+    private static List<BorderObligationPoint> pointsOf(Settlements table) {
         List<BorderObligationPoint> asked = new ArrayList<>();
         for (OfferItem item : table.requested()) {
             if (item instanceof OfferItem.APointOfALine(var point)) {
                 asked.add(point);
             }
         }
-        // The behavior's own account, entry for entry, before the points the declarations own. Two
-        // of these differ in nothing a row is composed or labelled from, and one row answers both:
-        // asked as the places a row is composed at, there would be ten of them here.
-        List<BorderObligationPoint> owed = account.stream().map(OwedBoundaryPoint::owed).toList();
-        assertTrue(asked.size() >= owed.size(), "every point of the account is asked about: " + asked);
-        assertEquals(owed, asked.subList(0, owed.size()),
-                "every thing owed at a point is asked about, and not one per point");
+        return asked;
     }
 
     @Test
@@ -130,7 +172,7 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
                 Adequacy.generatedOf(compilation.db(), "example.stops");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
         return Composition.composed(OfferingRequest.overTheModule("example.stops", true), generated,
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.stops",
+                Adequacy.accountFor(compilation.db(), "example.stops",
                         new GenerationScope.Module()));
     }
 }

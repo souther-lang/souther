@@ -150,7 +150,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         assertNotNull(generated, "the model under test compiles");
         return Settlements.of(compilation.db(), Composition.composed(
                 OfferingRequest.overTheModule("example.unspoken", true), generated,
-                Adequacy.generatedForDeclarationsOf(compilation.db(), "example.unspoken",
+                Adequacy.accountFor(compilation.db(), "example.unspoken",
                         new GenerationScope.Module())));
     }
 

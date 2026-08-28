@@ -428,8 +428,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         return declarations.stream()
                 .filter(each -> !(each.about()
-                        instanceof About.APointOfADeclaredBorder(var debt))
-                        || names.stream().anyMatch(debt::carriedBy))
+                        instanceof About.APointOfADeclaredBorder(var owed))
+                        || names.stream().anyMatch(owed.debt()::carriedBy))
                 .toList();
     }
 
@@ -465,12 +465,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         byDeclaration.forEach((declaration, findings) -> {
             out.append(String.format("  %s%n", declaration));
             for (Adequacy.Finding f : findings) {
-                if (f.about() instanceof About.APointOfADeclaredBorder(var debt)) {
+                if (f.about() instanceof About.APointOfADeclaredBorder(var owed)) {
                     // What the point asks, in its own words. A point against the line names a value
                     // and a point beside it names a run, and a sentence that wrote `=` for both said
                     // a run was one value.
                     out.append(String.format("      %s no row is at the %s point %s (%s)%n",
-                            mark(f), debt.role(), debt.said(), debt.id().named()));
+                            mark(f), owed.debt().role(), owed.said(),
+                            owed.debt().id().named()));
                 }
             }
         });

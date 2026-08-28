@@ -85,6 +85,32 @@ public sealed interface PointAttribution {
     }
 
     /**
+     * Two readings of one point, as one answer about whose it is.
+     *
+     * <p>Whose a point is follows from what settled it, and what settled it is part of what the
+     * point is: the line it is at, and whatever stops the region beside it
+     * ({@link RegionBasis}). So two readings of one point were settled by the same things and
+     * answer this the same way, and a pair that does not says something has called two points one.
+     * Refused here rather than resolved, the way two readings disagreeing about what a point asks
+     * for are refused — picking one of them would file a body's row under a declaration, or the
+     * other way about, and nothing downstream reads both.
+     *
+     * <p>Which owners a declaration point names is the exception and is a union, because a
+     * declaration owes a line wherever the type is carried: one module's declaration may take the
+     * position in at one reading and another's at another, and the point is owed to both.
+     */
+    static PointAttribution and(PointAttribution one, PointAttribution also) {
+        if (one instanceof TheDeclarations first && also instanceof TheDeclarations second) {
+            return first.and(second);
+        }
+        if (one instanceof TheReading && also instanceof TheReading) {
+            return one;
+        }
+        throw new IllegalStateException("two readings of one point disagree about whose it is, so"
+                + " they are not one point: " + one + " and " + also);
+    }
+
+    /**
      * What the contributors come to.
      *
      * <p>The one place this is decided. Everything that measures a behavior, counts what it covers,
