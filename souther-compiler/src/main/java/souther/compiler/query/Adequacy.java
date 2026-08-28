@@ -1658,7 +1658,7 @@ public final class Adequacy {
             // A point this module answers for nothing at: a line owed to declarations elsewhere,
             // whose values this module's are held to and whose row is somebody else's to write.
             // Which is the attribution's answer and no second reading of it.
-            if (debt.ownersIn(module).isEmpty() && !debt.owedToTheReading()) {
+            if (!debt.keptBy(module)) {
                 continue;
             }
             // Which lines this request is about, settled once and here. A line no reading the
@@ -3077,8 +3077,8 @@ public final class Adequacy {
                             // met the line, the answer would be one reading's — and a point read at
                             // two positions has as many of those as it has readings.
                             case About.APointOfABorder(var point) -> account.outcomeAtTheReading(
-                                    point.owed(), new BorderObligationPointAssessment.Reading(
-                                            spec.name(), point.line().cut().left()));
+                                    point.owed(), BorderObligationPointAssessment.Reading.of(
+                                            spec.name(), point.line()));
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                                     atCase(input, missing, composed, spec);
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);

@@ -537,10 +537,11 @@ public final class GeneratedRows {
                 // Said rather than passed over, because the report counts this coordinate among
                 // what is missing and no row is offered for it. Left out, an author reads a gap
                 // above and no account of why nothing was written for it; the account is that the
-                // line it is a coordinate of is owed one row and already has it.
+                // line it is a coordinate of is owed one row and has one — written already, or
+                // composed at another of the line's positions and offered above.
                 case GenerationOutcome.ObligationAlreadySettled _ -> say(out, said,
-                        String.format("// no row offered for `%s` in `%s`: a row already stands"
-                                + " where this line is owed one%n",
+                        String.format("// no row offered for `%s` in `%s`: this line is answered"
+                                + " by a row elsewhere%n",
                                 about(each.finding()), behavior));
                 // Filtered out above, and listed here so that the switch stays exhaustive: an
                 // answer added later has to be given words rather than falling silently into

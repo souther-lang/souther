@@ -73,6 +73,20 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             }
         }
 
+        /**
+         * The reading a behavior made where it met {@code line}.
+         *
+         * <p>The one spelling of it, because it is compared. A reader asking whether a row was
+         * composed at its own position holds a border and a behavior and works out the pair; so
+         * does the gathering that keyed the readings in the first place, and two of them spelling
+         * the position differently is a comparison that answers no every time. It fails as a row
+         * that quietly stops being offered — nothing is thrown and no answer is wrong on its face —
+         * so the pair is made here and nowhere else.
+         */
+        public static Reading of(String behavior, souther.compiler.partition.Border line) {
+            return new Reading(behavior, line.cut().left());
+        }
+
         @Override
         public String toString() {
             return behavior + "/" + at;
@@ -118,7 +132,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 new LinkedHashMap<>();
         byBehavior.forEach((behavior, readings) -> {
             for (BorderAssessment reading : readings) {
-                Reading where = new Reading(behavior, reading.border().cut().left());
+                Reading where = Reading.of(behavior, reading.border());
                 // Every arm answered, for the reason the readings are: a point whose arm nothing
                 // names is a point gathered nowhere, and everything downstream would go on
                 // compiling.
@@ -359,6 +373,23 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      */
     public boolean owedToTheReading() {
         return attribution instanceof souther.compiler.partition.PointAttribution.TheReading;
+    }
+
+    /**
+     * Whether {@code module} is the one that answers for this point.
+     *
+     * <p>The three the attribution tells apart, put as the one question every reader of it was
+     * asking: a line this module's own rule drew, a line one of its declarations owns, and a line
+     * owed to declarations somewhere else. A module that merely carries the type reads the third
+     * kind and answers for none of it — the row belongs where the declaration is.
+     *
+     * <p>Here because it is asked in more than one place, and the two spellings of it came apart. An
+     * editor deciding whether to offer rows and a search deciding which points to resolve are asking
+     * this, and a reader that wrote it as {@link #ownersIn} alone, or as its negation, put a foreign
+     * module's line into this one's work.
+     */
+    public boolean keptBy(String module) {
+        return owedToTheReading() || !ownersIn(module).isEmpty();
     }
 
     /**

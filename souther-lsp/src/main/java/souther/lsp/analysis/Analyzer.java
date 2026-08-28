@@ -835,10 +835,6 @@ public final class Analyzer {
             // many positions read it, so a coordinate of a line another position answered is a
             // finding standing over nothing to write — and counted here, an offer is made that
             // resolves to no rows. What is owed is the point's own answer and is asked below.
-            // A finding at a point of a line is not by itself work. A line is owed one row however
-            // many positions read it, so a coordinate of a line another position answered is a
-            // finding standing over nothing to write — and counted here, an offer is made that
-            // resolves to no rows. What is owed is the point's own answer and is asked below.
             if (each.about() instanceof souther.compiler.query.About.APointOfABorder
                     || each.about() instanceof souther.compiler.query.About
                             .APointOfADeclaredBorder) {
@@ -863,6 +859,12 @@ public final class Analyzer {
      * and a row written for a behavior carrying the type is what discharges it, so an offer standing
      * beside that behavior is an offer to do that work.
      *
+     * <p>And only the lines this module answers for
+     * ({@link souther.compiler.query.BorderObligationPointAssessment#keptBy}). A module that carries
+     * an imported type reads its lines and owes rows at none of them: the row belongs where the
+     * declaration is. Offered here, the offer is made and the search that follows it leaves the
+     * point out, so there is nothing to hand back.
+     *
      * <p>What is asked is whether the point is worth looking for a row at, which is the measurement
      * saying no row stands there. Whether one can be composed is a further question and costs a
      * decoder run to answer, so it is left to whoever takes the offer: an offer made here and
@@ -878,6 +880,7 @@ public final class Analyzer {
             return false;
         }
         return owed.stream().anyMatch(point -> point.carriedBy(behavior)
+                && point.keptBy(module)
                 && point.owed().worthSearching());
     }
 

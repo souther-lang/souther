@@ -207,6 +207,58 @@ class AdequacyLensTest {
                 | "tOff" : (T { deadline = 10, y = 0 }) -> No
             """;
 
+    private static final String PRODUCER_URI = "file:///producer.sou";
+
+    private static final String CARRIER_URI = "file:///carrier.sou";
+
+    /** The module that writes the rule, and so owns the line its {@code invariant} draws. */
+    private static final String PRODUCER = """
+            module example.producer exposing ( Cap )
+
+            data Cap = Int
+                invariant floor = value >= 0
+            """;
+
+    /** A module that only carries the imported type: it reads the line at its own position and owes
+     *  a row at none of its points, because the declaration that drew it is somewhere else. The ON
+     *  point of that line is one this module reads, has no row at, and does not answer for. */
+    private static final String CARRIER = """
+            module example.carrier
+
+            import example.producer (Cap)
+
+            data Holds = { c: Cap }
+
+            behavior take : (h: Holds) -> Int
+            let take (h) = 1
+
+            example take
+                | "x" : (Holds { c = Cap(1) }) -> 1
+            """;
+
+    /**
+     * Neither client is offered rows for a line another module answers for.
+     *
+     * <p>A module carrying an imported type reads that type's lines wherever it takes the position
+     * in, and the rows for them are written where the declaration is. So a coordinate of one is
+     * something this module is short of and nothing it can be asked to write.
+     *
+     * <p>The same two clients and a second way to tell them apart. Read as work, the offer is made
+     * and the search behind it leaves the point out, so a client that comes back for the edit is
+     * handed nothing — and one that wanted it at once was never shown the offer.
+     */
+    @Test
+    void neitherClientIsOfferedRowsForALineAnotherModuleAnswersFor() {
+        Map<String, String> documents = Map.of(PRODUCER_URI, PRODUCER, CARRIER_URI, CARRIER);
+
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, true)
+                        .codeActions(CARRIER_URI, CARRIER, on(6), graphOf(documents)),
+                "a client that comes back for the edit is offered nothing");
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, false)
+                        .codeActions(CARRIER_URI, CARRIER, on(6), graphOf(documents)),
+                "and neither is one that wants it now");
+    }
+
     /**
      * Neither client is offered rows where there are none to write.
      *
