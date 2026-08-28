@@ -45,7 +45,7 @@ import java.util.Map;
 public record BorderObligationPointAssessment(BorderObligationPoint point, String axis,
                                               souther.compiler.partition.PointAttribution
                                                       attribution,
-                                              souther.compiler.partition.BorderLocus locus,
+                                              souther.compiler.check.RuleCitation cited,
                                               Demand demand, ItemAssessment.Owed item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met) {
@@ -88,7 +88,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
             throw new IllegalArgumentException(
                     "a point is what its readings came to, and this is none of them: " + point);
         }
-        if (demand == null || item == null || attribution == null || locus == null) {
+        if (demand == null || item == null || attribution == null || cited == null) {
             throw new IllegalArgumentException(
                     "a point owed a row asks for one, came to something, is owed to somebody and"
                             + " is found somewhere: " + point);
@@ -174,24 +174,28 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
     }
 
     /**
-     * Where a reader is sent to see the line, which every reading of it answers the same way.
+     * How a reader finds the line, which every reading of it answers the same way.
      *
      * <p>Not the origin. A reading carries which reading of the rule drew its line — a comparison
      * inside a helper carries the call it was read through — and a point read at two positions has
      * as many of those as it has readings, so a point that held one would name whichever the walk
-     * met first. What a reader is shown is where the rule is written or what it is called
-     * ({@link souther.compiler.partition.BorderLocus}), and that is the same at all of them.
+     * met first. How the rule is found is what the origin already projects to
+     * ({@link souther.compiler.partition.OriginRef#cited}): the name where the author gave the rule
+     * one, and the place where the rule is a comparison. That is the same at all of them.
+     *
+     * <p><b>And it is not what the line is on.</b> That is the reading's word — {@code n} here and
+     * {@code r@P.deadline} there — and a point read at two positions has one for each, so a point
+     * that held one would be named after a place it is not owed at. Which is why what a report says
+     * about the quantity comes from the readings and what it says about the rule comes from here.
      *
      * <p>Checked and not folded, for the reason the demand is: a pair that disagrees says the two
      * are not one point, and picking one would send a reader to a rule they were not told about.
      */
-    private static souther.compiler.partition.BorderLocus foundAt(
+    private static souther.compiler.check.RuleCitation foundAt(
             BorderObligationPoint point, List<BorderAssessment> readings) {
-        souther.compiler.partition.BorderLocus found =
-                souther.compiler.partition.BorderLocus.of(readings.get(0).border().origin());
+        souther.compiler.check.RuleCitation found = readings.get(0).border().origin().cited();
         for (BorderAssessment reading : readings) {
-            souther.compiler.partition.BorderLocus also =
-                    souther.compiler.partition.BorderLocus.of(reading.border().origin());
+            souther.compiler.check.RuleCitation also = reading.border().origin().cited();
             if (!found.equals(also)) {
                 throw new IllegalStateException("two readings of one point are found in different"
                         + " places, so they are not one point: " + point + " at " + found + " by "
@@ -200,6 +204,19 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
             }
         }
         return found;
+    }
+
+    /**
+     * How a report writes where this line came from, with the sources under the names {@code names}
+     * gives them.
+     *
+     * <p>The citation's own sentence, which every reading of the point says the same way: a rule the
+     * author named is found by that name wherever it is read, and a comparison by the place it is
+     * written.
+     */
+    public String describe(souther.compiler.diag.SourceNameResolver names,
+                           souther.compiler.source.SourceId sectionSource) {
+        return cited.said(names, sectionSource);
     }
 
     /**
