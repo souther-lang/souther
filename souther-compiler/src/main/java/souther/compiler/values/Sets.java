@@ -144,11 +144,16 @@ public final class Sets<A> {
      * position this says nothing about, which is what every other rule it cannot use leaves.
      */
     public Composed matching(A atom, PatternSyntax syntax) {
+        return admitted(atom, PatternPlan.of(syntax));
+    }
+
+    /** What {@code plan} comes to, out of what the position has left. */
+    private Composed admitted(A atom, PatternPlan plan) {
         if (isSpent(atom)) {
             return gaveUp(atom);
         }
         int[] purse = purse(atom);
-        Language made = PatternPlan.of(syntax).compile(
+        Language made = plan.compile(
                 new PatternPlan.Budget(Math.min(budget.mostStates(), purse[0]), purse[0]));
         if (made == null) {
             return gaveUp(atom);
@@ -156,6 +161,30 @@ public final class Sets<A> {
         purse[0] -= made.size();
         return new Composed(ValueSet.matching(made), false);
     }
+
+    /**
+     * The strings {@code syntax} does not accept, as the values one position may hold.
+     *
+     * <p>What a pattern denied leaves, which is a set as surely as what it stated leaves. Built
+     * here rather than by complementing a language afterwards, because the complement is the
+     * expensive operation — a machine has to be made deterministic before a walk over it can be
+     * turned around — and doing it out there would be doing it where nothing is counting.
+     */
+    public Composed notMatching(A atom, PatternSyntax syntax) {
+        return admitted(atom, EVERY_STRING.less(PatternPlan.of(syntax)));
+    }
+
+    /**
+     * Every string there is, as a plan to take one away from.
+     *
+     * <p>Any symbol, any number of times. Written as the symbols and not as a dot, which leaves out
+     * the five line terminators — a denial that admitted every string but those would refuse values
+     * a model may hold.
+     */
+    private static final PatternPlan EVERY_STRING = PatternPlan.of(
+            new PatternSyntax.Repeated(new PatternSyntax.Symbols(
+                    souther.compiler.regex.CodePoints.EVERYTHING),
+                    0, PatternSyntax.Repeated.NO_CEILING));
 
     /** The values both admit — what two rules stated together leave a position. */
     public Composed meet(A atom, ValueSet one, ValueSet other) {

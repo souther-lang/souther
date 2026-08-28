@@ -2,6 +2,10 @@ package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.values.Sets;
@@ -100,7 +104,15 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
                 ? one.joinApart(other, sets) : one.join(other, sets);
     }
 
-    /** An equality names a value and a denial leaves the rest; nothing else here is read. */
+    /**
+     * An equality names a value, a denial leaves the rest, and a pattern names the strings it
+     * accepts; nothing else here is read.
+     *
+     * <p>A pattern is the third because a format is a third kind of answer and not because it is a
+     * call. What {@code String.matches} says about a position is which strings stand there, which
+     * is the question this reading asks — read as a call nobody follows, the rule said nothing and
+     * a position an author had written a format for came out admitting every string there is.
+     */
     @Override
     public AdmissibleValues<FactSubject> leaf(Core e, boolean positive) {
         if (e instanceof Core.Binary b && (b.op() == BinOp.EQ || b.op() == BinOp.NE)) {
@@ -108,7 +120,48 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
             // states the equality, and `==` denied denies it.
             return comparison(b, (b.op() == BinOp.EQ) == positive);
         }
-        return unreadable(e);
+        AdmissibleValues<FactSubject> matched = pattern(e, positive);
+        return matched != null ? matched : unreadable(e);
+    }
+
+    /**
+     * What a pattern says about the position it is asked of, or null where the leaf is not one.
+     *
+     * <p>Read whichever way it is stated. Denied, what stands is every string the pattern does not
+     * accept, which is a set the same way — and reading only the stated form would leave a denial
+     * as a form this cannot take apart, which of this very form would not be true.
+     *
+     * <p>Null and not {@link AdmissibleValues#unreadable} for the leaves that are not this, so that
+     * the one place a reading gives up stays where it is: what a rule this could not read costs is
+     * worked out there, and a second answer to it here would be a second account of the same thing.
+     */
+    private AdmissibleValues<FactSubject> pattern(Core e, boolean states) {
+        if (!(e instanceof Core.PreservedCall call) || call.args().size() != 2
+                || !(call.operation() instanceof ValueName.Stdlib.Operation operation)
+                || symbols.kernelOf(operation) != Kernel.STRING_MATCHES) {
+            return null;
+        }
+        // The subject is written last and the pattern first, which is the operation's own order.
+        FactSubject position = positionIn(call.args().get(1));
+        if (position == null
+                || !(Terms.folded(call.args().get(0), symbols) instanceof String written)) {
+            return null;
+        }
+        // A pattern is what it accepts, and what it is written out of is the author's. Read through
+        // the fold above, so a format built out of pieces the model names — a shared tail joined to
+        // a prefix — is the one pattern it comes to rather than an expression nobody followed.
+        if (!(PatternParser.read(written) instanceof PatternRead.Read read)) {
+            return null;
+        }
+        Sets.Composed made = states ? sets.matching(position, read.syntax())
+                : sets.notMatching(position, read.syntax());
+        // And where the set was not built, the position is left standing with the reason for it —
+        // which is the same shape as any other rule this reading could not turn into values, and a
+        // different reason, because this one was followed to the end.
+        return made.gaveUp()
+                ? AdmissibleValues.unreadable(Set.of(position),
+                        UnreadReason.EXACT_VALUES_TOO_COSTLY)
+                : AdmissibleValues.at(position, made.set());
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */

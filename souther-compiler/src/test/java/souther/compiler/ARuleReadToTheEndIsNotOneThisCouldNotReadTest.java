@@ -206,10 +206,33 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
+     * A clause admitting values by a pattern, which is now one of the ones read to the end.
+     *
+     * <p>What this compiler was short of is what it is no longer short of. A format names the
+     * strings a position may hold, which is the question the reading of values asks, so the rule is
+     * taken in and the measurement is whole — and the two words a report writes for being short of
+     * a rule are absent rather than reworded.
+     *
+     * <p>Beside {@link #aClauseNothingReadsIsAQuestionNobodyAnswered}, which is the same shape of
+     * clause about the same position with a form this still has no word for. The pair is what says
+     * the difference is the reading and not the shape of the sentence.
+     */
+    @Test
+    void aClauseAdmittingValuesByAPatternIsMeasuredWhole() {
+        Measured measured = of("    invariant String.matches(\"[a-z]+\", name)");
+
+        assertEquals("complete", measured.status());
+        assertEquals(List.of(), measured.weakening());
+        assertFalse(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
+        assertFalse(measured.says("written in a form this compiler does not read"),
+                measured.human());
+    }
+
+    /**
      * And a clause nothing here takes apart, which is what a limit of this compiler looks like.
      *
      * <p>Here the question standing is the truth: what the clause says about the values was never
-     * read, so what the position may hold is not known to have been read either. The three above
+     * read, so what the position may hold is not known to have been read either. The four above
      * are what this one has to stay different from.
      */
     @Test

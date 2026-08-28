@@ -166,7 +166,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant either = value == "A" || String.matches("[0-9]+", value)
+                    invariant either = value == "A" || String.startsWith("0",value)
                 """, "Gender");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
     }
@@ -187,7 +187,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant either = left == "A" || String.matches("[0-9]+", right)
+                    invariant either = left == "A" || String.startsWith("0",right)
                 """, "Pair");
         asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "left");
     }
@@ -331,7 +331,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant both = value == "A" && String.matches("[A-Z]", value)
+                    invariant both = value == "A" && String.startsWith("A",value)
                 """, "Gender");
         asFarAsRead(ValueSet.just(A), UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
     }
@@ -347,7 +347,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant both = left == "A" && String.matches("[A-Z]", right)
+                    invariant both = left == "A" && String.startsWith("A",right)
                 """, "Pair");
         wholly(ValueSet.just(A), read, "left");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "right");
@@ -380,7 +380,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant shape = String.matches("[A-Z]", left)
+                    invariant shape = String.startsWith("A",left)
                 """, "Pair");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, shaped, "left");
     }
@@ -442,7 +442,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant shape = String.matches("[A-Z]", value)
+                    invariant shape = String.startsWith("A",value)
                 """, "Gender");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
     }
