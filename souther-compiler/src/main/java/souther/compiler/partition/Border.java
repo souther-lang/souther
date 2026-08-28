@@ -754,12 +754,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         // does not, which is half the operators an author can write.
         Level leaves = Seam.of(space, cut,
                 valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE).leaving(kept);
-        // Nothing to hold the range against where the seam names no place in the quantity's units.
-        // The two readings are held against each other where both can say where the rule leaves
-        // off, and a check run on one of them alone would be this reading answering for the other.
-        if (leaves == null) {
-            return;
-        }
         if (end == null || !end.at().sameAs(placeOf(leaves))) {
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: " + origin.named());
