@@ -91,32 +91,6 @@ public final class Front {
     public record Core() implements Input<Boolean> {}
 
     /**
-     * What one row or one reading is given to finish within, set outright rather than as a number of
-     * milliseconds.
-     *
-     * <p>Only a test sets one. A wall clock answers "did this finish in time", which is not the
-     * question nearly every test about an overrun is asking — those ask what the compiler says about
-     * work that did not finish, and had to write a model that does not terminate and then race the
-     * clock to observe it. On a loaded host the race is lost in the direction that matters: work
-     * that does finish is reported as work that did not. A deadline that decides by what the work is
-     * lets the test state the fact instead.
-     */
-    public record ExampleDeadline() implements Input<souther.compiler.examples.Deadline> {}
-
-    /**
-     * How much stack a worker of this compilation's own is made with, in bytes.
-     *
-     * <p>Not a term a row is held to. What holds a recursion is counted
-     * ({@link souther.compiler.execute.EvaluationPolicy#recursionDepthLimit}) and reads the same on
-     * every machine; this is how much room the arrangement that runs a row on a JVM thread makes for
-     * that count to be reached before the stack runs out, and it means nothing to a way of running a
-     * row that is not that one.
-     *
-     * <p>Absent means {@link souther.compiler.examples.Deadline#DEFAULT_WORKER_STACK_BYTES}.
-     */
-    public record WorkerStack() implements Input<Long> {}
-
-    /**
      * What this compilation allows one row's evaluation: the steps and the depth that decide it, and
      * the wait after which it is given up on.
      *

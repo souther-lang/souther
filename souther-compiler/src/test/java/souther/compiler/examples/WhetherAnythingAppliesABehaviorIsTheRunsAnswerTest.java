@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
@@ -226,7 +227,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         mine.db().ask(new Bodies.Requirements(name)).value(),
                         ExampleVerifier.class.getClassLoader(),
                         mine.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                        Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                        JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                         EvaluationPolicy.DEFAULT,
                         Answering.generatedHere(),
                         CheckedEnsures.executableOf(
@@ -321,7 +322,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answering,
                 CheckedEnsures.executableOf(

@@ -7,7 +7,8 @@ import souther.compiler.diag.Primary;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
-import souther.compiler.examples.Deadline;
+import souther.compiler.execute.jvm.JvmDeadlines;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.examples.ExampleStatements;
 import souther.compiler.examples.ExampleVerifier;
@@ -344,7 +345,7 @@ class CompileFakeExampleDisagreementTest {
         // it is set and not as a locale would group it, which is what the number in this line is for.
         assertTrue(rendered(one).contains("Could not compare this fake with the rows recorded for"
                         + " `find` — building the table did not answer within "
-                        + DoesNotComeBack.BUDGET.toMillis() + "ms."),
+                        + DoesNotComeBack.WAIT.toMillis() + "ms."),
                 rendered(one));
     }
 
@@ -460,7 +461,7 @@ class CompileFakeExampleDisagreementTest {
                         name, souther.compiler.observe.ArmObservation.OMIT)).value().classes(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
-                Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 CheckedEnsures.executableOf(c.db().ask(
                         new souther.compiler.query.Bodies.ReachableContracts(name)).value()),
@@ -477,10 +478,10 @@ class CompileFakeExampleDisagreementTest {
 
     /** As {@link #warningsOf(String)}, for a model whose table does not finish being built —
      * which is said here rather than waited for. */
-    private static List<Located> warningsOf(String model, Deadline overrun) {
+    private static List<Located> warningsOf(String model, JvmExampleDeadlines overrun) {
         List<Located> out = new ArrayList<>();
         assertDoesNotThrow(() -> Compiler.compiled(model, "Main", out,
-                souther.compiler.query.Adequacy.Asked.NOTHING, null, overrun));
+                souther.compiler.query.Adequacy.Asked.NOTHING, DoesNotComeBack.WAIT, overrun));
         return out;
     }
 
@@ -628,11 +629,11 @@ class CompileFakeExampleDisagreementTest {
     }
 
     /** As {@link #allCodesOf(String)}, for a model with a row that does not come back. */
-    private static List<String> allCodesOf(String model, Deadline overrun) {
+    private static List<String> allCodesOf(String model, JvmExampleDeadlines overrun) {
         souther.compiler.query.Compilation compilation =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         if (overrun != null) {
-            compilation.withDeadline(overrun);
+            compilation.withJvmExampleDeadlines(overrun);
         }
         compilation.answerEverything();
         List<String> codes = new ArrayList<>();

@@ -75,7 +75,7 @@ class EveryReasonAPositionGivesIsCarriedByAMeasureTest {
     @Test
     void aPositionThatCouldNotPlaceARowSaysSoThroughAMeasure() {
         Compilation compilation = Compilation.ofSource(UNREADABLE, "Main");
-        compilation.withDeadline(DoesNotComeBack.overrunningOn(
+        compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.source.SourceId;
 
-import souther.compiler.examples.Deadline;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -113,7 +113,7 @@ class CompilePartialAdequacyTest {
     /** A model that comes back, on the default budget — including {@link #budgetSpent}, which walks
      * four thousand nodes and is the reason a short budget cannot be set for the whole suite. */
     private static Compilation measured(String source) {
-        return measured(source, (Deadline) null);
+        return measured(source, (JvmExampleDeadlines) null);
     }
 
     private static Compilation warned(String source) {
@@ -139,17 +139,17 @@ class CompilePartialAdequacyTest {
 
     /** Measured, with {@code overrun} the work this model does not get back from — for a model
      *  written out here, which is its own key. */
-    private static Compilation measured(String source, Deadline overrun) {
+    private static Compilation measured(String source, JvmExampleDeadlines overrun) {
         return measured("report:", source, overrun, Adequacy.Asked.fullReport());
     }
 
     /** The same, for a model shared between tests, which needs a key of its own. */
-    private static Compilation measured(String key, String source, Deadline overrun) {
+    private static Compilation measured(String key, String source, JvmExampleDeadlines overrun) {
         return measured("report:" + key, source, overrun, Adequacy.Asked.fullReport());
     }
 
     /** The same, warned about at every level. */
-    private static Compilation warned(String key, String source, Deadline overrun) {
+    private static Compilation warned(String key, String source, JvmExampleDeadlines overrun) {
         return measured("warn:" + key, source, overrun,
                 Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
     }
@@ -162,11 +162,13 @@ class CompilePartialAdequacyTest {
      * rows that were supposed to finish as rows that did not, on any host loaded enough to make it
      * so.
      */
-    private static Compilation measured(String key, String source, Deadline overrun,
+    private static Compilation measured(String key, String source, JvmExampleDeadlines overrun,
                                         Adequacy.Asked asked) {
         return COMPILED.computeIfAbsent(key + ":" + source, _ -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.withDeadline(overrun);
+            if (overrun != null) {
+                compilation.withJvmExampleDeadlines(overrun);
+            }
             compilation.measure(asked);
             compilation.answerEverything();
             return compilation;

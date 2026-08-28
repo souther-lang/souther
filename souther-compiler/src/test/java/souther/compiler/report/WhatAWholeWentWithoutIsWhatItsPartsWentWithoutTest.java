@@ -252,7 +252,7 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
     @Test
     void aModuleHoldsWhatOnlyItsDeclarationsWentWithout() {
         Compilation compilation = Compilation.ofSource(ONE_ROW_UNREAD, "Main");
-        compilation.withDeadline(souther.compiler.DoesNotComeBack.overrunningOn(
+        compilation.withJvmExampleDeadlines(souther.compiler.DoesNotComeBack.overrunningOn(
                 souther.compiler.DoesNotComeBack.everythingAboutRowsOf("unread")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

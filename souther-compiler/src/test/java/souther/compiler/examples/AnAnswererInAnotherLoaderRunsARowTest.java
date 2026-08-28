@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
 import net.unit8.raoh.Ok;
@@ -240,7 +241,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answerer.asAnswering(classes, parent),
                 CheckedEnsures.executableOf(

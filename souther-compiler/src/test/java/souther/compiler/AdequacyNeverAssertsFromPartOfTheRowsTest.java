@@ -1,7 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.query.Measurement;
-import souther.compiler.examples.Deadline;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -45,7 +45,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
      * spends the observation budget, one is past what the backend can emit — so nothing about them
      * overruns.
      */
-    private record Unreadable(String source, Deadline overrun) {}
+    private record Unreadable(String source, JvmExampleDeadlines overrun) {}
 
     /** Models where something a measure would want to read was not read, each in a different way. */
     private static List<Unreadable> unreadableInSomeWay() {
@@ -175,10 +175,10 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         return measured(source, null);
     }
 
-    private static Compilation measured(String source, Deadline overrun) {
+    private static Compilation measured(String source, JvmExampleDeadlines overrun) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         if (overrun != null) {
-            compilation.withDeadline(overrun);
+            compilation.withJvmExampleDeadlines(overrun);
         }
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
