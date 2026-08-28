@@ -45,6 +45,7 @@ import java.util.Map;
 public record BorderObligationPointAssessment(BorderObligationPoint point, String axis,
                                               souther.compiler.partition.PointAttribution
                                                       attribution,
+                                              souther.compiler.partition.BorderLocus locus,
                                               Demand demand, ItemAssessment.Owed item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met) {
@@ -87,10 +88,10 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
             throw new IllegalArgumentException(
                     "a point is what its readings came to, and this is none of them: " + point);
         }
-        if (demand == null || item == null || attribution == null) {
+        if (demand == null || item == null || attribution == null || locus == null) {
             throw new IllegalArgumentException(
-                    "a point owed a row asks for one, came to something, and is owed to somebody: "
-                            + point);
+                    "a point owed a row asks for one, came to something, is owed to somebody and"
+                            + " is found somewhere: " + point);
         }
         if (axis == null) {
             throw new IllegalArgumentException("a line is a line on something: " + point);
@@ -168,8 +169,37 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
             java.util.SequencedMap<Reading, BorderAssessment> met) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Demand asked = asked(point, readings);
-        return new BorderObligationPointAssessment(point, axis, attribution, asked,
-                came(point.role(), readings, asked), met);
+        return new BorderObligationPointAssessment(point, axis, attribution,
+                foundAt(point, readings), asked, came(point.role(), readings, asked), met);
+    }
+
+    /**
+     * Where a reader is sent to see the line, which every reading of it answers the same way.
+     *
+     * <p>Not the origin. A reading carries which reading of the rule drew its line — a comparison
+     * inside a helper carries the call it was read through — and a point read at two positions has
+     * as many of those as it has readings, so a point that held one would name whichever the walk
+     * met first. What a reader is shown is where the rule is written or what it is called
+     * ({@link souther.compiler.partition.BorderLocus}), and that is the same at all of them.
+     *
+     * <p>Checked and not folded, for the reason the demand is: a pair that disagrees says the two
+     * are not one point, and picking one would send a reader to a rule they were not told about.
+     */
+    private static souther.compiler.partition.BorderLocus foundAt(
+            BorderObligationPoint point, List<BorderAssessment> readings) {
+        souther.compiler.partition.BorderLocus found =
+                souther.compiler.partition.BorderLocus.of(readings.get(0).border().origin());
+        for (BorderAssessment reading : readings) {
+            souther.compiler.partition.BorderLocus also =
+                    souther.compiler.partition.BorderLocus.of(reading.border().origin());
+            if (!found.equals(also)) {
+                throw new IllegalStateException("two readings of one point are found in different"
+                        + " places, so they are not one point: " + point + " at " + found + " by "
+                        + readings.get(0).border().cut().named() + " and at " + also + " by "
+                        + reading.border().cut().named());
+            }
+        }
+        return found;
     }
 
     /**
