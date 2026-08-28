@@ -3030,7 +3030,9 @@ public final class Adequacy {
                                 .LinkageFailed(behavior)));
             }
             return Answer.of(new Filling(composed, offeredHere(behavior, edges),
-                    dispositions(owed, edges, composed, spec)));
+                    dispositions(owed,
+                            generatedForDeclarationsOf(db, name, new GenerationScope.Module()),
+                            composed, spec)));
         }
 
         /**
@@ -3054,7 +3056,7 @@ public final class Adequacy {
          * compile until somebody has said which of the four it is.
          */
         private static List<GenerationDisposition> dispositions(List<Finding> findings,
-                                                      List<BorderAssessment> edges,
+                                                      BorderAccount account,
                                                       souther.compiler.partition.FillResult composed,
                                                       Hir.SpecBehavior spec) {
             List<GenerationDisposition> out = new ArrayList<>();
@@ -3063,7 +3065,11 @@ public final class Adequacy {
                 out.add(new GenerationDisposition(finding, itemOf(finding, composed, spec),
                         none != null ? none
                         : switch (finding.about()) {
-                            case About.APointOfABorder(var point) -> atEdge(finding, point, edges);
+                            // Asked of the module's account, which is where a row for a point is
+                            // searched for. Read off this behavior's own attempt at the place it
+                            // met the line, the answer would be one reading's — and a point read at
+                            // two positions has as many of those as it has readings.
+                            case About.APointOfABorder(var point) -> account.outcomeAt(point.owed());
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                                     atCase(input, missing, composed, spec);
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
@@ -3261,66 +3267,6 @@ public final class Adequacy {
                         new GenerationOutcome.Generated(List.of(composed.rowFor(built.row())));
                 case souther.compiler.partition.ClassDisposition.Unresolved none ->
                         new GenerationOutcome.CannotGenerate(none.why());
-            };
-        }
-
-        /**
-         * The edge's own attempt, read off what the assessment already made.
-         *
-         * <p>Nothing is built here, and nothing is worked out from the verdict either. The attempt
-         * says what happened; this reads it. Reading it back off {@link BorderAssessment#writability()}
-         * would lose the case that matters most to an author — an edge the projection proves is
-         * writable and the search could not produce a row for — which came out as a verdict of
-         * "provable" with nothing said about the row that never appeared.
-         *
-         * <p>The point is the finding's own; what a search made of it is taken from the search this
-         * asked for. The two are readings of one behavior's lines and the finding's is the older of
-         * them — a report composes nothing unless the build asked it to, and a generation asks for
-         * the values whatever the report did — so the attempt is read where it exists rather than
-         * off a reading that predates it.
-         *
-         * <p>Which point, asked with the line itself ({@link BorderAssessment#owedAt}). A finding
-         * used to carry a copy of the axis, the value, the rule and the role and this matched that
-         * copy back three fields deep, which does not identify a point: several rules can draw a
-         * line at one value. A border is a value, and two lines that are equal are one line.
-         */
-        private static GenerationOutcome atEdge(Finding gap, OwedBoundaryPoint point,
-                                                List<BorderAssessment> searched) {
-            // Of whichever of the border's four points the finding is about. Which of them a build
-            // refuses over is the criterion's answer and the loop above has already asked it; asking
-            // again here — and this used to answer that only the two against the line can be gaps —
-            // is a second criterion, and it said the impossible about the two a build held to
-            // reliable domain coverage refuses over.
-            String subject = point.said();
-            if (!(BorderAssessment.owedAt(searched, point.line(), point.role())
-                    instanceof ItemAssessment.Owed owed)) {
-                // A gap was found at a point nobody is owed a row at, which is the finding and
-                // the assessment disagreeing about the same border rather than a row that could
-                // not be generated.
-                throw new IllegalStateException("a gap at a point nothing owes: " + gap);
-            }
-            return switch (owed.attempt()) {
-                case ItemAssessment.Attempt.Built built ->
-                        new GenerationOutcome.Generated(List.of(built.row()));
-                case ItemAssessment.Attempt.Unresolved why ->
-                        new GenerationOutcome.CannotGenerate(why.why());
-                // Classes that were not there is a thing this saw, said in the words the
-                // generator says it in. Classes that would not link used to be beside it and is
-                // not: it is found by running a candidate the region search had already produced,
-                // so it arrives above as a search that came to nothing, in the same words this
-                // was rebuilding here.
-                //
-                case ItemAssessment.Attempt.Unavailable _ ->
-                        new GenerationOutcome.CannotGenerate(
-                                new Generator.UnresolvedCombination(List.of(subject),
-                                        Generator.UnresolvedCombination.Reason
-                                                .NOTHING_TO_BUILD_AGAINST));
-                // No attempt at all, at a point a finding says is a gap. Generation asks for the
-                // search, and the search answers at every point the measurement says is worth one —
-                // so arriving here is the finding and the assessment disagreeing about the same
-                // border rather than anything about generating a row.
-                case null -> throw new IllegalStateException("nothing was searched for at "
-                        + subject + ", which the finding says is a gap: " + gap);
             };
         }
 

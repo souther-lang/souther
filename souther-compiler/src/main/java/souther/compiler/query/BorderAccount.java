@@ -267,24 +267,47 @@ public record BorderAccount(GenerationScope scope,
                 continue;   // a line this request was not put a question about
             }
             BorderObligationPoint at = debt.point();
-            Answer answer = resolved.get(at);
-            if (answer == null) {
-                throw new IllegalStateException(
-                        "a finding about a line this generation was asked about and holds no answer"
-                                + " for: " + at);
-            }
             out.add(new Adequacy.GenerationDisposition(finding,
-                    java.util.Optional.of(new OfferItem.APointOfALine(at)),
-                    switch (answer.resolution()) {
-                case PointResolution.Generated(var _, var row) ->
-                        new GenerationOutcome.Generated(List.of(row));
-                case PointResolution.Unresolved _ -> cannot(unmet(answer));
-                case PointResolution.NoSearch(var cause) -> throw new IllegalStateException(
-                        "a finding at a point nothing was looked for at, which the measurement says"
-                                + " needs nothing looked for: " + at + " " + cause);
-            }));
+                    java.util.Optional.of(new OfferItem.APointOfALine(at)), outcomeAt(at)));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * What a generation can do about the point at {@code at}.
+     *
+     * <p>The one reading of a resolution as an outcome, whoever owes the point. A row a search
+     * composed is the row that answers it; a search that composed none says what every reading of
+     * the point came to; and a point the measurement says needs nothing looked for is not one a
+     * finding stands at.
+     *
+     * <p>Refused rather than answered where this holds no resolution, or holds one saying no search
+     * was called for. A finding stands where the point was measured and missed and something showed
+     * a row can be written there, so either is the finding and the account disagreeing about one
+     * point — and a caller that quietly passed over it would leave an author told nothing while the
+     * rows beside it read as though they filled everything.
+     */
+    GenerationOutcome outcomeAt(BorderObligationPoint at) {
+        Answer answer = resolved.get(at);
+        if (answer == null) {
+            throw new IllegalStateException(
+                    "a finding about a line this generation was asked about and holds no answer"
+                            + " for: " + at);
+        }
+        return switch (answer.resolution()) {
+            case PointResolution.Generated(var _, var row) ->
+                    new GenerationOutcome.Generated(List.of(row));
+            case PointResolution.Unresolved _ -> cannot(unmet(answer));
+            case PointResolution.NoSearch(var cause) -> throw new IllegalStateException(
+                    "a finding at a point nothing was looked for at, which the measurement says"
+                            + " needs nothing looked for: " + at + " " + cause);
+        };
+    }
+
+    /** Whether this account holds an answer at {@code at}, for a caller that has findings from
+     *  beyond what this request asked about. */
+    boolean holds(BorderObligationPoint at) {
+        return resolved.containsKey(at);
     }
 
     /**
