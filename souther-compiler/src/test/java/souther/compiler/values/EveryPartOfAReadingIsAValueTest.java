@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,35 +32,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryPartOfAReadingIsAValueTest {
 
-    /** A part of a reading that something could be put into after the fact, and one for its maker
-     *  to still be holding. */
-    private record Handed(Object given, Object mutable) {}
-
     /**
-     * Something to hand over for one part, and one for its maker to keep hold of.
+     * A value to hand over, and every way its maker is still able to write into what it is made of.
      *
-     * <p>Only the parts something can be put into afterwards have a second half. What the whole
-     * thing is for is that the reading copied what it was handed, and there is nothing to copy
-     * about a value.
+     * <p>The writes are a list because the value is a tree. A part of a reading is a map of
+     * something to something, and a maker holding the map holds whatever is inside it as well — so
+     * a reading that copied the map and kept the caller's lists is one whose {@code equals} still
+     * moves after it was compared, and a pair naming one mutable thing has nowhere to say so.
+     *
+     * <p>Which is not hypothetical. The reasons a position was left standing with became a list
+     * inside a map, and the copy of the inner one could be deleted with every test here passing.
      */
-    private static Handed sampleFor(java.lang.reflect.Type declared) {
-        Class<?> type = erased(declared);
-        if (Map.class.isAssignableFrom(type)) {
-            Map<Object, Object> out = new LinkedHashMap<>();
-            out.put(sample(held(declared, 0)), sample(held(declared, 1)));
-            return new Handed(out, out);
-        }
-        if (Collection.class.isAssignableFrom(type)) {
-            Collection<Object> out = Set.class.isAssignableFrom(type)
-                    ? new LinkedHashSet<>() : new ArrayList<>();
-            out.add(sample(held(declared, 0)));
-            return new Handed(out, out);
-        }
-        return new Handed(sample(declared), null);
-    }
+    private record Sample(Object value, List<Runnable> writes) {}
 
     /**
-     * A value of whatever {@code declared} is, read as the shape it is declared to be.
+     * A value of whatever {@code declared} is, read as the shape it is declared to be, and every
+     * way its maker could write into it afterwards.
      *
      * <p>Recursive over the declared type and not a table of the shapes met so far. A part of a
      * reading is a map of something to something, and what those are is part of what the part is —
@@ -70,40 +56,61 @@ class EveryPartOfAReadingIsAValueTest {
      * unasked while the failure reads as this test's own. That happened once for the erased type
      * and would happen again one argument deeper.
      *
+     * <p>The writes are gathered by the same recursion, so what may be written into is settled
+     * wherever the shape is. Asked afterwards by the test, whether a value is one something can be
+     * put into is a second reading of the same declared type, and the two agree only until one of
+     * them meets a shape the other has not.
+     *
      * <p>A type variable is a position a reading is generic over, and a string stands for one:
      * nothing here reads what a position is, only that two of them are told apart.
      */
-    private static Object sample(java.lang.reflect.Type declared) {
+    private static Sample sample(java.lang.reflect.Type declared) {
         Class<?> type = erased(declared);
         if (Map.class.isAssignableFrom(type)) {
-            return Map.of(sample(held(declared, 0)), sample(held(declared, 1)));
+            Sample key = sample(held(declared, 0));
+            Sample value = sample(held(declared, 1));
+            Map<Object, Object> out = new LinkedHashMap<>();
+            out.put(key.value(), value.value());
+            return new Sample(out, writes(key, value, () -> out.put("z", value.value())));
         }
-        if (Set.class.isAssignableFrom(type)) {
-            return Set.of(sample(held(declared, 0)));
-        }
-        if (List.class.isAssignableFrom(type)) {
-            return List.of(sample(held(declared, 0)));
+        if (Collection.class.isAssignableFrom(type)) {
+            Sample element = sample(held(declared, 0));
+            Collection<Object> out = Set.class.isAssignableFrom(type)
+                    ? new LinkedHashSet<>() : new ArrayList<>();
+            out.add(element.value());
+            return new Sample(out, writes(element, null, () -> out.add("z")));
         }
         if (type == boolean.class) {
-            return false;
+            return new Sample(false, List.of());
         }
         if (type == ValueSet.class) {
-            return ValueSet.just(Value.text("5"));
+            return new Sample(ValueSet.just(Value.text("5")), List.of());
         }
         if (type == UnreadReason.class) {
-            return UnreadReason.FORM_NOT_READ;
+            return new Sample(UnreadReason.FORM_NOT_READ, List.of());
         }
         if (type == AdmissibleValues.Held.class) {
-            return new AdmissibleValues.Held.Alternatives<>(
-                    Set.of(new AdmissibleValues.Box<>(Map.of())));
+            return new Sample(new AdmissibleValues.Held.Alternatives<>(
+                    Set.of(new AdmissibleValues.Box<>(Map.of()))), List.of());
         }
         // A position, which this reading is generic over. What one is is the caller's; that two of
         // them are not the same one is all this needs.
         if (declared instanceof java.lang.reflect.TypeVariable<?> || type == Object.class) {
-            return "a";
+            return new Sample("a", List.of());
         }
         throw new IllegalArgumentException("nothing here knows how to hand over a " + declared
                 + ": a part of a reading was added in a shape this has no sample of");
+    }
+
+    /** What is inside, and this container itself. The inner ones first: a copy that stops at the
+     *  outside passes the last of them and fails the first. */
+    private static List<Runnable> writes(Sample inside, Sample also, Runnable here) {
+        List<Runnable> out = new ArrayList<>(inside.writes());
+        if (also != null) {
+            out.addAll(also.writes());
+        }
+        out.add(here);
+        return out;
     }
 
     /** What {@code declared} holds at argument {@code which}, or {@code Object} where it says. */
@@ -120,16 +127,16 @@ class EveryPartOfAReadingIsAValueTest {
     }
 
     /** Every part of one, and what was handed over for each, in the order the record declares. */
-    private static List<Handed> handedOver(RecordComponent[] parts) {
-        List<Handed> out = new ArrayList<>();
+    private static List<Sample> handedOver(RecordComponent[] parts) {
+        List<Sample> out = new ArrayList<>();
         for (RecordComponent part : parts) {
-            out.add(sampleFor(part.getGenericType()));
+            out.add(sample(part.getGenericType()));
         }
         return out;
     }
 
     @SuppressWarnings("unchecked")
-    private static Object made(Class<?> of, List<Handed> handed) throws Exception {
+    private static Object made(Class<?> of, List<Sample> handed) throws Exception {
         Constructor<?>[] every = of.getDeclaredConstructors();
         Constructor<?> canonical = every[0];
         for (Constructor<?> each : every) {
@@ -137,17 +144,22 @@ class EveryPartOfAReadingIsAValueTest {
                 canonical = each;
             }
         }
-        Object[] args = handed.stream().map(Handed::given).toArray();
+        Object[] args = handed.stream().map(Sample::value).toArray();
         canonical.setAccessible(true);
         return canonical.newInstance(args);
     }
 
     /**
-     * Nothing a reading holds may be added to once it has been made.
+     * Nothing a reading holds may be changed once it has been made.
      *
      * <p>Both halves, because one of them alone is passed by a copy that was wrapped and by a wrap
      * that was not copied: what comes out refuses to be written to, and what the maker kept is no
      * longer the same thing.
+     *
+     * <p>The second half is asked of every way the maker could still write, and not of the
+     * outermost one. A part is a map of something to something, so a maker holding the map holds
+     * whatever is inside it too — and a reading that copied the map and kept the caller's lists
+     * passes a check that only ever writes into the map.
      */
     @Test
     void nothingAReadingHoldsMayBeChangedAfterItIsMade() throws Exception {
@@ -160,17 +172,24 @@ class EveryPartOfAReadingIsAValueTest {
                     && !Map.class.isAssignableFrom(part.getType())) {
                 continue;
             }
-            List<Handed> handed = handedOver(parts);
+            List<Sample> handed = handedOver(parts);
             Object reading = made(AdmissibleValues.class, handed);
             Object held = part.getAccessor().invoke(reading);
 
             assertThrows(UnsupportedOperationException.class, () -> add(held),
                     part.getName() + " may be written to after the reading was made");
 
-            Object stillTheirs = handed.get(i).mutable();
-            add(stillTheirs);
-            assertNotEquals(stillTheirs, part.getAccessor().invoke(reading),
-                    part.getName() + " is the map its maker was holding, and moves when they write");
+            // What it holds, before its maker writes anything. As words, because what is being
+            // asked is whether anything inside moved: a value compared with itself is equal to
+            // itself however far in it changed.
+            String said = String.valueOf(held);
+            List<Runnable> writes = handed.get(i).writes();
+            assertTrue(!writes.isEmpty(), part.getName() + " is a part with nothing to write into");
+            for (Runnable write : writes) {
+                write.run();
+                assertEquals(said, String.valueOf(part.getAccessor().invoke(reading)),
+                        part.getName() + " moved when the maker wrote into what it was made of");
+            }
         }
     }
 
