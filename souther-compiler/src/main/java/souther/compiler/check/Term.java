@@ -38,36 +38,41 @@ import java.util.Map;
 final class Term {
 
     /** How a term is built. What a shape means is what {@link Terms} builds it for; this says only
-     * which shapes are told apart. */
+     * which shapes are told apart, and what each carries beside its parts ({@link Payload}). */
     enum Shape {
         /** A place: a binding and the fields read from it. */
-        AT,
+        AT(Payload.of(Location.class)),
         /** A parameter of a closure, named by where it is bound rather than by which binding it is. */
-        BOUND,
+        BOUND(Payload.of(At.class)),
         /** Fields read off a term that is not a place. */
-        ON,
-        INT, DECIMAL, STRING, BOOL, UNIT,
+        ON(Payload.listOf(Payload.of(String.class))),
+        INT(Payload.of(Long.class)),
+        DECIMAL(Payload.of(BigDecimal.class)),
+        STRING(Payload.of(String.class)),
+        BOOL(Payload.of(Boolean.class)),
+        UNIT(Payload.of(TypeSymbol.class)),
         /** Arithmetic negation. */
-        NEG,
+        NEG(Payload.none()),
         /** The denial of a condition. */
-        NOT,
+        NOT(Payload.none()),
         /** An {@code ==}, whose two parts are unordered. */
-        EQ,
+        EQ(Payload.none()),
         /** Any other operator, over its two operands in the order written. */
-        OP,
-        LIST, TUPLE,
+        OP(Payload.of(BinOp.class)),
+        LIST(Payload.none()),
+        TUPLE(Payload.none()),
         /** One element of a tuple, by index. */
-        PART,
+        PART(Payload.of(Integer.class)),
         /** A conditional, over its condition and its two branches. */
-        CHOICE,
+        CHOICE(Payload.none()),
         /** A closure, over the number of parameters it binds and its body. */
-        CLOSURE,
+        CLOSURE(Payload.of(Integer.class)),
         /** A value bound and a body read under it. */
-        LET,
+        LET(Payload.none()),
         /** A construction, over the values its fields are given in declaration order. */
-        BUILT,
+        BUILT(Payload.of(Built.class)),
         /** A call, over its arguments. */
-        CALLED,
+        CALLED(Payload.of(ValueName.class)),
         /**
          * One evaluation, told apart from every other by the { EvaluationId} it holds and not by
          * anything about its shape.
@@ -78,9 +83,9 @@ final class Term {
          * built over it composes. { length(E)} written twice is one term because { CALLED}
          * interns over its children and the child is the one atom both times.
          */
-        EVALUATION,
+        EVALUATION(Payload.of(EvaluationId.class)),
         /** A value given to an optional position. */
-        SOME,
+        SOME(Payload.none()),
         /**
          * What a present optional holds, read where an arm has opened one.
          *
@@ -89,9 +94,9 @@ final class Term {
          * read out of, so this is that one case and nothing more general. Everything else a
          * {@code match} opens binds the value it was given.
          */
-        HELD,
+        HELD(Payload.none()),
         /** The empty optional, at the type of the position it fills. */
-        NONE,
+        NONE(Payload.of(souther.compiler.types.Type.class)),
         /**
          * The value one case of a union carries, over the value that union is.
          *
@@ -107,7 +112,7 @@ final class Term {
          * is {@code a / b} and is one term with the written divide (spec
          * §invariant-discharge-arithmetic).
          */
-        OPENED,
+        OPENED(Payload.of(souther.compiler.types.Type.class)),
         /**
          * A value a walk hands its step, read where that walk is being proved about.
          *
@@ -120,11 +125,58 @@ final class Term {
          * <p>And by the walk, not only by the position: two walks in one body each hand their step an
          * accumulator, and they are two values.
          */
-        HANDED,
+        HANDED(Payload.of(Integer.class)),
         /** A value opened, over the scrutinee and each arm's body. */
-        MATCHED,
+        MATCHED(Payload.listOf(Payload.listOf(Payload.of(TypeSymbol.class)))),
         /** An attempted construction, over what it builds and what each of its departures answers. */
-        ATTEMPTED
+        ATTEMPTED(Payload.listOf(Payload.of(String.class)));
+
+        private final Payload payload;
+
+        Shape(Payload payload) {
+            this.payload = payload;
+        }
+
+        /** What a term of this shape carries beside its parts. */
+        Payload payload() {
+            return payload;
+        }
+    }
+
+    /**
+     * What a shape carries beside its parts, said as something a walk can read.
+     *
+     * <p>Written here because {@link #of} is an {@code Object} and an {@code Object} states nothing:
+     * a hash taken of one is taken of whatever that value's own class does, and the values a term is
+     * made of have to be values for the hash to be one. So the shapes say what they carry, and
+     * {@link #hashOf} says how each kind of thing is taken — the two together are what makes the
+     * whole of a term's hash a function of the term.
+     *
+     * <p>A list says what its elements are rather than being one class, since a class does not carry
+     * its element type and an element is where the walk would otherwise stop.
+     */
+    sealed interface Payload {
+
+        /** A shape whose parts are the whole of it. */
+        record Nothing() implements Payload {}
+
+        /** A value of {@code type}, or of one of the types {@code type} permits. */
+        record OfType(Class<?> type) implements Payload {}
+
+        /** A list of {@code element}. */
+        record OfList(Payload element) implements Payload {}
+
+        static Payload none() {
+            return new Nothing();
+        }
+
+        static Payload of(Class<?> type) {
+            return new OfType(type);
+        }
+
+        static Payload listOf(Payload element) {
+            return new OfList(element);
+        }
     }
 
     /** What a shape holds beside its parts: a location, a written value, an operator, the name of an
@@ -147,11 +199,164 @@ final class Term {
      */
     private static final int MIX = 0x9E3779B1;
 
+    /**
+     * How the value under a payload is taken into a term's hash.
+     *
+     * <p>Asked of a class rather than written into one switch body, so that the walk which proves the
+     * payload types are all taken by value reads the same answer the hash reads. A rule stated in a
+     * place a test cannot ask is a rule a test can only copy.
+     */
+    enum Rule {
+        /** Its own hash, which for such a class is a function of the value. */
+        ITS_OWN_HASH,
+        /** Its name: an enum constant's own hash is its identity and is drawn afresh each run. */
+        AN_ENUM_BY_NAME,
+        /** Each of its record components, in the order they are declared. */
+        ITS_COMPONENTS,
+        /** Each of its elements, in order. */
+        ITS_ELEMENTS,
+        /** Nothing here takes a value of this class. */
+        NONE_HERE
+    }
+
+    /** A class the platform hashes by what the value is. */
+    private static final java.util.Set<Class<?>> SCALARS = java.util.Set.of(
+            String.class, Long.class, Integer.class, Boolean.class, BigDecimal.class,
+            Short.class, Byte.class, Character.class, Double.class, Float.class);
+
+    private static final ClassValue<Rule> RULES = new ClassValue<>() {
+
+        @Override
+        protected Rule computeValue(Class<?> type) {
+            return ruleOf(type);
+        }
+    };
+
+    /** How a value of {@code type} is taken. */
+    static Rule ruleFor(Class<?> type) {
+        return RULES.get(type);
+    }
+
+    private static Rule ruleOf(Class<?> type) {
+        if (Enum.class.isAssignableFrom(type)) {
+            return Rule.AN_ENUM_BY_NAME;
+        }
+        if (SCALARS.contains(type)) {
+            return Rule.ITS_OWN_HASH;
+        }
+        if (List.class.isAssignableFrom(type)) {
+            return Rule.ITS_ELEMENTS;
+        }
+        if (type.isRecord()) {
+            // A record given its equality holds it over everything it carries, so its components are
+            // what it is. One stating an equality of its own holds it over some of what it carries,
+            // and taking the rest in would give two equal values two hashes.
+            return statesAnEqualityOfItsOwn(type) ? Rule.ITS_OWN_HASH : Rule.ITS_COMPONENTS;
+        }
+        return statesAnEqualityOfItsOwn(type) ? Rule.ITS_OWN_HASH : Rule.NONE_HERE;
+    }
+
+    /**
+     * Whether {@code type} answers which two of it are one, rather than leaving the answer to what
+     * it is made of or to which object it is.
+     *
+     * <p>Read off the modifier, since the equality a record is given is final and one written by
+     * hand is not. What it decides is who is taken at their word: a type stating an equality states
+     * a hash to go with it, and this hash algebra takes that hash. A type stating none is either a
+     * record, and is what it holds, or is told apart by which object it is — which is drawn afresh
+     * each run and is what nothing here may be hashed from.
+     */
+    private static boolean statesAnEqualityOfItsOwn(Class<?> type) {
+        for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+            if (method.getName().equals("hashCode") && method.getParameterCount() == 0) {
+                return !java.lang.reflect.Modifier.isFinal(method.getModifiers());
+            }
+        }
+        return false;
+    }
+
+    /** How each of a record's components is read, worked out once for the class. */
+    private static final ClassValue<java.lang.invoke.MethodHandle[]> ACCESSORS = new ClassValue<>() {
+
+        @Override
+        protected java.lang.invoke.MethodHandle[] computeValue(Class<?> type) {
+            java.lang.reflect.RecordComponent[] components = type.getRecordComponents();
+            java.lang.invoke.MethodHandle[] accessors =
+                    new java.lang.invoke.MethodHandle[components.length];
+            java.lang.invoke.MethodHandles.Lookup lookup = java.lang.invoke.MethodHandles.lookup();
+            for (int i = 0; i < components.length; i++) {
+                java.lang.reflect.Method accessor = components[i].getAccessor();
+                accessor.setAccessible(true);
+                try {
+                    accessors[i] = lookup.unreflect(accessor)
+                            .asType(java.lang.invoke.MethodType.methodType(
+                                    Object.class, Object.class));
+                } catch (IllegalAccessException e) {
+                    throw new IllegalStateException("a " + type.getName() + " does not answer "
+                            + accessor.getName(), e);
+                }
+            }
+            return accessors;
+        }
+    };
+
+    /**
+     * The hash of a value a shape carries, which is a function of that value and of nothing else.
+     *
+     * <p>The one place a term's hash meets something that is not a term. What is wanted of it is not
+     * a good hash but a hash of the value: {@code Object.hashCode} tells an object from every other
+     * and says nothing about what it holds, and on HotSpot the number it answers is drawn from a
+     * sequence held per thread — so a term hashed through one is hashed by when its class was first
+     * asked, which is a fact about the run and not about the program. An enum is that case wearing a
+     * value's clothes, since {@code Enum.hashCode} is {@code Object}'s and cannot be replaced.
+     *
+     * <p>What is refused is refused here rather than left to answer wrongly. A payload nothing above
+     * knows how to take is a shape carrying something this algebra was never extended to, and the
+     * only thing it could do quietly is hash it by its identity.
+     */
+    static int hashOf(Object value) {
+        if (value == null) {
+            return 0;
+        }
+        Class<?> type = value.getClass();
+        return switch (ruleFor(type)) {
+            case ITS_OWN_HASH -> value.hashCode();
+            case AN_ENUM_BY_NAME -> ((Enum<?>) value).name().hashCode();
+            case ITS_COMPONENTS -> componentsOf(value, type);
+            case ITS_ELEMENTS -> elementsOf((List<?>) value);
+            case NONE_HERE -> throw new IllegalStateException(
+                    "nothing says what a term hashed from a " + type.getName() + " is hashed from");
+        };
+    }
+
+    /** Which record it is and what it holds. The class is taken in because two records holding alike
+     *  are two values, and a term carrying either is told apart by nothing else here. */
+    private static int componentsOf(Object value, Class<?> type) {
+        int h = type.getName().hashCode();
+        for (java.lang.invoke.MethodHandle accessor : ACCESSORS.get(type)) {
+            try {
+                h = h * MIX + hashOf((Object) accessor.invokeExact(value));
+            } catch (Throwable e) {
+                throw new IllegalStateException("a " + type.getName() + " does not answer one of"
+                        + " what it holds", e);
+            }
+        }
+        return h;
+    }
+
+    private static int elementsOf(List<?> values) {
+        int h = values.size();
+        for (Object value : values) {
+            h = h * MIX + hashOf(value);
+        }
+        return h;
+    }
+
     private Term(Shape shape, Object of, List<Term> parts) {
         this.shape = shape;
         this.of = of;
         this.parts = List.copyOf(parts);
-        int h = shape.hashCode() * MIX + (of == null ? 0 : of.hashCode());
+        int h = hashOf(shape) * MIX + hashOf(of);
         h = h * MIX + this.parts.size();
         if (shape == Shape.EQ) {
             // an equality is between two values and not from one to the other

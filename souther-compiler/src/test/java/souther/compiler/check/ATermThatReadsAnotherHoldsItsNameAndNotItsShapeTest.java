@@ -122,6 +122,24 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
         assertNotEquals(four, five, "and two shapes are two");
     }
 
+    /** How many places a table holding a thousand and one of these has, and how it reads a hash into
+     *  one: what {@link java.util.HashMap} does, since it is the table this is held for. */
+    private static final int PLACES = 2048;
+
+    /** How many of the chain's terms fall in the fullest place of that table. */
+    private static int longestBucket(List<Term> along) {
+        int[] held = new int[PLACES];
+        for (Term term : along) {
+            int hash = term.hashCode();
+            held[(hash ^ (hash >>> 16)) & (PLACES - 1)]++;
+        }
+        int longest = 0;
+        for (int count : held) {
+            longest = Math.max(longest, count);
+        }
+        return longest;
+    }
+
     /**
      * This chain does not hash into one bucket.
      *
@@ -134,8 +152,14 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
      * distinct, and only the table holding them turns into a list. A thousand links took 8.7 seconds
      * where a hundred took 20 milliseconds.
      *
-     * <p>Held as a spread and not as a time, since a time is a fact about the machine. A mixing that
-     * ties a few of these together is not this defect; one that ties most of them together is.
+     * <p>Held on the fullest place of the table rather than on how many hashes there are. What made
+     * the lookup a walk is a place holding the family, and the two are not the same measurement:
+     * that collapse put 997 of the thousand in one place, while a family spread over 84% of its
+     * hashes still fills its fullest place seven deep, which is what an evenly spread thousand into
+     * two thousand places does anyway. Counting hashes both passes a hash whose low bits agree and
+     * fails one that is perfectly good.
+     *
+     * <p>Held as places and not as a time, since a time is a fact about the machine.
      */
     @Test
     void theChainDoesNotHashIntoOneBucket() {
@@ -145,8 +169,12 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
         along.forEach(term -> hashes.add(term.hashCode()));
 
         assertEquals(1001, terms.size(), "a thousand links are a thousand terms");
-        assertTrue(hashes.size() > terms.size() * 0.9,
-                "and they are spread over hashes: " + hashes.size() + " of " + terms.size());
+        // Sixteen: the collapse filled a place 997 deep and this family fills one 6 deep, which is
+        // what a thousand spread evenly over two thousand places comes to. A bound between them
+        // holds the difference and lets the hash change without saying so.
+        assertTrue(longestBucket(along) <= 16, "and no place of the table holds many of them: "
+                + longestBucket(along) + " at the fullest, over " + hashes.size() + " of "
+                + terms.size() + " distinct hashes");
     }
 
     /**
