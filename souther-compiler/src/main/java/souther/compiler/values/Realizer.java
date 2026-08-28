@@ -1,8 +1,6 @@
 package souther.compiler.values;
 
-import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
-import souther.compiler.regex.PatternPlan;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -54,9 +52,7 @@ final class Realizer {
         return switch (plan) {
             case AdmittedPlan.Everything _ -> new Realization.Exact(ValueSet.ANY);
             case AdmittedPlan.Nothing _ -> new Realization.Exact(ValueSet.NONE);
-            case AdmittedPlan.Written it -> new Realization.Exact(it.set());
-            case AdmittedPlan.Accepting it -> language(PatternPlan.of(it.syntax()));
-            case AdmittedPlan.Refusing it -> language(everyString().less(PatternPlan.of(it.syntax())));
+            case AdmittedPlan.Of it -> new Realization.Exact(it.set());
             case AdmittedPlan.Both it -> met(it.parts());
             case AdmittedPlan.Either it -> joined(it.parts());
         };
@@ -76,7 +72,7 @@ final class Realizer {
         List<AdmittedPlan> rest = new ArrayList<>();
         ValueSet written = null;
         for (AdmittedPlan each : parts) {
-            if (each instanceof AdmittedPlan.Written it) {
+            if (each instanceof AdmittedPlan.Of it && it.isFree()) {
                 written = written == null ? it.set() : Sets.metPlainly(written, it.set());
             } else {
                 rest.add(each);
@@ -166,22 +162,7 @@ final class Realizer {
         return outcome(Sets.joinedUnder(one, other, meter));
     }
 
-    private Realization language(PatternPlan plan) {
-        Language made = plan.compile(meter);
-        return made == null ? new Realization.TooCostly()
-                : new Realization.Exact(ValueSet.matching(made));
-    }
-
     private static Realization outcome(ValueSet made) {
         return made == null ? new Realization.TooCostly() : new Realization.Exact(made);
-    }
-
-    /** Every string there is, as a plan to take one away from. Written as the symbols and not as a
-     *  dot, which leaves out the five line terminators. */
-    private static PatternPlan everyString() {
-        return PatternPlan.of(new souther.compiler.regex.PatternSyntax.Repeated(
-                new souther.compiler.regex.PatternSyntax.Symbols(
-                        souther.compiler.regex.CodePoints.EVERYTHING),
-                0, souther.compiler.regex.PatternSyntax.Repeated.NO_CEILING));
     }
 }

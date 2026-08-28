@@ -128,7 +128,7 @@ public sealed interface PlannedValues<A> {
                 // something stands in. Anywhere else the answer waits.
                 case PlannedHeld.Alternatives<A> boxes -> boxes.boxes().stream()
                         .anyMatch(box -> box.at().values().stream()
-                                .allMatch(plan -> plan instanceof AdmittedPlan.Written
+                                .allMatch(plan -> plan instanceof AdmittedPlan.Of
                                         || plan instanceof AdmittedPlan.Everything))
                         ? Emptiness.NONEMPTY : Emptiness.UNDECIDED;
             };

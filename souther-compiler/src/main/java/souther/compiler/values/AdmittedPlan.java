@@ -1,7 +1,5 @@
 package souther.compiler.values;
 
-import souther.compiler.regex.PatternSyntax;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -48,47 +46,28 @@ public sealed interface AdmittedPlan {
     record Nothing() implements AdmittedPlan {}
 
     /**
-     * A set the rules wrote out: these values, or every value but these.
+     * A set one rule says the position admits, worked out already.
      *
-     * <p>One arm for both, because what tells them apart is a question the set answers and not a
-     * step this has to plan. Neither costs anything to put together with anything else — the values
-     * are in hand, and asking a language whether it holds one of finitely many is a walk over that
-     * value.
+     * <p>Every leaf is one of these, and every one of them exists: the values an equality names,
+     * the values a denial leaves, the strings a pattern accepts. What a rule could not be turned
+     * into at all — a pattern outside the subset this reads, or one whose own machine is more than
+     * a rule is allowed — never becomes a leaf, and is stopped where the rule is read. So a failure
+     * here is always about the answer and never about one of the rules, which is the difference a
+     * reader is owed and the difference this arrangement is for.
      */
-    record Written(ValueSet set) implements AdmittedPlan {
+    record Of(ValueSet set) implements AdmittedPlan {
 
-        public Written {
+        public Of {
             if (set == null || set.isAny() || set.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "everything and nothing are said as themselves, not as a written set");
-            }
-            // A language is not one of these, and that is what makes them free. What a pattern
-            // admits is `Accepting`, which is a thing to build; these are values the rules wrote
-            // down, and two of them are put together by looking at what is in them.
-            if (set instanceof ValueSet.Matching) {
-                throw new IllegalArgumentException(
-                        "a language is a plan to build and not a set the rules wrote out");
+                        "everything and nothing are said as themselves, not as a set of their own");
             }
         }
-    }
 
-    /** The strings a pattern accepts, which is the one thing here that has to be built. */
-    record Accepting(PatternSyntax syntax) implements AdmittedPlan {
-
-        public Accepting {
-            if (syntax == null) {
-                throw new IllegalArgumentException("a pattern is some syntax");
-            }
-        }
-    }
-
-    /** The strings a pattern does not accept. */
-    record Refusing(PatternSyntax syntax) implements AdmittedPlan {
-
-        public Refusing {
-            if (syntax == null) {
-                throw new IllegalArgumentException("a pattern is some syntax");
-            }
+        /** Whether putting this together with something costs nothing, which is what the values a
+         *  rule wrote out do. A language is the other kind. */
+        boolean isFree() {
+            return !(set instanceof ValueSet.Matching);
         }
     }
 
@@ -127,7 +106,7 @@ public sealed interface AdmittedPlan {
         if (set.isAny()) {
             return ANY;
         }
-        return set.isEmpty() ? NONE : new Written(set);
+        return set.isEmpty() ? NONE : new Of(set);
     }
 
     /**
@@ -149,7 +128,10 @@ public sealed interface AdmittedPlan {
                     return NONE;
                 }
                 case Everything _ -> { }
-                case Written it -> written = written == null ? it.set()
+                // Two sets the rules wrote out are met here, since that costs nothing and leaves
+                // less to build. A language is not folded in: putting one together with anything is
+                // a machine, and where that happens is under an allowance.
+                case Of it when it.isFree() -> written = written == null ? it.set()
                         : Sets.metPlainly(written, it.set());
                 default -> out.add(each);
             }
@@ -159,7 +141,7 @@ public sealed interface AdmittedPlan {
                 return NONE;
             }
             if (!written.isAny()) {
-                out.add(new Written(written));
+                out.add(new Of(written));
             }
         }
         return one(out, true);
@@ -175,7 +157,7 @@ public sealed interface AdmittedPlan {
                     return ANY;
                 }
                 case Nothing _ -> { }
-                case Written it -> written = written == null ? it.set()
+                case Of it when it.isFree() -> written = written == null ? it.set()
                         : Sets.joinedPlainly(written, it.set());
                 default -> out.add(each);
             }
@@ -185,7 +167,7 @@ public sealed interface AdmittedPlan {
                 return ANY;
             }
             if (!written.isEmpty()) {
-                out.add(new Written(written));
+                out.add(new Of(written));
             }
         }
         return one(out, false);
