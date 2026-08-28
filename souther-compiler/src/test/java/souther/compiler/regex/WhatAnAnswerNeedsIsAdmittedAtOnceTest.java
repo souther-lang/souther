@@ -46,6 +46,41 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
         assertEquals("T0000000000000", one.some());
     }
 
+    /**
+     * A value somebody can paste is a different question from a string the language holds.
+     *
+     * <p>{@link Language#some} answers with what the language holds, preferring a written string
+     * where one is no longer; {@link Language#someWritten} refuses to answer with anything else. A
+     * caller writing a value into a model wants the second — a row carrying a control character is
+     * not a row anybody can read back — and one deciding whether a language is empty wants the
+     * first.
+     *
+     * <p>The two come apart exactly where every string a language holds is one a source cannot
+     * carry, which is what the third of these is.
+     */
+    @Test
+    void whatCanBeWrittenIsAskedApartFromWhatIsHeld() {
+        String one = String.valueOf((char) 1);
+
+        assertEquals("a", language("[a-z]").some());
+        assertEquals("a", language("[a-z]").someWritten());
+
+        // Shorter and unwritable beside longer and writable: what it holds is the short one, and
+        // what can be written is the long one.
+        Language either = language("[\\x{1}]|abc");
+        // Written as a value rather than as itself: a control character pasted into a source is
+        // what this whole question is about, and one sitting in the expectation would be the same
+        // trap in the test.
+        assertEquals(one, either.some());
+        assertEquals("abc", either.someWritten());
+
+        // And a language of nothing else has a string and no value to offer.
+        Language unwritable = language("[\\x{1}-\\x{2}]+");
+        assertEquals(one, unwritable.some());
+        assertNull(unwritable.someWritten(),
+                "every string it holds is one nobody can paste, so there is nothing to write");
+    }
+
     /** And a plan of several is what those several come to. */
     @Test
     void aPlanOfSeveralIsWhatTheyComeTo() {

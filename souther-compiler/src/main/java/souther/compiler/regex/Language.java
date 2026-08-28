@@ -116,6 +116,18 @@ public final class Language {
     }
 
     /**
+     * One string it holds that a source can carry, or null where it holds none such.
+     *
+     * <p>What a caller writing a value into a model wants, which is not {@link #some}. That answers
+     * with what the language holds and prefers a written string where there is one at the same
+     * length; here a string nobody can paste is not an answer, so a language of control characters
+     * has one to offer and none to write.
+     */
+    public String someWritten() {
+        return machine.shortestWritten();
+    }
+
+    /**
      * The same strings and these others, or null past {@code mostStates}.
      *
      * <p>Takes the words themselves rather than a plan. What joining them costs is the words — a

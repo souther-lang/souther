@@ -1515,8 +1515,10 @@ public final class Partitions {
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
                     if (InvariantConstraints.against(symbols).of(each, base).orElse(null)
                             instanceof InvariantConstraints.Pattern format) {
-                        PatternValues.shortestAccepted(format.regex())
-                                .map(FixtureTemplate::string).ifPresent(candidates::add);
+                        String written = writtenFor(format.regex());
+                        if (written != null) {
+                            candidates.add(FixtureTemplate.string(written));
+                        }
                     }
                 }
             }
@@ -1534,6 +1536,29 @@ public final class Partitions {
             once.putIfAbsent(each.text(), each);
         }
         return List.copyOf(once.values());
+    }
+
+    /**
+     * A value a source can carry that {@code regex} accepts, or null where there is none to offer.
+     *
+     * <p>Null three ways, and they are one answer here: a pattern outside the subset this compiler
+     * reads, one whose machine costs more than writing a value is allowed, and one every string of
+     * which is something nobody can paste. What a caller does with each of them is offer no
+     * candidate, so they are not told apart — a row is offered or it is not.
+     *
+     * <p>Read by the one thing here that reads patterns. What this used to have was a reader of its
+     * own, which meant two answers to "what does this pattern accept" and one model where they
+     * could differ.
+     */
+    private static String writtenFor(String regex) {
+        if (!(souther.compiler.regex.PatternParser.read(regex)
+                instanceof souther.compiler.regex.PatternRead.Read read)) {
+            return null;
+        }
+        souther.compiler.regex.Language language = souther.compiler.regex.PatternPlan
+                .of(read.syntax())
+                .compile(souther.compiler.regex.PatternPlan.Budget.OF_A_WITNESS);
+        return language == null ? null : language.someWritten();
     }
 
     /** A count the position holds, or null where it holds none. The ends decide it, so nothing here

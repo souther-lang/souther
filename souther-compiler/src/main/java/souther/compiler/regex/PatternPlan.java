@@ -56,6 +56,19 @@ public final class PatternPlan {
          * not answer.
          */
         public static final Budget OF_ADMITTED_VALUES = new Budget(50_000, 200_000);
+
+        /**
+         * What writing one value out of a pattern is allowed to cost.
+         *
+         * <p>Its own and not the one above, because it bounds a different thing: one pattern,
+         * built to take a string out of, and nothing met with it. A caller here is offering a
+         * value for a row and has no answer to compose — where the allowance runs out it offers
+         * nothing, which is what it does for a pattern it cannot read either.
+         *
+         * <p>The same numbers today, and that is a coincidence rather than a fact. Written as one
+         * constant, the day either question wants a different size the other would move with it.
+         */
+        public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000);
     }
 
     /** What one step of a plan does. */

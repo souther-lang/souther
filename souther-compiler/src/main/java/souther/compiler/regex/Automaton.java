@@ -497,6 +497,19 @@ final class Automaton {
     }
 
     /**
+     * The shortest string it accepts that a source can carry, or null where every string it accepts
+     * is one a source cannot.
+     *
+     * <p>Beside {@link #shortest}, and a different question. That one answers with what the
+     * language holds and prefers a written string at the price of nothing; this one is asked by a
+     * caller writing a value into a model, where a string nobody can paste is not an answer at all.
+     * A pattern admitting only control characters has a shortest string and no value to offer.
+     */
+    String shortestWritten() {
+        return shortest(WRITABLE, -1);
+    }
+
+    /**
      * The symbols a value can be written out of and read back.
      *
      * <p>A control character other than the three a literal spells reaches a source as itself, and
