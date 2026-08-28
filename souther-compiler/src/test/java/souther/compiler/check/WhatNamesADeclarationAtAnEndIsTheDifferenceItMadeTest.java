@@ -18,10 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 /**
  * Which readings a declaration is named by, asked of the readings alone.
  *
- * <p>The counterfactuals are given here rather than read out of a model, so that each question can
- * be put to a set of ends the questions beside it cannot reach. Two of these answers are what the
- * compiler's own models come to; the other two are what the rules say and no model reaches, and a
- * rule nothing observes is a rule the next reader is free to write a different way.
+ * <p>The counterfactuals are stated here rather than read out of a model, so that every answer, and
+ * every rule that tells two of them apart, stays observable where the compiler's own models do not
+ * reach it. A rule nothing observes is a rule the next reader is free to write a different way.
  *
  * <p>Every reading asked for is one this states, so a question put to a set of declarations that is
  * not the set the rule names fails here rather than answering.
