@@ -51,12 +51,15 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("UnreadComparisonDomain", "short/short/UNSUPPORTED_DOMAIN");
         table.put("RuleAboutADerivedValue", "short/short/RULE_ABOUT_A_DERIVED_VALUE");
         table.put("UnreadValueRule", "short/short/UNSUPPORTED_SYNTAX");
-        // Read to the end, every one of them, and the set they leave between them not built. Both
-        // measures are short because both are read off that set: a class is a part of it and an end
-        // is where it stops, so neither knows what it is missing. Its own word and not the one
-        // above — that one sends an author after the form a rule is written in, and here there is
-        // no form to change, since two rules cheap on their own can have an answer that is not.
-        table.put("ExactValuesTooCostly", "short/short/EXACT_VALUES_TOO_COSTLY");
+        // A pattern read to the end and larger than this will make a machine of. Both measures are
+        // short because both are read off the set it names: a class is a part of it and an end is
+        // where it stops. Its own word and not the one above — that one sends an author after the
+        // form their rule is written in, and here the form was read and the rule is simply large.
+        //
+        // What is not here is the answer nobody could work out, which leaves the position short of
+        // the same two things and is not a rule without a line. This table is what a rule leaves,
+        // and that one is not about a rule.
+        table.put("PatternTooCostly", "short/short/EXACT_VALUES_TOO_COSTLY");
         // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
@@ -114,6 +117,16 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // engaged with this one. Not `RULES_NOT_READ_AT_ALL` either, which promises the rule was
         // never arrived at: it was.
         table.put("NoReadingTookItIn", "RULE_NOT_INTERPRETED_HERE");
+        // Here because it is in neither capability, which is the fact rather than an oversight. It
+        // is not a rule without a line — it is about no rule — and it is not a position whose rules
+        // were never reached, since every one of them arrived and was understood. What was not
+        // worked out is what they leave between them.
+        //
+        // One word with `PatternTooCostly` all the same. Out there the two are the same kind of
+        // thing: the values are wider than the rules leave them because working them out was too
+        // much. Which of them it was decides whether a rule can be named, and that is this
+        // compiler's question rather than a promise the document makes.
+        table.put("ExactValuesTooCostly", "EXACT_VALUES_TOO_COSTLY");
         return table;
     }
 
@@ -243,6 +256,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.UnreadValueRule(),
+                new BlockReason.PatternTooCostly(),
                 new BlockReason.ExactValuesTooCostly(),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.CompetingCoordinates(),

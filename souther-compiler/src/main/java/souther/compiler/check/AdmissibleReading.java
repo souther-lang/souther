@@ -161,8 +161,7 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
         // author can act on — the other way a pattern can cost too much is what a position's rules
         // come to between them, and that names no rule and is answered where they are put together.
         return made == null
-                ? PlannedValues.unreadable(Set.of(position),
-                        UnreadReason.EXACT_VALUES_TOO_COSTLY)
+                ? PlannedValues.unreadable(Set.of(position), UnreadReason.PATTERN_TOO_COSTLY)
                 : PlannedValues.at(position, AdmittedPlan.of(made));
     }
 

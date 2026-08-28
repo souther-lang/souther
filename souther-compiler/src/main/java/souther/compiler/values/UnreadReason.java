@@ -46,14 +46,24 @@ public enum UnreadReason {
     ALTERNATIVE_NOT_READ,
 
     /**
+     * One rule about this position names a set of strings, and making the machine for it is more
+     * than this compiler will do.
+     *
+     * <p>About that rule and naming it. A pattern is a machine as big as it is written, so a rule
+     * this refuses is one somebody wrote and could write differently — which is what an author can
+     * act on, and what tells this from the reason below.
+     */
+    PATTERN_TOO_COSTLY,
+
+    /**
      * The rules about this position were read, and the values they leave are more than this
      * compiler will build.
      *
-     * <p>Not a form it has no word for. Every rule that reached here was understood — a pattern was
-     * parsed, an equality was recognised — and what ran out was the allowance for the set they come
-     * to between them ({@link Sets}). Two patterns each small on its own have a meet the size of
-     * their product, so this is a fact about the answer and not about any one of the rules: naming
-     * one of them would tell an author to go and change a rule that is not why.
+     * <p>Not a form it has no word for, and not one of the rules being too large either. Every rule
+     * that reached here was understood and every one of them was turned into the set it names; what
+     * ran out was the allowance for what those sets come to between them. Two patterns each small
+     * on its own have a meet the size of their product, so this is a fact about the answer and
+     * about none of the rules — naming one would tell an author to change a rule that is not why.
      *
      * <p>Widens like the rest. What is left at the position is every value, which is true and is
      * short of what the rules say.

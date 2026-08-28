@@ -1322,6 +1322,8 @@ public final class InputDomain {
         if (admitted.whyPartial() != null) {
             return Crossing.stopped(admitted.whyPartial());
         }
+        // And the same answer where it arrived as a qualification of the set rather than as a rule
+        // left standing, which is how a reading of two declarations records it.
         return admitted.exactValuesTooCostly() ? new BlockReason.ExactValuesTooCostly() : null;
     }
 
