@@ -76,8 +76,69 @@ public final class Language {
         return machine.shortest();
     }
 
+    /**
+     * The same strings and these others.
+     *
+     * <p>Takes the words themselves rather than a plan, and needs no allowance to do it. What it
+     * costs is the words: a set of them is a machine as big as their letters, and joining one to
+     * this is the cheap operation. So a caller holding a language and a handful of values it must
+     * also admit is answered without going back for anything.
+     */
+    public Language with(java.util.Collection<String> words) {
+        return words.isEmpty() ? this : new Language(machine.or(Automaton.ofWords(words)));
+    }
+
+    /** The same strings less these, on the same terms. */
+    public Language without(java.util.Collection<String> words) {
+        return words.isEmpty() ? this
+                : new Language(machine.and(Automaton.ofWords(words).not()));
+    }
+
     /** How many states hold it, which is what a caller answering for its work counts. */
     public int size() {
         return machine.size();
+    }
+
+    /**
+     * Whether the two hold the same strings.
+     *
+     * <p>The strings and not the states. A language is a set, and two patterns that accept the same
+     * strings are one — so a reading run twice over one model has to come to values that are equal,
+     * whatever shape the machines took on the way.
+     *
+     * <p>Asked as neither holding anything the other does not, which is what sameness is and what it
+     * costs. Cheap where the two are the same object, which is what a reading comparing what it just
+     * built with what it had usually has.
+     */
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof Language it)) {
+            return false;
+        }
+        return machine.and(it.machine.not()).isEmpty()
+                && it.machine.and(machine.not()).isEmpty();
+    }
+
+    /**
+     * The same for every language, which is what a set with no cheap canonical form has.
+     *
+     * <p>A value's hash has to agree with its equality, and what makes two languages equal is a
+     * question about their strings — there is no small thing to read off a machine that two equal
+     * languages are bound to share. So they all hash alike and a table holding several of them
+     * compares them; a table holding one, which is what a position's rules come to, does not
+     * notice.
+     */
+    @Override
+    public int hashCode() {
+        return Language.class.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        String some = some();
+        return "language of " + (some == null ? "nothing" : "\"" + some + "\" and such");
     }
 }

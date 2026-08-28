@@ -93,10 +93,7 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
     }
 
     private static boolean holds(ValueSet set, Value value) {
-        return switch (set) {
-            case ValueSet.Finite it -> it.values().contains(value);
-            case ValueSet.Cofinite it -> !it.excluded().contains(value);
-        };
+        return set.has(value);
     }
 
     /** A rule read in full: one set of records and no doubt about it. */

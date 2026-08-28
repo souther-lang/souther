@@ -43,6 +43,39 @@ public sealed interface ValueSet {
     }
 
     /**
+     * The strings a pattern admits, which are neither finitely many nor finitely many short of
+     * everything.
+     *
+     * <p>A third shape because a format is a third kind of answer. {@code T[0-9]{13}} names ten
+     * thousand billion strings and leaves out every other string there is, so neither of the two
+     * above holds it — written as either, a reading would have to answer that the rule admits
+     * everything, which is the answer that loses the rule.
+     *
+     * <p><b>Never empty and never everything.</b> Those two have their shapes already, and a second
+     * spelling of either would be a set that {@link #isEmpty} and {@link #isAny} answer about by
+     * asking which shape it is. {@link #matching} is where that is settled, and it is the only way
+     * to one of these.
+     *
+     * <p>What the language holds is the whole of what this says. Two patterns accepting the same
+     * strings are one set here, because a {@link souther.compiler.regex.Language} is its strings —
+     * so a reading run twice over one model comes to values that are equal.
+     *
+     * <p><b>Over strings, as every set here is over one carrier.</b> {@link Cofinite} already means
+     * every value of the carrier but these, so a set does not describe values of two kinds and never
+     * did; what stands at a position is of the position's type. So a finite set met or joined with
+     * one of these holds strings, and a value of another kind in it is a set belonging to no
+     * position rather than a case for this to answer.
+     */
+    record Matching(souther.compiler.regex.Language language) implements ValueSet {
+
+        public Matching {
+            if (language == null) {
+                throw new IllegalArgumentException("a pattern admits the strings of some language");
+            }
+        }
+    }
+
+    /**
      * A set kept as it was given, and unable to be changed after.
      *
      * <p>The order is the order the model writes the values in, and it is kept because something
@@ -77,6 +110,42 @@ public sealed interface ValueSet {
         return new Finite(values);
     }
 
+    /**
+     * The strings {@code language} admits.
+     *
+     * <p>The one way to a {@link Matching}, and where a language that turns out to be one of the
+     * two shapes already here becomes that shape. A pattern nothing satisfies is the empty set and
+     * not a pattern with no strings; one that accepts everything is every value and not a pattern
+     * that happens to leave nothing out. Held otherwise, {@link #isEmpty} would be a question about
+     * which shape a set is written in, and the answer would turn on how a rule was spelled.
+     */
+    static ValueSet matching(souther.compiler.regex.Language language) {
+        if (language.isEmpty()) {
+            return NONE;
+        }
+        if (language.isEverything()) {
+            return ANY;
+        }
+        return new Matching(language);
+    }
+
+    /**
+     * Whether {@code value} is one of these.
+     *
+     * <p>Here, so that a reader wanting it does not answer it by asking which shape a set is. Every
+     * shape has its own way of holding what it holds — one names them, one names what it leaves out,
+     * one holds a language — and a caller reading that for itself is a second place the shapes are
+     * enumerated, which the day a third arrived is exactly where it was not.
+     */
+    default boolean has(Value value) {
+        return switch (this) {
+            case Finite it -> it.values().contains(value);
+            case Cofinite it -> !it.excluded().contains(value);
+            // A language is a set of strings, so nothing that is not one is in it.
+            case Matching it -> value instanceof Value.Text text && it.language().has(text.value());
+        };
+    }
+
     /** Whether no value is admitted, which is what refuses a declaration. */
     default boolean isEmpty() {
         return this instanceof Finite it && it.values().isEmpty();
@@ -94,12 +163,36 @@ public sealed interface ValueSet {
                 case Finite there -> new Finite(kept(here.values(), there.values()::contains));
                 case Cofinite there -> new Finite(kept(here.values(),
                         each -> !there.excluded().contains(each)));
+                // Which of finitely many the language holds, asked of each. Exact and cheap: what
+                // comes out is a subset of what was already written down, so no language is built.
+                case Matching there -> new Finite(kept(here.values(), there::has));
             };
             case Cofinite here -> switch (other) {
                 case Finite _ -> other.meet(this);
                 case Cofinite there -> new Cofinite(both(here.excluded(), there.excluded()));
+                case Matching _ -> other.meet(this);
+            };
+            case Matching here -> switch (other) {
+                case Finite there -> new Finite(kept(there.values(), here::has));
+                // The language less what is excluded, which is a language: a value written out is a
+                // string the machine can be told to refuse, and the rest is untouched.
+                case Cofinite there ->
+                        matching(here.language().without(textsIn(there.excluded())));
+                case Matching there -> matching(here.language().and(there.language()));
             };
         };
+    }
+
+    /** The strings among {@code values}, which are the only ones a language has anything to say
+     *  about. */
+    private static Set<String> textsIn(Set<Value> values) {
+        Set<String> out = new LinkedHashSet<>();
+        values.forEach(each -> {
+            if (each instanceof Value.Text text) {
+                out.add(text.value());
+            }
+        });
+        return out;
     }
 
     /** The values either admits — what a rule stated as one of two alternatives leaves. */
@@ -112,11 +205,25 @@ public sealed interface ValueSet {
                 // the two of them together.
                 case Cofinite there -> new Cofinite(kept(there.excluded(),
                         each -> !here.values().contains(each)));
+                case Matching _ -> other.join(this);
             };
             case Cofinite here -> switch (other) {
                 case Finite _ -> other.join(this);
                 case Cofinite there -> new Cofinite(kept(here.excluded(),
                         there.excluded()::contains));
+                case Matching _ -> other.join(this);
+            };
+            case Matching here -> switch (other) {
+                // The language and the values written beside it, which is a language: what a set of
+                // words costs to add is the words.
+                case Finite there -> matching(here.language().with(textsIn(there.values())));
+                // Everything except what is excluded and the language does not hold. A value
+                // excluded there is admitted here where the language holds it, so it is excluded
+                // from the two of them together only where neither has it — which is asked of each
+                // of finitely many and builds nothing.
+                case Cofinite there -> new Cofinite(kept(there.excluded(),
+                        each -> !here.has(each)));
+                case Matching there -> matching(here.language().or(there.language()));
             };
         };
     }

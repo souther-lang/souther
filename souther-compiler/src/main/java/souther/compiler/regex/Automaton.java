@@ -111,6 +111,39 @@ final class Automaton {
     }
 
     /**
+     * The machine accepting exactly {@code words} and nothing else.
+     *
+     * <p>No allowance is asked for. What it costs is the words themselves — one state per symbol of
+     * each — so a caller holding a handful of values has an answer without going back for anything,
+     * and a language met with them is the cheap operation rather than the one that has to be
+     * counted.
+     */
+    static Automaton ofWords(java.util.Collection<String> words) {
+        List<List<Step>> steps = new ArrayList<>();
+        List<int[]> free = new ArrayList<>();
+        steps.add(new ArrayList<>());
+        free.add(new int[0]);
+        BitSet accepting = new BitSet();
+        for (String word : words) {
+            int at = START;
+            int i = 0;
+            while (i < word.length()) {
+                int symbol = word.codePointAt(i);
+                i += Character.charCount(symbol);
+                steps.add(new ArrayList<>());
+                free.add(new int[0]);
+                int made = steps.size() - 1;
+                steps.get(at).add(new Step(CodePoints.of(symbol), made));
+                at = made;
+            }
+            // The word of no symbols ends where it began, which makes the beginning one a walk may
+            // stop at rather than a state of its own.
+            accepting.set(at);
+        }
+        return new Automaton(steps, free, accepting);
+    }
+
+    /**
      * Either of them.
      *
      * <p>A new beginning that steps freely into both. Cheap: the states are the two machines'
