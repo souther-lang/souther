@@ -248,20 +248,11 @@ class EverySchemaWordIsAccountedForTest {
                             "reason"),
                     Set.of("no_axis_derived"),
                     souther.compiler.query.PartitionDerivation.class),
-            // Every word a document writes for a reason, held here where the whole of the
-            // vocabulary is. What a surface of the document may carry is narrower than this and is
-            // held where the reasons it can reach are known
-            // (`WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce`) — asked here as well, this
-            // would be a second list of which word belongs where, kept by hand.
-            //
-            // `depth_limit` is among them and is retired. The reading stopped after a count of
-            // steps and said so, and documents of this version carry the word — so it stays, where
-            // what stops the reading is now the path returning to a declaration it had already
-            // opened.
-            new Vocabulary("questionStoppedReason",
-                    List.of("$defs", "questionStoppedReason"),
-                    Set.of("depth_limit"),
-                    souther.compiler.partition.UndividedPosition.Reason.class),
+            // The vocabularies a reason is written in are not here. Which words a surface of the
+            // document admits is decided by the capabilities its producers hold, and each is held
+            // against those in `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce` — a list here of
+            // which word belongs to which surface would be that answer kept a second time by hand,
+            // and it is what let one surface admit everything the other did.
             // And `no_lines_derived` likewise.
             Vocabulary.of("partition.boundariesMeasure.reason",
                     List.of("$defs", "partition", "properties", "boundariesMeasure", "properties",
@@ -568,12 +559,12 @@ class EverySchemaWordIsAccountedForTest {
         for (Vocabulary each : VOCABULARIES) {
             held.add("/" + String.join("/", each.at()));
         }
-        // The words an entry about a position may carry, which is narrower than the vocabulary
-        // above. Held against the reasons a position's readings can reach rather than against an
-        // enum, in `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce` — what makes it narrower is
-        // which reasons those surfaces are fed from, and a list of words here would say the same
-        // thing without saying why.
-        held.add("/$defs/notReadReason");
+        // The words each surface of the document may carry, held against the capabilities its
+        // producers hold rather than against an enum, in
+        // `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce`. What decides them is which reasons
+        // reach the surface, and a list of words here would say the same thing without saying why.
+        held.add("/$defs/ruleStoppedReadingReason");
+        held.add("/$defs/notReadReason/anyOf/1");
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
         held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");

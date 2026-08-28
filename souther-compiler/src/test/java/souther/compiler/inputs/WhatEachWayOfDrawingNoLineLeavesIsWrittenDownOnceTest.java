@@ -256,34 +256,53 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
-     * A surface of the document admits the words the reasons reaching it can be projected to.
+     * A surface of the document admits the words its own reasons reach, and no others.
      *
-     * <p>Two surfaces and two vocabularies. An entry about a position is written from the reasons a
-     * position's readings hold — a rule that came to no line, and a stop at the position itself —
-     * and a question's is written from those and from the reasons that are about a rule and neither
-     * of those. So the second vocabulary is the first and one word more, and which word is not a
-     * choice: it is what the reasons outside those two capabilities project to.
+     * <p>Two surfaces, and each is fed by the capabilities its producers hold. An entry about a
+     * position is written from a rule that came to no line and from a stop at the position itself;
+     * a question's is written from what is short about a rule. Neither contains the other: a type
+     * that could not be worked out is a stop at a position and reaches no question, and a rule
+     * nothing claimed is about a rule and reaches no position.
      *
-     * <p>Held as the difference between the two, on both sides. The schema said them with one
-     * definition while the two sets were equal, and a word added to it was a word an entry about a
-     * position could carry with nothing able to produce it — the type had just been arranged so
-     * that it could not. A vocabulary per surface says which, and this says why.
+     * <p>Each held to its own capabilities and not to the other surface. Written as one vocabulary
+     * and the other plus a word, the question's admitted everything a position's did — a type
+     * nothing could work out among them, which no question can be left standing by — and a
+     * difference is all a check of two sets one of which is defined as the other can ever see.
      */
     @Test
     void eachSurfaceAdmitsTheWordsItsOwnReasonsReach() throws Exception {
         JsonNode schema = schema();
 
-        java.util.Set<String> onlyAQuestion = new java.util.LinkedHashSet<>(
-                words(schema, "questionStoppedReason"));
-        onlyAQuestion.removeAll(words(schema, "notReadReason"));
+        java.util.Set<String> aPosition = new java.util.LinkedHashSet<>(
+                projected(everyRuleWithoutALine()));
+        aPosition.addAll(projected(everyStopAtAPosition()));
+        // The walk stopping after a count of steps, which nothing writes any more. A word of this
+        // surface and of no other: documents of this version carry it where a position's reading
+        // ran out, and the question's vocabulary is new in this version and never carried it.
+        aPosition.add("depth_limit");
 
-        java.util.Set<String> reachedByARuleAlone = new java.util.LinkedHashSet<>(
-                projected(theOtherReasons()));
-        reachedByARuleAlone.removeAll(projected(everyRuleWithoutALine()));
-        reachedByARuleAlone.removeAll(projected(everyStopAtAPosition()));
+        assertEquals(aPosition, words(schema, "notReadReason"),
+                "an entry about a position admits what a position's readings can be short of");
+        assertEquals(projected(everyReasonAboutARule()), words(schema, "questionStoppedReason"),
+                "a question admits what can be short about a rule");
+    }
 
-        assertEquals(reachedByARuleAlone, onlyAQuestion,
-                "what one surface admits and the other does not is what its own reasons reach");
+    /**
+     * And every word a document has is one some reason reaches.
+     *
+     * <p>Beside the two above, which are about which surface may carry a word. This is about the
+     * words themselves: one no reason projects to is a promise to a reader that nothing can keep,
+     * and the surfaces would both be right about it by neither of them admitting it.
+     */
+    @Test
+    void everyPublishedWordIsOneSomeReasonReaches() {
+        assertEquals(java.util.Arrays.stream(
+                                souther.compiler.partition.UndividedPosition.Reason.values())
+                        .map(each -> each.name().toLowerCase(java.util.Locale.ROOT))
+                        .collect(java.util.stream.Collectors
+                                .toCollection(java.util.LinkedHashSet::new)),
+                projected(everyReason()),
+                "a word a document may carry that no reason comes to");
     }
 
     /** The words {@code these} come to, which is what a document writes for each of them. */
@@ -305,6 +324,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
             for (JsonNode each : node.get("anyOf")) {
                 if (each.has("const")) {
                     out.add(each.get("const").asString());
+                }
+                if (each.has("enum")) {
+                    each.get("enum").forEach(word -> out.add(word.asString()));
                 }
                 if (each.has("$ref")) {
                     out.addAll(words(schema,
@@ -340,6 +362,13 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 .filter(each -> !(each instanceof BlockReason.RuleWithoutLineReason))
                 .filter(each -> !(each instanceof BlockReason.AboutThePosition))
                 .toList();
+    }
+
+    /** And those of them that are a shortfall about a rule, which is what a question stands on. */
+    private static List<BlockReason.AboutARule> everyReasonAboutARule() {
+        return everyReason().stream()
+                .filter(BlockReason.AboutARule.class::isInstance)
+                .map(BlockReason.AboutARule.class::cast).toList();
     }
 
     /** And those of them that name a position and no rule. */
