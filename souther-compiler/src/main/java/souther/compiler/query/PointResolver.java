@@ -107,9 +107,9 @@ public final class PointResolver {
                     switch (attempt) {
                         case ItemAssessment.Attempt.Built(var row, var _, var _) ->
                                 // The line is answered. Which reading answered it is where the row
-                                // goes and not what the answer is.
-                                { return new PointResolution.Generated(
-                                        reading.behavior(), row); }
+                                // goes, and what a reader asking about one coordinate compares
+                                // against — so the position is carried and not the behavior alone.
+                                { return new PointResolution.Generated(reading, row); }
                         case ItemAssessment.Attempt.Unresolved(var why, var _, var _) ->
                                 walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));

@@ -418,10 +418,11 @@ class EveryFindingHasAGenerationDispositionTest {
                 new java.util.LinkedHashMap<>();
         resolved(compiled(EITHER_END), "example.ends", new GenerationScope.Module()).resolved()
                 .forEach((at, answer) -> {
-                    if (answer.resolution() instanceof PointResolution.Generated(var by, var _)
+                    if (answer.resolution() instanceof PointResolution.Generated(var composedAt,
+                            var _)
                             && at.line().owedToTheDeclaration()
                                     .map(on -> on.name().equals("Code")).orElse(false)) {
-                        composers.put(at, by);
+                        composers.put(at, composedAt.behavior());
                     }
                 });
         Map<souther.compiler.partition.BorderObligationPoint, String> atTheLines = composers

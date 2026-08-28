@@ -22,18 +22,29 @@ public sealed interface PointResolution {
     /**
      * A row stands at the line, written in one reading's terms.
      *
-     * <p>The first reading the request walked that composed one, which is enough: what the two
-     * points against a line ask is the same at every reading of it — checked where a debt's demands
-     * are — so a row standing at one reading's point stands at the line. Which reading it came from
-     * is not part of the answer to whether the line can be written.
+     * <p>The first reading the request walked that composed one, which is enough for the line: what
+     * the two points against a line ask is the same at every reading of it — checked where a debt's
+     * demands are — so a row standing at one reading's point stands at the line.
+     *
+     * <p>Which reading composed it is carried all the same, because not every reader is asking
+     * about the line. A row is written in the terms of the position it was composed at, so a reader
+     * asking what stands at one coordinate is asking whether that coordinate is this one — and told
+     * only the behavior, two positions of one behavior come back indistinguishable and the row
+     * written for one is offered as the answer at the other.
      */
-    record Generated(String composedBy, Generator.GeneratedRow row) implements PointResolution {
+    record Generated(BorderObligationPointAssessment.Reading at, Generator.GeneratedRow row)
+            implements PointResolution {
 
         public Generated {
-            if (composedBy == null || row == null) {
-                throw new IllegalArgumentException("a row was composed by walking some behavior's"
+            if (at == null || row == null) {
+                throw new IllegalArgumentException("a row was composed by walking some position's"
                         + " inputs, and this is neither");
             }
+        }
+
+        /** Which behavior's inputs were walked, which is where the row belongs. */
+        public String composedBy() {
+            return at.behavior();
         }
     }
 

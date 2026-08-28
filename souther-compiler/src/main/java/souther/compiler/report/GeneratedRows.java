@@ -538,7 +538,7 @@ public final class GeneratedRows {
                 // what is missing and no row is offered for it. Left out, an author reads a gap
                 // above and no account of why nothing was written for it; the account is that the
                 // line it is a coordinate of is owed one row and already has it.
-                case GenerationOutcome.AlreadySettled _ -> say(out, said,
+                case GenerationOutcome.ObligationAlreadySettled _ -> say(out, said,
                         String.format("// no row offered for `%s` in `%s`: a row already stands"
                                 + " where this line is owed one%n",
                                 about(each.finding()), behavior));

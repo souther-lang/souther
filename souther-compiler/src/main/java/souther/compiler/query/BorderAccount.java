@@ -10,7 +10,8 @@ import java.util.List;
 import java.util.SequencedMap;
 
 /**
- * The rows a module's declarations are owed: one answer per point of each authored line.
+ * The rows a module is owed at the points of its lines, whosever the line is: one answer per point
+ * of each authored line, a body's own and its declarations' alike.
  *
  * <p><b>The authority on how many points a line is resolved at, and not on how many rows go out.</b>
  * A point is one piece of work however many positions carry the type, and that is a rule about what
@@ -120,8 +121,8 @@ public record BorderAccount(String module, GenerationScope scope,
     private void take(SequencedMap<String, List<Generator.GeneratedRow>> out, boolean theBodys) {
         resolved.forEach((_, answer) -> {
             if (answer.owedByTheBody() == theBodys
-                    && answer.resolution() instanceof PointResolution.Generated(var by, var row)) {
-                out.computeIfAbsent(by, _ -> new ArrayList<>()).add(row);
+                    && answer.resolution() instanceof PointResolution.Generated(var at, var row)) {
+                out.computeIfAbsent(at.behavior(), _ -> new ArrayList<>()).add(row);
             }
         });
     }
@@ -304,7 +305,8 @@ public record BorderAccount(String module, GenerationScope scope,
             }
             BorderObligationPoint at = owed.debt().point();
             out.add(new Adequacy.GenerationDisposition(finding,
-                    java.util.Optional.of(new OfferItem.APointOfALine(at)), outcomeAt(at)));
+                    java.util.Optional.of(new OfferItem.APointOfALine(at)),
+                    outcomeForTheLine(at)));
         }
         return List.copyOf(out);
     }
@@ -317,11 +319,10 @@ public record BorderAccount(String module, GenerationScope scope,
      * the point came to; and a row that already stands where the point is owed is the point's work
      * done.
      *
-     * <p><b>A finding is at a coordinate and this answers about a line.</b> A rule read at two
-     * positions is met at both and owes one row, so a row written at one position leaves the other
-     * a coordinate no row stands at — a finding, and nothing for a generation to do, at once. That
-     * is {@link GenerationOutcome.AlreadySettled}, and it is what the two questions coming apart
-     * looks like rather than a disagreement between them.
+     * <p>Asked of the line, which is a declaration's question: what an {@code invariant} states is
+     * the same wherever the type is carried, so a finding about it is about the line and any row
+     * standing at the line answers it. A finding standing at one coordinate is a different question
+     * and asks {@link #outcomeAtTheReading}.
      *
      * <p>Refused rather than answered where this holds no resolution, or holds one saying nothing
      * measured the point. A finding stands where the point was measured and missed, so a
@@ -329,22 +330,56 @@ public record BorderAccount(String module, GenerationScope scope,
      * other about one point — and a caller that quietly passed over it would leave an author told
      * nothing while the rows beside it read as though they filled everything.
      */
-    GenerationOutcome outcomeAt(BorderObligationPoint at) {
+    GenerationOutcome outcomeForTheLine(BorderObligationPoint at) {
+        return switch (answerAt(at).resolution()) {
+            case PointResolution.Generated(var _, var row) ->
+                    new GenerationOutcome.Generated(List.of(row));
+            case PointResolution.Unresolved(var coverage) -> cannot(coverage);
+            case PointResolution.NoSearch(var cause) -> settledOr(cause, at);
+        };
+    }
+
+    /**
+     * The same resolution read as an answer about one coordinate of the line.
+     *
+     * <p>What a finding standing at a position asks. A rule read at two positions is met at both and
+     * owes one row, so a row composed at one of them settles the line while the other position stays
+     * a coordinate no row stands at — a finding, and nothing for a generation to do here, at once.
+     *
+     * <p>So a row is this coordinate's answer only where this coordinate is where it was composed.
+     * Handed on without that test, the row written for the other position is offered as the answer
+     * here: it is written in that position's terms and named for that position's point, and an
+     * author who writes it finds the coordinate they were shown still uncovered.
+     */
+    GenerationOutcome outcomeAtTheReading(BorderObligationPoint at,
+            BorderObligationPointAssessment.Reading asked) {
+        return switch (answerAt(at).resolution()) {
+            case PointResolution.Generated(var composedAt, var row) ->
+                    composedAt.equals(asked) ? new GenerationOutcome.Generated(List.of(row))
+                            : new GenerationOutcome.ObligationAlreadySettled();
+            case PointResolution.Unresolved(var coverage) -> cannot(coverage);
+            case PointResolution.NoSearch(var cause) -> settledOr(cause, at);
+        };
+    }
+
+    private Answer answerAt(BorderObligationPoint at) {
         Answer answer = resolved.get(at);
         if (answer == null) {
             throw new IllegalStateException(
                     "a finding about a line this generation was asked about and holds no answer"
                             + " for: " + at);
         }
-        return switch (answer.resolution()) {
-            case PointResolution.Generated(var _, var row) ->
-                    new GenerationOutcome.Generated(List.of(row));
-            case PointResolution.Unresolved(var coverage) -> cannot(coverage);
-            case PointResolution.NoSearch(var cause) -> switch (cause) {
-                case A_ROW_ALREADY_STANDS -> new GenerationOutcome.AlreadySettled();
-                case NOTHING_MEASURED -> throw new IllegalStateException(
-                        "a finding at a point the measurement says was never measured: " + at);
-            };
+        return answer;
+    }
+
+    /** What a point nothing was looked for at comes to, which is one of the two reasons there was
+     *  nothing to look for. */
+    private static GenerationOutcome settledOr(PointResolution.Cause cause,
+                                               BorderObligationPoint at) {
+        return switch (cause) {
+            case A_ROW_ALREADY_STANDS -> new GenerationOutcome.ObligationAlreadySettled();
+            case NOTHING_MEASURED -> throw new IllegalStateException(
+                    "a finding at a point the measurement says was never measured: " + at);
         };
     }
 

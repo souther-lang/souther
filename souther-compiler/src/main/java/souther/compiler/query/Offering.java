@@ -73,7 +73,8 @@ public final class Offering {
         return searched;
     }
 
-    /** What the module's declarations are owed, or null where none were asked for. */
+    /** Every point of a line this request answers for, whosever it is, or null where no boundary
+     *  rows were asked for. */
     public BorderAccount account() {
         return account;
     }

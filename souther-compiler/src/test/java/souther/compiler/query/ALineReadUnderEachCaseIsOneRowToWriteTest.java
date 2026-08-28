@@ -152,6 +152,36 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
     }
 
     /**
+     * A row composed at one position is not offered as the answer at another.
+     *
+     * <p>The other half of the same split. A row is written in the terms of the position it was
+     * composed at and named for that position's point, so a coordinate handed the row composed
+     * somewhere else is shown something that does not stand at it: an author writes {@code P { … }},
+     * and the {@code T} coordinate they were pointed at is exactly as uncovered as before.
+     *
+     * <p>Nothing throws when this is wrong, which is why it is fixed here. The line is answered
+     * either way and the offer looks the same in a block.
+     */
+    @Test
+    void theRowComposedAtOnePositionIsNotTheAnswerAtAnother() {
+        Map<PointRole, GenerationOutcome> away = new LinkedHashMap<>();
+        compiled(UNDER_P).db().ask(new Adequacy.Generated("example.line", "check")).value()
+                .generation().forEach(each -> {
+                    if (each.finding().about() instanceof About.APointOfABorder(var point)
+                            && !point.role().againstTheLine()
+                            && point.line().cut().left().equals("r@T.deadline")) {
+                        away.put(point.role(), each.outcome());
+                    }
+                });
+
+        assertEquals(Map.of(PointRole.IN, new GenerationOutcome.ObligationAlreadySettled(),
+                        PointRole.OUT, new GenerationOutcome.ObligationAlreadySettled()),
+                away,
+                () -> "the row for these was composed under the other case, so it is not what"
+                        + " stands here: " + away);
+    }
+
+    /**
      * A coordinate the row was not written under is a finding, and no second row is offered for it.
      *
      * <p>The two questions coming apart. A finding stands at a coordinate — {@code T}'s side of the
@@ -177,8 +207,8 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
                         againstTheLine.put(point.role(), each.outcome());
                     }
                 });
-        assertEquals(Map.of(PointRole.ON, new GenerationOutcome.AlreadySettled(),
-                        PointRole.OFF, new GenerationOutcome.AlreadySettled()),
+        assertEquals(Map.of(PointRole.ON, new GenerationOutcome.ObligationAlreadySettled(),
+                        PointRole.OFF, new GenerationOutcome.ObligationAlreadySettled()),
                 againstTheLine,
                 () -> "the coordinates under `T` are findings whose line is answered, and no row"
                         + " is composed a second time for them: " + againstTheLine);

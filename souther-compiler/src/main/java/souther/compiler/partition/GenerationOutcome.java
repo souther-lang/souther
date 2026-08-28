@@ -27,10 +27,11 @@ import java.util.List;
  * {@link NotApplicable} is not on that path: nothing anyone writes turns a measure this compiler
  * could not make into a row somebody can write.
  *
- * <p>{@link AlreadySettled} is not on it either, and for the opposite reason: a row would answer
- * that finding, and one already has. It is the answer wherever a finding and what a row is owed for
- * are counted differently — a finding stands at a coordinate, a row is owed once for the line
- * whatever its coordinates, and the two are then free to be a finding and no work at the same time.
+ * <p>{@link ObligationAlreadySettled} is not on it either, and for the opposite reason: a row would
+ * answer that finding, and the line it belongs to has one. It is the answer wherever a finding and
+ * what a row is owed for are counted differently — a finding stands at a coordinate, a row is owed
+ * once for the line whatever its coordinates, and the two are then free to be a finding and no work
+ * at the same time.
  */
 public sealed interface GenerationOutcome {
 
@@ -118,20 +119,26 @@ public sealed interface GenerationOutcome {
     }
 
     /**
-     * A row would answer this finding, and one this compilation read already stands where it is
-     * owed.
+     * A row would answer this finding, and the obligation it is a coordinate of is answered
+     * somewhere else.
      *
-     * <p>Apart from every other arm because the news is different: nothing is missing, nobody has
-     * to write a strategy, and no row is offered. The three that say a row is not coming say it of
-     * the finding — this says it of what the finding is a coordinate of.
+     * <p>Named for the obligation and not for the finding, because the finding is not settled: the
+     * coordinate this stands at has no row at it and a report goes on counting it. What is settled
+     * is the line the coordinate belongs to, and no row is offered here for that reason.
      *
-     * <p>What makes the two come apart is that a finding stands at a coordinate and a row is owed
-     * once for the line. A rule read at two positions is met at both, and a row written at one of
-     * them settles what the line is owed while the other position stays a coordinate no row stands
-     * at. Answered as {@link NotApplicable}, a reader would be told no row changes it, which is
-     * false — the row that changes it is the one already written.
+     * <p>Apart from every other arm because the news is different: nothing is missing at the line,
+     * nobody has to write a strategy, and no row is offered. The three that say a row is not coming
+     * say it of the finding — this says it of what the finding is a coordinate of.
+     *
+     * <p>Two ways the line comes to be answered elsewhere, and one piece of news. A row this
+     * compilation read may already stand at another reading of the line, or a row composed for
+     * another reading may be the one on offer for it — either way what would be written here is a
+     * second row for work that has one. Answered as {@link NotApplicable}, a reader would be told no
+     * row changes it, which is false; answered as {@link Generated} with that other row, a reader is
+     * handed a row written in another position's terms and told it fills this coordinate, which it
+     * does not.
      */
-    record AlreadySettled() implements GenerationOutcome {}
+    record ObligationAlreadySettled() implements GenerationOutcome {}
 
     /** No strategy takes a finding of this kind, or the form this one would need. */
     record NotSupported(Reason reason) implements GenerationOutcome {

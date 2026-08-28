@@ -230,9 +230,9 @@ public record Settlements(List<OfferItem> requested,
             offering.account().resolved().forEach((point, answer) -> {
                 OfferItem item = new OfferItem.APointOfALine(point);
                 switch (answer.resolution()) {
-                    case PointResolution.Generated(var by, var row) -> {
+                    case PointResolution.Generated(var at, var row) -> {
                         requested.add(item);
-                        composedFor.put(item, RowKey.of(by, row));
+                        composedFor.put(item, RowKey.of(at.behavior(), row));
                     }
                     // Asked for and nothing came of it, which is still a thing this run is short of
                     // — and something else may stand there, which is what makes it worth asking.

@@ -59,8 +59,8 @@ class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
         List<List<String>> theBodys = new ArrayList<>();
         List<List<String>> theDeclarations = new ArrayList<>();
         account.resolved().forEach((_, answer) -> {
-            if (answer.resolution() instanceof PointResolution.Generated(var by, var row)
-                    && by.equals("f")) {
+            if (answer.resolution() instanceof PointResolution.Generated(var at, var row)
+                    && at.behavior().equals("f")) {
                 (answer.point().owedToTheReading() ? theBodys : theDeclarations)
                         .add(written(row));
             }
