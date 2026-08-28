@@ -540,6 +540,12 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.ValueOf _ -> FieldDomains.Coordinate.value(spelled);
             case NumericTerm.TakenOf taken ->
                     FieldDomains.Coordinate.takenBy(spelled, taken.operation());
+            // Named the same way, and named at a place no clause of the value is written at: the
+            // steps run inside a sequence, and what a record says relates the fields it holds. So
+            // a lookup finds nothing, which is the true answer — a record states no rule about
+            // what its elements add up to — rather than a collision with the rules of a field.
+            case NumericTerm.TakenOver over ->
+                    FieldDomains.Coordinate.takenBy(spelled, over.operation());
         };
     }
 

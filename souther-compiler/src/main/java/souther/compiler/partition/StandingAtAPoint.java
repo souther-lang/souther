@@ -159,6 +159,24 @@ public final class StandingAtAPoint {
             return null;
         }
 
+        /**
+         * Every value the row wrote at {@code path}, whichever elements this reading chose.
+         *
+         * <p>No choosing and nothing recorded to choose between. A number taken over a run is over
+         * all of them, so there is no element for a reading to have picked and no second reading to
+         * try — which is why this neither reads {@code chosen} nor adds to {@code held}.
+         *
+         * <p>An empty run is a row that wrote no element, and a total over nothing is what the walk
+         * starts from rather than a value nobody could read. So the row is not marked as having
+         * written nothing here: it wrote a container, and what it holds is none.
+         */
+        @Override
+        public List<ObservedValue> everyValueAt(TermPath path) {
+            // Null where the walk and the type disagree, which is the quantity's to report, as it
+            // is for the one value a place holds.
+            return where.valuesAt(row.inputs(), path);
+        }
+
         /** Whether {@code each} was reached through the elements this reading chose. */
         private boolean agrees(BehaviorInputs.Occurrence each) {
             for (Map.Entry<TermPath, Integer> step : each.at().entrySet()) {

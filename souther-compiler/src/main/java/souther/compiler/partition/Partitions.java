@@ -155,6 +155,12 @@ public final class Partitions {
                 case NumericTerm.TakenOf taken ->
                         souther.compiler.semantics.OperationFacts
                                 .everyAnswerItCanGiveHasASourceValue(taken.operation());
+                // A run has as many values as a row wrote and each of them is chosen, so whether
+                // some run adds up to a given total is a question about what the elements may hold
+                // and how many there may be — not one the operation answers about itself. Nothing
+                // here has walked that, so no edge on such a number is known writable, and the
+                // point says as much rather than promising a row.
+                case NumericTerm.TakenOver _ -> false;
             };
         }
 
@@ -788,7 +794,7 @@ public final class Partitions {
      * shape a class has been limited to is what this is here to stop being the limit.
      */
     private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
-                                                       NumericTerm term, Type type,
+                                                       NumericTerm.FromOnePosition term, Type type,
                                                        NumericDomain.Bounds within, Symbols symbols) {
         souther.compiler.inputs.TermOrders orders = term.ordersAt(type, symbols);
         Carrier carrier = orders.answered();
@@ -835,7 +841,8 @@ public final class Partitions {
     }
 
     /** A class that reads the term's count out of a row and answers about it. */
-    private static Recognition holding(NumericTerm term, souther.compiler.inputs.TermOrders on,
+    private static Recognition holding(NumericTerm.FromOnePosition term,
+                                          souther.compiler.inputs.TermOrders on,
                                           Recognition.CountIs is) {
         return new Recognition.OfACount(term, on, is);
     }

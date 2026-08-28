@@ -511,9 +511,17 @@ public sealed interface BorderQuantity {
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
                 // Each on its own order. Read on one order for the whole form, a position written
                 // back differently from its neighbour was read as a value it does not hold.
-                NumericTerm.Reading read =
-                        each.getKey().read(row.at(each.getKey().subjectPath()),
-                                on.get(each.getKey()));
+                //
+                // And each asked for what its own number is of: one value where a place answers the
+                // term, every value where the term is over a run of them. Asked for one either way,
+                // a total would be read off whichever element the row's reading happened to pick.
+                TermOrders orders = on.get(each.getKey());
+                NumericTerm.Reading read = switch (each.getKey()) {
+                    case NumericTerm.FromOnePosition one ->
+                            one.read(row.at(one.position()), orders);
+                    case NumericTerm.TakenOver over ->
+                            over.readOver(row.everyValueAt(over.subjectPath()), orders);
+                };
                 if (read instanceof NumericTerm.Reading.Missing) {
                     return Stands.UNREADABLE;
                 }
@@ -700,6 +708,20 @@ public sealed interface BorderQuantity {
      *  off it. Handed in rather than reached for: which rows there are and how a value is found in
      *  one belong to the measure, and a quantity only asks what stands at a path. */
     interface Observation {
+
+        /** The one value standing at {@code path}, for a number taken of what is there. */
         ObservedValue at(TermPath path);
+
+        /**
+         * Every value standing at {@code path}, for a number taken over a run of them.
+         *
+         * <p>Beside {@link #at} and not instead of it. What a row holds at a place inside a
+         * sequence is as many values as it wrote, and which question is being asked decides what to
+         * do with them: a rule relating two positions is about one element and picks, and a rule
+         * about what they add up to is about all of them and does not. Answered by one method, the
+         * caller that wanted one would be handed a list to choose from and the choosing would move
+         * to whoever asked — which is the reading of a row being made twice.
+         */
+        java.util.List<ObservedValue> everyValueAt(TermPath path);
     }
 }

@@ -43,7 +43,7 @@ import souther.compiler.types.ValueName;
  * operation. An operation added to the language is read by everything here without a line being
  * written for it.
  */
-public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
+public sealed interface NumericTerm permits NumericTerm.FromOnePosition, NumericTerm.TakenOver {
 
     /**
      * A number a row can be asked for at one place, because one value stands there.
@@ -69,6 +69,12 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
         @Override
         default TermPath subjectPath() {
             return position();
+        }
+
+        /** The number this term names at the one value standing at its position, or why there is
+         *  none. */
+        default Reading read(ObservedValue at, TermOrders on) {
+            return NumericTerm.read(this, at, on);
         }
     }
 
@@ -207,6 +213,91 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
     }
 
     /**
+     * A number an operation took over a run of values, which no single position answers.
+     *
+     * <p>The dual of {@link TakenOf} and named for it: one takes a number of the value at a place,
+     * this takes one over the values a walk was given. What differs is not how many values the
+     * operation looks at — a count of a container reads every element of it — but whether there is
+     * one place a row can be asked to hold the value the number is taken of. A list an operation
+     * built stands nowhere a row writes, so there is none, and a line drawn on this divides no
+     * position.
+     *
+     * <p><b>Where the values came from is not where a line falls.</b> {@link #subjectPath} says
+     * where to look and where to send a reader; it is not a position whose values a class could be
+     * a class of. Two lines of sixty and forty are on the boundary of a hundred as surely as one of
+     * a hundred is, so a class at the element position would be a class about a rule the model does
+     * not state — which is why this term has no {@link FromOnePosition#position}, and every reader
+     * that would draw one is a reader that cannot hold this.
+     *
+     * <p>Only for an operation that has declared how its number is taken, as a taking of one value
+     * is. What the declaration settles is every other answer about the term, and the account is
+     * applied to the values of the run rather than to a value standing at a place.
+     */
+    record TakenOver(ValueName.Stdlib operation, RunSource source) implements NumericTerm {
+
+        public TakenOver {
+            java.util.Objects.requireNonNull(operation, "a number taken over a run is taken by an"
+                    + " operation");
+            java.util.Objects.requireNonNull(source, "and taken over values from somewhere");
+            if (OperationFacts.takenAs(operation) == null) {
+                throw new IllegalArgumentException(operation.qualified() + " declares no account of"
+                        + " what it takes, so a number of it would be read as whatever the reader's"
+                        + " default happened to be");
+            }
+        }
+
+        /** What this operation takes of what it is given. Never null: one of these cannot be made
+         *  for an operation that declares none. */
+        public TakenAs takenAs() {
+            return OperationFacts.takenAs(operation);
+        }
+
+        @Override
+        public TermPath subjectPath() {
+            return source.subjectPath();
+        }
+
+        /**
+         * The number this term names over the values of its run, or why there is none.
+         *
+         * <p>Handed the values rather than reaching for them: which rows there are and how many
+         * values stand at a place in one are the measure's, and a term only says what its number is
+         * of them. The plural is the whole difference from a taking of one value, and it is here
+         * rather than in the path or in what a row is asked — a location says nothing about how
+         * many values stand at it, and a reader that asked for one where a run stands would be
+         * given the first of them or none.
+         *
+         * <p>Exhaustive over the accounts, with no {@code default}. An account of a number taken of
+         * one value says nothing about a run of them — which hour a run of times falls in is not a
+         * question — so those answer that this is no number of theirs rather than being read as
+         * whichever value came first.
+         */
+        public Reading readOver(java.util.List<ObservedValue> values, TermOrders on) {
+            // Nothing to read, which a caller that could not walk to the run answers with. Said as
+            // "this is no number of that" rather than as a total over the values it did find.
+            if (values == null) {
+                return new Reading.NotNumber();
+            }
+            for (ObservedValue each : values) {
+                Membership.Incomplete unread = Membership.unread(each);
+                if (unread != null) {
+                    return new Reading.Missing(unread.code());
+                }
+            }
+            return switch (takenAs()) {
+                case TakenAs.TheSumOfWhatItHolds _ -> addedUp(values, on.answered());
+                case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
+                        new Reading.NotNumber();
+            };
+        }
+
+        @Override
+        public String toString() {
+            return operation.qualified() + "(" + source + ")";
+        }
+    }
+
+    /**
      * Where the subject of this number is read or reported from.
      *
      * <p>Not a position at which this term may be divided. What a reader may do with this is go and
@@ -235,6 +326,9 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
     default FromOnePosition atOnePosition() {
         return switch (this) {
             case FromOnePosition at -> at;
+            // A run of values is answered by no single place, which is the whole of what this term
+            // is. Every reader that goes on to draw a line or ask for a value gets the answer here.
+            case TakenOver _ -> null;
         };
     }
 
@@ -258,6 +352,11 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
         return switch (this) {
             case ValueOf _ -> new ValueOf(other);
             case TakenOf taken -> TakenOf.of(taken.operation(), other, at, symbols);
+            // What moves here is where a number is taken, and a run is not taken anywhere: its
+            // values come from a place inside a sequence, and the name that would move is the
+            // container's. Answered as "not there" rather than by rebuilding the run at a
+            // location, which would be this reading inventing where a walk got its values.
+            case TakenOver _ -> null;
         };
     }
 
@@ -284,6 +383,17 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
                 Type answers = NumericAnswers.typeOf(taken.operation(), positionType, symbols);
                 yield answers == null ? null : Carrier.ofValue(answers, symbols);
             }
+            // Asked of the operation as a taking is, and asked of what it was given: a run is a
+            // container of the values standing at the place it is read from, so what the operation
+            // answers of one is what it answers of a container of them. Written out here as the
+            // element's own order instead, this would be the account of a walk that adds restated
+            // for every account, and the first one that answers something else would be read as
+            // answering what its elements are.
+            case TakenOver over -> {
+                Type answers = positionType == null ? null : NumericAnswers.typeOf(
+                        over.operation(), new Type.ListOf(positionType), symbols);
+                yield answers == null ? null : Carrier.ofValue(answers, symbols);
+            }
         };
     }
 
@@ -307,7 +417,8 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
         Carrier observed = observedOn(positionType, symbols);
         return switch (this) {
             case ValueOf _ -> TermOrders.itself(observed);
-            case TakenOf _ -> new TermOrders(observed, answeredOn(positionType, symbols));
+            case TakenOf _, TakenOver _ ->
+                    new TermOrders(observed, answeredOn(positionType, symbols));
         };
     }
 
@@ -329,7 +440,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
      * the arrangement the whole of #1027 exists to stop, one layer along. The decision is here,
      * where the arms that need it are.
      */
-    default Reading read(ObservedValue at, TermOrders on) {
+    static Reading read(FromOnePosition term, ObservedValue at, TermOrders on) {
         Carrier observed = on.observed();
         Membership.Incomplete unread = Membership.unread(at);
         if (unread != null) {
@@ -341,9 +452,9 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
         // the value should be, and a walk that only looked at the outside would call that a value
         // this term does not hold.
         if (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
-            return read(c.field("value"), on);
+            return read(term, c.field("value"), on);
         }
-        return switch (this) {
+        return switch (term) {
             case ValueOf _ -> asItStands(at, observed);
             case TakenOf taken -> taken(taken.takenAs(), at, observed);
         };
@@ -412,11 +523,17 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
      * can write outside every class of the number a rule is about.
      */
     private static Reading addedUp(ObservedValue at, Carrier observed) {
-        if (observed == null || !(at instanceof ObservedValue.Sequence held)) {
+        return at instanceof ObservedValue.Sequence held
+                ? addedUp(held.elements(), observed) : new Reading.NotNumber();
+    }
+
+    /** The same, over values a caller gathered rather than over a container standing somewhere. */
+    private static Reading addedUp(java.util.List<ObservedValue> values, Carrier observed) {
+        if (observed == null) {
             return new Reading.NotNumber();
         }
         java.math.BigDecimal total = java.math.BigDecimal.ZERO;
-        for (ObservedValue each : held.elements()) {
+        for (ObservedValue each : values) {
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
                 return new Reading.Missing(unread.code());
@@ -524,6 +641,12 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition {
         return switch (this) {
             case ValueOf _ -> NumericDomain.Bounds.OPEN;
             case TakenOf taken -> ResultRange.of(taken.operation(), ConstantArguments.NONE);
+            // Asked of the operation, as a taking is. That a total of non-negative amounts is
+            // itself non-negative is not among the answers: it follows from what the elements are
+            // bounded by and from how many there may be, which is a statement about the run and
+            // not about the operation. Declared here as a range of the operation, it would be
+            // wrong for a run whose elements may be negative.
+            case TakenOver over -> ResultRange.of(over.operation(), ConstantArguments.NONE);
         };
     }
 

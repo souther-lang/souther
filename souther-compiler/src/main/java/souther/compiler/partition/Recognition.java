@@ -52,7 +52,8 @@ public sealed interface Recognition {
      * the number — and what a value that is not a number, or one that could not be read, comes to —
      * was spelled twice in this package and would have been spelled a third time by the next one.
      */
-    record OfACount(NumericTerm term, souther.compiler.inputs.TermOrders orders, CountIs is)
+    record OfACount(NumericTerm.FromOnePosition term,
+                    souther.compiler.inputs.TermOrders orders, CountIs is)
             implements Recognition {
 
         /** What the count is compared on, which is what the class was written in. */

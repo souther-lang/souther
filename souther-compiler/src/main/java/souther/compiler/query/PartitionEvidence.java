@@ -208,6 +208,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                             case souther.compiler.inputs.NumericTerm.ValueOf _ -> null;
                             case souther.compiler.inputs.NumericTerm.TakenOf taken ->
                                     taken.toString();
+                            // The number itself, as it is written: what the `path` beside this says
+                            // is where its values are read from, which for a run is not what the
+                            // number is of. A consumer reading the path as the measure would take
+                            // a total for the values it was added up from.
+                            case souther.compiler.inputs.NumericTerm.TakenOver over ->
+                                    over.toString();
                         };
             };
         }

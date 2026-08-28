@@ -33,8 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  */
 class ATermSaysWhyItHasNoNumberTest {
 
-    private static final NumericTerm VALUE = new NumericTerm.ValueOf(TermPath.of("x"));
-    private static final NumericTerm LENGTH = NumericTerm.TakenOf.of(
+    private static final NumericTerm.FromOnePosition VALUE =
+            new NumericTerm.ValueOf(TermPath.of("x"));
+    private static final NumericTerm.FromOnePosition LENGTH = NumericTerm.TakenOf.of(
             ValueName.Stdlib.operation("String", "length"), TermPath.of("x"),
             souther.compiler.types.Type.STRING,
             souther.compiler.check.Symbols.none(souther.compiler.DefaultStdlib.get()));
