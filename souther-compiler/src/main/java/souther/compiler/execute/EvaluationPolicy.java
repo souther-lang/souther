@@ -115,11 +115,7 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
                         DEFAULT_OUTER_TIMEOUT.toMillis())));
     }
 
-    /**
-     * One setting read as a positive number of something, or {@code fallback} where it does not say
-     * one. What "does not say one" covers is in {@link #fromSettings}.
-     */
-    public static long positiveLong(String setting, long fallback) {
+    private static long positiveLong(String setting, long fallback) {
         String written = System.getProperty(setting);
         if (written == null) {
             return fallback;

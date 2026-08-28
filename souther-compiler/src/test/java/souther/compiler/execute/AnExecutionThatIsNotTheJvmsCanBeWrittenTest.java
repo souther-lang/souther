@@ -102,9 +102,10 @@ class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
                 execution.asked());
     }
 
-    /** Two behaviors with rows of their own, so a budget split over what the reading holds is a
-     *  different number from the budget. */
-    private static final String TWO_ROWS = """
+    /** Two behaviors with an {@code example} of their own, so a budget split over what the reading
+     *  holds is a different number from the budget. What the reading counts is the blocks and not
+     *  the lines in them, which is why one row each is enough and two under one block would not be. */
+    private static final String TWO_EXAMPLES = """
             module example.terms
             data N = Int
             data Out = Int
@@ -125,7 +126,7 @@ class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
      * says the one part of it that is a term rather than a fact — what the compile holds a run to —
      * arrives as a number an execution can be held to. A stand-in that only carried it would pass
      * every other test in this file, so what this asks is that the answer moves when the terms do:
-     * two thousand steps over two rows is a thousand a row, and four thousand is two thousand.
+     * two thousand steps over two examples is a thousand each, and four thousand is two thousand.
      *
      * <p>Which is also why the arrangement that keeps the terms is not here to be read. Whether a
      * budget is kept by a worker and a clock or by something else is the implementation's, and this
@@ -138,23 +139,23 @@ class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
         execution.statements(readingHeldTo(EvaluationPolicy.of(2_000L)));
         execution.statements(readingHeldTo(EvaluationPolicy.of(4_000L)));
 
-        assertEquals(List.of("1000 steps a row", "2000 steps a row"),
+        assertEquals(List.of("1000 steps an example", "2000 steps an example"),
                 execution.asked().stream().map(AnExecutionThatIsNotTheJvmsCanBeWrittenTest::steps)
                         .toList());
     }
 
-    private static final Pattern STEPS_A_ROW = Pattern.compile("\\d+ steps a row");
+    private static final Pattern STEPS_EACH = Pattern.compile("\\d+ steps an example");
 
-    /** What one sentence says a row is allowed, or the sentence itself where it says nothing —
+    /** What one sentence says an example is allowed, or the sentence itself where it says nothing —
      *  which is what a stand-in that stopped reading the terms would leave to compare. */
     private static String steps(String said) {
-        Matcher matched = STEPS_A_ROW.matcher(said);
+        Matcher matched = STEPS_EACH.matcher(said);
         return matched.find() ? matched.group() : said;
     }
 
-    /** {@link #TWO_ROWS} as this compiler reads it, under {@code terms}. */
+    /** {@link #TWO_EXAMPLES} as this compiler reads it, under {@code terms}. */
     private static ExampleExecution readingHeldTo(EvaluationPolicy terms) {
-        Compilation compilation = Compilation.ofSource(TWO_ROWS, "Main");
+        Compilation compilation = Compilation.ofSource(TWO_EXAMPLES, "Main");
         compilation.withEvaluationPolicy(terms);
         compilation.answerEverything();
         ExampleExecution reading = ExampleExecutions.of(compilation.db(), "example.terms");

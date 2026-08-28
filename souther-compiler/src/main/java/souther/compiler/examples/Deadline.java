@@ -36,11 +36,20 @@ public interface Deadline {
      */
     long DEFAULT_WORKER_STACK_BYTES = 64L * 1024 * 1024;
 
-    /** The stack this JVM's settings ask a worker to be given, read the way {@link
-     *  EvaluationPolicy#fromSettings} reads the terms. */
+    /** The stack this JVM's settings ask a worker to be given, on the terms
+     *  {@link EvaluationPolicy#fromSettings} states: a setting that is missing, unreadable or not
+     *  positive leaves the default in place. */
     static long workerStackFromSettings() {
-        return EvaluationPolicy.positiveLong("souther.example.worker.stack.bytes",
-                DEFAULT_WORKER_STACK_BYTES);
+        String written = System.getProperty("souther.example.worker.stack.bytes");
+        if (written == null) {
+            return DEFAULT_WORKER_STACK_BYTES;
+        }
+        try {
+            long asked = Long.parseLong(written.trim());
+            return asked > 0 ? asked : DEFAULT_WORKER_STACK_BYTES;
+        } catch (NumberFormatException _) {
+            return DEFAULT_WORKER_STACK_BYTES;
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import souther.compiler.execute.jvm.JvmProgramImages;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.source.SourceId;
@@ -52,6 +53,9 @@ public final class Compilation {
      * shape of holding something for a backend, and a second one would want the name.
      */
     private final JvmProgramImages jvmProgramImages = new QueryJvmProgramImages(db);
+    /** And what it runs them under, one of it for the same reason: the run that decides whether the
+     *  rows hold and the run a Java binding drives are held to one compilation's answer. */
+    private final JvmExampleDeadlines jvmExampleDeadlines = new QueryJvmExampleDeadlines(db);
     /** Which source each id was, for a caller that identifies sources by index. */
     private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
@@ -85,10 +89,8 @@ public final class Compilation {
         // program, and ADR-0032 settles that it is run as the program that will ship. Which
         // implementation that is belongs here, so that nothing deciding whether the language
         // accepts a program names one.
-        // Its classes, and the deadline it runs them under. The second is read at the question and
-        // not handed over now, because a test says one after this line has run.
         db.running(new souther.compiler.execute.jvm.JvmProgramExecution(jvmProgramImages,
-                () -> Output.deadlineOf(db)));
+                jvmExampleDeadlines));
     }
 
     /**
@@ -101,6 +103,13 @@ public final class Compilation {
      */
     public JvmProgramImages jvmProgramImages() {
         return jvmProgramImages;
+    }
+
+    /** What the JVM runs this compilation's rows under, for the same caller. Reached the same way
+     *  and for the same reason: a binding that ran the rows under a deadline of its own making
+     *  would not be running them the way this compilation says. */
+    public JvmExampleDeadlines jvmExampleDeadlines() {
+        return jvmExampleDeadlines;
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
