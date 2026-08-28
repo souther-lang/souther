@@ -61,30 +61,6 @@ public sealed interface PlannedValues<A> {
         }
     }
 
-    /**
-     * A choice whose branches this cannot tell apart yet.
-     *
-     * <p>An interpreted connective and not an unread one: the clause said {@code ||} and this is
-     * what {@code ||} means, held open only because which branch survives turns on values nobody
-     * has worked out. What is done with it once they are is {@link AdmissibleValues#join}'s rules,
-     * applied once and where they always were.
-     *
-     * <p>Made only where the question is open. A branch settled to admit nothing is answered here
-     * and now, because nothing about that answer can change.
-     *
-     * @param apart whether the alternatives are to be held apart rather than merged, which the
-     *              declaration settled before any of it was read
-     */
-    record Choice<A>(PlannedValues<A> left, PlannedValues<A> right,
-                     boolean apart) implements PlannedValues<A> {
-
-        public Choice {
-            if (left == null || right == null) {
-                throw new IllegalArgumentException("a choice is between two readings");
-            }
-        }
-    }
-
     /** Nothing read and nothing missed, which is what a reading starts from. */
     static <A> PlannedValues<A> top() {
         return new Settled<>(PlannedHeld.one(new PlannedHeld.Box<>(Map.of())), Map.of(), Map.of(),
@@ -121,7 +97,6 @@ public sealed interface PlannedValues<A> {
      */
     default Emptiness emptiness() {
         return switch (this) {
-            case Choice<A> it -> it.left().emptiness().joined(it.right().emptiness());
             case Settled<A> it -> switch (it.held()) {
                 case PlannedHeld.Nothing<A> _ -> Emptiness.EMPTY;
                 // An alternative every position of which is settled to admit something is one
@@ -145,7 +120,6 @@ public sealed interface PlannedValues<A> {
      */
     default Map<A, List<UnreadReason>> standing() {
         return switch (this) {
-            case Choice<A> it -> union(it.left().standing(), it.right().standing());
             case Settled<A> it -> it.standing();
         };
     }
@@ -153,7 +127,6 @@ public sealed interface PlannedValues<A> {
     /** Whether a rule was left unread anywhere in this reading — see {@link AdmissibleValues}. */
     default boolean dropped() {
         return switch (this) {
-            case Choice<A> it -> it.left().dropped() || it.right().dropped();
             case Settled<A> it -> it.dropped();
         };
     }
@@ -176,7 +149,6 @@ public sealed interface PlannedValues<A> {
 
     private static <A> Set<A> adoptedIn(PlannedValues<A> of) {
         return switch (of) {
-            case Choice<A> it -> both(adoptedIn(it.left()), adoptedIn(it.right()));
             case Settled<A> it -> adopted(it);
         };
     }
@@ -195,9 +167,6 @@ public sealed interface PlannedValues<A> {
             return this;
         }
         return switch (this) {
-            // Every branch of it, since what a caller showed impossible is the whole reading.
-            case Choice<A> it -> new Choice<>(it.left().leavingNothing(),
-                    it.right().leavingNothing(), it.apart());
             case Settled<A> it -> new Settled<>(new PlannedHeld.Nothing<>(), Map.of(),
                     it.standing(), it.dropped(), Map.of(), AdmittedPlan.NONE, true, it.tangled(),
                     it.widened());
@@ -210,18 +179,12 @@ public sealed interface PlannedValues<A> {
      * <p>Nothing is built and nothing can be refused: what two descriptions come to is a
      * description, so a conjunction costs what it costs to say and the saying is free.
      *
-     * <p><b>Distributed over a choice this could not settle.</b> A conjunction of a choice is the
-     * choice between the conjunctions, which is what a settled reading does to the alternatives it
-     * holds — so an open choice keeps its branches and each of them meets what was stated beside it.
-     * Merged into one first, the reading would be answering about a branch that may not be there.
+     * <p>A choice whose branches are not settled is not one of these. Which branch of a clause
+     * survives is a question about the whole of what was read of it — the values and the order
+     * together — so it is held a layer out, where both of those are ({@code StatedByClauses}), and
+     * a conjunction distributes over it there.
      */
     default PlannedValues<A> meet(PlannedValues<A> other) {
-        if (this instanceof Choice<A> it) {
-            return new Choice<>(it.left().meet(other), it.right().meet(other), it.apart());
-        }
-        if (other instanceof Choice<A> it) {
-            return new Choice<>(meet(it.left()), meet(it.right()), it.apart());
-        }
         Settled<A> here = (Settled<A>) this;
         Settled<A> there = (Settled<A>) other;
         // Promising what both sides promise, where both promise their positions together — see
@@ -294,8 +257,6 @@ public sealed interface PlannedValues<A> {
     /** What each position holds across the alternatives, which a description makes free. */
     default AdmittedPlan at(A atom) {
         return switch (this) {
-            case Choice<A> it -> AdmittedPlan.joining(
-                    List.of(it.left().at(atom), it.right().at(atom)));
             case Settled<A> it -> across(it, atom);
         };
     }
@@ -310,60 +271,23 @@ public sealed interface PlannedValues<A> {
     }
 
     /**
-     * Either reading holding, the alternatives merged into one product.
+     * Either reading holding, both branches being ones somebody can take.
      *
-     * <p>What a choice leaves depends on which of its branches can be taken, and that is a question
-     * about values. Where the descriptions settle it, it is settled here and the rules are the ones
-     * a finished reading uses. Where they do not, the choice is kept open ({@link Choice}) and the
-     * same rules are applied once, later, to the same two branches — so what a choice comes to is
-     * the same whichever of those happened, and neither depends on how much of the clause had been
-     * read when the question came up.
+     * <p>Which branches those are is not decided here. What a choice leaves turns on whether either
+     * branch admits anything, and that is a question about the whole of what was read of the clause
+     * — the values and the order together — so it is asked a layer out and this is called with the
+     * answer already in hand ({@code StatedByClauses}). Asked here as well, the two would be two
+     * answers to one question, and the one made of values alone would drop a branch the order
+     * refused and keep one the values did.
      */
     default PlannedValues<A> join(PlannedValues<A> other) {
-        return joining(other, false);
+        return joinedLive(other, false);
     }
 
     /** Either reading holding, with the alternatives of the two held apart — see
      *  {@link AdmissibleValues#joinApart}. */
     default PlannedValues<A> joinApart(PlannedValues<A> other) {
-        return joining(other, true);
-    }
-
-    private PlannedValues<A> joining(PlannedValues<A> other, boolean apart) {
-        Emptiness here = emptiness();
-        Emptiness there = other.emptiness();
-        // An alternative nobody can take leaves the answer to the other, and both being that is a
-        // reading admitting nothing. Settled now because nothing about it can change: a branch that
-        // admits nothing admits nothing whatever is written beside it.
-        if (here == Emptiness.EMPTY && there == Emptiness.EMPTY) {
-            return bothDead(other);
-        }
-        if (here == Emptiness.EMPTY) {
-            return besideDead(other, this);
-        }
-        if (there == Emptiness.EMPTY) {
-            return besideDead(this, other);
-        }
-        // Both standing, and settled to be: the choice is the one a finished reading makes, and
-        // waiting would put off a question that already has an answer.
-        if (here == Emptiness.NONEMPTY && there == Emptiness.NONEMPTY) {
-            return joinedLive(other, apart);
-        }
-        // And where it is not settled, the question waits. Both branches are kept whole, since
-        // which of them survives decides what the other one owes.
-        return new Choice<>(this, other, apart);
-    }
-
-    /**
-     * A choice one branch of which nobody can take, which is the other branch.
-     *
-     * <p>What the dead one said goes with it. Nothing satisfies it, so what it left a position is
-     * not something a value of this type is under — its unread rules included, which is why the
-     * reasons do not travel either. What it does leave is the account of adoption, and that is the
-     * clause reading's to keep ({@code StatedByClauses}).
-     */
-    private static <A> PlannedValues<A> besideDead(PlannedValues<A> live, PlannedValues<A> dead) {
-        return live;
+        return joinedLive(other, true);
     }
 
     /**
@@ -374,7 +298,7 @@ public sealed interface PlannedValues<A> {
      * at, which is an answer about the whole value — see {@link AdmissibleValues#joinApart}, whose
      * reasoning this is.
      */
-    private PlannedValues<A> bothDead(PlannedValues<A> other) {
+    default PlannedValues<A> bothDead(PlannedValues<A> other) {
         Settled<A> here = settled();
         Settled<A> there = other.settled();
         Map<A, AdmittedPlan> empty = new LinkedHashMap<>();
@@ -397,7 +321,7 @@ public sealed interface PlannedValues<A> {
      * What is here is the same arithmetic over descriptions rather than sets, which is why it costs
      * nothing and can be done before anything is built.
      */
-    private PlannedValues<A> joinedLive(PlannedValues<A> other, boolean apart) {
+    default PlannedValues<A> joinedLive(PlannedValues<A> other, boolean apart) {
         Settled<A> here = settled();
         Settled<A> there = other.settled();
         Map<A, AdmittedPlan> covered = guaranteedBy(here, there, false);
@@ -508,25 +432,6 @@ public sealed interface PlannedValues<A> {
      */
     default AdmissibleValues<A> resolve(Allowance<A> by) {
         return switch (this) {
-            case Choice<A> it -> {
-                // What the question was waiting for: whether either branch admits anything. Asked
-                // of the branches worked out, and of nothing else.
-                AdmissibleValues<A> left = it.left().resolve(by);
-                AdmissibleValues<A> right = it.right().resolve(by);
-                if (left.isBottom() && right.isBottom()) {
-                    yield it.left().bothDead(it.right()).resolve(by);
-                }
-                if (left.isBottom()) {
-                    yield right;
-                }
-                if (right.isBottom()) {
-                    yield left;
-                }
-                // And where both stand, the choice is put together as a description and built once.
-                // Joined as the two readings above instead, every position of it would be a machine
-                // made out of sets that were already machines, which is work nobody described.
-                yield it.left().joinedLive(it.right(), it.apart()).resolve(by);
-            }
             case Settled<A> it -> resolved(it, by);
         };
     }
@@ -620,10 +525,6 @@ public sealed interface PlannedValues<A> {
     default Set<A> subjects() {
         Set<A> out = new LinkedHashSet<>();
         switch (this) {
-            case Choice<A> it -> {
-                out.addAll(it.left().subjects());
-                out.addAll(it.right().subjects());
-            }
             case Settled<A> it -> {
                 if (it.held() instanceof PlannedHeld.Alternatives<A> boxes) {
                     boxes.boxes().forEach(box -> out.addAll(box.at().keySet()));

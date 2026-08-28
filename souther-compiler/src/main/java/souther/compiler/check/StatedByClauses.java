@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.Emptiness;
 
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -33,39 +34,82 @@ import java.util.Set;
  * A branch impossible only by an arithmetic relation between two positions is one nothing here can
  * drop, and giving those two a reading of alternatives is its own change with its own reason.
  */
-record StatedByClauses(souther.compiler.values.PlannedValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
-                       Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder) {
+sealed interface StatedByClauses {
+
+    /**
+     * What the clauses read so far leave, in both languages, with the account of what each took in.
+     *
+     * <p>Everything a choice could settle has been settled: what is here is one reading and not a
+     * question about which of two it turned out to be.
+     */
+    record Said(souther.compiler.values.PlannedValues<FactSubject> values,
+                OrderedIntervals<FactSubject> ordered,
+                Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder)
+            implements StatedByClauses {}
+
+    /**
+     * A choice whose branches this cannot tell apart yet.
+     *
+     * <p>An interpreted connective and not an unread one: the clause said {@code ||} and this is
+     * what {@code ||} means, held open only because whether either branch admits anything turns on
+     * machines nobody has made.
+     *
+     * <p><b>The whole of what was read, and not its values alone.</b> A branch is dropped, kept, or
+     * kept beside a dead one, and every part of a reading is answered differently by each of those
+     * — what the positions admit, where they stop, and which rules each language took in. Held open
+     * for the values while the rest was settled, a branch that turned out dead left its adoption
+     * behind: the account said a rule of a branch nothing satisfies had gone unread, and there was
+     * no branch for an author to go and look at.
+     */
+    record Choice(StatedByClauses left, StatedByClauses right) implements StatedByClauses {
+
+        public Choice {
+            if (left == null || right == null) {
+                throw new IllegalArgumentException("a choice is between two readings");
+            }
+        }
+    }
 
     /** Nothing read, so nothing ruled out. */
     static StatedByClauses top() {
-        return new StatedByClauses(souther.compiler.values.PlannedValues.top(),
+        return new Said(souther.compiler.values.PlannedValues.top(),
                 OrderedIntervals.top(),
                 Adoption.nothing(), Adoption.nothing());
     }
 
-    /** The positions some reading took the whole of this clause in at.
+    /**
+     * Whether anything satisfies what has been read, as far as that is settled.
      *
-     * <p>Some, and not both: the two languages are short of different things, and a bound one of
-     * them has no word for is read whole by the other. What neither took in is what is left
-     * standing. */
-    Set<FactSubject> adopted() {
-        Set<FactSubject> out = new LinkedHashSet<>();
-        // Everything either account is about, and not what it put a constraint on: a position a
-        // dead branch settled is one the reading answered for and put no constraint on, which is
-        // what `took` is asked rather than told.
-        byValues.mentions().forEach(each -> {
-            if (byValues.took(each)) {
-                out.add(each);
-            }
-        });
-        byOrder.mentions().forEach(each -> {
-            if (byOrder.took(each)) {
-                out.add(each);
-            }
-        });
-        return out;
+     * <p>Either language, because each can hold the whole answer on its own: what one of them
+     * cannot express it leaves alone. Where a language is settled that nothing satisfies it, that
+     * is the answer; where the values are a description nobody has built, the answer waits.
+     */
+    default Emptiness emptiness() {
+        return switch (this) {
+            case Choice it -> it.left().emptiness().joined(it.right().emptiness());
+            case Said it -> it.ordered().isBottom() ? Emptiness.EMPTY : it.values().emptiness();
+        };
     }
 
+    /**
+     * Both holding at once, distributed over a choice this could not settle.
+     *
+     * <p>A conjunction of a choice is the choice between the conjunctions. Merged into one first,
+     * the reading would be answering about a branch that may not be there.
+     */
+    default StatedByClauses meet(StatedByClauses other) {
+        if (this instanceof Choice it) {
+            return new Choice(it.left().meet(other), it.right().meet(other));
+        }
+        if (other instanceof Choice it) {
+            return new Choice(meet(it.left()), meet(it.right()));
+        }
+        Said here = (Said) this;
+        Said there = (Said) other;
+        return new Said(here.values().meet(there.values()),
+                here.ordered().meet(there.ordered()),
+                here.byValues().both(there.byValues()), here.byOrder().both(there.byOrder()));
+    }
 
     /** The reading of one value's positions, made once and used over however many clauses reach it.
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
@@ -78,23 +122,6 @@ record StatedByClauses(souther.compiler.values.PlannedValues<FactSubject> values
 
 
 
-
-    /**
-     * Whether nothing satisfies what has been read.
-     *
-     * <p>Either language, because each can hold the whole answer on its own: what one of them cannot
-     * express it leaves alone. This is the question a choice is settled by, which is why it is here
-     * and not on the two of them separately.
-     */
-    boolean holdsNothing() {
-        return values.isBottom() || ordered.isBottom();
-    }
-
-    /** Both holding at once, {@code sets} being what the answer's allowance is spent from. */
-    StatedByClauses meet(StatedByClauses other) {
-        return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered),
-                byValues.both(other.byValues), byOrder.both(other.byOrder));
-    }
 
     /**
      * The two readings of one clause tree, run together so that the connectives are the clause's,
@@ -129,7 +156,7 @@ record StatedByClauses(souther.compiler.values.PlannedValues<FactSubject> values
             souther.compiler.values.PlannedValues<FactSubject> said = values.leaf(e, positive);
             OrderedIntervals<FactSubject> range = ordered.leaf(e, positive);
             Set<FactSubject> mentions = mentioned(e);
-            return new StatedByClauses(said, range,
+            return new Said(said, range,
                     // Each language says whether it gave up on the leaf. The reading of values
                     // carries it; the reading of order has nothing to hand back but its ranges, and
                     // a leaf it read leaves at least one.
@@ -192,30 +219,120 @@ record StatedByClauses(souther.compiler.values.PlannedValues<FactSubject> values
          */
         @Override
         public StatedByClauses either(StatedByClauses one, StatedByClauses other) {
-            if (one.holdsNothing() && other.holdsNothing()) {
-                return new StatedByClauses(
-                        values.either(one.values.leavingNothing(), other.values.leavingNothing()),
-                        ordered.either(one.ordered.leavingNothing(),
-                                other.ordered.leavingNothing()),
-                        one.byValues.bothDead(other.byValues),
-                        one.byOrder.bothDead(other.byOrder));
+            if (one instanceof Said here && other instanceof Said there) {
+                Emptiness a = here.emptiness();
+                Emptiness b = there.emptiness();
+                if (a == Emptiness.EMPTY && b == Emptiness.EMPTY) {
+                    return bothDead(here, there);
+                }
+                if (a == Emptiness.EMPTY) {
+                    return beside(there, here);
+                }
+                if (b == Emptiness.EMPTY) {
+                    return beside(here, there);
+                }
+                if (a == Emptiness.NONEMPTY && b == Emptiness.NONEMPTY) {
+                    return live(here, there);
+                }
             }
-            // An alternative nobody can take says nothing about the positions, its unread rules
-            // included — so what it missed leaves with it, the way its evidence does. What it does
-            // leave is that the positions it named are settled: nothing satisfies it, so the choice
-            // does nothing to them, and that is an answer only a reading that got to the end of the
-            // branch could give.
-            if (one.holdsNothing()) {
-                return new StatedByClauses(other.values, other.ordered,
-                        other.byValues.beside(one.byValues), other.byOrder.beside(one.byOrder));
-            }
-            if (other.holdsNothing()) {
-                return new StatedByClauses(one.values, one.ordered,
-                        one.byValues.beside(other.byValues), one.byOrder.beside(other.byOrder));
-            }
-            return new StatedByClauses(values.either(one.values, other.values),
-                    ordered.either(one.ordered, other.ordered),
-                    one.byValues.either(other.byValues), one.byOrder.either(other.byOrder));
+            // And where whether a branch can be taken is not settled, the question waits — the
+            // whole of it, and not the values alone. Which of the four above this comes to decides
+            // what the positions admit, where they stop, and what each language is recorded as
+            // having taken in; settled for some of those and held open for the rest, a branch that
+            // turned out dead would have left an account of what it adopted behind it.
+            return new Choice(one, other);
+        }
+
+        /**
+         * What the choice comes to, with every branch of it worked out.
+         *
+         * <p>Where the question waited, this is where it is answered — once, by the rules above,
+         * on branches that are readings rather than descriptions of them. Nothing downstream is
+         * left holding a decision: what comes back has a set at every position, an account of what
+         * each language took in, and no branch anybody still has to choose between.
+         */
+        ReadByClauses resolve(StatedByClauses read,
+                              souther.compiler.values.Allowance<FactSubject> by) {
+            Said said = settled(read, by);
+            return new ReadByClauses(said.values().resolve(by), said.ordered(),
+                    said.byValues(), said.byOrder());
+        }
+
+        /**
+         * The same reading with every choice in it decided, which is one reading.
+         *
+         * <p>The branches are worked out to decide, and then the decision is made over the
+         * descriptions rather than over what they came to: the four rules are the ones a settled
+         * reading always used, and what they are applied to is the same two branches. Joined as the
+         * worked-out readings instead, every position of the choice would be a machine made out of
+         * sets that were already machines, which is work nobody described.
+         */
+        private Said settled(StatedByClauses read,
+                             souther.compiler.values.Allowance<FactSubject> by) {
+            return switch (read) {
+                case Said it -> it;
+                case Choice it -> {
+                    Said one = settled(it.left(), by);
+                    Said other = settled(it.right(), by);
+                    boolean oneDead = dead(one, by);
+                    boolean otherDead = dead(other, by);
+                    if (oneDead && otherDead) {
+                        yield bothDead(one, other);
+                    }
+                    if (oneDead) {
+                        yield beside(other, one);
+                    }
+                    yield otherDead ? beside(one, other) : live(one, other);
+                }
+            };
+        }
+
+        /** Whether nothing satisfies a branch, asked of the branch worked out. */
+        private boolean dead(Said read, souther.compiler.values.Allowance<FactSubject> by) {
+            return read.ordered().isBottom() || read.values().resolve(by).isBottom();
+        }
+
+        /**
+         * A choice neither branch of which anybody can take.
+         *
+         * <p>No one of them speaks for the rest: taking the first to be found impossible out of the
+         * answer would settle the proof by the order the operands were written in, and the same
+         * model written two ways would be refused two ways. So each side is taken as leaving
+         * nothing and the languages are joined as they are for any other choice — what each of them
+         * says the choice leaves empty is what <em>every</em> alternative leaves empty.
+         */
+        private Said bothDead(Said here, Said there) {
+            return new Said(
+                    // The rule for a choice nobody can take, named rather than arrived at: a join
+                    // is what two branches somebody can take come to, and neither of these is one.
+                    here.values().leavingNothing()
+                            .bothDead(there.values().leavingNothing()),
+                    ordered.either(here.ordered().leavingNothing(),
+                            there.ordered().leavingNothing()),
+                    here.byValues().bothDead(there.byValues()),
+                    here.byOrder().bothDead(there.byOrder()));
+        }
+
+        /**
+         * A choice one branch of which nobody can take, which is the other branch.
+         *
+         * <p>What the dead one said goes with it, its unread rules included: nothing satisfies it,
+         * so what it left a position is not something a value of this type is under. What it does
+         * leave is that the positions it named are settled — the choice does nothing to them — and
+         * that is an answer only a reading that got to the end of the branch could give.
+         */
+        private Said beside(Said alive, Said gone) {
+            return new Said(alive.values(), alive.ordered(),
+                    alive.byValues().beside(gone.byValues()),
+                    alive.byOrder().beside(gone.byOrder()));
+        }
+
+        /** A choice both branches of which somebody can take. */
+        private Said live(Said here, Said there) {
+            return new Said(values.either(here.values(), there.values()),
+                    ordered.either(here.ordered(), there.ordered()),
+                    here.byValues().either(there.byValues()),
+                    here.byOrder().either(there.byOrder()));
         }
     }
 }
