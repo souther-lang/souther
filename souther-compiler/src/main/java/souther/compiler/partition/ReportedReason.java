@@ -38,12 +38,15 @@ public final class ReportedReason {
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
             case BlockReason.UnreadValueRule _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
-            // And the same word for a rule no reading claimed at all. What a reader of a document
-            // is promised is which kind of thing stopped the derivation, and the kind is the same
-            // either way: no reading of this compiler has a word for the rule. Which of them was
-            // asked and gave up, and whether any of them was, is this compiler's own arrangement of
-            // readers — a distinction it needs and a document does not.
-            case BlockReason.NoReadingTookItIn _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            // Its own word, and not the one above. That one promises a rule was read and could not
+            // be used, which is a reader having engaged with it and given up; here none did, and an
+            // author sent after the form their clause is written in would be looking for a
+            // complaint nobody made. Neither is it the rule never having been reached — it was.
+            // The published words had these two and the state between them is one a model reaches,
+            // so the partition is one finer rather than the state going out under a word whose
+            // promise it does not meet.
+            case BlockReason.NoReadingTookItIn _ ->
+                    UndividedPosition.Reason.RULE_NOT_INTERPRETED_HERE;
             // Its own word, and not the one above. Both are rules this reading did not turn into a
             // line, and a reader acting on them is doing different work: one wants a reader for a
             // form that was seen, and one wants the gathering to reach the rules at all. Collapsed

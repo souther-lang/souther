@@ -1335,6 +1335,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // settled by the authority a reason belongs to
             // ({@link souther.compiler.inputs.BlockReason}), so no reason is written both ways.
             case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
+            case RULE_NOT_INTERPRETED_HERE ->
+                    "it was reached, and nothing worked out what it says about the values here";
             case RETURNS_TO_A_DECLARATION_ALREADY_READ ->
                     "the input returns here to a declaration already read above it, and what is"
                             + " under it is not read again";

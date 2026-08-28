@@ -164,20 +164,24 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     /**
-     * A question no reading claimed says the same word as a form nothing reads.
+     * A question no reading claimed says what is known of it, and no more.
      *
      * <p>The invariant is a call, and what it comes to is a rule about a field of the value its
      * helper was handed — a position none of the readings here is filed under, so none of them
-     * claimed the rule and none recorded why. What a document promises its reader is which kind of
-     * thing stopped the derivation, and the kind is the same either way: no reading of this
-     * compiler has a word for the rule. Which reader was asked, and whether any was, is this
-     * compiler's own arrangement and not something an author acts on differently.
+     * claimed the rule and none recorded why.
+     *
+     * <p>Neither of the words beside it is true of that. One promises a rule was read and could not
+     * be used, which sends an author after the form they wrote and nothing here complained of the
+     * form; the other promises the rule was never arrived at, and it was. What is known is that the
+     * rule is here, that a question of it stands, and that nothing worked out what it says — so
+     * that is the word, and it claims nothing about which capability would lift it.
      */
     @Test
     void aQuestionNoReadingClaimedSaysWhatIsKnownOfIt() {
         assertEquals("      · not accounted for: invariant Checked #1"
                         + " — which values may stand at c.range.max:"
-                        + " written in a form this compiler does not read",
+                        + " it was reached, and nothing worked out what it says about the values"
+                        + " here",
                 about(reportOf("""
                         module probe.helper
 

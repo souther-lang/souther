@@ -130,6 +130,23 @@ public record UndividedPosition(TermPath at, Why why) {
          * a reader is told the hole and not this compiler's route to it.
          */
         RULES_NOT_READ_AT_ALL,
+        /**
+         * The rule was reached, and nothing worked out what it says about the values here.
+         *
+         * <p>Between the two above, and neither of them. {@link #UNSUPPORTED_SYNTAX} says a rule
+         * was read and could not be used — something engaged with it and gave up, and what a
+         * reader may go on to do about it is find the form it is written in. {@link
+         * #RULES_NOT_READ_AT_ALL} says the rule was never arrived at, and what is written under
+         * that hole is whatever it is. This one is a rule that arrived and that nothing here
+         * established an interpretation of for the question it raises.
+         *
+         * <p>Nothing is claimed about which capability would make it interpretable. That is what
+         * separates it from the first: an author sent after a form to rewrite would be looking for
+         * one nothing complained about, and the rule may be perfectly ordinary and read in full
+         * somewhere else. What is known is that the rule is here, that a question of it is
+         * standing, and that nothing answered it.
+         */
+        RULE_NOT_INTERPRETED_HERE,
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
         /**

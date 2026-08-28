@@ -82,6 +82,27 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
+     * And every reason that is neither of those, which is what a question is left standing by.
+     *
+     * <p>Its own table because the two above are answers about a line: what a rule with none of one
+     * leaves, and what a position nothing was reached at leaves. A rule nothing established an
+     * interpretation of is neither — nothing stopped on it and nothing drew a line it is the
+     * absence of — so it has no {@code leavesShort} to answer and no position to be the account of.
+     *
+     * <p>What it does have is a word a document writes, which is why it is here at all: the whole
+     * of the coarsening is meant to be reviewable in one place, and a reason with a capability of
+     * its own would otherwise be projected where nothing reads the collapse back.
+     */
+    private static Map<String, String> theOtherReasonsAboutARule() {
+        Map<String, String> table = new LinkedHashMap<>();
+        // Not `UNSUPPORTED_SYNTAX`, which promises a rule was read and could not be used: nothing
+        // engaged with this one. Not `RULES_NOT_READ_AT_ALL` either, which promises the rule was
+        // never arrived at: it was.
+        table.put("NoReadingTookItIn", "RULE_NOT_INTERPRETED_HERE");
+        return table;
+    }
+
+    /**
      * The table, held against what the reasons answer.
      *
      * <p>Every member of the seal is here: the map is built from the reasons themselves, so one
@@ -111,6 +132,17 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         }
 
         assertEquals(theStopsAtAPosition(), said);
+    }
+
+    /** And of the reasons that are in neither of those capabilities. */
+    @Test
+    void everyOtherReasonAboutARuleSaysWhatItIsCalled() {
+        Map<String, String> said = new LinkedHashMap<>();
+        for (BlockReason each : theOtherReasons()) {
+            said.put(each.getClass().getSimpleName(), ReportedReason.of(each).name());
+        }
+
+        assertEquals(theOtherReasonsAboutARule(), said);
     }
 
     /**
@@ -144,27 +176,40 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      */
     @Test
     void everyReasonThereIsHasARowAbove() {
-        assertEquals(named(BlockReason.RuleWithoutLineReason.class.getPermittedSubclasses()),
-                theRulesWithNoLine().keySet(),
-                "a rule with no line, answered for and not written down");
-        assertEquals(named(BlockReason.AboutThePosition.class.getPermittedSubclasses()),
-                theStopsAtAPosition().keySet(),
-                "a stop at a position, answered for and not written down");
+        java.util.Set<String> written = new LinkedHashMap<String, String>() {{
+                putAll(theRulesWithNoLine());
+                putAll(theStopsAtAPosition());
+                putAll(theOtherReasonsAboutARule());
+            }}.keySet();
+
+        assertEquals(reasons(BlockReason.class), written,
+                "a reason a document has a word for, and no row saying which word");
     }
 
     /**
-     * The names of a seal's members, less the halves that are seals of their own.
+     * Every reason there is, which is what {@link ReportedReason} is asked about.
      *
-     * <p>{@link BlockReason.RuleReadingStopped} is a member of both capabilities and a seal rather
-     * than a reason, so its own members are what the rows are about and it is not one of them.
+     * <p>Read from {@link BlockReason} itself and down through whatever seals stand under it,
+     * rather than from the capabilities. The capabilities are what is true of a reason and a reason
+     * may be in more than one of them, so a list per capability is a list per way of being asked —
+     * and a reason in a capability nobody enumerated is one this compiler projects to a published
+     * word with nothing reading the collapse back. Which is what happened: a reason moved out of
+     * both capabilities kept its projection and left the tables passing.
+     *
+     * <p>What the switch already refuses is a reason with no word at all. What it cannot refuse is
+     * a word whose promise the reason does not meet, and that is the whole of what the rows are
+     * for.
      */
-    private static java.util.Set<String> named(Class<?>[] members) {
-        return java.util.Arrays.stream(members)
-                .flatMap(each -> each.isSealed()
-                        ? java.util.Arrays.stream(each.getPermittedSubclasses())
-                        : java.util.stream.Stream.of(each))
-                .map(Class::getSimpleName)
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    private static java.util.Set<String> reasons(Class<?> seal) {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (Class<?> each : seal.getPermittedSubclasses()) {
+            if (each.isSealed()) {
+                out.addAll(reasons(each));
+            } else {
+                out.add(each.getSimpleName());
+            }
+        }
+        return out;
     }
 
     /** One of each, for the rows to be read off. */
@@ -180,6 +225,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonBetweenPositions());
+    }
+
+    /** One of each reason that is in neither capability the two lists above are of. */
+    private static List<BlockReason> theOtherReasons() {
+        return List.of(new BlockReason.NoReadingTookItIn());
     }
 
     private static List<BlockReason.AboutThePosition> everyStopAtAPosition() {
