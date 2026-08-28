@@ -93,22 +93,28 @@ final class ReadingEvidence {
     }
 
     /**
-     * What the reading of values made of {@code rule}, as that reading says it.
+     * What the reading of values made of {@code rule}, as that reading recorded it.
      *
      * <p>Taken from the reading of this one clause and before it is met with the rest. What is met
      * is a set of values, and the reasons of every clause meet with it — so a caller asking the
      * whole what stopped it at a position is asking about the position and hearing whichever rule
      * reached it.
+     *
+     * <p><b>What the reading wrote down, and not what it answers when asked about a position.</b>
+     * {@link AdmissibleValues#standing} is the record: a part this reading gave up on, at each
+     * position that part named. {@link AdmissibleValues#whyUnread} is a reading of that record
+     * against the set the alternatives arrived at, and it answers a different question — whether
+     * the set at a position is as narrow as the rules leave it. The two part company exactly where
+     * a choice covers a position: the set is exact and nothing is answerable for it, and the rule
+     * is still one nobody took in. Asked through the second, a rule left standing under alternatives
+     * that cover it came back with no reason at all, and an accounting with the decision from one
+     * question and the reason from the other has a seam to fill.
      */
     void stoppedBy(RuleRef rule, AdmissibleValues<FactSubject> read) {
         Map<FactSubject, List<UnreadReason>> here =
                 stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>());
-        for (FactSubject position : read.subjects()) {
-            List<UnreadReason> why = read.whyUnread(position);
-            if (!why.isEmpty()) {
-                here.merge(position, why, ReadingEvidence::appended);
-            }
-        }
+        read.standing().forEach((position, why) -> here.merge(position, why,
+                ReadingEvidence::appended));
     }
 
     /**

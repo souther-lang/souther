@@ -25,6 +25,10 @@ import souther.compiler.check.RuleRef;
  *                a published word reaching back into what a reading may record; which word a
  *                document writes for one of these is {@link ReportedReason}'s.
  *
+ *                <p>About the rule and never about the place. The question carries the rule, and
+ *                what it is short of is short of that rule — a reason about the position it stands
+ *                at answers a different question and belongs to whoever asks that one.
+ *
  *                <p>Every one of them, in the order the parts of the clause were met. A question is
  *                answered when every part that asked it has been read, so a part standing behind
  *                another is a second thing to lift — and which of them a reader met would otherwise
@@ -35,7 +39,7 @@ import souther.compiler.check.RuleRef;
  *                on.
  */
 public record StandingQuestion(RuleRef rule, RuleCitation cited, InputQuestion asks,
-                               java.util.List<BlockReason.RuleReadingStopped> stopped) {
+                               java.util.List<BlockReason.AboutARule> stopped) {
 
     public StandingQuestion {
         if (rule == null || cited == null || asks == null) {

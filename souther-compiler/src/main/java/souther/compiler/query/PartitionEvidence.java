@@ -175,7 +175,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * ({@link souther.compiler.partition.ReportedReason}) — projected here instead, a surface
          * that says more than the document does would have nothing left to say it from.
          */
-        public java.util.List<souther.compiler.inputs.BlockReason.RuleReadingStopped> stopped() {
+        public java.util.List<souther.compiler.inputs.BlockReason.AboutARule> stopped() {
             return asked.stopped();
         }
 

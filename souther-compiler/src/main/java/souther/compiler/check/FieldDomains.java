@@ -816,7 +816,7 @@ public final class FieldDomains {
         // one conjunct is not an account of the conjunct written beside it.
         if (took.anyLeftStanding(rule, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
-                    new RuleAccounting.Why.TheValueReadingSays(stoppedBy(rule, named)));
+                    stoppedBy(rule, named));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
@@ -828,8 +828,7 @@ public final class FieldDomains {
         if (took.tookIn(rule, named)) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
-        return new RuleAccounting.Outcome.Unaccounted(
-                new RuleAccounting.Why.TheValueReadingSays(stoppedBy(rule, named)));
+        return new RuleAccounting.Outcome.Unaccounted(stoppedBy(rule, named));
     }
 
     /**
@@ -845,9 +844,15 @@ public final class FieldDomains {
      * wrote down — and an empty answer would say a question stands with nothing behind it. Not the
      * position's reasons: those belong to whichever rule left them.
      */
-    private List<UnreadReason> stoppedBy(RuleRef rule, List<FactSubject> named) {
+    private RuleAccounting.Why stoppedBy(RuleRef rule, List<FactSubject> named) {
         List<UnreadReason> why = took.stoppedBy(rule, named);
-        return why.isEmpty() ? List.of(UnreadReason.FORM_NOT_READ) : why;
+        // Nothing recorded, so nothing is answerable for it. A rule reaches the readings that
+        // recognise the positions it names, and one about a position none of them knows — a field
+        // of a value a helper reads, reached through the call — is claimed by none of them and
+        // gave none of them anything to write down. Named as the value reading's, an author is
+        // sent to a reader that never held their clause.
+        return why.isEmpty() ? new RuleAccounting.Why.NothingTookItIn()
+                : new RuleAccounting.Why.TheValueReadingSays(why);
     }
 
     /** Every name the position at {@code path} answers to. */

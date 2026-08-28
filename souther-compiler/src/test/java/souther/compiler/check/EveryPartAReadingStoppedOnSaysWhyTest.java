@@ -78,6 +78,52 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
                 invariant said = x <= 10 * 2 && x <= Int.abs(x)
             """;
 
+    /**
+     * A clause about a position none of the readings knows.
+     *
+     * <p>The invariant is a call, and what it comes to is a rule about a field of the value the
+     * helper was handed. The readings here are filed under the positions they recognise, and that
+     * field is not one of them — so the rule is claimed by none of them, and none of them has
+     * anything to say about why.
+     */
+    private static final String A_RULE_NO_READING_CLAIMS = """
+            module demo
+
+            data Range = { min: Int, max: Int }
+
+            data N = { range: Range }
+                invariant valid(range)
+
+            let valid (r: Range) : Bool = r.max >= 0
+            """;
+
+    /** What became of every question of every rule that nothing answered. */
+    private static Map<String, String> whyStanding(FieldDomains read) {
+        Map<String, String> out = new LinkedHashMap<>();
+        read.accounting().values().forEach(accounting ->
+                accounting.answers().forEach((owed, outcome) -> {
+                    if (outcome instanceof RuleAccounting.Outcome.Unaccounted unaccounted) {
+                        out.put(((RuleCitation.Named) accounting.cited()).name() + " at " + owed,
+                                unaccounted.why().getClass().getSimpleName());
+                    }
+                }));
+        return out;
+    }
+
+    /**
+     * A question no reading claimed says so, and does not borrow a reading's account.
+     *
+     * <p>The other two arms are one reading's own words for where it gave up. A question standing
+     * because nobody took the rule in has no such words behind it — answered with them, an author
+     * is told which reader fell short of their clause, and the reader named is one that never held
+     * it and has no word for such a rule at all.
+     */
+    @Test
+    void aQuestionNoReadingClaimedNamesNoReading() {
+        assertEquals(Map.of("invariant N #1 at range.max", "NothingTookItIn"),
+                whyStanding(read(A_RULE_NO_READING_CLAIMS)));
+    }
+
     /** Everything the reading of ends was stopped by, per question it left standing. */
     private static Map<String, List<String>> linesStanding(FieldDomains read) {
         Map<String, List<String>> out = new LinkedHashMap<>();

@@ -73,6 +73,24 @@ public sealed interface BlockReason {
     }
 
     /**
+     * A shortfall about a rule of the model, whatever became of the reading of it.
+     *
+     * <p>The third capability, and it cuts across the other two the way they cut across each other.
+     * A rule a reading held and gave up on is one of these and is also a stop and also a rule with
+     * no line; a rule no reading claimed is one of these and is neither of those — nothing stopped,
+     * because nothing started, and no reader is answerable for a line it never drew.
+     *
+     * <p>What a caller typed here is promised is that there is a rule to name. That is what the
+     * question a rule raises needs and all it needs: {@link souther.compiler.inputs.StandingQuestion}
+     * carries the rule already, and what it is short of is about that rule rather than about the
+     * place it stands at. Typed by {@link RuleReadingStopped} instead, a question no reading claimed
+     * had to be answered with some reading's account of stopping — and every reader downstream that
+     * takes a stop, a line that came to nothing, or a position's verdict would take that answer as
+     * well.
+     */
+    sealed interface AboutARule extends BlockReason {}
+
+    /**
      * A rule a reading stopped on, which is the half of {@link RuleWithoutLineReason} that says
      * this compiler fell short.
      *
@@ -87,12 +105,13 @@ public sealed interface BlockReason {
      * built from it; that the model is thereby short of something is what {@link #leavesShort} says
      * instead.
      *
-     * <p><b>The one reason in both capabilities.</b> A rule this got partway through is a rule with
-     * no line here, and it is also this compiler having fallen short — so it is the only member of
-     * {@link ReadingStopReason} that names a rule, and the only member of
+     * <p><b>The one reason in all three capabilities.</b> A rule this got partway through is a rule
+     * with no line here, it is this compiler having fallen short, and it is about a rule — so it is
+     * the only member of {@link ReadingStopReason} that names a rule, and the only member of
      * {@link RuleWithoutLineReason} a caller asking about a stop may be handed.
      */
-    sealed interface RuleReadingStopped extends RuleWithoutLineReason, ReadingStopReason {
+    sealed interface RuleReadingStopped extends RuleWithoutLineReason, ReadingStopReason,
+            AboutARule {
 
         /**
          * <p><b>Two switches and no {@code default} on either.</b> Asked per measure rather than
@@ -297,6 +316,33 @@ public sealed interface BlockReason {
      * values that follows a rule into a shape it does not enter today.
      */
     record UnreadValueRule() implements RuleReadingStopped {}
+
+    /**
+     * Every reading was asked about the rule at this position and none of them took it in, and none
+     * of them wrote down why.
+     *
+     * <p>Its own case because it names no reading. The others are one reading's account of where it
+     * gave up, and a question left standing by nobody has no such account to give — answered with
+     * one of them, an author is told which reader fell short of their clause, and the named reader
+     * may be one that has no word for such a rule at all and never claimed it.
+     *
+     * <p>What produces it is the accounting, from the two answers coming apart: a rule no reading
+     * adopted, at a position no reading recorded a reason for. A helper that reads a field of a
+     * value the readings do not know the positions of is one — the clause is about that field, and
+     * every reader here passed over it.
+     *
+     * <p>Nothing is claimed about which capability would lift it, which is what makes it different
+     * from every case above. What a document writes for it is the same word it writes for a rule
+     * written in a form nothing here reads, because that is the whole of what is known: no reading
+     * of this compiler has a word for the rule.
+     *
+     * <p><b>Not a {@link ReadingStopReason} and not a {@link RuleWithoutLineReason}.</b> Nothing
+     * stopped here, because nothing started; and no reading drew a line this could be the absence
+     * of. So it reaches neither the readers that ask what stopped a derivation nor the account of
+     * the rules a position was left with, and a {@link RuleWithoutALine} cannot be built carrying
+     * it. What is true of it is that there is a rule to name, which is {@link AboutARule}.
+     */
+    record NoReadingTookItIn() implements AboutARule {}
 
     /**
      * A rule about the position says how it stands against another position, and what is held here

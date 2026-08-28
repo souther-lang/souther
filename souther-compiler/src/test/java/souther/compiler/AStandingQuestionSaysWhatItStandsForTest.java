@@ -164,6 +164,35 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     /**
+     * A question no reading claimed says the same word as a form nothing reads.
+     *
+     * <p>The invariant is a call, and what it comes to is a rule about a field of the value its
+     * helper was handed — a position none of the readings here is filed under, so none of them
+     * claimed the rule and none recorded why. What a document promises its reader is which kind of
+     * thing stopped the derivation, and the kind is the same either way: no reading of this
+     * compiler has a word for the rule. Which reader was asked, and whether any was, is this
+     * compiler's own arrangement and not something an author acts on differently.
+     */
+    @Test
+    void aQuestionNoReadingClaimedSaysWhatIsKnownOfIt() {
+        assertEquals("      · not accounted for: invariant Checked #1"
+                        + " — which values may stand at c.range.max:"
+                        + " written in a form this compiler does not read",
+                about(reportOf("""
+                        module probe.helper
+
+                        data Range = { min: Int, max: Int }
+
+                        data Checked = { range: Range }
+                            invariant valid(range)
+
+                        behavior read : (c: Checked) -> Ok
+
+                        let valid (r: Range) : Bool = r.max >= 0
+                        """), "invariant Checked #1"));
+    }
+
+    /**
      * The document says what the report says, from the same projection.
      *
      * <p>Two surfaces of one adequacy document. A consumer reading the machine-readable one is owed

@@ -1816,7 +1816,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             souther.compiler.query.PartitionEvidence.Unanswered asked) {
         java.util.List<souther.compiler.partition.UndividedPosition.Reason> said =
                 new java.util.ArrayList<>();
-        for (souther.compiler.inputs.BlockReason.RuleReadingStopped each : asked.stopped()) {
+        for (souther.compiler.inputs.BlockReason.AboutARule each : asked.stopped()) {
             souther.compiler.partition.UndividedPosition.Reason word =
                     souther.compiler.partition.ReportedReason.of(each);
             if (!said.contains(word)) {

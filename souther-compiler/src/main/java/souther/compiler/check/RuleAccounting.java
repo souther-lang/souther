@@ -170,7 +170,15 @@ public final class RuleAccounting {
          * whether the model is covered may be read off it, because that is what tying a completeness
          * to the readers there happen to be amounts to.
          */
-        record Accounted(Reader by) implements Outcome {}
+        record Accounted(Reader by) implements Outcome {
+
+            public Accounted {
+                if (by == null) {
+                    throw new IllegalArgumentException("a question something answered was answered"
+                            + " by one of the readings");
+                }
+            }
+        }
 
         /**
          * Nothing took the rule in, so the question stands.
@@ -180,7 +188,15 @@ public final class RuleAccounting {
          * elsewhere: a published word reaching back into what a reading is allowed to record is the
          * coupling this whole arrangement is written against.
          */
-        record Unaccounted(Why why) implements Outcome {}
+        record Unaccounted(Why why) implements Outcome {
+
+            public Unaccounted {
+                if (why == null) {
+                    throw new IllegalArgumentException("a question nothing answered stands for a"
+                            + " reason");
+                }
+            }
+        }
     }
 
     /**
@@ -191,6 +207,13 @@ public final class RuleAccounting {
      * reading that turns a clause into an end says what would have to change before the rule could
      * be a line. Held as one word, a line about an end was written in the words of a set of values —
      * which is the sentence #842 is about, one level down.
+     *
+     * <p><b>And one arm that names no reading.</b> A question stands where no reading adopted the
+     * rule, which is not the same as a reading having been asked and fallen short: the readings a
+     * clause reaches are the ones that recognise the positions it names, and a clause about a
+     * position none of them knows is claimed by none of them. Answered with a reading's arm, such a
+     * question is attributed to a reader that never held the rule — and the account then says which
+     * capability of that reader would lift it, which is a sentence about the wrong reader.
      */
     public sealed interface Why {
 
@@ -210,13 +233,15 @@ public final class RuleAccounting {
          * <p>In the order the parts of the clause were met, and each said once: two parts one limit
          * stopped are one thing for a reader to lift.
          */
-        default List<souther.compiler.inputs.BlockReason.RuleReadingStopped> stopped() {
-            List<souther.compiler.inputs.BlockReason.RuleReadingStopped> out = new java.util.ArrayList<>();
-            for (souther.compiler.inputs.BlockReason.RuleReadingStopped each : switch (this) {
+        default List<souther.compiler.inputs.BlockReason.AboutARule> stopped() {
+            List<souther.compiler.inputs.BlockReason.AboutARule> out = new java.util.ArrayList<>();
+            for (souther.compiler.inputs.BlockReason.AboutARule each : switch (this) {
                 case TheValueReadingSays it -> it.why().stream()
                         .map(souther.compiler.inputs.BlockReason::ofARuleTheValueReadingLeft)
                         .toList();
                 case TheEndReadingSays it -> it.why();
+                case NothingTookItIn _ ->
+                        List.of(new souther.compiler.inputs.BlockReason.NoReadingTookItIn());
             }) {
                 if (!out.contains(each)) {
                     out.add(each);
@@ -269,6 +294,16 @@ public final class RuleAccounting {
                 why = List.copyOf(why);
             }
         }
+
+        /**
+         * No reading took the rule in, and none of them recorded why.
+         *
+         * <p>Nothing to carry, and that is what it says. The readings that record a reason are the
+         * ones that recognised the position and gave up on the rule about it; where the position is
+         * one none of them knows, the rule is claimed by nobody and there is no reader whose
+         * account this could be.
+         */
+        record NothingTookItIn() implements Why {}
     }
 
     /** Which reading answered a question. */

@@ -106,11 +106,16 @@ public sealed interface LeftAtThePosition {
      * <p>A reason a rule reading stopped on is in both capabilities — it is a stop, and it is a rule
      * with no line — and a stop is what it is here: what such a rule would have divided the position
      * by is exactly the part nobody read. So the stop is asked first, and the arms are the whole of
-     * {@link BlockReason} between them.
+     * {@link BlockReason.RuleWithoutLineReason} between them.
+     *
+     * <p>Which is what this takes, and not every reason there is. What a position is left with comes
+     * from a rule about it that came to no line, so a reason of another kind has no rule here to be
+     * the account of — a shortfall about a rule no reading claimed says nothing about a line, and
+     * nothing here would know which of the two arms to put it under.
      */
-    static LeftAtThePosition of(BlockReason why) {
+    static LeftAtThePosition of(BlockReason.RuleWithoutLineReason why) {
         return switch (why) {
-            case BlockReason.ReadingStopReason stopped -> new AReadingStopped(stopped);
+            case BlockReason.RuleReadingStopped stopped -> new AReadingStopped(stopped);
             case BlockReason.ReadToEndWithoutLine read -> new ARuleWithNoLine(read);
         };
     }
