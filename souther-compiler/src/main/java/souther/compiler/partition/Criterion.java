@@ -308,26 +308,4 @@ public sealed interface Criterion {
         return in.band().written(of, in.except(),
                 times -> BorderQuantity.times(times, left));
     }
-
-    /**
-     * The same, where the model gives the quantity no name to write the sentence around.
-     *
-     * <p>A clause names what it is about — {@code value} in every declaration — and a comparison in
-     * a body names nothing: what it was drawn on is the term each reading met it at, and a line read
-     * at two positions has one for each. So a sentence about the line says the ends and leaves the
-     * quantity to the readings, which are where its names are true.
-     *
-     * <p>A level is written the same way either way: it is a value of the quantity and says nothing
-     * about what the quantity is called.
-     *
-     * <p>Null for a run one of whose ends says how much of the quantity its rule wrote, which
-     * cannot be said without saying of what ({@link Band#withoutASubject}). A caller with a reading
-     * in hand writes what that reading says; one without has nothing to write and says nothing.
-     */
-    default String writtenWithNoNameForIt(BorderQuantity of) {
-        if (!(this instanceof Within in)) {
-            return of.writtenAt(against());
-        }
-        return in.band().withoutASubject(of, in.except());
-    }
 }

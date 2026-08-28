@@ -93,13 +93,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
                     "a point owed a row asks for one, came to something, is owed to somebody and"
                             + " is found somewhere: " + point);
         }
-        // A name for the quantity exactly where a declaration drew the line, which is the one thing
-        // that has one: a clause says what it is about, and a comparison in a body says it in the
-        // terms of the position it was read at. Kept as one fact rather than two, so that a name
-        // and the line it is supposed to be the declaration's cannot come apart.
-        if ((axis != null) != point.line().owedToTheDeclaration().isPresent()) {
-            throw new IllegalArgumentException("a line is named by the declaration that drew it, and"
-                    + " by nothing else: " + point + " named " + axis);
+        if (axis == null) {
+            throw new IllegalArgumentException("a line is a line on something: " + point);
         }
         met = java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>(met));
     }
@@ -395,22 +390,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      * a consumer against one of a border's items, so they are spelled by one rule and not two.
      */
     public String said() {
-        if (axis == null) {
-            // No name for the quantity, so no relation to write between it and the value. A point
-            // against the line is that value; a run beside it is said by its ends
-            // ({@link souther.compiler.partition.Criterion#writtenWithNoNameForIt}), where it can be
-            // said at all — and where it cannot, this says as much and the readings say the rest.
-            String against = against();
-            return against == null ? "" : role().againstTheLine() ? "= " + against : against;
-        }
         return role().againstTheLine() ? axis + " = " + against()
                 : axis + " " + operator() + " " + against();
-    }
-
-    /** Whether the model gives the quantity this line is on a name of its own, which a clause does
-     *  and a comparison in a body does not. */
-    public boolean namesItsQuantity() {
-        return axis != null;
     }
 
     /** How this point relates a row's value to what it is against. */
@@ -426,21 +407,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point, Strin
      * point is — the readings of one point cut one carrier at one place, which is checked where
      * their demands are. So this is not a reading standing in for the rest; it is the one answer
      * they all give.
-     *
-     * <p>And the quantity's name is this point's, where the model gives it one. Where it does not,
-     * the sentence is the ends of the run and says nothing about what they are ends of: the words a
-     * reading would supply are that reading's, and one of them here would be the position a walk
-     * reached first.
-     *
-     * <p><b>Null where nothing can be said without those words.</b> A run one of whose ends says how
-     * much of the quantity its rule wrote is one of those: {@code 3 * x > 1} puts a row over a third
-     * of the quantity, and which third cannot be said without saying of what. What a reader is owed
-     * there is what each reading says, which is where the quantity has a name.
      */
     public String against() {
-        souther.compiler.partition.BorderQuantity of =
-                met.firstEntry().getValue().border().cut().of();
-        return axis == null ? demand.criterion().writtenWithNoNameForIt(of)
-                : demand.criterion().written(of, axis);
+        return demand.criterion().written(met.firstEntry().getValue().border().cut().of(), axis);
     }
 }
