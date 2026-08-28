@@ -1,13 +1,23 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
 
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,11 +47,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
 
-    /** A class whose hash is a function of its value and is written in the platform. */
-    private static final Set<Class<?>> SCALARS = Set.of(
-            String.class, Long.class, Integer.class, Boolean.class, BigDecimal.class,
-            int.class, long.class, boolean.class, char.class, double.class, float.class,
-            short.class, byte.class);
+    private static final SourcePos POS = new SourcePos(1, 1);
+    private static final Hir.Binders BINDERS =
+            new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
+
+    /** What a component declared as a primitive arrives as, since a hash is taken of the value and a
+     *  value handed over as an {@code Object} is the box. */
+    private static final Map<Class<?>, Class<?>> BOXED = Map.of(
+            int.class, Integer.class, long.class, Long.class, boolean.class, Boolean.class,
+            char.class, Character.class, double.class, Double.class, float.class, Float.class,
+            short.class, Short.class, byte.class, Byte.class);
 
     /** What reached a type, so that a finding names the payload it is under and not only itself. */
     private record Path(List<String> steps) {
@@ -75,6 +90,65 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                 + String.join("\n\n", findings) + "\n");
     }
 
+    /**
+     * What the shapes say they carry is what the interner builds them with.
+     *
+     * <p>The other test walks from what the shapes say. Said and built are two things, and a walk
+     * over what was said proves what was said: writing {@code OP} down as carrying a string leaves
+     * the whole suite green and takes {@code BinOp} out of the walk without a word. So the interner
+     * is asked to build one term of every shape, and the check that a shape carries what it says it
+     * carries is in the constructor, where every term goes through — under assertions, which is
+     * every run of this suite.
+     *
+     * <p>Every shape and not the ones that came to mind: a shape nothing here builds is a shape the
+     * constructor's check never sees, and the two tests together would then be proving something
+     * about a smaller set than there is.
+     */
+    @Test
+    void everyShapeIsBuiltWithWhatItSaysItCarries() {
+        Term.Interner interned = new Term.Interner();
+        BindingId x = BINDERS.binder("x", POS).id();
+        TypeSymbol data = TypeSymbols.declared(new TypeKey("m", "D"));
+        Term one = interned.written(1L);
+        Term evaluated = interned.evaluated(new EvaluationId("an answer", POS, 0));
+
+        Set<Term.Shape> built = new LinkedHashSet<>();
+        for (Term term : List.of(
+                interned.at(Location.of(x)),
+                interned.bound(0, 0),
+                interned.on(evaluated, List.of("a")),
+                one,
+                interned.written(java.math.BigDecimal.ONE),
+                interned.written("s"),
+                interned.written(true),
+                interned.unit(data),
+                interned.negated(one),
+                interned.not(interned.written(true)),
+                interned.operator(BinOp.EQ, one, one),
+                interned.operator(BinOp.ADD, one, one),
+                interned.list(List.of(one)),
+                interned.tuple(List.of(one)),
+                interned.part(one, 0),
+                interned.choice(one, one, one),
+                interned.closure(1, one),
+                interned.let(one, one),
+                interned.built(data, List.of("f"), List.of(one)),
+                interned.called(new ValueName.Helper("m", "f"), List.of(one)),
+                evaluated,
+                interned.some(one),
+                interned.held(evaluated),
+                interned.handed(one, 0),
+                interned.none(Type.INT),
+                interned.opened(one, Type.INT),
+                interned.matched(one, List.of(List.of(data)), List.of(one)),
+                interned.attempted(one, List.of("c"), List.of(one)))) {
+            built.add(term.shape());
+        }
+
+        assertEquals(Set.of(Term.Shape.values()), built,
+                "every shape is built here, so that what each carries is checked as it is built");
+    }
+
     private void walkPayload(Term.Payload payload, Path path) {
         switch (payload) {
             case Term.Payload.Nothing ignored -> { }
@@ -99,10 +173,8 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
         }
     }
 
-    private void walkClass(Class<?> type, Path path) {
-        if (SCALARS.contains(type)) {
-            return;
-        }
+    private void walkClass(Class<?> raw, Path path) {
+        Class<?> type = BOXED.getOrDefault(raw, raw);
         if (type.isInterface() || java.lang.reflect.Modifier.isAbstract(type.getModifiers())) {
             Class<?>[] permitted = type.getPermittedSubclasses();
             if (permitted == null || permitted.length == 0) {

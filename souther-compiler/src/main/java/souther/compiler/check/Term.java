@@ -157,14 +157,51 @@ final class Term {
      */
     sealed interface Payload {
 
+        /**
+         * Whether {@code value} is what this says a shape carries.
+         *
+         * <p>Asked of every term as it is built, under assertions. What a shape carries is written
+         * down so that a walk can prove nothing a term is hashed from is hashed by its identity, and
+         * a walk over what was written proves that of the shapes as written — so if the writing and
+         * the building come apart, what is proved is a set of types nothing builds. The building is
+         * what settles it, and this is where the two meet.
+         */
+        boolean holds(Object value);
+
         /** A shape whose parts are the whole of it. */
-        record Nothing() implements Payload {}
+        record Nothing() implements Payload {
+
+            @Override
+            public boolean holds(Object value) {
+                return value == null;
+            }
+        }
 
         /** A value of {@code type}, or of one of the types {@code type} permits. */
-        record OfType(Class<?> type) implements Payload {}
+        record OfType(Class<?> type) implements Payload {
+
+            @Override
+            public boolean holds(Object value) {
+                return type.isInstance(value);
+            }
+        }
 
         /** A list of {@code element}. */
-        record OfList(Payload element) implements Payload {}
+        record OfList(Payload element) implements Payload {
+
+            @Override
+            public boolean holds(Object value) {
+                if (!(value instanceof List<?> values)) {
+                    return false;
+                }
+                for (Object each : values) {
+                    if (!element.holds(each)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
 
         static Payload none() {
             return new Nothing();
@@ -251,22 +288,26 @@ final class Term {
             // A record given its equality holds it over everything it carries, so its components are
             // what it is. One stating an equality of its own holds it over some of what it carries,
             // and taking the rest in would give two equal values two hashes.
-            return statesAnEqualityOfItsOwn(type) ? Rule.ITS_OWN_HASH : Rule.ITS_COMPONENTS;
+            return statesAHashOfItsOwn(type) ? Rule.ITS_OWN_HASH : Rule.ITS_COMPONENTS;
         }
-        return statesAnEqualityOfItsOwn(type) ? Rule.ITS_OWN_HASH : Rule.NONE_HERE;
+        return statesAHashOfItsOwn(type) ? Rule.ITS_OWN_HASH : Rule.NONE_HERE;
     }
 
     /**
-     * Whether {@code type} answers which two of it are one, rather than leaving the answer to what
-     * it is made of or to which object it is.
+     * Whether {@code type} says what a value of it hashes to, rather than leaving it to what the
+     * value is made of or to which object it is.
      *
-     * <p>Read off the modifier, since the equality a record is given is final and one written by
-     * hand is not. What it decides is who is taken at their word: a type stating an equality states
-     * a hash to go with it, and this hash algebra takes that hash. A type stating none is either a
-     * record, and is what it holds, or is told apart by which object it is — which is drawn afresh
-     * each run and is what nothing here may be hashed from.
+     * <p>Read off the modifier, since the hash a record is given is final and one written by hand is
+     * not. What it decides is who is taken at their word. A record stating none is what it holds, and
+     * following its components is following its hash; a record stating one states it over some of
+     * what it holds, so following the rest would give two equal values two hashes.
+     *
+     * <p>Taken at their word and no further: what such a hash is itself taken from is not walked, so
+     * a type saying what it hashes to answers for the whole of what it reads. Which is why what is
+     * said here is about the hash and not about the equality — {@link EvaluationId} tells two apart
+     * by which object each is and still says what it hashes to, and it is the hash this asks about.
      */
-    private static boolean statesAnEqualityOfItsOwn(Class<?> type) {
+    private static boolean statesAHashOfItsOwn(Class<?> type) {
         for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
             if (method.getName().equals("hashCode") && method.getParameterCount() == 0) {
                 return !java.lang.reflect.Modifier.isFinal(method.getModifiers());
@@ -353,6 +394,8 @@ final class Term {
     }
 
     private Term(Shape shape, Object of, List<Term> parts) {
+        assert shape.payload().holds(of) : shape + " is written as carrying " + shape.payload()
+                + " and was built with " + (of == null ? "nothing" : of.getClass().getName());
         this.shape = shape;
         this.of = of;
         this.parts = List.copyOf(parts);

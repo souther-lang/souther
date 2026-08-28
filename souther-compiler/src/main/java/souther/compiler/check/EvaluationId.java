@@ -22,8 +22,14 @@ import souther.compiler.diag.SourcePos;
  * equality. A hash has to agree with equality one way only — two that are one hash alike — so a
  * subject told apart by identity may still be hashed by something a reading can say, and it has to
  * be: {@code Object}'s hash is drawn afresh each run, and a term carrying one of these is filed
- * under it. What is taken is where the evaluation is written and which occurrence there it is, so
- * two evaluations at one position are two hashes and the whole of it is a function of the program.
+ * under it.
+ *
+ * <p>What it is taken from is a string and a number, and nothing that holds anything further. A hash
+ * a type states for itself is taken at its word by the walk that proves a term is hashed from values
+ * ({@link Term#ruleFor}), so what such a hash reads is exactly what nothing else checks — which is a
+ * reason to read as little as possible. The position is not among it: it is what a reader is shown
+ * and it stands on a {@link souther.compiler.diag.Placement}, whose own hash reads a tree this has
+ * no way to answer for.
  */
 final class EvaluationId {
 
@@ -41,7 +47,7 @@ final class EvaluationId {
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(what, where, occurrence);
+        return what.hashCode() * 31 + occurrence;
     }
 
     SourcePos where() {
