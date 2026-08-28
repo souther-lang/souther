@@ -148,6 +148,18 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
             }
 
             /**
+             * Several, with what each position holds across them already worked out.
+             *
+             * <p>For a caller that had the descriptions and put them together there
+             * ({@link PlannedValues#resolve}). What a position holds across the alternatives is a
+             * join, and a join of two languages is a machine — worked out from the sets after they
+             * were built, it would be a machine nobody had described and nobody had counted.
+             */
+            static <A> Alternatives<A> of(Set<Box<A>> boxes, Map<A, ValueSet> across) {
+                return new Alternatives<>(boxes, across);
+            }
+
+            /**
              * Several of them, and what a position holds across them.
              *
              * <p><b>The one way to more than one alternative, and it takes a composer.</b> What a
