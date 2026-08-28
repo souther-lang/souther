@@ -208,14 +208,17 @@ public final class Compiler {
                                                java.time.Duration exampleBudget, Deadline deadline,
                                                EvaluationPolicy policy, ModulePath path) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName, path);
+        // The terms first and the wait after, because the wait is one of them: said the other way
+        // round, a caller that asked for both would have the policy put the default wait back over
+        // the one it asked for, and nothing would say so.
+        if (policy != null) {
+            compilation.withEvaluationPolicy(policy);
+        }
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
         }
         if (deadline != null) {
             compilation.withDeadline(deadline);
-        }
-        if (policy != null) {
-            compilation.withEvaluationPolicy(policy);
         }
         compilation.measure(measure);
 
@@ -380,14 +383,15 @@ public final class Compiler {
                                               java.time.Duration exampleBudget, Deadline deadline,
                                               EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(sources, path);
+        // The terms first and the wait after, for the reason compilingSource gives.
+        if (policy != null) {
+            compilation.withEvaluationPolicy(policy);
+        }
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
         }
         if (deadline != null) {
             compilation.withDeadline(deadline);
-        }
-        if (policy != null) {
-            compilation.withEvaluationPolicy(policy);
         }
         compilation.measure(measure);
 

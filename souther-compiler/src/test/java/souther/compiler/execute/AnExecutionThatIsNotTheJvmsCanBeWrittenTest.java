@@ -8,6 +8,7 @@ import souther.compiler.query.ExampleExecutions;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -144,6 +145,37 @@ class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
                         .toList());
     }
 
+    /**
+     * And the wait it is told is the wait this compilation is run on.
+     *
+     * <p>A budget in milliseconds is what a caller says when it wants a row given up on sooner than
+     * a build would. Said as an input of its own it was kept by the JVM and unknown to the boundary,
+     * so an execution asked what it was held to answered the default minute while the run it was
+     * answering for was already being abandoned at five milliseconds — the boundary stating one
+     * thing and the implementation doing another, which is the whole of what this file is about.
+     *
+     * <p>So it is not an input of its own. It is the wait among the terms, and this reads it back
+     * where every execution reads it.
+     */
+    @Test
+    void andTheWaitItIsToldIsTheWaitTheCompilationRunsOn() {
+        RecordingExecution execution = new RecordingExecution();
+
+        execution.statements(readingHeldTo(EvaluationPolicy.DEFAULT, Duration.ofMillis(1_234)));
+
+        assertEquals(List.of("given up on after 1234ms"),
+                execution.asked().stream().map(AnExecutionThatIsNotTheJvmsCanBeWrittenTest::waited)
+                        .toList());
+    }
+
+    private static final Pattern GIVEN_UP_AFTER = Pattern.compile("given up on after \\d+ms");
+
+    /** What one sentence says the wait is, or the sentence itself where it says nothing. */
+    private static String waited(String said) {
+        Matcher matched = GIVEN_UP_AFTER.matcher(said);
+        return matched.find() ? matched.group() : said;
+    }
+
     private static final Pattern STEPS_EACH = Pattern.compile("\\d+ steps an example");
 
     /** What one sentence says an example is allowed, or the sentence itself where it says nothing —
@@ -155,8 +187,16 @@ class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
 
     /** {@link #TWO_EXAMPLES} as this compiler reads it, under {@code terms}. */
     private static ExampleExecution readingHeldTo(EvaluationPolicy terms) {
+        return readingHeldTo(terms, null);
+    }
+
+    /** The same, {@code budget} saying the wait the way a caller with a reason to differ says it. */
+    private static ExampleExecution readingHeldTo(EvaluationPolicy terms, Duration budget) {
         Compilation compilation = Compilation.ofSource(TWO_EXAMPLES, "Main");
         compilation.withEvaluationPolicy(terms);
+        if (budget != null) {
+            compilation.withExampleBudget(budget);
+        }
         compilation.answerEverything();
         ExampleExecution reading = ExampleExecutions.of(compilation.db(), "example.terms");
         assertTrue(reading != null, "the module has to check for there to be a reading of it");

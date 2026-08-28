@@ -202,7 +202,8 @@ public final class SoutherExamples {
         }
         return new BoundExamples(module, asked.rows(),
                 JvmExampleRuns.evaluating(compilation.jvmProgramImages(), asked,
-                        compilation.jvmExampleDeadlines().forThisCompile(),
+                        compilation.jvmExampleDeadlines()
+                                .forThisCompile(asked.policy().outerTimeout()),
                         Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))),
                 bound);
     }

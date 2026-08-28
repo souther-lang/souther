@@ -383,15 +383,20 @@ public final class Compilation {
      * is reported when one does not come back — gets that without holding every other compile in the
      * same JVM to the same wait.
      *
+     * <p>The wait among the terms and not a second one beside them. Said as its own input it would be
+     * a wait the JVM kept and the boundary did not know about, so an execution asked what it was held
+     * to would answer the default while the run it was answering for was already being given up on.
+     * Which is why {@link #withEvaluationPolicy} said afterwards replaces this along with the rest of
+     * them: it states the terms, and this states one of them.
+     *
      * @throws IllegalArgumentException if {@code budget} is not positive; a row that is given no time
      *     at all would report every behavior as one that does not terminate.
      */
     public Compilation withExampleBudget(java.time.Duration budget) {
-        long ms = budget.toMillis();
-        if (ms <= 0) {
+        if (budget.toMillis() <= 0) {
             throw new IllegalArgumentException("an example budget has to be positive: " + budget);
         }
-        db.set(new Front.ExampleBudget(), ms);
+        db.set(new Front.Policy(), Output.policyOf(db).withOuterTimeout(budget));
         return this;
     }
 

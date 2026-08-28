@@ -91,20 +91,6 @@ public final class Front {
     public record Core() implements Input<Boolean> {}
 
     /**
-     * How long one thing built and run on a worker of its own is given, in milliseconds: an example
-     * row evaluated, or one written statement read to compare it against another.
-     *
-     * <p>Not what decides a row. What a row is held to is counted
-     * ({@link souther.compiler.execute.EvaluationPolicy#stepLimit}), and this is the wait after which an
-     * evaluation that has stopped answering is given up on — which is reported as the compiler
-     * failing to decide, not as the model failing to terminate.
-     *
-     * <p>Absent means {@link souther.compiler.execute.EvaluationPolicy#outerTimeout}. Nothing but a caller
-     * with a reason to differ has to know this exists.
-     */
-    public record ExampleBudget() implements Input<Long> {}
-
-    /**
      * What one row or one reading is given to finish within, set outright rather than as a number of
      * milliseconds.
      *
