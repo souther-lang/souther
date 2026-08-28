@@ -90,7 +90,7 @@ public final class ExampleExecutions {
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
         return new ExampleExecution(prepared.value(), scope.value(), sigs.value(),
                 requirements, values == null ? Map.of() : values, contracts,
-                Output.deadlineOf(db), Output.policyOf(db),
+                Output.policyOf(db),
                 withDeclaring ? declaringOf(db, prepared.value()) : Map.of());
     }
 

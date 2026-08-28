@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.RowIdentity;
 
 import java.util.concurrent.Callable;
@@ -19,6 +20,37 @@ import java.util.concurrent.Callable;
  * come back" is stated rather than raced for.
  */
 public interface Deadline {
+
+    /**
+     * The stack a worker is given.
+     *
+     * <p>Large, and said here rather than inherited, so that how deep a recursion gets before the
+     * stack runs out is not something the surrounding JVM decides. What is meant to stop a recursion
+     * is {@link EvaluationPolicy#recursionDepthLimit}, which is counted and is the same on every
+     * machine; this is what makes room for that count to be reached first, and how much room it makes
+     * is what that limit was measured against.
+     *
+     * <p>A number of bytes of a thread's stack is this arrangement's and no other's. An execution
+     * that runs a row some other way bounds its recursion its own way and has nothing to do with
+     * this, which is why it is not among the terms a run is held to.
+     */
+    long DEFAULT_WORKER_STACK_BYTES = 64L * 1024 * 1024;
+
+    /** The stack this JVM's settings ask a worker to be given, on the terms
+     *  {@link EvaluationPolicy#fromSettings} states: a setting that is missing, unreadable or not
+     *  positive leaves the default in place. */
+    static long workerStackFromSettings() {
+        String written = System.getProperty("souther.example.worker.stack.bytes");
+        if (written == null) {
+            return DEFAULT_WORKER_STACK_BYTES;
+        }
+        try {
+            long asked = Long.parseLong(written.trim());
+            return asked > 0 ? asked : DEFAULT_WORKER_STACK_BYTES;
+        } catch (NumberFormatException _) {
+            return DEFAULT_WORKER_STACK_BYTES;
+        }
+    }
 
     /**
      * One piece of work, said as what it is rather than as a sentence about it.
@@ -90,7 +122,7 @@ public interface Deadline {
      * <p>For a run whose answers come from outside the compile. Two things have to hold at once and
      * they look like they conflict. A row is one thread's from beginning to end — what it spends is
      * counted there, and how deep it may recurse is decided by the stack that thread was made with,
-     * which is why {@link EvaluationPolicy#workerStackBytes} is said outright rather than inherited
+     * which is why {@link #DEFAULT_WORKER_STACK_BYTES} is said outright rather than inherited
      * from whatever {@code -Xss} the surrounding JVM has. And a supplied implementation answers out
      * of the caller's world, of which a thread is part — a transaction bound to one, a security or
      * request context, an MDC, a scoped value — so it has to run where the caller called from.

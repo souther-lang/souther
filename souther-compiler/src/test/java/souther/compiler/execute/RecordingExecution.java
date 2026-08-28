@@ -51,23 +51,33 @@ final class RecordingExecution implements ProgramExecution {
      * can be declared without the machine and not that it can be met: the imports it does not need
      * are the ones for the parts it never opened. So this reads all of them, and what it makes of
      * them is a sentence, because what it is showing is that they can be read at all.
+     *
+     * <p>The terms are worked with and not quoted. A getter called for the object that comes back
+     * would compile against a term whose type this cannot name, and print it — which says the ask
+     * carries something, not that an execution can be held to it. Splitting the budget over what
+     * was written is this stand-in's own arrangement, and it is what makes the number in the
+     * sentence the terms' and not the sentence's. A module that wrote none is given the whole of it
+     * rather than divided by nothing.
      */
     private static String read(ExampleExecution about) {
+        EvaluationPolicy held = about.policy();
+        long written = Math.max(1, about.rows().rows().size());
         return about.module()
-                + " (" + about.rows().rows().size() + " rows"
+                + " (" + about.rows().rows().size() + " examples"
                 + ", " + about.signatures().size() + " behaviors"
                 + ", " + about.requirements().size() + " requirement tables"
                 + ", " + about.definitions().size() + " definitions"
                 + ", " + about.contracts().size() + " contracts"
                 + ", names " + (Objects.requireNonNull(about.symbols()) != null)
-                + ", within " + Objects.requireNonNull(about.deadline())
-                + " and " + Objects.requireNonNull(about.policy()) + ")";
+                + ", " + held.stepLimit() / written + " steps an example"
+                + ", " + held.recursionDepthLimit() + " deep"
+                + ", given up on after " + held.outerTimeout().toMillis() + "ms)";
     }
 
     @Override
     public TableBuild fakeTables(ExampleExecution about, SourceId source) {
         asked.add("fakes of " + read(about) + " written in " + source
-                + ", " + about.rowsWrittenIn(source).rows().size() + " of its rows here");
+                + ", " + about.rowsWrittenIn(source).rows().size() + " of them here");
         return new TableBuild.NotBuiltHere();
     }
 

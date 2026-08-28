@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;

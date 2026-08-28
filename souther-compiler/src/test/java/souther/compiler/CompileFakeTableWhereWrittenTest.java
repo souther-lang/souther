@@ -4,7 +4,7 @@ import souther.compiler.diag.Primary;
 
 import souther.compiler.source.SourceId;
 
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 

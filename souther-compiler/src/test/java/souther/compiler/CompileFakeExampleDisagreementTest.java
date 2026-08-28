@@ -8,7 +8,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.examples.Deadline;
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.examples.ExampleStatements;
 import souther.compiler.examples.ExampleVerifier;
 import org.junit.jupiter.api.Test;

@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.WrittenStatements.Disagreement;
 import souther.compiler.observe.WrittenStatements.Readings;
 import souther.compiler.observe.WrittenStatements.Statement;

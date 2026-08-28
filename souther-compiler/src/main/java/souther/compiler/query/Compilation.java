@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import souther.compiler.execute.jvm.JvmProgramImages;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.source.SourceId;
@@ -52,6 +53,9 @@ public final class Compilation {
      * shape of holding something for a backend, and a second one would want the name.
      */
     private final JvmProgramImages jvmProgramImages = new QueryJvmProgramImages(db);
+    /** And what it runs them under, one of it for the same reason: the run that decides whether the
+     *  rows hold and the run a Java binding drives are held to one compilation's answer. */
+    private final JvmExampleDeadlines jvmExampleDeadlines = new QueryJvmExampleDeadlines(db);
     /** Which source each id was, for a caller that identifies sources by index. */
     private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
@@ -64,7 +68,11 @@ public final class Compilation {
         // Read now, so this compilation is held to what the settings said when it started rather than
         // to what the first compile in this JVM happened to read. A caller with a reason of its own
         // says so with withEvaluationPolicy.
-        db.set(new Front.Policy(), souther.compiler.examples.EvaluationPolicy.fromSettings());
+        db.set(new Front.Policy(), souther.compiler.execute.EvaluationPolicy.fromSettings());
+        // And the stack a worker of this compilation's own is made with, read now for the same
+        // reason. Not one of the terms above: what a recursion is held to is counted, and this is
+        // what the arrangement running it on a JVM thread gives that count room to be reached in.
+        db.set(new Front.WorkerStack(), souther.compiler.examples.Deadline.workerStackFromSettings());
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
         db.set(new Front.Reading(), Front.Reading.STANDARD);
@@ -81,7 +89,8 @@ public final class Compilation {
         // program, and ADR-0032 settles that it is run as the program that will ship. Which
         // implementation that is belongs here, so that nothing deciding whether the language
         // accepts a program names one.
-        db.running(new souther.compiler.execute.jvm.JvmProgramExecution(jvmProgramImages));
+        db.running(new souther.compiler.execute.jvm.JvmProgramExecution(jvmProgramImages,
+                jvmExampleDeadlines));
     }
 
     /**
@@ -94,6 +103,13 @@ public final class Compilation {
      */
     public JvmProgramImages jvmProgramImages() {
         return jvmProgramImages;
+    }
+
+    /** What the JVM runs this compilation's rows under, for the same caller. Reached the same way
+     *  and for the same reason: a binding that ran the rows under a deadline of its own making
+     *  would not be running them the way this compilation says. */
+    public JvmExampleDeadlines jvmExampleDeadlines() {
+        return jvmExampleDeadlines;
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
@@ -367,15 +383,20 @@ public final class Compilation {
      * is reported when one does not come back — gets that without holding every other compile in the
      * same JVM to the same wait.
      *
+     * <p>The wait among the terms and not a second one beside them. Said as its own input it would be
+     * a wait the JVM kept and the boundary did not know about, so an execution asked what it was held
+     * to would answer the default while the run it was answering for was already being given up on.
+     * Which is why {@link #withEvaluationPolicy} said afterwards replaces this along with the rest of
+     * them: it states the terms, and this states one of them.
+     *
      * @throws IllegalArgumentException if {@code budget} is not positive; a row that is given no time
      *     at all would report every behavior as one that does not terminate.
      */
     public Compilation withExampleBudget(java.time.Duration budget) {
-        long ms = budget.toMillis();
-        if (ms <= 0) {
+        if (budget.toMillis() <= 0) {
             throw new IllegalArgumentException("an example budget has to be positive: " + budget);
         }
-        db.set(new Front.ExampleBudget(), ms);
+        db.set(new Front.Policy(), Output.policyOf(db).withOuterTimeout(budget));
         return this;
     }
 
@@ -402,7 +423,7 @@ public final class Compilation {
      * What a caller says here is said about this compilation alone, so a test holding a row to a few
      * steps does not hold every other compile in the same JVM to them.
      */
-    public Compilation withEvaluationPolicy(souther.compiler.examples.EvaluationPolicy policy) {
+    public Compilation withEvaluationPolicy(souther.compiler.execute.EvaluationPolicy policy) {
         db.set(new Front.Policy(), policy);
         return this;
     }

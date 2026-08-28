@@ -33,6 +33,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * That is the difference between this walk and the one over a checked program, which does refuse
  * them, because what reads a checked program is an output standing outside this compiler.
  *
+ * <p>The subsystem that runs a row on a worker of this compile's own is refused for the same reason
+ * the emitted classes are. What a run is held to is the compile's and crosses as a term; the
+ * arrangement that keeps it — a thread of a stated size, a wall clock, work handed back to the
+ * caller — is one implementation's answer to how, and an execution that answers how differently
+ * would have to name it to be asked at all.
+ *
  * <p>Reachability and not the declared surface of one interface. A type is reached through the
  * methods of the types before it and through the arms of a sealed one, so a machine word four hops
  * out is one that crossed.
@@ -46,6 +52,7 @@ class NothingCrossingTheExecutionBoundaryIsTheMachinesTest {
             "souther.compiler.generated.",
             "souther.compiler.jvm.",
             "souther.compiler.execute.jvm.",
+            "souther.compiler.examples.",
             "java.lang.ClassLoader",
             "java.lang.Object");
 
