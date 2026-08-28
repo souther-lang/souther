@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import java.lang.reflect.Constructor;
@@ -160,7 +161,7 @@ class AComparisonSaysWhichWayItCameOutTest {
         return compilation;
     }
 
-    private static Map<String, byte[]> probed(Compilation compilation) {
+    private static Map<String, ClassFileImage> probed(Compilation compilation) {
         souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                 .ask(new Output.Evaluated(compilation.modules().get(0),
                         ArmObservation.RECORD)).value();
@@ -174,7 +175,7 @@ class AComparisonSaysWhichWayItCameOutTest {
         private final Object instance;
         private final Method apply;
 
-        Behavior(Map<String, byte[]> classes) {
+        Behavior(Map<String, ClassFileImage> classes) {
             assertNotNull(classes, "the model under test compiles");
             ClassLoader loader = new MemoryClassLoader(classes,
                     AComparisonSaysWhichWayItCameOutTest.class.getClassLoader());

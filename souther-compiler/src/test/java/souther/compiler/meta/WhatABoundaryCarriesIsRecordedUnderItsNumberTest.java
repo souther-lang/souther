@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
 import souther.compiler.codegen.Backend;
+import souther.compiler.jvm.ClassFileImage;
 
 import java.io.InputStream;
 import java.lang.classfile.Annotation;
@@ -85,10 +86,10 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
     }
 
     /** The members of each annotation this compiler writes, and what kind of value each holds. */
-    private static String carried(Map<String, byte[]> classes) {
+    private static String carried(Map<String, ClassFileImage> classes) {
         Map<String, String> byAnnotation = new TreeMap<>();
-        for (byte[] bytes : classes.values()) {
-            for (Annotation annotation : annotations(bytes)) {
+        for (ClassFileImage image : classes.values()) {
+            for (Annotation annotation : annotations(image.bytes())) {
                 String type = annotation.className().stringValue();
                 if (!type.startsWith("Lsouther/runtime/meta/")) {
                     continue;

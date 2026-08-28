@@ -2,6 +2,7 @@ package souther.cli;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.Compiler;
 import souther.compiler.Reserved;
@@ -230,7 +231,8 @@ public final class Main {
         }
         List<Located> warnings = new ArrayList<>();
         try {
-            Map<String, byte[]> classes = compiledClasses(sources, classPath, warnings, measure);
+            Map<String, ClassFileImage> classes =
+                    compiledClasses(sources, classPath, warnings, measure);
             // Before the written files: the warnings are about the source, and a long list of paths
             // between them and the command would bury them.
             report(warnings, sources, render);
@@ -1124,7 +1126,7 @@ public final class Main {
      * the classes are not the output of an accepted compile, and a directory holding them anyway is
      * what a later step would read as if they were.
      */
-    static Map<String, byte[]> compiledClasses(List<Path> sources, List<Path> classPath,
+    static Map<String, ClassFileImage> compiledClasses(List<Path> sources, List<Path> classPath,
                                                List<Located> warningsOut, Adequacy.Asked measure)
             throws IOException {
         List<String> texts = new ArrayList<>();
@@ -1145,12 +1147,13 @@ public final class Main {
     }
 
     /** Writes each class under {@code outDir}, and answers with the paths written, in order. */
-    static List<Path> writeClasses(Map<String, byte[]> classes, Path outDir) throws IOException {
+    static List<Path> writeClasses(Map<String, ClassFileImage> classes, Path outDir)
+            throws IOException {
         List<Path> written = new ArrayList<>();
-        for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
             Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue());
+            Files.write(file, entry.getValue().bytes());
             written.add(file);
         }
         return written;

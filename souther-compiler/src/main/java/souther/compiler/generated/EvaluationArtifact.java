@@ -1,5 +1,7 @@
 package souther.compiler.generated;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 import java.util.Objects;
 
@@ -25,10 +27,10 @@ import java.util.Objects;
  * manifest is what a run needs — and one covering every linked module would be answering for
  * behaviors no answerer here is asked about.
  *
- * @param classes         binary name to bytecode, for this module and the ones its rows reach
+ * @param classes         binary name to class file, for this module and the ones its rows reach
  * @param implementations what the module being evaluated generated an implementation for
  */
-public record EvaluationArtifact(Map<String, byte[]> classes,
+public record EvaluationArtifact(Map<String, ClassFileImage> classes,
                                  GeneratedImplementations implementations) {
 
     public EvaluationArtifact {

@@ -115,14 +115,14 @@ class CompileValueSpreadTest {
      */
     @Test
     void aPublishedValueCarriesTheValueItSpreads() {
-        ModulePath library = Compiler.compile("""
+        ModulePath library = ModulePath.of(Compiler.compile("""
                 module shared.people exposing ( Person, listed )
 
                 data Person = { name: String, age: Int }
 
                 let base = Person { name = "A", age = 20 }
                 let listed = Person { ...base, age = 21 }
-                """)::get;
+                """));
 
         assertDoesNotThrow(() -> Compiler.compileModules(java.util.List.of("""
                 module app.roster exposing ( Entry )

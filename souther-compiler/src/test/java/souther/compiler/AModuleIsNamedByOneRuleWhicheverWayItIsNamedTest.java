@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import java.util.List;
 import java.util.Map;
@@ -62,7 +63,7 @@ class AModuleIsNamedByOneRuleWhicheverWayItIsNamedTest {
 
     /** The behavior lands in the package the module was named, whichever way it was named. */
     private static void emitsCalcUnder(String module) {
-        Map<String, byte[]> classes = Compiler.compile(HEADERLESS, module);
+        Map<String, ClassFileImage> classes = Compiler.compile(HEADERLESS, module);
         assertTrue(classes.containsKey(Emitted.impl(module, "calc")), classes.keySet().toString());
     }
 }

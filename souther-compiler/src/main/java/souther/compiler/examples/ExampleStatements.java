@@ -8,6 +8,7 @@ import souther.compiler.observe.WrittenStatements.UnreadFake;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Contract;
 import souther.compiler.check.Sig;
@@ -224,7 +225,8 @@ public final class ExampleStatements {
      * the two answers are compared as the written values they are built into.
      */
     public static Readings disagreements(souther.compiler.check.Prepared.Examples module, Symbols symbols,
-                                         Map<ValueName.Behavior, Sig> sigs, Map<String, byte[]> classes,
+                                         Map<ValueName.Behavior, Sig> sigs,
+                                         Map<String, ClassFileImage> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
                                          Deadline deadline, EvaluationPolicy policy,
                                          Map<ValueName.Behavior, Contract> contracts,
@@ -316,7 +318,8 @@ public final class ExampleStatements {
      * step.
      */
     public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.Examples module, Symbols symbols,
-                                              Map<ValueName.Behavior, Sig> sigs, Map<String, byte[]> classes,
+                                              Map<ValueName.Behavior, Sig> sigs,
+                                              Map<String, ClassFileImage> classes,
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
                                               SourceId sourceId,
                                               Deadline deadline, EvaluationPolicy policy,

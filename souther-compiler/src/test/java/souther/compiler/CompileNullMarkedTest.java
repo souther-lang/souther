@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassFile;
@@ -38,11 +40,11 @@ class CompileNullMarkedTest {
         // class states to a consumer's compiler is the boundary, and a second annotation arriving
         // there is a decision to take rather than something to let through. The module's declarations
         // ride on `$Module` as runtime-invisible for that reason.
-        Map<String, byte[]> classes = Compiler.compile(SRC);
+        Map<String, ClassFileImage> classes = Compiler.compile(SRC);
 
         assertTrue(classes.size() > 1, "there is more than one class to mark: " + classes.keySet());
-        for (Map.Entry<String, byte[]> e : classes.entrySet()) {
-            assertEquals(List.of(NULL_MARKED), annotations(e.getValue()), e.getKey());
+        for (Map.Entry<String, ClassFileImage> e : classes.entrySet()) {
+            assertEquals(List.of(NULL_MARKED), annotations(e.getValue().bytes()), e.getKey());
         }
     }
 
@@ -58,7 +60,7 @@ class CompileNullMarkedTest {
 
     @Test
     void eachModuleOfALinkedSetMarksItsOwnClasses() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """, """
@@ -67,8 +69,8 @@ class CompileNullMarkedTest {
                 data Line = { paid: Amount }
                 """));
 
-        assertEquals(List.of(NULL_MARKED), annotations(classes.get("shared.money.Amount")));
-        assertEquals(List.of(NULL_MARKED), annotations(classes.get("ordering.Line")));
+        assertEquals(List.of(NULL_MARKED), annotations(classes.get("shared.money.Amount").bytes()));
+        assertEquals(List.of(NULL_MARKED), annotations(classes.get("ordering.Line").bytes()));
     }
 
     @Test
@@ -78,7 +80,7 @@ class CompileNullMarkedTest {
         // names the clause that did not hold.
         assertEquals("(Ldemo/Amount;)Lsouther/runtime/Result<Ldemo/Receipt;"
                         + "Lsouther/runtime/InvariantFailure;>;",
-                methodSignature(Compiler.compile(SRC).get("demo.Receipt"), "__construct"));
+                methodSignature(Compiler.compile(SRC).get("demo.Receipt").bytes(), "__construct"));
     }
 
     /** The annotation types the class carries as runtime-visible — what a Kotlin compiler reads. */

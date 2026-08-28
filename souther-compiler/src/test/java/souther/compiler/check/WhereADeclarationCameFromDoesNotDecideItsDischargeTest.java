@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.Compiler;
 import souther.compiler.check.InvariantChecker.Said;
 import souther.compiler.check.InvariantChecker.Verdict;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -111,8 +112,8 @@ class WhereADeclarationCameFromDoesNotDecideItsDischargeTest {
     /** The library compiled on its own, and its classes handed over as the whole of what the second
      * compile knows about it. */
     private static List<Verdict> importedFromClasses(String uses) {
-        Map<String, byte[]> classes = Compiler.compile(LIBRARY);
-        ModulePath path = classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compile(LIBRARY);
+        ModulePath path = ModulePath.of(classes);
         return verdicts(() -> Compiler.compileModulesWithWarnings(List.of(app(uses)), path));
     }
 

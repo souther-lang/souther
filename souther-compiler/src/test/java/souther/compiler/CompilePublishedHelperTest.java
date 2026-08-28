@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.msg.ParseMessage;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -294,7 +295,7 @@ class CompilePublishedHelperTest {
      * declares it closed it, and the module at the end emits the method. */
     @Test
     void aRecursiveHelperTwoModulesUpArrivesThroughTheChain() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module low exposing ( summed )
 
                 partial let summed (n: Int) : Int = if n == 0 then 0 else n + summed(n - 1)
@@ -350,7 +351,7 @@ class CompilePublishedHelperTest {
      */
     @Test
     void twoModulesRecursiveHelpersOfOneNameStayTwoMethods() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up.a exposing ( step )
 
                 partial let step (n: Int) : Int = if n == 0 then 1 else step(n - 1)
@@ -385,7 +386,7 @@ class CompilePublishedHelperTest {
      * Java-reachable entry, and a construction inside it is no more reachable than before. */
     @Test
     void aCarriedHelperIsEmittedOnThePackagePrivateFnsOfTheReader() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module maths exposing ( built )
 
                 data Wrapped = Int
@@ -416,8 +417,8 @@ class CompilePublishedHelperTest {
      * body reaches, and the importing project closes and expands it the same way. */
     @Test
     void aHelperCrossesAProjectBoundary() throws Exception {
-        Map<String, byte[]> classes = Compiler.compile(PRICING);
-        ModulePath path = classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compile(PRICING);
+        ModulePath path = ModulePath.of(classes);
 
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
                 module app.billing exposing ( Receipt, bill )
@@ -545,7 +546,7 @@ class CompilePublishedHelperTest {
      * a method has to go somewhere, not because a helper was imported. */
     @Test
     void aReaderOfANonRecursiveHelperEmitsNoFnsClass() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(PRICING, """
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(PRICING, """
                 module order exposing ( Receipt, bill )
 
                 import pricing ( Amount, taxed )
@@ -609,8 +610,8 @@ class CompilePublishedHelperTest {
      */
     @Test
     void aHelperWhoseElementIsOpenCrossesAProjectBoundary() {
-        Map<String, byte[]> library = Compiler.compile(COUNTING);
-        ModulePath path = library::get;
+        Map<String, ClassFileImage> library = Compiler.compile(COUNTING);
+        ModulePath path = ModulePath.of(library);
 
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
                 module app.report exposing ( Counted, tally )

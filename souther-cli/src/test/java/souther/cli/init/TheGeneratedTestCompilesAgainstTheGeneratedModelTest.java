@@ -6,6 +6,7 @@ import souther.compiler.Compiler;
 import souther.compiler.diag.Located;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Adequacy;
 
 import javax.tools.DiagnosticCollector;
@@ -51,7 +52,7 @@ class TheGeneratedTestCompilesAgainstTheGeneratedModelTest {
     }
 
     /** The classes the model compiles to, by binary name. */
-    private static Map<String, byte[]> compiled() {
+    private static Map<String, ClassFileImage> compiled() {
         List<String> texts = Templates.sourcesOf(PROJECT).stream()
                 .filter(file -> file.path().endsWith(".sou"))
                 .map(Templates.File::content)
@@ -76,11 +77,11 @@ class TheGeneratedTestCompilesAgainstTheGeneratedModelTest {
         };
     }
 
-    private static void write(Map<String, byte[]> classes, Path into) throws IOException {
-        for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
+    private static void write(Map<String, ClassFileImage> classes, Path into) throws IOException {
+        for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
             Path file = into.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue());
+            Files.write(file, entry.getValue().bytes());
         }
     }
 

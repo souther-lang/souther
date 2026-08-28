@@ -8,6 +8,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import org.junit.jupiter.api.Test;
@@ -66,9 +67,9 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
      * files has.
      */
     private static ModulePath leftOverClassFiles() {
-        Map<String, byte[]> built = new LinkedHashMap<>(Compiler.compile(EARLIER));
+        Map<String, ClassFileImage> built = new LinkedHashMap<>(Compiler.compile(EARLIER));
         built.keySet().remove(Emitted.declarations("example.stale"));
-        return built::get;
+        return ModulePath.of(built);
     }
 
     @Test
@@ -93,7 +94,7 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
      *  into is loaded once, by whoever already has it, not defined a second time here. */
     @Test
     void anameThisCompileDidNotGenerateStillComesFromTheParent() throws Exception {
-        Map<String, byte[]> mine = Compiler.compile(EARLIER);
+        Map<String, ClassFileImage> mine = Compiler.compile(EARLIER);
         MemoryClassLoader loader =
                 new MemoryClassLoader(mine, AnEvaluationRunsTheClassesThisCompileGeneratedTest.class
                         .getClassLoader());

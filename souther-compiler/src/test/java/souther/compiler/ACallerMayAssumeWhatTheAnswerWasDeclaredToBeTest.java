@@ -2,6 +2,8 @@ package souther.compiler;
 
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
@@ -273,8 +275,9 @@ class ACallerMayAssumeWhatTheAnswerWasDeclaredToBeTest {
 
     /** The consumer compiled on its own, against the library's classes and none of its source. */
     private static List<Diagnostic> unprovenAgainst(String consumer, String library) {
-        Map<String, byte[]> classes = Compiler.compile(library);
-        return Compiler.compileModulesWithWarnings(List.of(consumer), classes::get).warnings()
+        Map<String, ClassFileImage> classes = Compiler.compile(library);
+        return Compiler.compileModulesWithWarnings(List.of(consumer), ModulePath.of(classes))
+                .warnings()
                 .stream().filter(d -> d.severity() == Severity.WARNING)
                 .filter(d -> d.code().equals("E2011")).toList();
     }

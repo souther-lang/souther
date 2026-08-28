@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import java.lang.reflect.Constructor;
@@ -66,7 +67,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         CoverageSites.Plan plan =
                 Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
         ComparisonOccurrence perElement = comparisonAt(plan, "fee", 9);
-        Map<String, byte[]> classes = probed(compilation);
+        Map<String, ClassFileImage> classes = probed(compilation);
 
         Observation mixed = new Behavior(classes, "fee").observing(20L, List.of(1L, -1L));
         Observation positives = new Behavior(classes, "fee").observing(20L, List.of(1L, 2L));
@@ -90,7 +91,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         CoverageSites.Plan plan =
                 Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
         ComparisonOccurrence named = comparisonAt(plan, "fee", 7);
-        Map<String, byte[]> classes = probed(compilation);
+        Map<String, ClassFileImage> classes = probed(compilation);
 
         assertEquals(List.of(true),
                 waysOut(new Behavior(classes, "fee").observing(20L, List.of(1L)), named));
@@ -105,7 +106,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         CoverageSites.Plan plan =
                 Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
         ComparisonOccurrence answered = comparisonAt(plan, "positive", 12);
-        Map<String, byte[]> classes = probed(compilation);
+        Map<String, ClassFileImage> classes = probed(compilation);
 
         assertEquals(List.of(true),
                 waysOut(new Behavior(classes, "positive").observing(5L), answered));
@@ -144,7 +145,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         return compilation;
     }
 
-    private static Map<String, byte[]> probed(Compilation compilation) {
+    private static Map<String, ClassFileImage> probed(Compilation compilation) {
         souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                 .ask(new Output.Evaluated(compilation.modules().get(0),
                         ArmObservation.RECORD)).value();
@@ -158,7 +159,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         private final Object instance;
         private final Method apply;
 
-        Behavior(Map<String, byte[]> classes, String named) {
+        Behavior(Map<String, ClassFileImage> classes, String named) {
             assertNotNull(classes, "the model under test compiles");
             ClassLoader loader = new MemoryClassLoader(classes,
                     AComparisonIsLitWhereverItIsWrittenTest.class.getClassLoader());

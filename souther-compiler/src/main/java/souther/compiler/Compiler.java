@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -35,7 +36,7 @@ public final class Compiler {
     /** Compiles a single self-contained module (no imports) into binary class name → bytecode.
      * A source that omits the {@code module} header is named {@code Main} (the string API has no
      * file name to derive from; {@code souther run} passes the file-name stem instead). */
-    public static Map<String, byte[]> compile(String source) {
+    public static Map<String, ClassFileImage> compile(String source) {
         return compile(source, "Main");
     }
 
@@ -46,7 +47,7 @@ public final class Compiler {
      * @param classes the generated classes, by binary name
      * @param locatedWarnings the warnings, each with the source that holds it
      */
-    public record Compiled(Map<String, byte[]> classes, List<Located> locatedWarnings) {
+    public record Compiled(Map<String, ClassFileImage> classes, List<Located> locatedWarnings) {
 
         /** The warnings on their own, for a caller that only reads what they say. */
         public List<Diagnostic> warnings() {
@@ -63,16 +64,16 @@ public final class Compiler {
      * {@code defaultModuleName} (so the CLI's filename-stem naming can surface warnings too). */
     public static Compiled compileWithWarnings(String source, String defaultModuleName) {
         List<Located> warnings = new ArrayList<>();
-        Map<String, byte[]> classes = compile(source, defaultModuleName, warnings);
+        Map<String, ClassFileImage> classes = compile(source, defaultModuleName, warnings);
         return new Compiled(classes, warnings);
     }
 
     /** As {@link #compile(String)}, but a header-less source is named {@code defaultModuleName}. */
-    public static Map<String, byte[]> compile(String source, String defaultModuleName) {
+    public static Map<String, ClassFileImage> compile(String source, String defaultModuleName) {
         return compile(source, defaultModuleName, new ArrayList<>());
     }
 
-    private static Map<String, byte[]> compile(String source, String defaultModuleName,
+    private static Map<String, ClassFileImage> compile(String source, String defaultModuleName,
                                                List<Located> warningsOut) {
         return compiling(source, defaultModuleName, warningsOut);
     }
@@ -126,7 +127,7 @@ public final class Compiler {
      * with its own position rather than tagged with the file it came from, because there is only
      * the one.
      */
-    private static Map<String, byte[]> compiling(String source, String defaultModuleName,
+    private static Map<String, ClassFileImage> compiling(String source, String defaultModuleName,
                                                  List<Located> warningsOut) {
         return driven(() -> classesOf(compiled(source, defaultModuleName, warningsOut)));
     }
@@ -269,12 +270,12 @@ public final class Compiler {
         });
     }
 
-    private static Map<String, byte[]> classesOf(Compilation compilation) {
+    private static Map<String, ClassFileImage> classesOf(Compilation compilation) {
         return new LinkedHashMap<>(compilation.classes());
     }
 
     /** Compiles a set of modules together, resolving explicit imports and rejecting cycles. */
-    public static Map<String, byte[]> compileModules(List<String> sources) {
+    public static Map<String, ClassFileImage> compileModules(List<String> sources) {
         return compileModules(sources, ModulePath.EMPTY);
     }
 
@@ -284,7 +285,7 @@ public final class Compiler {
      * module found there is read for its declarations and nothing else: its classes are already
      * built, and this compile neither re-emits them nor re-runs its examples.
      */
-    public static Map<String, byte[]> compileModules(List<String> sources, ModulePath path) {
+    public static Map<String, ClassFileImage> compileModules(List<String> sources, ModulePath path) {
         return compileModules(sources, path, new ArrayList<>());
     }
 
@@ -301,7 +302,7 @@ public final class Compiler {
         return new Compiled(compileModules(sources, path, warnings), warnings);
     }
 
-    private static Map<String, byte[]> compileModules(List<String> sources, ModulePath path,
+    private static Map<String, ClassFileImage> compileModules(List<String> sources, ModulePath path,
                                                       List<Located> warningsOut) {
         return linking(sources, path, warningsOut);
     }
@@ -332,7 +333,7 @@ public final class Compiler {
      * collected, and that every module's examples are evaluated before any failing one is reported
      * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
      */
-    private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
+    private static Map<String, ClassFileImage> linking(List<String> sources, ModulePath path,
                                                List<Located> warningsOut) {
         return driven(() -> new LinkedHashMap<>(
                 linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes()));
@@ -451,10 +452,10 @@ public final class Compiler {
     }
     /** Compiles source and writes each generated class under {@code outDir}. */
     public static void compileToDir(String source, Path outDir) throws IOException {
-        for (Map.Entry<String, byte[]> entry : compile(source).entrySet()) {
+        for (Map.Entry<String, ClassFileImage> entry : compile(source).entrySet()) {
             Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue());
+            Files.write(file, entry.getValue().bytes());
         }
     }
 }

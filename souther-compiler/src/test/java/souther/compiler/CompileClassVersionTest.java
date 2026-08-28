@@ -2,6 +2,8 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,16 +43,16 @@ class CompileClassVersionTest {
 
     @Test
     void everyGeneratedClassTargetsJava25() {
-        Map<String, byte[]> classes = Compiler.compile(MODULE);
-        for (Map.Entry<String, byte[]> e : classes.entrySet()) {
-            assertEquals(JAVA_25, majorVersion(e.getValue()),
+        Map<String, ClassFileImage> classes = Compiler.compile(MODULE);
+        for (Map.Entry<String, ClassFileImage> e : classes.entrySet()) {
+            assertEquals(JAVA_25, majorVersion(e.getValue().bytes()),
                     e.getKey() + " must target Java 25, not the JDK that built it");
         }
     }
 
     @Test
     void theCompilerEmitsDataDecodersAndBehaviorsAlike() {
-        Map<String, byte[]> classes = Compiler.compile(MODULE);
+        Map<String, ClassFileImage> classes = Compiler.compile(MODULE);
         // guards the test above against silently covering an empty or tiny set
         assertEquals(true, classes.size() >= 10, "expected the whole module's output, got " + classes.keySet());
     }

@@ -3,6 +3,8 @@ package souther.compiler;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,7 +41,7 @@ class CompileSharedInstanceTest {
             """;
 
     /** The module compiled once: the four tests only read, so they can share one loader. */
-    private static final Map<String, byte[]> CLASSES = Compiler.compile(MODULE);
+    private static final Map<String, ClassFileImage> CLASSES = Compiler.compile(MODULE);
     private static final BytesClassLoader LOADER =
             new BytesClassLoader(CLASSES, CompileSharedInstanceTest.class.getClassLoader());
 

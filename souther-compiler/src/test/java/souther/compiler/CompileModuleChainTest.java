@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.types.TypeKey;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.types.TypeSymbols;
 
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,7 @@ class CompileModuleChainTest {
 
     @Test
     void composesABehaviorTwoImportHopsAway() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(A, B, C));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(A, B, C));
         assertTrue(classes.containsKey("c.Quad"), "the two-hop composition generates c.Quad");
 
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -78,7 +79,7 @@ class CompileModuleChainTest {
     void aDepartedImportedCaseReachesTheCompositionsUnionThroughABridgeCase() throws Exception {
         // checkout's output is Receipt | Empty. Receipt is pb's own and is the case itself; Empty is
         // pa's, so pb emits pb.EmptyCase and permits that.
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(PA, PB));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(PA, PB));
         BytesClassLoader loader = new BytesClassLoader(classes, CompileModuleChainTest.class.getClassLoader());
         assertEquals(List.of(loader.loadClass(Emitted.bridgeCase("pb", TypeSymbols.declared(new TypeKey("pa", "Empty")))), loader.loadClass("pb.Receipt")),
                 Arrays.asList(loader.loadClass(Emitted.result("pb", "checkout")).getPermittedSubclasses()));

@@ -12,12 +12,12 @@ import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.generated.EvaluationArtifact;
-import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -230,7 +230,7 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
     /** The classes one build of these sources emits, read for what they were stamped with. */
     private static PublishedClasses declarationsOf(List<String> sources) {
         Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
-        Map<String, byte[]> classes = compiled.db().ask(new Output.All()).value();
-        return new ClassFileDeclarations(classes::get);
+        Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
+        return ModulePath.of(classes).declarations();
     }
 }

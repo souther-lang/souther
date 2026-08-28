@@ -234,7 +234,7 @@ class AStandInsStatementIsHeldToWhatTheImplementationAnswersTest {
         for (var e : souther.compiler.Compiler.compileModules(List.of(model)).entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
-            Files.write(at, e.getValue());
+            Files.write(at, e.getValue().bytes());
         }
         Path java = classes.resolve(pkg.replace('.', '/') + "/FindTodoImpl.java");
         Files.writeString(java, impl);

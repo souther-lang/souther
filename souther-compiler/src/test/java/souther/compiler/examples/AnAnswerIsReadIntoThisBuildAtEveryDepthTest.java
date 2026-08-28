@@ -6,6 +6,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import java.util.List;
@@ -91,7 +92,7 @@ class AnAnswerIsReadIntoThisBuildAtEveryDepthTest {
 
     private static Read read() {
         Compilation c = Compilation.ofSource(MODEL, "Main");
-        Map<String, byte[]> classes = c.db().ask(new Output.All()).value();
+        Map<String, ClassFileImage> classes = c.db().ask(new Output.All()).value();
         assertEquals(List.of(), c.diagnostics().values().stream().flatMap(List::stream)
                 .map(d -> String.valueOf(d.diagnostic().code())).toList());
         MemoryClassLoader loader =

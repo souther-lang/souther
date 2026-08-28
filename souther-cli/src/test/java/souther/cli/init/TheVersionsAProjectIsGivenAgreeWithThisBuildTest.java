@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.diag.Located;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Adequacy;
 
 import java.io.InputStream;
@@ -68,10 +69,10 @@ class TheVersionsAProjectIsGivenAgreeWithThisBuildTest {
     @Test
     void theJavaReleaseAProjectDeclaresIsTheOneTheCompilerEmits() {
         List<Located> warnings = new ArrayList<>();
-        Map<String, byte[]> classes = Compiler.compiledModules(
+        Map<String, ClassFileImage> classes = Compiler.compiledModules(
                 List.of("module probe\n\ndata Amount = Int\n    invariant value >= 0\n"),
                 ModulePath.EMPTY, warnings, Adequacy.Asked.NOTHING).classes();
-        byte[] emitted = classes.values().iterator().next();
+        byte[] emitted = classes.values().iterator().next().bytes();
         assertNotNull(emitted);
 
         int major = ((emitted[6] & 0xFF) << 8) | (emitted[7] & 0xFF);

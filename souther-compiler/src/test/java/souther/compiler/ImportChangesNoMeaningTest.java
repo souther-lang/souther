@@ -202,9 +202,9 @@ class ImportChangesNoMeaningTest {
         return qualified.classes().entrySet().stream()
                 .filter(e -> !e.getKey().equals(Emitted.declarations("demo")))
                 .sorted(java.util.Map.Entry.comparingByKey())
-                .filter(e -> e.getValue().length != imported.classes().get(e.getKey()).length)
+                .filter(e -> e.getValue().size() != imported.classes().get(e.getKey()).size())
                 .map(e -> e.getKey() + "="
-                        + (e.getValue().length - imported.classes().get(e.getKey()).length))
+                        + (e.getValue().size() - imported.classes().get(e.getKey()).size()))
                 .collect(Collectors.joining(","));
     }
 }

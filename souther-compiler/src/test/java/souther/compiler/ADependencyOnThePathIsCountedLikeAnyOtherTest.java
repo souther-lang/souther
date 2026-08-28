@@ -10,6 +10,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import java.util.List;
@@ -51,8 +52,8 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
             """;
 
     private static ModulePath published() {
-        Map<String, byte[]> classes = Compiler.compile(PUBLISHED);
-        return classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compile(PUBLISHED);
+        return ModulePath.of(classes);
     }
 
     private static RowOutcome onlyRowOf(String source, EvaluationPolicy policy) {
@@ -127,7 +128,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
      */
     @Test
     void aBehaviorBodyThatStaysInTheJarIsCountedToo() {
-        Map<String, byte[]> jar = Compiler.compile("""
+        Map<String, ClassFileImage> jar = Compiler.compile("""
                 module lib.svc exposing ( Amount, spin )
 
                 data Amount = Int
@@ -152,7 +153,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
 
                 example bill
                   | "reaches the dependency body": (Amount(1)) -> Receipt { total = Amount(0) }
-                """), jar::get);
+                """), ModulePath.of(jar));
         compilation.withEvaluationPolicy(EvaluationPolicy.of(50_000L));
         compilation.answerEverything();
 

@@ -10,6 +10,7 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.diag.SourceNames;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.Compiler;
 import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
@@ -100,12 +101,12 @@ public final class SoutherProcessor extends AbstractProcessor {
             for (String reported : render(compiled.locatedWarnings(), sources)) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, reported);
             }
-            Map<String, byte[]> classes = compiled.classes();
+            Map<String, ClassFileImage> classes = compiled.classes();
             Filer filer = processingEnv.getFiler();
-            for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
+            for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
                 JavaFileObject file = filer.createClassFile(entry.getKey());
                 try (OutputStream out = file.openOutputStream()) {
-                    out.write(entry.getValue());
+                    out.write(entry.getValue().bytes());
                 }
             }
         } catch (CompileException e) {

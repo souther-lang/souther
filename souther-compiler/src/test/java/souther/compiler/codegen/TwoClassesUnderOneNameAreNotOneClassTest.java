@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.Emitted;
 import souther.compiler.EmittedBytes;
 import org.junit.jupiter.api.Test;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.TypeKey;
@@ -12,7 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -50,10 +50,10 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
                 "the refusal names the class both wanted: " + refused.getMessage());
         assertTrue(refused.getMessage().contains("Quote") && refused.getMessage().contains("quote"),
                 "and the two identities that wanted it: " + refused.getMessage());
-        assertEquals(List.of(Emitted.value("demo", "Quote")), List.copyOf(out.byBinaryName().keySet()),
+        assertEquals(List.of(Emitted.value("demo", "Quote")), List.copyOf(out.seal().keySet()),
                 "the class already written stays the one that is written");
-        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "first"),
-                out.byBinaryName().get(Emitted.value("demo", "Quote")),
+        assertEquals(ClassFileImage.of(EmittedBytes.of(QUOTE_DATA, "first")),
+                out.seal().get(Emitted.value("demo", "Quote")),
                 "and it is not replaced on the way out");
     }
 
@@ -86,8 +86,8 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
                 () -> out.rewrite(QUOTE_BEHAVIOR, _ -> EmittedBytes.of(QUOTE_BEHAVIOR)));
         assertTrue(refused.getMessage().contains("Quote") && refused.getMessage().contains("quote"),
                 "the refusal names what was emitted and what asked: " + refused.getMessage());
-        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "first"),
-                out.byBinaryName().get(Emitted.value("demo", "Quote")),
+        assertEquals(ClassFileImage.of(EmittedBytes.of(QUOTE_DATA, "first")),
+                out.seal().get(Emitted.value("demo", "Quote")),
                 "and the class is not rewritten");
     }
 
@@ -97,12 +97,14 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
         Emissions out = new Emissions("demo");
         out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA, "rewritten"));
-        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "rewritten"),
-                out.byBinaryName().get(Emitted.value("demo", "Quote")));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "third")));
         assertTrue(refused.getMessage().contains("written twice"),
                 "and a rewrite is not a second emission: " + refused.getMessage());
+        // Read last: sealing ends the writing, so what the refusal above is about has to be asked
+        // before it.
+        assertEquals(ClassFileImage.of(EmittedBytes.of(QUOTE_DATA, "rewritten")),
+                out.seal().get(Emitted.value("demo", "Quote")));
     }
 
     /** A rewrite of something nothing emitted is refused rather than becoming the emission of it. */
@@ -112,7 +114,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA)));
         assertTrue(refused.getMessage().contains("demo.Quote"), refused.getMessage());
-        assertEquals(List.of(), List.copyOf(out.byBinaryName().keySet()));
+        assertEquals(List.of(), List.copyOf(out.seal().keySet()));
     }
 
     /** And through the door a whole set of classes arrives by, which is how the classes compiled for
@@ -144,6 +146,6 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
         assertEquals(List.of(Emitted.value("demo", "Quote"), Emitted.encoder("demo", "Quote"),
                         Emitted.decoder("demo", "Quote", DecoderKind.JSON),
                         Emitted.behaviorInterface("demo", "price")),
-                List.copyOf(out.byBinaryName().keySet()));
+                List.copyOf(out.seal().keySet()));
     }
 }

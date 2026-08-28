@@ -8,6 +8,7 @@ import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.JsonBoundary;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Compilation;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -108,6 +109,10 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
      * deciding what changed, and either is right here: what may not happen is a loader that is not
      * over what {@link Compilation#classes()} now answers, or a second one over classes that never
      * moved.
+     *
+     * <p>Never moved by what they say. A generation that ran a second time and came to the same
+     * class files answers with a map that was built again, and the program is the one that was
+     * already loaded.
      */
     @Test
     void itStandsExactlyWhileTheClassesDo() {
@@ -115,7 +120,7 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
         for (boolean lookingInBetween : new boolean[] {true, false}) {
             Compilation compilation = Compilation.ofDocuments(
                     Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY);
-            Map<String, byte[]> classes = compilation.classes();
+            Map<String, ClassFileImage> classes = compilation.classes();
             ClassLoader loader = compilation.loader();
 
             compilation.update(Map.of("a.sou", edited), Set.of());
@@ -129,13 +134,19 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
         }
     }
 
-    /** Asserts the rule at one step and answers with the classes as they now are. */
-    private static Map<String, byte[]> sameOrNot(Compilation compilation,
-                                                 Map<String, byte[]> classesBefore,
+    /**
+     * Asserts the rule at one step and answers with the classes as they now are.
+     *
+     * <p>Which classes there are is asked by what they say and not by which map they came back in. A
+     * generation that ran again and came to the same class files is the same program, and a loader
+     * replaced over it would divide the types of a program nothing about had changed.
+     */
+    private static Map<String, ClassFileImage> sameOrNot(Compilation compilation,
+                                                 Map<String, ClassFileImage> classesBefore,
                                                  ClassLoader loaderBefore, String step) {
-        Map<String, byte[]> classesNow = compilation.classes();
+        Map<String, ClassFileImage> classesNow = compilation.classes();
         ClassLoader loaderNow = compilation.loader();
-        assertEquals(classesBefore == classesNow, loaderBefore == loaderNow,
+        assertEquals(classesBefore.equals(classesNow), loaderBefore == loaderNow,
                 "the loader stands exactly while the classes do, after " + step);
         return classesNow;
     }

@@ -6,6 +6,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceContext;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -182,7 +183,7 @@ class AGeneratedMethodStaysWithinTheJvmParameterSlotLimitTest {
         return sb.toString();
     }
 
-    private void loadAll(Map<String, byte[]> classes) throws Exception {
+    private void loadAll(Map<String, ClassFileImage> classes) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         for (String name : classes.keySet()) {
             // getDeclaredMethods is what forces the descriptors to be parsed; the methods

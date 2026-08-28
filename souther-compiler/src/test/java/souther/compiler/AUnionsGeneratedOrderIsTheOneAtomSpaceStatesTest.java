@@ -9,6 +9,8 @@ import java.lang.classfile.instruction.TypeCheckInstruction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,7 +83,7 @@ class AUnionsGeneratedOrderIsTheOneAtomSpaceStatesTest {
     }
 
     private static List<String> permitsOf(String behavior) throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(MODULE));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(MODULE));
         BytesClassLoader loader = new BytesClassLoader(classes,
                 AUnionsGeneratedOrderIsTheOneAtomSpaceStatesTest.class.getClassLoader());
         return Arrays.stream(loader.loadClass(Emitted.result("m", behavior)).getPermittedSubclasses())
@@ -90,8 +92,8 @@ class AUnionsGeneratedOrderIsTheOneAtomSpaceStatesTest {
 
     /** The types the union's encoder tests, in the order it tests them. */
     private static List<String> encoderDispatchOf(String behavior) {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(MODULE));
-        byte[] encoder = classes.get(Emitted.resultEncoder("m", behavior));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(MODULE));
+        byte[] encoder = classes.get(Emitted.resultEncoder("m", behavior)).bytes();
         List<String> tested = new ArrayList<>();
         for (MethodModel method : ClassFile.of().parse(encoder).methods()) {
             if (!method.methodName().stringValue().equals("encode")) {

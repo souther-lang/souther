@@ -7,6 +7,8 @@ import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.HashSet;
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 import java.util.Set;
 
@@ -24,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompileInjectedFactoryTest {
 
     private Class<?> base(String moduleSrc, String baseClass) throws Exception {
-        Map<String, byte[]> classes = Compiler.compile(moduleSrc);
+        Map<String, ClassFileImage> classes = Compiler.compile(moduleSrc);
         return new BytesClassLoader(classes, getClass().getClassLoader()).loadClass(baseClass);
     }
 
@@ -94,14 +96,14 @@ class CompileInjectedFactoryTest {
     void theFieldBearingFactoryBuildsThroughConstructNotTheRawConstructor() throws Exception {
         // The factory must route through __construct (which checks the invariant) and orThrow (which
         // aborts on a violation), not the raw non-checking constructor. Verify the emitted bytecode.
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module demo
                 data OrderId = String
                     invariant String.length(value) > 0
                 data In = { x: Int }
                 behavior mk : (i: In) -> OrderId constructs OrderId
                 """);
-        Set<String> invoked = invokedIn(classes.get("demo.Mk"), "OrderId");
+        Set<String> invoked = invokedIn(classes.get("demo.Mk").bytes(), "OrderId");
         assertTrue(invoked.contains("__construct"), "the factory runs the invariant through __construct");
         assertTrue(invoked.contains("orThrow"), "a violation aborts via orThrow");
     }

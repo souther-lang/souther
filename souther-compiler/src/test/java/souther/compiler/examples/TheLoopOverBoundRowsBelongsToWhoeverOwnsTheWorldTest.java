@@ -165,7 +165,7 @@ class TheLoopOverBoundRowsBelongsToWhoeverOwnsTheWorldTest {
         for (var e : souther.compiler.Compiler.compileModules(List.of(MODEL)).entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
-            Files.write(at, e.getValue());
+            Files.write(at, e.getValue().bytes());
         }
         Path java = classes.resolve("example/stored/FindTodoImpl.java");
         Files.writeString(java, IMPL);

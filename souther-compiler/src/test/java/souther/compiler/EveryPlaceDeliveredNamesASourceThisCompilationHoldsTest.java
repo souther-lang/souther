@@ -13,6 +13,8 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.source.SourceId;
 
 import tools.jackson.databind.JsonNode;
@@ -53,8 +55,8 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
     /** A module this compile has no file for, built as its own project's build would — and needing
      *  one this compile does not put on the path, so reading it back has something to report about a
      *  declaration written where there is no file. */
-    private static Map<String, byte[]> published() {
-        Map<String, byte[]> deep = Compiler.compile("""
+    private static Map<String, ClassFileImage> published() {
+        Map<String, ClassFileImage> deep = Compiler.compile("""
                 module lib.deep exposing ( Deep )
                 data Deep = String
                 """);
@@ -63,7 +65,7 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
                 import lib.deep ( Deep )
 
                 data Held = { deep: Deep }
-                """), deep::get);
+                """), ModulePath.of(deep));
     }
 
     /** A compile that reaches that module, so a report about it has to be said somewhere here. */
@@ -73,7 +75,7 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
                 import lib.held ( Held )
 
                 data Page = { held: Held }
-                """), published()::get);
+                """), ModulePath.of(published()));
         compilation.answerEverything();
         return compilation;
     }

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import java.lang.classfile.ClassFile;
@@ -59,7 +60,7 @@ class ProbedBytecodeTest {
         return compilation;
     }
 
-    private static Map<String, byte[]> probed(Compilation compilation) {
+    private static Map<String, ClassFileImage> probed(Compilation compilation) {
         souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                 .ask(new Output.Evaluated(compilation.modules().get(0),
                         ArmObservation.RECORD)).value();
@@ -152,12 +153,12 @@ class ProbedBytecodeTest {
      */
     @Test
     void nothingThatShipsMentionsTheProbe() {
-        Map<String, byte[]> shipped = compiled().db().ask(new Output.All()).value();
+        Map<String, ClassFileImage> shipped = compiled().db().ask(new Output.All()).value();
         assertNotNull(shipped);
         assertFalse(shipped.isEmpty());
 
-        for (Map.Entry<String, byte[]> each : shipped.entrySet()) {
-            assertFalse(referencedClasses(each.getValue()).contains(PROBE),
+        for (Map.Entry<String, ClassFileImage> each : shipped.entrySet()) {
+            assertFalse(referencedClasses(each.getValue().bytes()).contains(PROBE),
                     each.getKey() + " refers to the probe");
         }
     }
@@ -165,10 +166,10 @@ class ProbedBytecodeTest {
     /** And that check is not vacuous: the measured classes do name it. */
     @Test
     void theMeasuredClassesDoMentionIt() {
-        Map<String, byte[]> classes = probed(compiled());
+        Map<String, ClassFileImage> classes = probed(compiled());
 
         assertTrue(classes.values().stream()
-                        .anyMatch(bytes -> referencedClasses(bytes).contains(PROBE)),
+                        .anyMatch(image -> referencedClasses(image.bytes()).contains(PROBE)),
                 "something in there records where a run went");
     }
 
@@ -203,23 +204,23 @@ class ProbedBytecodeTest {
     void onlyThisModulesClassesAreTheMeasuredOnes() {
         Compilation compilation = compiled();
         String module = compilation.modules().get(0);
-        Map<String, byte[]> plain = compilation.db().ask(new Output.Linked(module)).value();
-        Map<String, byte[]> measured = compilation.db()
+        Map<String, ClassFileImage> plain = compilation.db().ask(new Output.Linked(module)).value();
+        Map<String, ClassFileImage> measured = compilation.db()
                 .ask(new Output.Evaluated(module, ArmObservation.RECORD)).value().classes();
-        Map<String, byte[]> linked = compilation.db()
+        Map<String, ClassFileImage> linked = compilation.db()
                 .ask(new Output.EvaluationLinked(module, ArmObservation.RECORD)).value().classes();
         assertNotNull(plain);
         assertNotNull(linked);
 
         assertEquals(plain.keySet(), linked.keySet(), "the same classes are loadable");
-        for (Map.Entry<String, byte[]> each : linked.entrySet()) {
-            byte[] want = measured.containsKey(each.getKey())
+        for (Map.Entry<String, ClassFileImage> each : linked.entrySet()) {
+            ClassFileImage want = measured.containsKey(each.getKey())
                     ? measured.get(each.getKey()) : plain.get(each.getKey());
-            assertEquals(referencedClasses(want), referencedClasses(each.getValue()),
-                    each.getKey());
+            assertEquals(referencedClasses(want.bytes()),
+                    referencedClasses(each.getValue().bytes()), each.getKey());
         }
         assertTrue(measured.keySet().stream().anyMatch(name ->
-                        referencedClasses(linked.get(name)).contains(PROBE)),
+                        referencedClasses(linked.get(name).bytes()).contains(PROBE)),
                 "this module's own classes are the measured ones");
     }
 
@@ -231,7 +232,7 @@ class ProbedBytecodeTest {
         private final Object instance;
         private final Method apply;
 
-        Behavior(Map<String, byte[]> classes) {
+        Behavior(Map<String, ClassFileImage> classes) {
             assertNotNull(classes, "the model under test compiles");
             ClassLoader loader = new MemoryClassLoader(classes,
                     ProbedBytecodeTest.class.getClassLoader());

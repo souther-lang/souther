@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -165,7 +166,7 @@ class CompileImplicitUnitDataTest {
      * second type of the same name, and the value would be of the wrong one. */
     @Test
     void anImportedUnitIsNotDeclaredAgainHere() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Done )
                 data Done
                 """, """

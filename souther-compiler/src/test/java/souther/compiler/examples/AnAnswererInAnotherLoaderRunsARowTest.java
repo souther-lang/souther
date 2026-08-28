@@ -20,6 +20,7 @@ import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
@@ -134,7 +135,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         private Class<?> hereLoaded;
         private String hereNamed;
 
-        private Answering asAnswering(Map<String, byte[]> classes, ClassLoader parent) {
+        private Answering asAnswering(Map<String, ClassFileImage> classes, ClassLoader parent) {
             return (generated, compiled) -> {
                 mine = new MemoryClassLoader(classes, parent);
                 return this;
@@ -221,7 +222,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         String name = c.modules().get(0);
         souther.compiler.generated.EvaluationArtifact artifact = c.db()
                 .ask(new Output.EvaluationLinked(name, ArmObservation.OMIT)).value();
-        Map<String, byte[]> classes = artifact.classes();
+        Map<String, ClassFileImage> classes = artifact.classes();
         ClassLoader parent = ExampleVerifier.class.getClassLoader();
         answerer.hereNamed = "example.crossing.倍額";
         answerer.hereLoaded = loaded(new MemoryClassLoader(classes, parent), answerer.hereNamed);

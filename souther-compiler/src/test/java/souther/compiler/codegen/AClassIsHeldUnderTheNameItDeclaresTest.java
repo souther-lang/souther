@@ -63,6 +63,6 @@ class AClassIsHeldUnderTheNameItDeclaresTest {
 
         emissions.put(held, declaring(name));
 
-        assertEquals(java.util.Set.of(name), emissions.byBinaryName().keySet());
+        assertEquals(java.util.Set.of(name), emissions.seal().keySet());
     }
 }

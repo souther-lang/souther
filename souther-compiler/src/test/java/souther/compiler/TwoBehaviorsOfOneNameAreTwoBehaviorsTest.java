@@ -8,6 +8,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.query.Output;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.types.ValueName;
 
 import java.lang.classfile.ClassFile;
@@ -119,9 +120,9 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
         Compilation c = compiled(THEIRS, own);
         // `app.a.f` is built where it is declared, so this composition requires nothing injected.
         assertEquals(List.of(), c.db().ask(new Bodies.Requirements("app.own")).value().get("flow"));
-        Map<String, byte[]> classes = c.db().ask(new Output.Classes("app.own")).value();
+        Map<String, ClassFileImage> classes = c.db().ask(new Output.Classes("app.own")).value();
         assertTrue(classes.containsKey("app.own.F"), classes.keySet().toString());
-        assertEquals("app.own.F", declaredBy(classes.get("app.own.F")));
+        assertEquals("app.own.F", declaredBy(classes.get("app.own.F").bytes()));
     }
 
     /** And the other way round: the module's own is built here and the one it reaches is injected
@@ -196,8 +197,8 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
                         new ValueName.Behavior("app.b", "f")),
                 dependenciesOf(c, "app.own", "flow"),
                 "one requirement each, in the order the stages name them");
-        Map<String, byte[]> classes = c.db().ask(new Output.Classes("app.own")).value();
-        List<String> fields = fieldNames(classes.get("app.own.Flow$Impl"));
+        Map<String, ClassFileImage> classes = c.db().ask(new Output.Classes("app.own")).value();
+        List<String> fields = fieldNames(classes.get("app.own.Flow$Impl").bytes());
         assertEquals(2, fields.size(), "two dependencies, two fields: " + fields);
         assertEquals(2, Set.copyOf(fields).size(),
                 "and two names — a field name is the class's own, so one name cannot answer for"
@@ -295,7 +296,7 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
      */
     @Test
     void oneDeclaredHereAndOneReadBackFromTheClassPath() {
-        Map<String, byte[]> published = Compiler.compile(THEIRS);
+        Map<String, ClassFileImage> published = Compiler.compile(THEIRS);
         String own = """
                 module app.own exposing ( Out, flow : Out )
                 data Out = { n: Int }
@@ -303,7 +304,7 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
                 let f (m) = Out { n = m.n }
                 behavior flow = app.a.f >-> f
                 """;
-        Compilation c = Compilation.ofSources(List.of(own), published::get);
+        Compilation c = Compilation.ofSources(List.of(own), ModulePath.of(published));
         c.answerEverything();
         List<String> codes = new ArrayList<>();
         for (Db.Found found : c.db().allReports()) {

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -37,9 +39,9 @@ class CompileGrowingMapFoldTest {
     /** How many times the compiled module calls {@code method} on the runtime's map helpers. */
     private int callsTo(String src, String method) {
         int calls = 0;
-        for (byte[] bytes : Compiler.compile(src).values()) {
+        for (ClassFileImage emitted : Compiler.compile(src).values()) {
             for (java.lang.classfile.MethodModel m : java.lang.classfile.ClassFile.of()
-                    .parse(bytes).methods()) {
+                    .parse(emitted.bytes()).methods()) {
                 if (m.code().isEmpty()) {
                     continue;
                 }

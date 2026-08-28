@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
@@ -33,7 +35,7 @@ class CompileObjectTest {
             """;
 
     private Class<?> compileAccount() throws Exception {
-        Map<String, byte[]> classes = Compiler.compile(ACCOUNT);
+        Map<String, ClassFileImage> classes = Compiler.compile(ACCOUNT);
         return new BytesClassLoader(classes, getClass().getClassLoader()).loadClass("demo.Account");
     }
 

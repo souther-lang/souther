@@ -3,6 +3,8 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,7 +58,7 @@ class CompileFoldSelfHostTest {
                 behavior run : (b: Bag) -> Out constructs Out
                 let run (b) = Out(List.fold((acc, x) -> acc + x, 0, b.xs))
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(a, b));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(a, b));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "m.b.Bag", Map.of("xs", List.of(1L, 2L, 3L, 4L)));
         Object behavior = Emitted.behavior(loader, "m.b", "run").getConstructor().newInstance();

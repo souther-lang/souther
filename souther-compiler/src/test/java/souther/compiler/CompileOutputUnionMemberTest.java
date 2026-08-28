@@ -4,6 +4,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,7 +28,7 @@ class CompileOutputUnionMemberTest {
 
     @Test
     void aPrimitiveIsAMemberAndReachesJavaWrapped() throws Exception {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
@@ -46,7 +47,7 @@ class CompileOutputUnionMemberTest {
 
     @Test
     void anImportedTypeIsAMemberAndReachesJavaWrapped() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Yen )
                 data Yen = Int
                     invariant value >= 0
@@ -141,7 +142,7 @@ class CompileOutputUnionMemberTest {
      */
     @Test
     void aValueAnsweredOpenedAndAnsweredAgainIsNotWrappedTwice() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module money exposing ( Yen )
                 data Yen = Int
                 """, """
@@ -182,7 +183,7 @@ class CompileOutputUnionMemberTest {
      * the rule a local case class already follows. */
     @Test
     void oneBridgeCaseServesEveryBehaviorThatAnswersWithTheSameImportedType() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Yen )
                 data Yen = Int
                 """, """
@@ -247,7 +248,7 @@ class CompileOutputUnionMemberTest {
      */
     @Test
     void beingAUnionMemberLeavesTheMembersExternalRepresentationAlone() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Yen )
                 data Yen = Int
                 """, """
@@ -277,7 +278,7 @@ class CompileOutputUnionMemberTest {
      */
     @Test
     void anInjectedBehaviorCanAnswerWithABridgedMember() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Yen )
                 data Yen = Int
                 """, """
@@ -287,7 +288,7 @@ class CompileOutputUnionMemberTest {
                 behavior owed : (a: Yen) -> Yen | NothingOwed
                     constructs Yen
                 """));
-        byte[] impl = Subclasses.compile(classes, "consumer.HalfOwed", """
+        ClassFileImage impl = Subclasses.compile(classes, "consumer.HalfOwed", """
                 package consumer;
                 import up.Yen;
                 import down.NothingOwed;
@@ -300,7 +301,7 @@ class CompileOutputUnionMemberTest {
                     }
                 }
                 """);
-        Map<String, byte[]> all = new LinkedHashMap<>(classes);
+        Map<String, ClassFileImage> all = new LinkedHashMap<>(classes);
         all.put("consumer.HalfOwed", impl);
         BytesClassLoader loader = new BytesClassLoader(all, getClass().getClassLoader());
         Object behavior = loader.loadClass("consumer.HalfOwed").getConstructor().newInstance();

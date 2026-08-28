@@ -16,6 +16,7 @@ import souther.compiler.diag.Placement;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
@@ -158,8 +159,8 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
 
     /** The declaring module as another project built it: classes alone, no source. */
     private static ModulePath published(String source) {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(source));
-        return classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(source));
+        return ModulePath.of(classes);
     }
 
     private static List<SourcePos> positionsIn(Hir.Expr e) {

@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
@@ -43,7 +44,7 @@ class CompileModuleTest {
 
     @Test
     void crossModuleTypeResolvesAndRoundTrips() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(EMPLOYEE, TRIP));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(EMPLOYEE, TRIP));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         // the imported 従業員ID class lives in the declaring module's package
