@@ -56,10 +56,9 @@ public final class Compilation {
     private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
     private final Set<SourceId> held = new LinkedHashSet<>();
-    /** The loader over the classes as they were when it was made, and those classes — held so that
-     *  {@link #loader()} can tell whether the one it has is still a loader over what there is. */
-    private ClassLoader loader;
-    private Map<String, ClassFileImage> loadedClasses;
+    /** The loader over the classes as they were when it was made, which says for itself whether the
+     *  one it has is still a loader over what there is. */
+    private final LoaderOverClasses loader = new LoaderOverClasses();
 
     private Compilation() {
         // Read now, so this compilation is held to what the settings said when it started rather than
@@ -245,32 +244,20 @@ public final class Compilation {
      * makes a different program. A loader held across an edit would be one that cannot see it,
      * which is the first fault the other way round.
      *
-     * <p><b>Same classes means the same class files, not the same map.</b> An edit that recompiles
-     * a module to what it already was leaves a program nothing about has changed, and a loader made
-     * afresh over it would divide every type in it from the values already made under the first —
-     * which is this method's whole fault, reached by a route nobody edited anything to reach.
-     * Asking the map by which object it is would answer that question with where the answer came
-     * from, which is the mistake {@link ClassFileImage} exists to stop one level down. Being the
-     * same map is a shortcut and never the reason.
+     * <p>Whether it still has one is {@link LoaderOverClasses}'s, which is where what "the same
+     * classes" means is written and what is held to it. Not a condition here: a rule inside the
+     * method that hands out a loader can only be reached through whatever produces two class sets,
+     * and the one that matters — a module built again to what it already was — is the one no
+     * ordinary edit reaches.
      *
-     * <p>What decides this is the classes and nothing else, because a compilation's module path is
+     * <p>What decides it is the classes and nothing else, because a compilation's module path is
      * settled where it is made and never after. Were one ever able to be given another path, its
      * parent loader would move under classes that had not, and what a loader is kept against would
      * have to be the two of them together.
      */
     public ClassLoader loader() {
         Map<String, ClassFileImage> classes = classes();
-        if (loader == null || !(loadedClasses == classes || loadedClasses.equals(classes))) {
-            // Built before either field is written, so a build that threw leaves this holding what it
-            // held before rather than the classes it did not manage to make a loader for. Recording
-            // them first would leave the two saying different things, and the next ask would read
-            // that as a loader it already has — handing out the one from before the edit, which is
-            // this whole method's fault with an exception in front of it.
-            ClassLoader built = Output.loader(db, classes);
-            loadedClasses = classes;
-            loader = built;
-        }
-        return loader;
+        return loader.of(classes, () -> Output.loader(db, classes));
     }
 
     /** A module as everything below the check reads it — derived, desugared, and carrying the

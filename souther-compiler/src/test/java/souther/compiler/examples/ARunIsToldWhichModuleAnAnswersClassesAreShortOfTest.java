@@ -12,7 +12,6 @@ import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.generated.EvaluationArtifact;
-import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.query.Bodies;
@@ -232,6 +231,6 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
     private static PublishedClasses declarationsOf(List<String> sources) {
         Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
         Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
-        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        return ModulePath.of(classes).declarations();
     }
 }

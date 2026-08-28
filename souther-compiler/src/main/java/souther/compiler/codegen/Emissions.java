@@ -56,7 +56,14 @@ public final class Emissions {
         this.module = module;
     }
 
-    /** That these are still being written, said where the writing is asked for. */
+    /**
+     * That these are still being written, said at every way in.
+     *
+     * <p>What is refused is asking to write, and not a write that turned out to have something in
+     * it. A guard reached only by the loop that writes an entry is a guard a caller handing over
+     * nothing walks past, so what it holds is "one class was written after the sealing" — which is
+     * not the rule. The rule is about the phase this is in, so it is asked of this, once per way in.
+     */
     private void stillOpen(String writing) {
         if (sealed != null) {
             throw new IllegalStateException("the classes of " + module
@@ -110,6 +117,7 @@ public final class Emissions {
     }
 
     void putAll(Map<GeneratedClass, byte[]> classes) {
+        stillOpen("emitting classes");
         classes.forEach(this::put);
     }
 

@@ -59,7 +59,7 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
                 .dropping(a -> a instanceof RuntimeInvisibleAnnotationsAttribute)
                 .andThen(ClassTransform.endHandler(b -> b.with(
                         RuntimeInvisibleAnnotationsAttribute.of(as.apply(had))))))));
-        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        return ModulePath.of(classes).declarations();
     }
 
     /** A member the schema declares with no default, and the writer always writes. */
@@ -252,7 +252,7 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
     /** And the metadata this compiler does write is read. */
     @Test
     void whatThisCompilerWritesIsRead() {
-        PublishedClasses classes = new ClassFileDeclarations(ModulePath.of(Compiler.compile(SOURCE))::bytes);
+        PublishedClasses classes = ModulePath.of(Compiler.compile(SOURCE)).declarations();
 
         PublishedClasses.Carried.Declared read = assertInstanceOf(
                 PublishedClasses.Carried.Declared.class, classes.of("shared.money.Amount"));

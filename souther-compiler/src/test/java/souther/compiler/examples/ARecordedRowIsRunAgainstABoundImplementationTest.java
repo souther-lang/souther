@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.generated.EvaluationArtifact;
-import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.observe.Applied;
 import souther.compiler.observe.Counting;
@@ -367,7 +366,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
     /** What the module's rows are written for, as this compile emitted it. */
     private static java.util.function.Supplier<PublishedClasses> declarationsOf(Compilation c) {
         Map<String, ClassFileImage> classes = c.db().ask(new Output.All()).value();
-        return () -> new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        return () -> ModulePath.of(classes).declarations();
     }
 
     /**

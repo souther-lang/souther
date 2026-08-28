@@ -1016,7 +1016,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
         Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
         assertEquals(List.of(), diagnosed(compiled), "the model this is measured against compiles");
-        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        return ModulePath.of(classes).declarations();
     }
 
     /**
@@ -1031,7 +1031,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         Compilation compiled = Compilation.ofSource(source, "Main");
         Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
         assertEquals(List.of(), diagnosed(compiled), "the model this is measured against compiles");
-        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        return ModulePath.of(classes).declarations();
     }
 
     /** What a compile refused, as codes — nothing, for every model measured here.

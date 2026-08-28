@@ -222,6 +222,6 @@ class TheLanguagesOwnDeclarationsAreNotAskedOfEitherBuildTest {
                         .filter(d -> d.diagnostic().severity() == Severity.ERROR)
                         .map(d -> String.valueOf(d.diagnostic().code())).toList(),
                 "the model this is measured against compiles");
-        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        return ModulePath.of(classes).declarations();
     }
 }

@@ -66,7 +66,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
     @Test
     void aModuleReachedWithoutAnImportIsRead() {
         Map<String, ClassFileImage> both = Compiler.compileModules(List.of(LIB, QUALIFYING));
-        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(ModulePath.of(both)::bytes), DefaultStdlib.get());
+        PublishedUniverse universe = PublishedUniverse.of(ModulePath.of(both).declarations(), DefaultStdlib.get());
 
         readingOf(universe, "app.uses", "the module names a type of another and is read");
 
@@ -125,7 +125,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
     @Test
     void aDeclarationThatReadsThroughAnotherModulesHelperIsRead() {
         Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(OFFERING, READING));
-        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(ModulePath.of(classes)::bytes), DefaultStdlib.get());
+        PublishedUniverse universe = PublishedUniverse.of(ModulePath.of(classes).declarations(), DefaultStdlib.get());
 
         readingOf(universe, "example.order",
                 "its invariant calls a helper `example.money` published, which the import brings in");
@@ -156,7 +156,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
         classes.keySet().removeIf(binary -> binary.contains("money"));
         org.junit.jupiter.api.Assertions.assertTrue(classes.size() < all,
                 "the module being withheld is one this set had");
-        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(ModulePath.of(classes)::bytes), DefaultStdlib.get());
+        PublishedUniverse universe = PublishedUniverse.of(ModulePath.of(classes).declarations(), DefaultStdlib.get());
 
         Readback.Failure why = refusalOf(universe, "example.line");
 
@@ -249,6 +249,6 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
 
     private static PublishedUniverse universeOf(String source) {
         Map<String, ClassFileImage> classes = Compiler.compile(source);
-        return PublishedUniverse.of(new ClassFileDeclarations(ModulePath.of(classes)::bytes), DefaultStdlib.get());
+        return PublishedUniverse.of(ModulePath.of(classes).declarations(), DefaultStdlib.get());
     }
 }

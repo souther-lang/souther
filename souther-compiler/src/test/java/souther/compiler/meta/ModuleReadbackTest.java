@@ -28,7 +28,7 @@ class ModuleReadbackTest {
 
     private static ReadableModule readBack(String moduleName, Map<String, ClassFileImage> classes) {
         return assertInstanceOf(ReadableModule.class, assertInstanceOf(Readback.Ready.class,
-                ModuleReadback.read(moduleName, new ClassFileDeclarations(ModulePath.of(classes)::bytes), DefaultStdlib.get().names())).value());
+                ModuleReadback.read(moduleName, ModulePath.of(classes).declarations(), DefaultStdlib.get().names())).value());
     }
 
     /** Why a readback would not answer, as the arm rather than as a message it was raised with. */
@@ -236,7 +236,7 @@ class ModuleReadbackTest {
     void aNameThatIsNotACompiledModuleReadsAsNothing() {
         assertInstanceOf(Readback.NotReady.SaysNothing.class,
                 ModuleReadback.read("shared.money",
-                        new ClassFileDeclarations(ModulePath.EMPTY::bytes),
+                        ModulePath.EMPTY.declarations(),
                         DefaultStdlib.get().names()));
     }
 
@@ -400,7 +400,7 @@ class ModuleReadbackTest {
     /** {@code classes} as a compiler that wrote {@code injected} rather than {@code implementation}
      *  published them, at {@code boundary}. */
     private static PublishedClasses asItWasWritten(Map<String, ClassFileImage> classes, int boundary) {
-        ClassFileDeclarations read = new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        PublishedClasses read = ModulePath.of(classes).declarations();
         return binaryName -> {
             if (!(read.of(binaryName)
                     instanceof PublishedClasses.Carried.Declared(
@@ -422,7 +422,7 @@ class ModuleReadbackTest {
     private static PublishedClasses viewing(
             Map<String, ClassFileImage> classes,
             java.util.function.UnaryOperator<PublishedClasses.SoutherModuleView> as) {
-        ClassFileDeclarations read = new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        PublishedClasses read = ModulePath.of(classes).declarations();
         return binaryName -> {
             if (!(read.of(binaryName)
                     instanceof PublishedClasses.Carried.Declared(

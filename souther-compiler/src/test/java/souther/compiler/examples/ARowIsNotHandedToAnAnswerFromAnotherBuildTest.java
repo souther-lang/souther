@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
 import souther.compiler.generated.EvaluationArtifact;
-import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.observe.Applied;
 import souther.compiler.observe.Disposition;
@@ -329,6 +328,6 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     private static PublishedClasses declarationsOf(String source) {
         Compilation compiled = Compilation.ofSource(source, "Main");
         Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
-        return new ClassFileDeclarations(ModulePath.of(classes)::bytes);
+        return ModulePath.of(classes).declarations();
     }
 }

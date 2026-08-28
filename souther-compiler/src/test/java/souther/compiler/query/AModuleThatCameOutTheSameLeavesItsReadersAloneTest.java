@@ -11,6 +11,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 /**
@@ -60,7 +61,7 @@ class AModuleThatCameOutTheSameLeavesItsReadersAloneTest {
      *  everything. */
     @Test
     void andTwoSourcesThatSayDifferentThingsDoNot() {
-        assertNotEqualsClasses(Compiler.compile(SOURCE), Compiler.compile(OTHERWISE));
+        assertNotEquals(Compiler.compile(SOURCE), Compiler.compile(OTHERWISE));
     }
 
     /**
@@ -80,22 +81,12 @@ class AModuleThatCameOutTheSameLeavesItsReadersAloneTest {
 
         compilation.update(Map.of("a.sou", OTHERWISE), Set.of());
         Answer<Map<String, ClassFileImage>> edited = compilation.db().ask(new Output.All());
-        assertNotEqualsClasses(before.value(), edited.value(), "the edit reached the classes");
+        assertNotEquals(before.value(), edited.value(), "the edit reached the classes");
 
         compilation.update(Map.of("a.sou", SOURCE), Set.of());
         Answer<Map<String, ClassFileImage>> undone = compilation.db().ask(new Output.All());
 
         assertNotSame(before, undone, "the generation ran again");
         assertEquals(before, undone, "and came to the program that was there");
-    }
-
-    private static void assertNotEqualsClasses(Map<String, ClassFileImage> one,
-                                               Map<String, ClassFileImage> other) {
-        assertNotEqualsClasses(one, other, "two programs");
-    }
-
-    private static void assertNotEqualsClasses(Map<String, ClassFileImage> one,
-                                               Map<String, ClassFileImage> other, String said) {
-        assertFalse(one.equals(other), said);
     }
 }
