@@ -176,11 +176,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      */
     @Test
     void everyReasonThereIsHasARowAbove() {
-        java.util.Set<String> written = new LinkedHashMap<String, String>() {{
-                putAll(theRulesWithNoLine());
-                putAll(theStopsAtAPosition());
-                putAll(theOtherReasonsAboutARule());
-            }}.keySet();
+        java.util.Set<String> written = new java.util.LinkedHashSet<>();
+        written.addAll(theRulesWithNoLine().keySet());
+        written.addAll(theStopsAtAPosition().keySet());
+        written.addAll(theOtherReasonsAboutARule().keySet());
 
         assertEquals(reasons(BlockReason.class), written,
                 "a reason a document has a word for, and no row saying which word");

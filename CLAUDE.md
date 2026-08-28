@@ -45,3 +45,6 @@ precedent. Judge this as you type the comment, not afterwards.
   question and use the answer.
 - A text block puts the `%s` far from the `.formatted()` arguments. Count both
   when you edit either.
+- `new HashMap<>() {{ put(...); }}` is refused (`DoubleBraceInitialization`). It
+  makes an anonymous subclass, which is not what a collection literal wants. Fill
+  a plain collection and `addAll`.
