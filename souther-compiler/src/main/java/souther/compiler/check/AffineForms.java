@@ -6,6 +6,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -20,8 +21,9 @@ import java.util.Map;
  * first, and a rule the check enforced was one the measure reported as unread.
  *
  * <p><b>The grammar and the walk belong here.</b> Which nodes compose — a literal, a negation,
- * {@code +}, {@code -}, a scalar multiply, a binding, a newtype's value read off something that is
- * not a place — is a fact about the language. A caller supplies only the answers that depend on its
+ * {@code +}, {@code -}, a scalar multiply, a binding, a construction of a newtype, and an
+ * elimination standing against the introduction that wrote what it reads — is a fact about the
+ * language. A caller supplies only the answers that depend on its
  * environment: what an otherwise-uncomposed value is called, what environment lies inside a binding,
  * and which source value a name denotes transparently.
  *
@@ -89,7 +91,14 @@ public final class AffineForms {
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
          * a place is asked of what it denotes and not of how it is spelled: a name given a computed
          * value is no more a place than the call it was given, and asked by the spelling it came out
-         * one — so a guard over the name settled nothing about a construction over the value (#676).
+         * one — so a guard over the name settled nothing about a construction over the value.
+         *
+         * <p><b>The second proof a projection has, and asked second.</b> Where the value read from
+         * was written down, this walk takes the field off the construction that gave it and never
+         * asks here. What is left for this is a projection with no construction in sight — a name a
+         * call was given — which is a different piece of evidence and not a weaker copy of the
+         * first. Asked first, it would answer a projection the grammar reads, and the grammar's
+         * rule could be taken away without anything saying so.
          */
         boolean readsThrough(Core.FieldAccess fa, E at);
     }
@@ -258,6 +267,118 @@ public final class AffineForms {
         return form;
     }
 
+    /**
+     * An occurrence resolved as far as one value can be followed, and what to read it in.
+     *
+     * <p>The environment travels with the value for the reason {@link ReadThrough} gives: what a
+     * name was given is written in the environment the binding was made in, and a projection out of
+     * it is read in that one rather than in the one the projection was written in.
+     */
+    private record Standing<E>(Core value, E at) {}
+
+    /**
+     * {@code e} under the reductions this reading licenses, as far as they go.
+     *
+     * <p><b>A normal form and never a failure.</b> What comes back is where the reductions run out:
+     * a written construction where the occurrence resolves to one, and the occurrence itself where
+     * nothing licensed applies. Reaching a {@code Core.If} is such a result and not an absence —
+     * what stands there is known perfectly well, and it is a choice rather than a value — so a
+     * caller reads what it was handed and never treats getting its own expression back as an answer
+     * about this walk.
+     *
+     * <p><b>Nothing here chooses.</b> The reductions are the ones with a single successor: a name
+     * the reading says denotes one value, a binding's body, and an elimination standing against the
+     * introduction that wrote it. An alternative and an element of a list have more than one value
+     * that can stand at them, and there is no rule for either — which is what keeps a rule about
+     * {@code Big { threshold = 100000 }} from being answered for a position where a second
+     * construction can stand as well. That boundary is the absence of a rule and not a refusal, so
+     * nothing has to be kept in step with it.
+     *
+     * <p><b>Closed under its own eliminations.</b> A projection resolves through whatever the target
+     * resolves to, so a construction inside a construction is reached the same way a construction
+     * behind a name is. Left at one step, this would cross a single introduction and no more, and
+     * which spellings that admits is nothing either the language or a reader states.
+     *
+     * <p><b>The authority is the reading's and none is added here.</b> A name is followed only
+     * where {@link Reading#readThrough} licenses that occurrence, and a binding is entered only
+     * through {@link Reading#inside}. What is derived is how far those answers reach, which is not
+     * the same kind of thing as the answers — so this is not the place to ask what an environment
+     * happens to hold. {@code Terms.given} is that question and peels every name a binding gave a
+     * value to; a name it would peel is one this leaves alone unless the reading says the two are
+     * one value.
+     */
+    private static <A, E> Standing<E> standing(Core e, E at, Reading<A, E> reading,
+                                               java.util.Set<BindingId> following) {
+        switch (e) {
+            case Core.Read r -> {
+                ReadThrough<E> through = reading.readThrough(r, at);
+                if (through == null || through.value() == e || !following.add(r.binding())) {
+                    return new Standing<>(e, at);
+                }
+                Standing<E> denoted = standing(through.value(), through.at(), reading, following);
+                following.remove(r.binding());
+                return denoted;
+            }
+            case Core.LetIn li -> {
+                return standing(li.body(), reading.inside(li, at), reading, following);
+            }
+            case Core.FieldAccess _, Core.TupleGet _ -> {
+                Standing<E> written = eliminated(e, at, reading, following);
+                return written == null ? new Standing<>(e, at)
+                        : standing(written.value(), written.at(), reading, following);
+            }
+            default -> {
+                return new Standing<>(e, at);
+            }
+        }
+    }
+
+    /**
+     * What this elimination stands against, or null where nothing written stands against it.
+     *
+     * <p><b>One question with one answer, asked by the two readings that have it.</b> Resolving an
+     * occurrence needs to know what an elimination came to so it can go on, and reading a form
+     * needs to know it so it can compose — and where it comes to nothing, the second has another
+     * proof to try. Written out at each of them, one copy would come to read a shape the other did
+     * not, and which shapes a rule about eliminations covers would depend on which reader met it.
+     *
+     * <p><b>Null is the rule not applying, and never the kind of node.</b> A construction that does
+     * not give the field asked for has nothing written to stand against, exactly as an expression
+     * that is no construction has not — so a caller asking whether the structural reading produced
+     * a successor is asking one thing. Read off the node instead, a construction missing the field
+     * would count as a reduction this never made.
+     *
+     * <p>The target resolves before the field is taken, which is what closes this under itself: the
+     * value a construction gives a field is reached whether the construction was written where the
+     * projection is or stands behind a name and another projection.
+     */
+    private static <A, E> Standing<E> eliminated(Core e, E at, Reading<A, E> reading,
+                                                 java.util.Set<BindingId> following) {
+        switch (e) {
+            case Core.FieldAccess fa -> {
+                Standing<E> target = standing(fa.target(), at, reading, following);
+                if (!(target.value() instanceof Core.Construct nd)) {
+                    return null;
+                }
+                for (Core.FieldValue each : nd.values()) {
+                    if (each.field().equals(fa.field())) {
+                        return new Standing<>(each.value(), target.at());
+                    }
+                }
+                return null;
+            }
+            case Core.TupleGet get -> {
+                Standing<E> tuple = standing(get.tuple(), at, reading, following);
+                return tuple.value() instanceof Core.Tuple written && get.index() >= 0
+                        && get.index() < written.elements().size()
+                        ? new Standing<>(written.elements().get(get.index()), tuple.at()) : null;
+            }
+            default -> {
+                return null;
+            }
+        }
+    }
+
     /** {@code e} read as arithmetic over what its parts answer, or null where this has no rule for
      *  it or the rule it has does not compose. */
     private static <A, E> LinearForm<A> composed(Core e, E at, Reading<A, E> reading,
@@ -291,8 +412,42 @@ public final class AffineForms {
                     answered(e, at, reading, following, stopped);
             case Core.Call _ when formSaidOf(e) != null ->
                     answered(e, at, reading, following, stopped);
-            case Core.FieldAccess fa when reading.readsThrough(fa, at) ->
-                    formOf(fa.target(), at, reading, following, stopped);
+            // A newtype's construction is the value it wraps. What makes it one is the declaration
+            // and never the shape, which is what `isSingleValueNewtype` is asked — a data of one
+            // field that is not a newtype wraps its value rather than being it, and its
+            // construction is a value of its own.
+            // A carrier takes the same names off to find a value written down, and answers above
+            // for `Yen(100)` before this is reached. The two agree where they overlap and are not
+            // one rule: that one asks what a written value counts as and stops where nothing is
+            // written, and this one asks what the arithmetic under the name comes to.
+            case Core.Construct nd when !nd.values().isEmpty()
+                    && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), reading.symbols()) ->
+                    formOf(nd.values().get(0).value(), at, reading, following, stopped);
+            // One arm, holding two proofs that this projection is the value it reads. The
+            // structural one is asked first and is asked as whether it produced a successor rather
+            // than as what kind of node was standing there: a construction without the field asked
+            // for has proved nothing, and read as a node kind it would take the answer away from
+            // the proof that can still be made. Second, and only where nothing was written to
+            // eliminate, the reading's own evidence that the projection keeps what it reads —
+            // which is how a name a call was given is read through with no construction in sight.
+            case Core.FieldAccess fa -> {
+                Standing<E> eliminated = eliminated(fa, at, reading, following);
+                if (eliminated != null) {
+                    yield formOf(eliminated.value(), eliminated.at(), reading, following, stopped);
+                }
+                yield reading.readsThrough(fa, at)
+                        ? formOf(fa.target(), at, reading, following, stopped) : null;
+            }
+            // The same elimination against the introduction beside it. A tuple's element is reached
+            // this way and no other — the language writes no projection of one, so what comes here
+            // is what a binding over a tuple was taken apart into — and there is no second proof to
+            // fall back on, because nothing declares a tuple transparent the way a newtype's
+            // declaration does.
+            case Core.TupleGet get -> {
+                Standing<E> eliminated = eliminated(get, at, reading, following);
+                yield eliminated == null ? null
+                        : formOf(eliminated.value(), eliminated.at(), reading, following, stopped);
+            }
             // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what a helper
             // becomes, so reading through it is reading what the author wrote at the call. Whether
             // what it holds is a number is not asked: a binding denotes what it was given whatever

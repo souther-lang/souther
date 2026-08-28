@@ -612,15 +612,9 @@ final class Terms {
         return b.coefs().isEmpty() ? a.times(b.constant()) : null;
     }
 
-    /** A node the affine walk composes nothing out of, as a form: a numeric atom, a newtype
-     * construct's wrapped value, what a name was given, or {@code null}. */
+    /** A node the affine walk composes nothing out of, as a form: a numeric atom, what a name was
+     * given, or {@code null}. */
     private LinearForm<FactSubject> leafOf(Core n, Denotations at) {
-        // A newtype built around a number is that number here. What makes it one is the
-        // declaration, which the carrier reads through; a construction of it has the one field the
-        // declaration gives it.
-        if (n instanceof Core.Construct nd && carriesANumber(Type.ref(nd.typeName()))) {
-            return affineOf(nd.values().get(0).value(), at);
-        }
         Core written = writtenValue(n, at);
         if (written != null && written != n) {
             return affineOf(written, at);
@@ -700,6 +694,13 @@ final class Terms {
      * a container read through its name and not through a binding, a closure's answer read through
      * neither. What is left to the reader is what is genuinely about the value — the fields a
      * construction is built from, the arithmetic a number is — and never how it was written down.
+     *
+     * <p><b>This is what the environment holds and not what a reading is licensed to follow.</b>
+     * Every name a binding gives a value to is peeled here, which is the question a reader asking
+     * what was built wants answered. What one occurrence may be read as another is a narrower
+     * answer with an owner of its own ({@link AffineForms.Reading#readThrough}), and the walk that
+     * resolves an occurrence under it is held to that owner rather than to this one — so the two
+     * are not made one, however alike the shapes they peel look.
      */
     Given given(Core e, Denotations at) {
         if (e instanceof Core.Read r) {
