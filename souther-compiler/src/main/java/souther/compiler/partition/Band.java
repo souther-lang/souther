@@ -2,6 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.numeric.Towards;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * One run of values a quantity's rules leave between two of the places they part it.
  *
@@ -330,6 +333,96 @@ public record Band(BandEnd lower, BandEnd upper) {
 
     private static boolean same(Level one, Level other) {
         return one != null && other != null && one.key().equals(other.key());
+    }
+
+    /**
+     * One end of this run, as a value and whether the run holds it.
+     *
+     * <p>What a sentence about the run is composed from, whichever sentence it is. A run written
+     * about a quantity with a name says the relation between them — {@code 1 < value} — and a run
+     * about one with none says the end alone, and both are the same two facts arranged differently.
+     *
+     * <p>Null where nothing but the rule that drew it can name the end, which is what a bound
+     * written as a multiple of the quantity leaves.
+     */
+    private record AtAnEnd(String value, boolean held) {}
+
+    /**
+     * This run as a report writes it where the quantity has no name of its own.
+     *
+     * <p>Composed one end at a time, because that is what a run is: a lower end and an upper end,
+     * each holding the value it stops at or stopping short of it. Said as a shape per combination
+     * instead — one word for a run open above, another for a run closed both ways — a run that held
+     * one end and not the other would need a shape nobody had written.
+     *
+     * <p>Beside {@link #written(BorderQuantity, Level, java.util.function.Function)} and not instead
+     * of it. Where the quantity has a name the relation between it and the ends is the shorter
+     * sentence and says more, so a line a declaration drew keeps it.
+     *
+     * <p><b>Null where an end says how much of the quantity its rule wrote.</b> {@code 3 * x > 1}
+     * puts a row over a third of the quantity and not over one, so a run written as "over 1" says
+     * something the rule does not — and which multiple it is cannot be said without saying of what.
+     * Answered as half a sentence instead, a reader is handed the ends that could be said beside a
+     * phrase about this compiler's difficulty; answered as the whole of it, they are handed a bound
+     * the model does not draw. So this says it cannot be written, and whoever asked writes what the
+     * readings say, where the quantity has the name that makes it sayable.
+     */
+    public String withoutASubject(BorderQuantity of, Level except) {
+        AtAnEnd low = except != null && same(except, first())
+                ? new AtAnEnd(of.writtenAt(except), false)
+                : lower.seam() != null ? at(of, lower.seam(), Towards.ABOVE)
+                        : at(of, left(lower));
+        AtAnEnd high = except != null && same(except, last())
+                ? new AtAnEnd(of.writtenAt(except), false)
+                : upper.seam() != null ? at(of, upper.seam(), Towards.BELOW)
+                        : at(of, left(upper));
+        // An end that says how much of the quantity its rule wrote cannot be said without saying of
+        // what. Left out, the run reaches past the line that ends it; said in part, the sentence
+        // carries this compiler's difficulty instead of the model's line. So the whole of it is
+        // unsayable here and the caller writes what the readings say.
+        if (lower.seam() != null && low == null || upper.seam() != null && high == null) {
+            return null;
+        }
+        List<String> said = new ArrayList<>();
+        if (low != null) {
+            said.add((low.held() ? "at least " : "over ") + low.value());
+        }
+        if (high != null) {
+            said.add((high.held() ? "at most " : "under ") + high.value());
+        }
+        return said.isEmpty() ? "any" : String.join(" and ", said);
+    }
+
+    /** One end of the run where a line parts the values there, or null where only the rule that
+     *  drew it names it. The same reading {@link #said} writes the relation from. */
+    private static AtAnEnd at(BorderQuantity of, Seam parted, Towards side) {
+        Level line = parted.attainedLine();
+        if (line != null) {
+            return new AtAnEnd(of.writtenAt(line),
+                    side == Towards.ABOVE ? !keepsItsOwnValueBelow(parted)
+                            : keepsItsOwnValueBelow(parted));
+        }
+        Level named = parted.below() != null ? parted.below() : parted.above();
+        if (named != null) {
+            boolean below = named == parted.below();
+            return new AtAnEnd(of.writtenAt(named), side == Towards.ABOVE ? !below : below);
+        }
+        // Nothing the quantity has a value at names this end, and the rule that drew it says where
+        // it is: a line on a carrier that fills has no first value above it, and the rule still says
+        // the run starts over that place. Which is sayable without naming the quantity exactly where
+        // the rule wrote the whole of it — a rule that wrote a multiple relates a row to that
+        // multiple, and there is no way to say which multiple without saying of what.
+        java.math.BigDecimal[] rule = parted.at().asARule();
+        return rule == null || rule[0].compareTo(java.math.BigDecimal.ONE) != 0 ? null
+                : new AtAnEnd(rule[1].stripTrailingZeros().toPlainString(),
+                        side == Towards.BELOW);
+    }
+
+    /** One end of the run as the rules leave it, or null where they leave none there. The same
+     *  reading {@link #leaves} writes the relation from. */
+    private static AtAnEnd at(BorderQuantity of, Bound end) {
+        return end == null ? null
+                : new AtAnEnd(of.writtenAt(valueOrRefuse(end)), end.inclusive());
     }
 
     /**

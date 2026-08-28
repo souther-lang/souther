@@ -107,7 +107,7 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
     void theOrderTheReadingsArriveInDecidesNothing() {
         Map<String, List<BorderAssessment>> readings = readingsOf("");
         List<BorderObligationPointAssessment> forwards =
-                BorderObligationPointAssessment.across(readings, point -> "the line");
+                BorderObligationPointAssessment.across(readings, point -> point.line().owedToTheDeclaration().map(Object::toString).orElse(null));
         Map<String, List<BorderAssessment>> reversed = new LinkedHashMap<>();
         readings.forEach((behavior, lines) -> {
             List<BorderAssessment> back = new ArrayList<>(lines);
@@ -115,7 +115,7 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
             reversed.put(behavior, back);
         });
         List<BorderObligationPointAssessment> backwards =
-                BorderObligationPointAssessment.across(reversed, point -> "the line");
+                BorderObligationPointAssessment.across(reversed, point -> point.line().owedToTheDeclaration().map(Object::toString).orElse(null));
 
         assertEquals(points(forwards), points(backwards),
                 "the same points, whichever order their readings were met in");

@@ -4179,16 +4179,18 @@ public final class Adequacy {
      * clause. A coordinate spells an empty path as "the value", which is what it is called where a
      * sentence says it rather than where a line is named.
      *
-     * <p>A line no declaration drew has the rule's own name and no more. Where such a line is is
-     * the reading's answer and there are as many of those as there are positions carrying the rule,
-     * so a point named after one of them would be named after a place it is not owed at.
+     * <p><b>Null where no declaration drew the line.</b> A clause names what it is about and a
+     * comparison in a body names nothing: what it was drawn on is the term each reading met it at,
+     * and a line read at two positions has one for each. Answered with the rule's own name instead,
+     * a report said `the comparison = 100` — a rule's name standing where a quantity's belongs,
+     * which is a word no model wrote.
      */
     private static String axisOf(souther.compiler.partition.BorderObligationId id,
                                  Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
                                  Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
         TypeSymbol declaredOn = id.owedToTheDeclaration().orElse(null);
         if (declaredOn == null) {
-            return id.named();
+            return null;
         }
         souther.compiler.check.FieldDomains.Coordinate at =
                 declarationRead(read, declaredOn, symbols, policy)
