@@ -338,6 +338,50 @@ class ThresholdNormalizationTest {
                     constructs Answer
 
                 let classify (level) =
+                    if level.value < 20 then Answer { n = 1 } else Answer { n = 2 }
+                """, "classify");
+
+        Axis level = axis(read.partitioning(), "level");
+        Cut at20 = level.cuts().stream()
+                .filter(c -> new ObservedValue.Integer(20).equals(c.value())).findFirst()
+                .orElseThrow();
+        Cut at10 = level.cuts().stream()
+                .filter(c -> new ObservedValue.Integer(10).equals(c.value())).findFirst()
+                .orElseThrow();
+
+        assertEquals(1, at10.origins().size(), "the declaration's own end");
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin));
+        assertEquals(1, at20.origins().size(), "and the body's, which divides what it leaves");
+        assertTrue(at20.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin));
+    }
+
+    /**
+     * A comparison the declarations can never satisfy still draws its line.
+     *
+     * <p>{@code value < 10} over a {@code Level} the rules stop at ten and up is satisfied by no
+     * value there is. It divides the values all the same: a row at ten is one the behavior takes
+     * the other way, and that row is writable. A line has two sides and owes a point against each,
+     * so what makes it a line somebody can write a row against is a value at the line — not a value
+     * on the side the rule is satisfied on.
+     *
+     * <p>Which is why the two rules at ten stay two. The declaration's own end and the comparison
+     * are different things to exercise, and the comparison being unsatisfiable is a fact about one
+     * of its points rather than about whether it drew a line.
+     */
+    @Test
+    void aComparisonTheDeclarationsCannotSatisfyStillDrawsItsLine() {
+        Read read = read("""
+                module example.empty
+
+                data Level = Int
+                    invariant value >= 10
+
+                data Answer = { n: Int }
+
+                behavior classify : (level: Level) -> Answer
+                    constructs Answer
+
+                let classify (level) =
                     if level.value < 10 then Answer { n = 1 } else Answer { n = 2 }
                 """, "classify");
 
@@ -346,8 +390,12 @@ class ThresholdNormalizationTest {
                 .filter(c -> new ObservedValue.Integer(10).equals(c.value())).findFirst()
                 .orElseThrow();
 
-        assertEquals(2, at10.origins().size(), "an invariant and a guard both drew it");
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin));
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin));
+        assertEquals(2, at10.origins().size(),
+                () -> "the declaration's end and the comparison, both at ten: " + at10.origins());
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin),
+                () -> "the clause's own end: " + at10.origins());
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin),
+                () -> "and the comparison, which no value satisfies and which divides them all the"
+                        + " same: " + at10.origins());
     }
 }

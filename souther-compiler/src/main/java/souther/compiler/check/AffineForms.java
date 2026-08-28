@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
 
 import java.math.BigDecimal;
@@ -261,9 +263,11 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> composed(Core e, E at, Reading<A, E> reading,
                                                  java.util.Set<BindingId> following,
                                                  Stop<A, E> stopped) {
+        LinearForm<A> written = literal(e, reading);
+        if (written != null) {
+            return written;
+        }
         return switch (e) {
-            case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
-            case Core.Decimal d -> LinearForm.constant(d.value());
             case Core.Neg n -> Terms.negate(formOf(n.operand(), at, reading, following, stopped));
             case Core.Binary b when b.op() == BinOp.ADD ->
                     Terms.add(formOf(b.left(), at, reading, following, stopped),
@@ -298,6 +302,36 @@ public final class AffineForms {
                     stopped);
             default -> null;
         };
+    }
+
+    /**
+     * {@code e} as the count it writes on a carrier that counts, or null where it writes none.
+     *
+     * <p><b>A literal on a counted carrier is a constant of this arithmetic.</b> Which counts a
+     * value of a type stands on is the carrier's one answer, and a date written out stands on a day
+     * as surely as a number written out stands on itself. Read as an arm per scalar, a name would
+     * carry what the value that name stands for does not — so substituting a concrete value into a
+     * proposition would take its proof away, which is an answer about how a model is spelled.
+     *
+     * <p><b>Nothing about any carrier is read here.</b> What a written value counts as is
+     * {@link Carrier#literalOf}'s, which is where every reader of a written value asks it and where
+     * a newtype's construction around one is taken off. Answered here instead, this walk would hold
+     * a second account of what a date is written as.
+     *
+     * <p>A carrier that counts nothing has no constant to be: a string is ordered and stands no
+     * measurable distance from another, which is the carrier's own answer and not a case here.
+     *
+     * <p>Null where the carrier writes no literal at this expression, and the walk goes on to read
+     * it as arithmetic or as a leaf. Treated as "not affine" instead, an expression a carrier does
+     * not recognise would stop a reading the grammar below can still take apart.
+     */
+    private static <A, E> LinearForm<A> literal(Core e, Reading<A, E> reading) {
+        Carrier carrier = Carrier.ofValue(e.type(), reading.symbols());
+        if (carrier == null || !carrier.counts()) {
+            return null;
+        }
+        Place at = carrier.literalOf(e, reading.symbols());
+        return at == null ? null : LinearForm.constant(Count.number(at).at());
     }
 
     /**

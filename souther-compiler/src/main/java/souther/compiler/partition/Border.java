@@ -334,7 +334,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
-        if (!reaches(target, within)) {
+        if (!reaches(cut,
+                Seam.of(space, cut, valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE),
+                satisfyingSide(origin), ordersAroundTheCut(origin), within)) {
             // Asked and answered by whoever holds the rule. Reaching here is that reader and this
             // one disagreeing about one line, which is not a state a model can put them in.
             throw new IllegalStateException(
@@ -355,7 +357,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         boolean holdsHere = holdsAtTheValue(origin);
         Map<PointRole, PointAnswer> demands = new EnumMap<>(PointRole.class);
         if (!ordersAroundTheCut(origin)) {
-            aLineWithOneSide(demands, origin, cut, holdsHere, space, reach, arrangement);
+            aLineWithOneSide(demands, origin, target.of(), cut, holdsHere, space, reach,
+                    arrangement);
             return new Border(target, origin, demands);
         }
         // Which way the rule is satisfied from the threshold, which is the one thing the two points
@@ -394,21 +397,71 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * never negative, and a rule comparing one against a negative draws no line for anything to be
      * beside.
      *
-     * <p><b>Whether the line is outside what the rules leave, and not whether they leave its own
-     * value.</b> A bound's line stands at the very end of what the bound leaves, and a strict one on
-     * a carrier with no step stands at a value the position does not hold — the quantity comes
-     * arbitrarily close to it and never arrives, which is a line with values on one side of it and
-     * not a line nothing reaches. Asked as {@code admits}, the two were one answer: every strict
-     * bound on a {@code Decimal} was read as drawing no line, and a model whose every rule was one
-     * came back adequate on the strength of no measure at all (issue #1079).
+     * <p><b>Asked of the side the rule keeps, and of where it parts the values there.</b> A rule
+     * draws somewhere exactly when the values it keeps are values the rules leave — so what is asked
+     * is one place and not the whole line, and it is the place the rule leaves rather than the
+     * number it wrote. Asked at the number, a rule refusing its own threshold on a carrier that
+     * counts parts the values one step inside the range and reads as one cutting outside it; asked
+     * of both sides, a line beyond the range has the side it refuses pulled back inside and reads as
+     * one cutting within.
+     *
+     * <p>Which keeps a carrier with no step drawing. Such a rule names no value beside its line —
+     * the quantity comes arbitrarily close and never arrives — and what it keeps is the line itself,
+     * so the question is asked there and answered. Asked as whether the rules leave the line's own
+     * value, every strict bound on a {@code Decimal} was read as drawing no line, and a model whose
+     * every rule was one came back adequate on the strength of no measure at all.
      */
-    public static boolean reaches(BoundaryTarget target, NumericDomain.Bounds within) {
+    public static boolean reaches(Level cut, Seam parts, Towards kept, boolean ordersAroundTheCut,
+                                  NumericDomain.Bounds within) {
         if (within == null) {
             return true;
         }
-        Place at = placeOf(target.at());
+        return standsAt(within, cut, parts, kept)
+                // A line with two sides owes a point against the line on each of them, so the line's
+                // own value is enough for it to be one somebody can write a row against: the side a
+                // rule is satisfied on may hold nothing while a row at the line settles which way
+                // the behavior went. Asked of the satisfying side alone, a guard the declarations
+                // can never satisfy took its whole line with it, and the row showing the behavior
+                // going the other way was never asked for.
+                //
+                // The line and not the whole of the other side. Every value a length takes is above
+                // a line drawn below zero, and the rule divides them into nothing — asked of that
+                // side, a rule that puts everything in one class came back as one with two.
+                || ordersAroundTheCut && admits(within, cut);
+    }
+
+    /**
+     * Whether the rules leave a value where this line parts them on one side.
+     *
+     * <p>The line itself where the seam has nothing to name there in the quantity's own units, which
+     * is a rule that wrote a multiple of the quantity and refuses its threshold. The line is where
+     * the values part to within one step of the quantity either way, and a caller with no place to
+     * ask about has nothing better to ask about than that.
+     */
+    private static boolean standsAt(NumericDomain.Bounds within, Level cut, Seam parts,
+                                    Towards side) {
+        Level leaves = parts.leaving(side);
+        return admits(within, leaves == null ? cut : leaves);
+    }
+
+    /** Whether {@code within} holds the value at {@code level}. */
+    private static boolean admits(NumericDomain.Bounds within, Level level) {
+        Place at = placeOf(level);
         return (within.min() == null || at.compareTo(within.min().at()) >= 0)
                 && (within.max() == null || at.compareTo(within.max().at()) <= 0);
+    }
+
+    /**
+     * Which way a rule is satisfied from its threshold, from the two things every rule records about
+     * its own line.
+     *
+     * <p>One derivation, asked by whoever holds the pair. A line is read off a cutting before any
+     * rule has been named for it and off that rule's origin afterwards, and the two carry the same
+     * two facts — worked out separately, a line would be satisfied one way while it was a cutting
+     * and the other way once it had an origin.
+     */
+    static Towards satisfyingSide(boolean holdsAtTheValue, boolean valueBelongsBelow) {
+        return holdsAtTheValue == valueBelongsBelow ? Towards.BELOW : Towards.ABOVE;
     }
 
     /**
@@ -590,8 +643,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * offered as the {@code OUT} point of a border nothing can be outside of.
      */
     private static void aLineWithOneSide(Map<PointRole, PointAnswer> demands, OriginRef origin,
-                                         Level cut, boolean holdsHere, LevelSpace space,
-                                         NumericDomain.Bounds within,
+                                         BorderQuantity of, Level cut, boolean holdsHere,
+                                         LevelSpace space, NumericDomain.Bounds within,
                                          QuantityArrangement arrangement) {
         Criterion rest = new Criterion.AnythingBut(cut);
         switch (noSideOf(origin)) {
@@ -601,7 +654,15 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
                 // the line, and which of the two ends it is is what says which way it runs. Held
                 // against the range below, which the same reading settled.
                 Towards kept = satisfyingSide(origin);
-                requireItIsTheEndItKeeps(within, cut, kept, origin);
+                // Asked of a bound on a position and of nothing else. A position's range ends where
+                // its own bound is, so the two readings are answers to one question and are held
+                // against each other. What a rule relating positions cuts runs between whatever
+                // their ranges leave it, and its line falls inside that — so the range is no
+                // account of where this rule stops, and requiring the two to agree would refuse
+                // every relation a model states.
+                if (of.aBoundOnItEndsItsRange()) {
+                    requireItIsTheEndItKeeps(within, space, cut, kept, origin);
+                }
                 PointAnswer on = againstABound(space, cut, kept, holdsHere, within, origin);
                 demands.put(PointRole.ON, on);
                 demands.put(PointRole.OFF,
@@ -671,15 +732,10 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
         if (holdsHere) {
             return pointAt(space, cut, kept, true, within);
         }
-        Optional<Level> beside = beyond(space, cut, kept);
-        if (beside.isPresent()) {
-            throw new IllegalStateException(
-                    "a bound that stops short of its own line where the order names "
-                            + beside.get().key() + " beside it: " + origin.named()
-                            + " — an end this compiler could step was to have been stepped before"
-                            + " it got here");
-        }
-        return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
+        // And where it refuses its own threshold, the value beside it on the side it keeps — which
+        // is what every other role of every other line is offered. A rule refusing its threshold
+        // keeps the values from one count in, and that count is the row a person writes.
+        return pointAt(space, cut, kept, false, within);
     }
 
     /**
@@ -694,11 +750,18 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
      * <p>The side and not either end. A rule leaving one value puts both ends at the line, and each
      * of its two bounds answers for the end it placed rather than for whichever end matches.
      */
-    private static void requireItIsTheEndItKeeps(NumericDomain.Bounds within, Level cut,
-                                                 Towards kept, OriginRef origin) {
+    private static void requireItIsTheEndItKeeps(NumericDomain.Bounds within, LevelSpace space,
+                                                 Level cut, Towards kept, OriginRef origin) {
         Endpoint end = within == null ? null
                 : kept == Towards.ABOVE ? within.min() : within.max();
-        if (end == null || !end.at().sameAs(placeOf(cut))) {
+        // Where the rule leaves off, which is not always the number it wrote. A carrier that counts
+        // has a next value, so a rule refusing its own threshold keeps the values from one count in
+        // — and the range this is held against stops there too. Held against the number instead,
+        // the two agree wherever a rule admits its threshold and are one count apart wherever it
+        // does not, which is half the operators an author can write.
+        Level leaves = Seam.of(space, cut,
+                valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE).leaving(kept);
+        if (end == null || !end.at().sameAs(placeOf(leaves))) {
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: " + origin.named());
         }
@@ -800,11 +863,32 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointA
             // against however its own values run. Which is not what `singles` says of it, and
             // reading the two as one question is why this is asked here and not answered by the
             // rule.
-            case OriginRef.InvariantOrigin _ -> false;
+            case OriginRef.InvariantOrigin _ -> ordersAroundTheCut(true, false);
             case OriginRef.NarrowedOrigin n -> ordersAroundTheCut(n.bound());
             case OriginRef.ComparisonOrigin _, OriginRef.EnsuresOrigin _ ->
-                    !origin.lineFacts().singles();
+                    ordersAroundTheCut(false, origin.lineFacts().singles());
         };
+    }
+
+    /**
+     * The same, of a reading that has not named a rule for its line yet.
+     *
+     * <p>One derivation, asked by whoever holds the two facts. Whether a line has two sides is
+     * settled before a border is built — a reading has to know which points its line will owe
+     * before it can ask whether anything can stand at them — and it is settled again once the rule
+     * is named. Worked out twice, a line would owe one side while it was a reading and two once it
+     * had a rule.
+     *
+     * @param drawnByAnInvariant whether what drew it is a clause a value's declarations state.
+     *                           Nothing outside such a rule can be constructed, so there is no far
+     *                           side to order against. An {@code ensures} is written on a
+     *                           declaration too and is not one of these: what it states is a
+     *                           relation the behavior is held to, and both its sides hold values
+     * @param singles            whether the rule names a value rather than a side, which orders
+     *                           nothing around itself either
+     */
+    static boolean ordersAroundTheCut(boolean drawnByAnInvariant, boolean singles) {
+        return !drawnByAnInvariant && !singles;
     }
 
     /** Why a line has only one side, which is not the same answer for the two rules that leave it

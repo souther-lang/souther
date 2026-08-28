@@ -22,6 +22,7 @@ public sealed interface NotApplicableReason extends MeasureReason
                 BoundaryDerivation.NoRuleDrawsALine,
                 BoundaryDerivation.NoSubject,
                 InputCaseEvidence.NotASum,
+                NoFeasibleInput,
                 OutputCaseEvidence.NotASum,
                 PartitionDerivation.NoSubject,
                 PartitionDerivation.NothingIsDivided {}

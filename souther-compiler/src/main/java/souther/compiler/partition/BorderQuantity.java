@@ -591,6 +591,24 @@ public sealed interface BorderQuantity {
     LevelSpace levels();
 
     /**
+     * Whether a bound on this quantity is what stops the range the rules leave it.
+     *
+     * <p>What a position holds is what its own declarations leave it, so a bound on it is that
+     * range's end and the two are one fact read twice — which is what lets a reader hold them
+     * against each other. What a rule relating positions cuts runs between whatever their ranges
+     * leave it: {@code a - b} over two fields each stopping at ten runs from minus ten to ten
+     * whatever any rule about the pair says, and a rule cutting it at zero cuts inside that. Held
+     * to the same reading, every relation a model states would be refused as a bound that stops
+     * short of its own line.
+     */
+    default boolean aBoundOnItEndsItsRange() {
+        return switch (this) {
+            case OfACoordinate _ -> true;
+            case Apart _, OverAForm _ -> false;
+        };
+    }
+
+    /**
      * Every term this quantity is taken of.
      *
      * <p>What a caller moving a quantity to another position has to know it is moving. Read off the

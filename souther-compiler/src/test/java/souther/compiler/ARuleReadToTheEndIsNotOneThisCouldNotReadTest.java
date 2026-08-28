@@ -211,10 +211,15 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      * <p>Here the question standing is the truth: what the clause says about the values was never
      * read, so what the position may hold is not known to have been read either. The three above
      * are what this one has to stay different from.
+     *
+     * <p>The threshold is written as arithmetic the reading of lines does not take apart, and it
+     * leaves the position values all the same. That second half is the fixture's whole difficulty:
+     * a spelling this cannot read over a bound no value satisfies is two things at once, and the
+     * one below is what settles which of them a measurement answers to.
      */
     @Test
     void aClauseNothingReadsIsAQuestionNobodyAnswered() {
-        Measured measured = of("    invariant String.length(name) <= 0 - 1");
+        Measured measured = of("    invariant String.length(name) <= 1 - 0");
 
         assertEquals("partial", measured.status());
         assertTrue(measured.weakening().contains("rule_unread"), measured.weakening().toString());
@@ -222,5 +227,33 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
                 measured.weakening().toString());
         assertTrue(measured.says("written in a form this compiler does not read"), measured.human());
         assertTrue(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
+    }
+
+    /**
+     * And where the rules leave the input no value, that outranks what any reading of them managed.
+     *
+     * <p>The same clause as above with the bound moved past where a length runs. Two things are true
+     * of it: this reading does not take the threshold apart, and no value of the position satisfies
+     * it. They belong to different layers — whether the rules leave anything for a measure to be
+     * about decides that there is a measurement, and how far a reading got decides how good one is —
+     * and the first is asked first.
+     *
+     * <p>So the measurement is not weaker, it is not there: a class is a set of values a row can be
+     * written at, and there are none. Reported as a reading that fell short, an author is asked for
+     * rows over a model that admits none, and the proof that says so is thrown away in favour of
+     * what one reader could not spell.
+     *
+     * <p>Not a gap either. Nothing here is a row somebody has not written yet.
+     */
+    @Test
+    void aProvedEmptyInputOutranksWhatAReadingOfItManaged() {
+        Measured measured = of("    invariant String.length(name) <= 0 - 1");
+
+        assertTrue(measured.says("no_feasible_input"), measured.human());
+        assertFalse(measured.weakening().contains("rule_unread"),
+                "the measurement is not weaker, it is not there: " + measured.weakening());
+        assertFalse(measured.weakening().contains("question_unanswered"),
+                "and nothing stands unanswered about a position no row reaches: "
+                        + measured.weakening());
     }
 }

@@ -399,15 +399,18 @@ at.coverage().made().orElseThrow());
     }
 
     /**
-     * A line on a temporal, which nothing could compose a row at.
+     * The same rule shape on the temporal carriers, which count as the whole numbers do.
      *
-     * <p>The same two answers on the carriers the numbers above do not cover. A rule this reads
-     * bounds the value and a rule beside it refuses the value at that bound, so the line exists and
-     * the row does not — and which of the two failed decides what an author is told to do about it.
-     * Read here on both temporal carriers, because they reach the generator by different writers and
-     * a count written where a temporal belongs is refused by the decoder with nothing said about why.
+     * <p>What {@code HOLED} states of an {@code Int}, stated of a date and of a moment: a clause
+     * bounds the value and a clause beside it refuses the value at that bound, so the line is at the
+     * value the rules leave. A day and a second are counts with a next one, so each line steps by
+     * one of its own unit.
+     *
+     * <p>Read on both, because they reach the generator by different writers and a count written
+     * where a temporal belongs is refused by the decoder with nothing said about why. So the row at
+     * the line is asked for here as well as the line's place.
      */
-    private static final String TEMPORAL_EDGE_NOTHING_COMPOSED = """
+    private static final String TEMPORAL_EDGE_TAKEN_AWAY = """
             module example.temporal
 
             data Cutoff = Date
@@ -431,27 +434,34 @@ at.coverage().made().orElseThrow());
                 | "some" : (Moment(DateTime("2026-06-01T00:00:00"))) -> Ok
             """;
 
+    /** The line stands where the rules leave the values, one count along from the value refused. */
     @Test
-    void aTemporalEdgeNothingComposedIsTheSearchsFailureAndNotTheModelsSilence() {
+    void aTemporalEdgeTakenAwayIsALineAtTheValueTheRulesLeave() {
+        assertEquals(List.of("2026-01-02"),
+                valuesAt(TEMPORAL_EDGE_TAKEN_AWAY, "example.temporal", "onADate"),
+                "a day is a count with a next one, so the line steps to it");
+        assertEquals(List.of("2026-01-01T00:00:01"),
+                valuesAt(TEMPORAL_EDGE_TAKEN_AWAY, "example.temporal", "onAMoment"),
+                "and a moment steps by its second");
+    }
+
+    /** And a row is asked for there, which is what says the value is one a row can be written at. */
+    @Test
+    void aRowIsAskedForAtTheTemporalEdge() {
         for (String[] each : new String[][] {
-                {"onADate", "c = 2026-01-01"}, {"onAMoment", "m = 2026-01-01T00:00:00"}}) {
-            ItemAssessment.Owed at = assessmentAt(TEMPORAL_EDGE_NOTHING_COMPOSED,
-                    "example.temporal", each[0], each[1].substring(each[1].indexOf('=') + 2));
-
-            assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.attempt(),
-                    each[0] + ": the search came back with nothing");
-
-            Compilation compilation =
-                    Compilation.ofSource(TEMPORAL_EDGE_NOTHING_COMPOSED, "Main");
+                {"onADate", "Cutoff(Date(\"2026-01-02\"))"},
+                {"onAMoment", "Moment(DateTime(\"2026-01-01T00:00:01\"))"}}) {
+            Compilation compilation = Compilation.ofSource(TEMPORAL_EDGE_TAKEN_AWAY, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String block = souther.compiler.report.GeneratedRows.of(
-                    compilation, "example.temporal", each[0], true, SourceNameResolver.identity()).text();
+                    compilation, "example.temporal", each[0], true,
+                    SourceNameResolver.identity()).text();
 
-            assertTrue(block.contains("no row for `" + each[1] + "`"), block);
-            assertTrue(block.contains("does not make the combination impossible"), block);
-            assertFalse(block.contains("not derivable"),
-                    "the rule that drew the line is two lines above: " + block);
+            assertTrue(block.contains(each[1]),
+                    each[0] + ": a row is composed at the line: " + block);
+            assertFalse(block.contains("no row for"),
+                    each[0] + ": nothing here is a line no row could be written at: " + block);
         }
     }
 }

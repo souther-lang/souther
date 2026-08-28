@@ -97,7 +97,13 @@ final class Coverages {
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
                 : GuardThresholds.of(behavior.name(), body, plan, inputs, quantities,
                         symbols, elements);
-        // Both producers of one kind of line, put together before the position is divided. Two
+        // And what the declarations state between two of this input's positions. Such a rule places
+        // no end at either of them, so the reading of ends has nothing to draw it from; read here,
+        // it is a line like the two above and is arranged with them.
+        List<souther.compiler.partition.LineDrawn> declared =
+                souther.compiler.partition.DeclaredThresholds.between(behavior.name(), inputs,
+                        quantities, symbols);
+        // Every producer of one kind of line, put together before the position is divided. Two
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would
         // divide the position twice.
@@ -108,7 +114,8 @@ final class Coverages {
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(inputs,
                         both(clauses.evidence(), guards.evidence()),
-                        both(clauses.between(), guards.between()), quantities, symbols);
+                        both(declared, both(clauses.between(), guards.between())),
+                        quantities, symbols);
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
                 filed.evidence(), symbols, policy,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
@@ -180,7 +187,8 @@ final class Coverages {
         // could read leaves the border measure short while the classes either side of it were read
         // in full, and the enumeration above is the same case the other way round.
         return new PartitionEvidence(
-                PartitionDerivation.of(axes, partitioning.partitionClosure()),
+                PartitionDerivation.of(axes, partitioning.partitionClosure(),
+                        partitioning.inputIsEmpty()),
                 OwedBoundaryPoint.accountOf(lines),
                 pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),

@@ -78,6 +78,12 @@ public final class Partitions {
      * @param between the lines drawn between two positions, which divide neither of them
      * @param along   the lines drawn on one position, by the axis they are on. Every measurable axis
      *                has an entry, and an axis that is not measurable has no lines to have one for
+     * @param inputIsEmpty the proof that the rules reaching this input leave no value at all, or
+     *                null where no such proof was found. One fact about the behavior and not one per
+     *                rule or per position: two clauses each admitting values are empty together, so
+     *                neither of them is the one at fault and there is no position for it to be
+     *                about. Null is "not proved empty" and never "there is a value" — what a proof
+     *                of emptiness has no proof of is not the opposite claim
      */
     public record Partitioning(List<PositionAccount> positions, List<Axis> axes,
                                List<souther.compiler.inputs.StandingQuestion> unanswered,
@@ -90,7 +96,8 @@ public final class Partitions {
                                java.util.Map<AxisId, List<Border>> along,
                                ReachingCuts reaching,
                                MeasureClosure.OfThePartition partitionClosure,
-                               MeasureClosure.OfTheBorder borderClosure) {
+                               MeasureClosure.OfTheBorder borderClosure,
+                               souther.compiler.inputs.EmptyInput inputIsEmpty) {
         public Partitioning {
             positions = List.copyOf(positions);
             axes = List.copyOf(axes);
@@ -252,8 +259,9 @@ public final class Partitions {
         }
         // The lines first, because the closure is a conclusion about them: whether the reading ran
         // out is asked of what it produced beside what it found, and not of the gaps alone. Both
-        // producers write into the one account — here there is only the one, and no rule of this
-        // reading draws a line between two positions.
+        // producers write into the one account — here there is only the one. A rule of a declaration
+        // that relates two positions draws a line on neither of them, and every line on no position
+        // is arranged with the others where they are all in hand, which this phase is not.
         LinesRead read = new LinesRead();
         java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, symbols, read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
@@ -264,7 +272,11 @@ public final class Partitions {
                 List.copyOf(rulesWithoutALine), blockedIn(positions, measured),
                 List.copyOf(notSeparated),
                 List.of(), lines, ReachingCuts.NONE,
-                closed.partition(), closed.border());
+                closed.partition(), closed.border(),
+                // Asked once, of the one reading that holds every parameter's rules together. A
+                // contradiction between two declarations is visible nowhere else, and a reader
+                // asking per position or per rule would be asking what neither of them decides.
+                quantities.emptiness().orElse(null));
     }
 
     /**
@@ -726,7 +738,10 @@ public final class Partitions {
                 // sides of that border are runs of what all of them leave.
                 base.notSeparated(), across,
                 lines,
-                reaching, closed.partition(), closed.border());
+                reaching, closed.partition(), closed.border(),
+                // Carried across. Whether the rules leave the input a value is the declarations'
+                // answer, and a body drawing lines on what they left does not change it.
+                base.inputIsEmpty());
     }
 
     /**
