@@ -28,7 +28,57 @@ import java.util.Set;
  * rule may be filed under out of everything the reading wrote down.
  */
 record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
-                     Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder) {
+                     Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
+                     java.util.Map<souther.compiler.core.Core, OfAPart> parts) {
+
+    /**
+     * What one part of one clause came to, once every branch of the value is decided.
+     *
+     * <p>A projection of the whole and not a reading of its own. The branch a part is in is dropped
+     * or kept by the rules of every clause together, so a part read again on its own answers about a
+     * branch this declaration has already dropped — and pays for machines the whole answer never
+     * needed to find out.
+     *
+     * @param aboutARule what a rule of this part is answerable for, per position
+     */
+    record OfAPart(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
+                   java.util.Map<FactSubject,
+                           java.util.List<souther.compiler.values.UnreadReason>> aboutARule) {
+
+        /** The positions some reading took the whole of this part in at. */
+        java.util.Set<FactSubject> adopted() {
+            return ReadByClauses.adopted(byValues, byOrder);
+        }
+    }
+
+    /** Both maps, each position saying what either of them said of it. */
+    static java.util.Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>
+            alsoSaying(java.util.Map<FactSubject,
+                    java.util.List<souther.compiler.values.UnreadReason>> these,
+                    java.util.Map<FactSubject,
+                            java.util.List<souther.compiler.values.UnreadReason>> those) {
+        if (those.isEmpty()) {
+            return these;
+        }
+        java.util.Map<FactSubject,
+                java.util.List<souther.compiler.values.UnreadReason>> out =
+                new java.util.LinkedHashMap<>(these);
+        those.forEach((position, why) -> out.merge(position, why, ReadByClauses::alsoSaying));
+        return out;
+    }
+
+    /** Both lists, the second's entries after the first's, each reason once. */
+    static java.util.List<souther.compiler.values.UnreadReason> alsoSaying(
+            java.util.List<souther.compiler.values.UnreadReason> these,
+            java.util.List<souther.compiler.values.UnreadReason> those) {
+        java.util.List<souther.compiler.values.UnreadReason> out = new java.util.ArrayList<>(these);
+        those.forEach(each -> {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        });
+        return out;
+    }
 
     /**
      * Everything this reading wrote down that a rule is answerable for, per position.
@@ -77,6 +127,11 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
      * standing.
      */
     Set<FactSubject> adopted() {
+        return adopted(byValues, byOrder);
+    }
+
+    static Set<FactSubject> adopted(Adoption<FactSubject> byValues,
+                                    Adoption<FactSubject> byOrder) {
         Set<FactSubject> out = new LinkedHashSet<>();
         // Everything either account is about, and not what it put a constraint on: a position a
         // dead branch settled is one the reading answered for and put no constraint on, which is

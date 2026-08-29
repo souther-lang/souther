@@ -60,7 +60,7 @@ interface ClauseReading<S> {
      * long as nobody changes one of them.
      */
     default S read(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
-        S out = readInto(e, positive, per);
+        S out = from(e, readInto(e, positive, per));
         if (per != null) {
             per.accept(e, out);
         }
@@ -85,12 +85,28 @@ interface ClauseReading<S> {
             case ClauseExpr.Both it -> both(over(it.left(), per), over(it.right(), per));
             case ClauseExpr.Either it -> either(over(it.left(), per), over(it.right(), per));
         };
-        if (per != null) {
-            // Every node that was written as this shape, so a reader walking the clause afterwards
-            // finds what this made of the node it is holding — the denial as well as what is under
-            // it, since the two are one shape.
-            shape.spelled().forEach(each -> per.accept(each, out));
+        // Every node that was written as this shape, so a reader asking about the node it is
+        // holding finds what this made of it — the denial as well as what is under it, since the
+        // two are one shape.
+        for (Core each : shape.spelled()) {
+            out = from(each, out);
+            if (per != null) {
+                per.accept(each, out);
+            }
         }
+        return out;
+    }
+
+    /**
+     * The same reading, remembering that it is what {@code e} came to.
+     *
+     * <p>For a reading that has to answer about the parts of a clause afterwards. Kept in what the
+     * reading carries rather than handed to somebody who keeps it: a part of a branch that turns
+     * out dead is answered differently from the same part in a branch that stands, and everything
+     * that decides which of those it was happens above here. Kept outside, the part would be read
+     * again against a tree the decision had not reached.
+     */
+    default S from(Core e, S out) {
         return out;
     }
 }

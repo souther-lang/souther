@@ -75,6 +75,19 @@ record Adoption<A>(Set<A> read, Set<A> settled, Set<A> missed, boolean dropped) 
     }
 
     /**
+     * The same account, for a part of a branch nobody can be in.
+     *
+     * <p>Nothing satisfies the branch, so nothing it said narrows a value of this type — and
+     * nothing it missed is missing from what a value of this type is under either. What is left is
+     * that the positions it named are settled: the choice does nothing to them, which is an answer
+     * and not a gap. The same rule {@link #bothDead} states for a whole choice, said of one part of
+     * one branch of it.
+     */
+    Adoption<A> inADeadBranch() {
+        return new Adoption<>(Set.of(), mentions(), Set.of(), false);
+    }
+
+    /**
      * The same account, with the positions this reading could not work out given up on.
      *
      * <p>What a leaf says it adopted is said before anything is built: a pattern is named there and
