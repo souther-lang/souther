@@ -177,6 +177,27 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                                 through.denotes().at()) : null;
             }
 
+            /**
+             * A name an operation handed an element on, where the container was written out.
+             *
+             * <p>The same one answer as the one above ({@link InputReads#meaningOf}), read for the
+             * count it comes back with. A container an operation built answers no plurality here,
+             * and a rule about an element of one is a rule about no position — which is what it was
+             * before there was anything to write out.
+             */
+            @Override
+            public java.util.List<AffineForms.ReadThrough<InputReads>> alternativesOf(
+                    Core.Read read, InputReads at) {
+                if (!(at.meaningOf(read, symbols) instanceof ReadMeaning.OneOf one)) {
+                    return null;
+                }
+                java.util.List<AffineForms.ReadThrough<InputReads>> each =
+                        new java.util.ArrayList<>();
+                one.alternatives().forEach(stands ->
+                        each.add(new AffineForms.ReadThrough<>(stands.value(), stands.at())));
+                return each;
+            }
+
             @Override
             public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
                 return at.pathOf(fa.target(), symbols) == null
