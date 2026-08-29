@@ -29,28 +29,37 @@ import java.util.Map;
  * finds every comparison about nothing.
  *
  * <p>And a name stands for more than a position or nothing. It is a position, or the expression it
- * was given, or an element an operation handed out, or something this knows nothing about
- * ({@link ReadMeaning}). Answered as a position and nothing, the last three were one answer, and a
- * rule written over a name given arithmetic over positions was read as no rule at all.
+ * was given, or one of several values this can write out, or an element an operation handed out, or
+ * something this knows nothing about ({@link ReadMeaning}). Answered as a position and nothing, the
+ * last four were one answer, and a rule written over a name given arithmetic over positions was read
+ * as no rule at all.
  *
  * <p>Nothing here decides what a position holds; that is the reading of the declarations
  * ({@link InputDomain}), and this only says what a name is pointing at.
  *
- * @param roots      which bindings name which parameter, in the tree being walked
- * @param callsStand whether an operation the language defines the meaning of is left standing in
- *                   this tree. It is in the representation a declaration's own rules are read in
- *                   and it is not in the one that runs, and the difference is not a detail of the
- *                   walk: a call left standing names no location, which is an answer where such a
- *                   tree is what was handed over and a bug in the caller where it is not
+ * @param roots        which bindings name which parameter, in the tree being walked
+ * @param alternatives which bindings stand for one of several values, and which values those are.
+ *                     Written where an arm narrows what it was handed and read nowhere else: an
+ *                     element's own alternatives are worked out from the container it came from, and
+ *                     what an arm leaves of them is a fact about this walk's position in the tree
+ *                     that nothing under the arm could recover
+ * @param callsStand   whether an operation the language defines the meaning of is left standing in
+ *                     this tree. It is in the representation a declaration's own rules are read in
+ *                     and it is not in the one that runs, and the difference is not a detail of the
+ *                     walk: a call left standing names no location, which is an answer where such a
+ *                     tree is what was handed over and a bug in the caller where it is not
  */
 public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
                          Map<BindingId, Core> bound,
-                         souther.compiler.check.ElementBindings elements, boolean callsStand)
+                         souther.compiler.check.ElementBindings elements,
+                         Map<BindingId, java.util.List<Denotation>> alternatives,
+                         boolean callsStand)
         implements InputPaths {
 
     public InputReads {
         roots = Map.copyOf(roots);
         bound = Map.copyOf(bound);
+        alternatives = Map.copyOf(alternatives);
     }
 
     /** At the top of a body, where nothing has been bound yet and no element has been handed out. */
@@ -73,7 +82,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      */
     public static InputReads ofParameters(Map<BindingId, String> parameters,
                                           souther.compiler.check.ElementBindings elements) {
-        return new InputReads(null, rooted(parameters), Map.of(), elements, false);
+        return new InputReads(null, rooted(parameters), Map.of(), elements, Map.of(), false);
     }
 
     /**
@@ -99,7 +108,8 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * position, which is what it did before there was anything to give.
      */
     public static InputReads of(InputDomain read, souther.compiler.check.ElementBindings elements) {
-        return new InputReads(read, rooted(read.parameterReads()), Map.of(), elements, false);
+        return new InputReads(read, rooted(read.parameterReads()), Map.of(), elements,
+                Map.of(), false);
     }
 
     /** The parameters as positions, which is what a name in a tree stands for. */
@@ -118,7 +128,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      */
     public static InputReads ofWhatIsDeclared(InputDomain read, Map<BindingId, String> roots) {
         return new InputReads(read, rooted(roots), Map.of(),
-                souther.compiler.check.ElementBindings.NONE, true);
+                souther.compiler.check.ElementBindings.NONE, Map.of(), true);
     }
 
     /**
@@ -136,13 +146,13 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      */
     public static InputReads ofADeclaredClause(InputDomain read, Map<BindingId, TermPath> roots) {
         return new InputReads(read, roots, Map.of(),
-                souther.compiler.check.ElementBindings.NONE, true);
+                souther.compiler.check.ElementBindings.NONE, Map.of(), true);
     }
 
     /** The same, before there is a reading to hold beside it ({@link #ofParameters}). */
     public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
         return new InputReads(null, rooted(roots), Map.of(),
-                souther.compiler.check.ElementBindings.NONE, true);
+                souther.compiler.check.ElementBindings.NONE, Map.of(), true);
     }
 
     /**
@@ -157,16 +167,26 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * <p>Only where the arm selects one case. An arm answering for several narrows to none of them
      * in particular, and a name that stands for no position is what a reader is given for it —
      * which is what it was given before there was anything to say.
+     *
+     * <p><b>And where the scrutinee stands for one of several written values, the arm narrows that
+     * set.</b> Which is a different answer from the one above and not a weaker copy of it: a
+     * position is one place a row writes at, and a set is every value the name can take. An arm
+     * admitting one case takes out the members that are not of it and leaves the rest — however
+     * many that is. A container written with two members of the admitted case leaves two, and an
+     * arm is no evidence that the name is one of them: what would make it one is there being one
+     * left, which is what the set says and the arm does not.
      */
     @Override
     public InputReads insideArm(Core.Match match, Core.Case arm, Symbols symbols) {
-        if (arm.binder() == null || arm.binder().binding() == null
-                || arm.caseTypes().size() != 1) {
+        if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
+        }
+        if (arm.caseTypes().size() != 1) {
+            return admitting(match, arm, symbols);
         }
         TermPath scrutinee = pathOf(match.scrutinee(), symbols);
         if (scrutinee == null) {
-            return this;
+            return admitting(match, arm, symbols);
         }
         TermPath narrowed = scrutinee.refine(Refinement.sumCase(arm.caseTypes().get(0)));
         // And nothing is asked of the reading. What this answers is which location the arm's name
@@ -181,7 +201,83 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         // that stands for a place no row reaches — which the reading refuses when it is asked.
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
         wider.put(arm.binder().binding(), narrowed);
-        return new InputReads(read, wider, bound, elements, callsStand);
+        return new InputReads(read, wider, bound, elements, alternatives, callsStand);
+    }
+
+    /**
+     * The same, where what the arm binds is one of the values the scrutinee's set holds.
+     *
+     * <p>Only where the arm's carriers are the values themselves. A case that binds what an optional
+     * holds binds something under the value that was matched rather than the value, so the members
+     * of the set are not what the name stands for — and a set narrowed as though they were would
+     * name every member one step too high.
+     *
+     * <p>Nothing is narrowed where a member cannot be told which case it is. What makes the set an
+     * answer is that it holds every value the name can take, and a filter that let through what it
+     * could not classify would be keeping a member the arm excludes, while one that dropped it would
+     * be losing a member the arm admits. Neither is the set, so the name is left with none.
+     */
+    private InputReads admitting(Core.Match match, Core.Case arm, Symbols symbols) {
+        ReadMeaning.OneOf one = pluralityOf(match.scrutinee(), symbols,
+                new java.util.HashSet<>());
+        if (one == null) {
+            return this;
+        }
+        for (souther.compiler.types.CaseSelector selector : arm.pattern().selectors()) {
+            if (!(selector.refinement() instanceof souther.compiler.types.Refinement.Direct)) {
+                return this;
+            }
+        }
+        java.util.List<Denotation> left = new java.util.ArrayList<>();
+        for (Denotation each : one.alternatives()) {
+            souther.compiler.types.TypeSymbol written = caseWritten(each.value());
+            if (written == null) {
+                return this;
+            }
+            if (arm.caseTypes().contains(written)) {
+                left.add(each);
+            }
+        }
+        if (left.isEmpty()) {
+            return this;
+        }
+        Map<BindingId, java.util.List<Denotation>> wider = new LinkedHashMap<>(alternatives);
+        wider.put(arm.binder().binding(), left);
+        return new InputReads(read, roots, bound, elements, wider, callsStand);
+    }
+
+    /**
+     * The values {@code e} can stand for, or null where they are not written out.
+     *
+     * <p>Through the names that stand for one value, which is what a scrutinee usually is: a body
+     * naming what it matches, and a helper expanded into one binding the call's argument to its own
+     * parameter, leave a run of names between the {@code match} and the element. Read one step, an
+     * arm inside such a helper would narrow nothing and the reading would stop at the first name.
+     *
+     * <p>Following is this reader's own and is not written into {@link #meaningOf}. That answers
+     * what a name is, one step, for every reader; whether a reader may go on through a name that
+     * stands for one value is what the answer licenses rather than something it does.
+     */
+    private ReadMeaning.OneOf pluralityOf(Core e, Symbols symbols,
+                                          java.util.Set<BindingId> met) {
+        if (!(e instanceof Core.Read name) || !met.add(name.binding())) {
+            return null;
+        }
+        return switch (meaningOf(name, symbols)) {
+            case ReadMeaning.OneOf one -> one;
+            case ReadMeaning.Through through ->
+                    through.denotes().at().pluralityOf(through.denotes().value(), symbols, met);
+            default -> null;
+        };
+    }
+
+    /** Which case {@code e} is written as, or null where it is not written as one. */
+    private static souther.compiler.types.TypeSymbol caseWritten(Core e) {
+        return switch (e) {
+            case Core.Construct nd -> nd.typeName();
+            case Core.UnitValue unit -> unit.data();
+            default -> null;
+        };
     }
 
     /** The same, inside what {@code binder} binds. */
@@ -193,7 +289,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         Map<BindingId, Core> wider = new LinkedHashMap<>(bound);
         // The nearest binding wins, which is what being inside it means.
         wider.put(binder.binding(), value);
-        return new InputReads(read, roots, wider, elements, callsStand);
+        return new InputReads(read, roots, wider, elements, alternatives, callsStand);
     }
 
     /** The position {@code e} names here, or null where it names none. */
@@ -219,14 +315,24 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * stand where the name does is the caller's question, asked of the fact rather than of a
      * permission recorded here: an arithmetic reader substitutes it, and a reader collecting
      * positions walks into it, and neither is the other's rule.
+     *
+     * <p>A set the arms already narrowed stands before an element's own, which is the same order as
+     * everywhere else: what is in force where the name is read wins over what was true of it
+     * further out.
      */
     public ReadMeaning meaningOf(Core.Read read, Symbols symbols) {
         TermPath path = pathOf(read, symbols);
         if (path != null) {
             return new ReadMeaning.Position(path);
         }
-        if (elements.containerOf(read.binding()) != null) {
-            return new ReadMeaning.Element();
+        java.util.List<Denotation> narrowed = alternatives.get(read.binding());
+        if (narrowed != null) {
+            return new ReadMeaning.OneOf(narrowed);
+        }
+        Core container = elements.containerOf(read.binding());
+        if (container != null) {
+            java.util.List<Denotation> written = writtenElementsOf(new Denotation(container, this));
+            return written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
         }
         Core held = bound.get(read.binding());
         // Read in this environment. Bindings are added on the way down and each tells itself from
@@ -234,7 +340,69 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         // is why the environment at the binder and the one at the read cannot be told apart yet.
         // Said once here rather than by each reader, so the day they can be, one place changes.
         return held == null || held == read ? new ReadMeaning.Unknown()
-                : new ReadMeaning.Through(held, this);
+                : new ReadMeaning.Through(new Denotation(held, this));
+    }
+
+    /**
+     * The elements {@code container} was written with, or null where it was not written out.
+     *
+     * <p>What makes this an answer about every element and not about some of them is that the
+     * container is followed only through steps with one successor — a name this environment bound,
+     * and the body of a binding — until a list written in the source is standing there. An operation
+     * that builds a container answers elements this walk cannot enumerate, and the walk stops rather
+     * than reading what went in: {@code List.append(xs, ys)} holds the elements of both, and a
+     * reading that took either would have written out a set missing the other half.
+     *
+     * <p><b>Followed with this environment and never with the body's.</b> What a binding holds is
+     * also recorded over the whole body ({@link souther.compiler.check.ElementBindings#boundTo}), and
+     * reading a container out of that would give a value with no environment to read it in — after
+     * which the environment each element is read in would be whichever one the caller had in hand.
+     * Where the way to the list runs through a binding this walk has not passed, the elements are
+     * not written out, and that is a capability short of what a reader could have rather than a set
+     * put together out of two readings.
+     *
+     * <p>Null for a list written empty. No value stands at an element of it, so there is nothing for
+     * a statement about every member to be about, and a statement quantified over no members holds
+     * whatever it says.
+     */
+    private static java.util.List<Denotation> writtenElementsOf(Denotation container) {
+        Denotation standing = standing(container, new java.util.HashSet<>());
+        if (!(standing.value() instanceof Core.ListLit written) || written.elements().isEmpty()) {
+            return null;
+        }
+        java.util.List<Denotation> out = new java.util.ArrayList<>();
+        written.elements().forEach(each -> out.add(new Denotation(each, standing.at())));
+        return out;
+    }
+
+    /**
+     * {@code from} followed through the steps that have one successor, as far as they go.
+     *
+     * <p>The names this environment bound and the bodies of the bindings inside it, and nothing
+     * else. A normal form and never a failure: what comes back where nothing applies is what went
+     * in, which a caller reads rather than treating as an absence.
+     *
+     * <p>By the bindings met, which is what makes it stop. Each tells itself from every other, so a
+     * name that came round to itself is one already answered for.
+     */
+    private static Denotation standing(Denotation from, java.util.Set<BindingId> met) {
+        Denotation at = from;
+        while (true) {
+            switch (at.value()) {
+                case Core.Read name -> {
+                    Core held = at.at().bound.get(name.binding());
+                    if (held == null || held == name || !met.add(name.binding())) {
+                        return at;
+                    }
+                    at = new Denotation(held, at.at());
+                }
+                case Core.LetIn let ->
+                        at = new Denotation(let.body(), at.at().and(let.binder(), let.value()));
+                default -> {
+                    return at;
+                }
+            }
+        }
     }
 
     /** The position an element handed to {@code binding} stands at, or null where it stands at

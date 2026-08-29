@@ -173,7 +173,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             @Override
             public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
                 return at.meaningOf(read, symbols) instanceof ReadMeaning.Through through
-                        ? new AffineForms.ReadThrough<>(through.value(), through.at()) : null;
+                        ? new AffineForms.ReadThrough<>(through.denotes().value(),
+                                through.denotes().at()) : null;
             }
 
             @Override

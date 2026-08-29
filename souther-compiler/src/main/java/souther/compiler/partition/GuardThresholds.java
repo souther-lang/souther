@@ -357,7 +357,7 @@ public final class GuardThresholds {
                     Core.Read read, InputReads at) {
                 return at.meaningOf(read, symbols) instanceof ReadMeaning.Through through
                         ? new souther.compiler.check.AffineForms.ReadThrough<>(
-                                through.value(), through.at())
+                                through.denotes().value(), through.denotes().at())
                         : null;
             }
 
