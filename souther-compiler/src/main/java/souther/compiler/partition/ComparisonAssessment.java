@@ -121,7 +121,8 @@ sealed interface ComparisonAssessment {
      * <p>{@code filedAt} is where the rule is said to have cut nothing, and it comes off the
      * reading rather than off a second walk over the operands. What is left of the quantity is not
      * what the rule is about — {@code a - a <= 0} is about {@code a} and cuts nothing — so the
-     * coordinates are the numbers the reading named, whether or not they survived.
+     * coordinates are the numbers the reading named, whether or not they survived, and they are the
+     * numbers rather than the places they sit at ({@link AffineReading#filedAt}).
      */
     record CutsNothing(List<FilingCoordinate> filedAt) implements ComparisonAssessment {
 
@@ -222,9 +223,7 @@ sealed interface ComparisonAssessment {
             // constants and states nothing anywhere.
             case Cutting.Read.CutsNothing over -> over.read().isEmpty()
                     ? aboutNoPosition(comparison, reads, symbols)
-                    : new CutsNothing(over.read().stream()
-                            .map(NumericTerm::subjectPath).distinct()
-                            .map(FilingCoordinate::at).toList());
+                    : new CutsNothing(AffineReading.filedAt(over.read()));
             // And where the reading stopped, its own answer for having stopped — decided where it
             // stopped rather than worked out again from the comparison afterwards. Here the walk
             // over the expression is the only account of what the rule is about, which is what it

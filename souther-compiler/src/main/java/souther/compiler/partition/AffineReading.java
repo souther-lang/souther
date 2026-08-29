@@ -78,6 +78,11 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
          * that the quantity is empty would have to go back to the operands to find out where to say
          * so — which is a second account of what the rule names, beside the reading that has just
          * read it. A comparison of constants named nothing and comes back with nothing.
+         *
+         * <p>A set, because naming one number twice is naming it once. Which order a document lists
+         * them in is not carried here and is not the order they were met in: that is how the rule
+         * was spelled, and it is settled where the coordinates are made
+         * ({@link AffineReading#filedAt}).
          */
         record CutsNothing(java.util.Set<NumericTerm> read) implements OfAComparison {
 
@@ -147,6 +152,30 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             LinearForm<NumericTerm> form) {
         return form.coefs().entrySet().stream()
                 .sorted(java.util.Comparator.comparing(each -> each.getKey().toString())).toList();
+    }
+
+    /**
+     * Where a reading that reached the numbers files what it found, in the order a document names
+     * them.
+     *
+     * <p><b>The numbers and not the places they sit at.</b> A reader that got as far as the terms
+     * has the operation each number is taken by, and two operations over one path are two rules a
+     * report has to tell apart ({@link souther.compiler.inputs.FilingCoordinate}); the coordinate
+     * that names only the place is for a reader that did not get that far. Written out again at a
+     * second reader, the weaker of the two is the one that would be reached for, since a path is
+     * what every term can be asked for.
+     *
+     * <p>By the term's own name, for the reason {@link #ordered} gives: how a rule was spelled is
+     * not what a document is keyed on, and a report is compared against the one written last time.
+     * So the order the reading happened to meet them in is not carried, and neither is a set's.
+     */
+    static java.util.List<souther.compiler.inputs.FilingCoordinate> filedAt(
+            java.util.Collection<NumericTerm> terms) {
+        return terms.stream()
+                .sorted(java.util.Comparator.comparing(NumericTerm::toString))
+                .<souther.compiler.inputs.FilingCoordinate>map(
+                        souther.compiler.inputs.FilingCoordinate::of)
+                .distinct().toList();
     }
 
     /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */

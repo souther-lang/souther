@@ -418,15 +418,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * position it does not mention.
      */
     java.util.List<souther.compiler.inputs.FilingCoordinate> over() {
-        // By the position's own name, which is the one thing about a form that does not depend on
-        // how it was written — the same order {@link AffineReading#ordered} puts a form's
-        // coefficients in. Read off the map instead, the entries come back in an order salted once
-        // per run, and a report is a document compared against the one written last time.
-        return AffineReading.ordered(direction(of)).stream()
-                .map(java.util.Map.Entry::getKey)
-                .<souther.compiler.inputs.FilingCoordinate>map(
-                        souther.compiler.inputs.FilingCoordinate::of)
-                .distinct().toList();
+        // Where a reading that reached the numbers files them, which is one answer for every such
+        // reading ({@link AffineReading#filedAt}): the terms themselves, in the order a document
+        // names them. Written out here, a reader that reached the numbers by another way would
+        // write it out again, and the two would file one rule at two coordinates.
+        return AffineReading.filedAt(direction(of).coefs().keySet());
     }
 
     /** Whether the rule singles a value out rather than ordering the values around it. */

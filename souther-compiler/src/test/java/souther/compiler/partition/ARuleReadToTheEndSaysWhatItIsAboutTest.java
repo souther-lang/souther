@@ -61,6 +61,20 @@ class ARuleReadToTheEndSaysWhatItIsAboutTest {
     }
 
     /**
+     * A number taken of a position is filed as that number and not as the position.
+     *
+     * <p>What the reading named is the length, and a rule about the length is not a rule about the
+     * string: two operations over one place are two rules, and a report that filed both at the place
+     * would have them as one. The reading reached the number, so the number is what it says — a
+     * coordinate that names only the place is for a reader that did not get that far.
+     */
+    @Test
+    void aNumberTakenOfAPositionIsFiledAsThatNumber() {
+        assertEquals("[] unread [String.length(s) RULE_CUTS_NOTHING]", reading(
+                "if String.length(s) - String.length(s) <= 0 then Yes else No"));
+    }
+
+    /**
      * A comparison of constants names nothing, and nothing is recorded.
      *
      * <p>The other side of the same rule. It is read from end to end and cuts nothing, and there is
@@ -80,11 +94,11 @@ class ARuleReadToTheEndSaysWhatItIsAboutTest {
                 data Yes
                 data No
 
-                behavior classify : (n: Int) -> Yes | No
-                let classify (n) = %s
+                behavior classify : (n: Int, s: String) -> Yes | No
+                let classify (n, s) = %s
 
                 example classify
-                    | "one" : (1) -> Yes
+                    | "one" : (1, "") -> Yes
                 """.formatted(body), "classify");
     }
 }
