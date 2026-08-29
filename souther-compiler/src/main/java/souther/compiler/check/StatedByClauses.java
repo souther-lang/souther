@@ -432,8 +432,14 @@ sealed interface StatedByClauses {
          */
         private Emptiness emptinessOf(Said read,
                                       souther.compiler.values.Allowance<FactSubject> by) {
-            return read.ordered().isBottom() ? Emptiness.EMPTY : read.values().resolve(by)
-                    .emptiness();
+            if (read.ordered().isBottom()) {
+                return Emptiness.EMPTY;
+            }
+            // What the descriptions settle, before anything is built. A branch shown to admit
+            // nothing, or shown to admit something, is decided without a machine — and only where
+            // the descriptions leave the question open is the branch worked out to answer it.
+            Emptiness said = read.values().emptiness();
+            return said == Emptiness.UNDECIDED ? read.values().resolve(by).emptiness() : said;
         }
 
         /**
