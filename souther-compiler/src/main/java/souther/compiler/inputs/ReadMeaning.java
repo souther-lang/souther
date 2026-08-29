@@ -14,12 +14,12 @@ package souther.compiler.inputs;
  * where the name stands is that reader's to settle from the fact; what is answered here is what the
  * reading of the input knows, which is the same knowledge whoever asks.
  *
- * <p><b>How many values, and never which one.</b> {@link Through} says the name and one value are
- * one value; {@link OneOf} says the name stands for one of several and names all of them;
- * {@link Element} says several stand there and this reading cannot write them out. What a reader
- * does with a plurality is that reader's rule — the arithmetic reads every one of them and keeps
- * what they agree on — and choosing one of them here would be this reading answering a question
- * about a value with a fact about a set.
+ * <p><b>Which values, and never which one of them.</b> {@link Through} says the name and one value
+ * are one value; {@link OneOf} names every value the name can take, however many that is;
+ * {@link Element} says there are values and this reading cannot write them out. What a reader does
+ * with a set is that reader's rule — the arithmetic reads every member and keeps what they agree on
+ * — and choosing a member here would be this reading answering a question about a value with a fact
+ * about a set.
  */
 public sealed interface ReadMeaning {
 
@@ -43,6 +43,12 @@ public sealed interface ReadMeaning {
 
     /**
      * The name stands for one of {@code alternatives} and for no other value.
+     *
+     * <p>How many there are says nothing. A container written with one member, and an arm that left
+     * one of several standing, both answer with one — and that is this answer with one member rather
+     * than a name that denotes it: what a reader may do is state what every member supports, which
+     * is the same rule at any count. A singleton read as a denotation would be a name given the
+     * value of an element, which is what an arm is not evidence for.
      *
      * <p><b>Exhaustive, or this is not the answer.</b> What a reader may do with a plurality is
      * state what holds of every member, and one member left out makes that statement about a value

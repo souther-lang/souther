@@ -217,6 +217,13 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * could not classify would be keeping a member the arm excludes, while one that dropped it would
      * be losing a member the arm admits. Neither is the set, so the name is left with none.
      *
+     * <p>Which a member is is read off the construction or the case written where it stands, and the
+     * arm's own carriers reach further than that: a case may name a primitive, and a value written
+     * as a number is not a construction. No model gets here that way — a declared sum's cases are
+     * declared data, and the union that can name a primitive is anonymous and may not be written in
+     * a narrow type position, so no container's element type has one. A language that let one be
+     * written would arrive at the guard above rather than at a set with a member misfiled.
+     *
      * <p>And nothing is narrowed to no members. An arm admitting none of what the container holds is
      * an arm no value reaches, so the name inside it stands for nothing — which is what a name with
      * no meaning here already says, and is not a set of no members.

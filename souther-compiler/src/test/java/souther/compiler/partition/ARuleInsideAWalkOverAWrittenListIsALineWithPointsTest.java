@@ -14,11 +14,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * A rule written inside a step a combinator applies per element is a line, with the points a row has
  * to meet it at.
  *
- * <p>How many times a run passes a comparison used to settle this, and what it settles now is the
- * arithmetic. A line is over positions of the input and nothing else, so a run through a comparison
- * that bears one reads what the row holds however many times it passes: at one occurrence of a
- * position where the passes stand at different occurrences of one, and at the same values where they
- * do not.
+ * <p>How many times a run passes a comparison used to settle this, and what settles it now is the
+ * arithmetic. Every atom of a line is a term the row decides — a value at a position, a number taken
+ * of one, or a number taken over the occurrences of one path in a single run — so a run through a
+ * comparison that bears a line reads what the row holds however many times it passes: at one
+ * occurrence of a position where the passes stand at different occurrences of one, and at the same
+ * values where they do not.
  *
  * <p>Which is why the first of these is here. Nothing about an element enters its rule at all, and
  * it was refused for standing where an element's rule stands — so it is the case that says what the
@@ -61,6 +62,26 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
                 {
                         let ks = [ AtMost { threshold = 100000 }, Whatever ]
                         if List.any((k) -> reaches(n, k), ks) then Yes else No
+                    }"""));
+    }
+
+    /**
+     * And so is a rule whose members write one form two ways.
+     *
+     * <p>What the members agree on is the arithmetic's answer, and it is the only one asked. Two
+     * ways of writing one form are made of different things — a sum of a position with itself, and a
+     * position scaled — so a walk over the expressions disagrees about them where the arithmetic
+     * does not. Asked which positions the rule is about, that walk would answer none, and the rule
+     * would go out as one about no input at all: neither a line nor a rule anything fell short on.
+     */
+    @Test
+    void membersWritingOneFormTwoWaysAreStillTheSameLine() {
+        assertEquals("[n/x <= 49999, n/49999 < x] unread [] points ["
+                        + "classify/n ON 50000, classify/n OFF 49999, "
+                        + "classify/n IN 50000 < n, classify/n OUT n < 49999]", reading("""
+                {
+                        let ks = [ Big { threshold = n + n }, Big { threshold = 2 * n } ]
+                        if List.any((k) -> k.threshold >= 100000, ks) then Yes else No
                     }"""));
     }
 

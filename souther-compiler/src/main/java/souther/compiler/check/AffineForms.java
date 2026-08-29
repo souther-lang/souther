@@ -318,10 +318,8 @@ public final class AffineForms {
         if (alternatives == null || alternatives.isEmpty() || !following.add(r.binding())) {
             return null;
         }
-        java.util.List<Standing<E>> each = new java.util.ArrayList<>();
-        alternatives.forEach(one -> each.add(new Standing<>(one.value(), one.at())));
         Stop<A, E> stopped = new Stop<>();
-        LinearForm<A> agreed = commonForm(each, reading, following, stopped);
+        LinearForm<A> agreed = commonForm(membersOf(alternatives, reading), following, stopped);
         following.remove(r.binding());
         if (agreed != null) {
             return new Outcome.Composed<>(agreed);
@@ -330,13 +328,77 @@ public final class AffineForms {
     }
 
     /**
-     * An occurrence resolved as far as one value can be followed, and what to read it in.
+     * An occurrence resolved as far as one value can be followed, what to read it in, and what to
+     * read it with.
      *
      * <p>The environment travels with the value for the reason {@link ReadThrough} gives: what a
      * name was given is written in the environment the binding was made in, and a projection out of
      * it is read in that one rather than in the one the projection was written in.
+     *
+     * <p>And the reading travels with it for the same kind of reason. A value reached by taking one
+     * of several is read with less than the value the walk started from: the plurality it came out
+     * of is the one this walk reads, and a second one inside it is not read at all
+     * ({@link #membersOf}). Left behind, the restriction would hold over the step that produced the
+     * members and be gone by the time their parts were read — which is the whole of what it is for.
      */
-    private record Standing<E>(Core value, E at) {}
+    private record Standing<A, E>(Core value, E at, Reading<A, E> reading) {}
+
+    /**
+     * The values a name stands for, each to be read without a plurality of its own.
+     *
+     * <p><b>One plurality per rule, said here and nowhere else.</b> What this walk answers about a
+     * position several values stand at is what all of them support, and reading a member that is
+     * itself several means asking that of every pairing: two members whose members have two each is
+     * four readings, and a rule written down a chain of them is two to the power of its depth. That
+     * is a capability with a cost, and it is not the one this rule is: a container written out in
+     * the source is what a model states its numbers in.
+     *
+     * <p>Said as what the members are read with rather than as a count or a depth. A reading with no
+     * plurality in it cannot expand one however far down a member the walk goes, so the boundary
+     * holds over the parts of a member as well as over the member — which a guard at the point of
+     * expansion would not, since the parts are read after it.
+     */
+    private static <A, E> java.util.List<Standing<A, E>> membersOf(
+            java.util.List<ReadThrough<E>> alternatives, Reading<A, E> reading) {
+        java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
+        Reading<A, E> once = new OneAtATime<>(reading);
+        alternatives.forEach(each -> out.add(new Standing<>(each.value(), each.at(), once)));
+        return out;
+    }
+
+    /** {@code of} with no plurality in it, which is what the members of one are read with. */
+    private record OneAtATime<A, E>(Reading<A, E> of) implements Reading<A, E> {
+
+        @Override
+        public Symbols symbols() {
+            return of.symbols();
+        }
+
+        @Override
+        public LinearForm<A> leafOf(Core e, E at) {
+            return of.leafOf(e, at);
+        }
+
+        @Override
+        public E inside(Core.LetIn li, E at) {
+            return of.inside(li, at);
+        }
+
+        @Override
+        public ReadThrough<E> readThrough(Core.Read read, E at) {
+            return of.readThrough(read, at);
+        }
+
+        @Override
+        public java.util.List<ReadThrough<E>> alternativesOf(Core.Read read, E at) {
+            return null;
+        }
+
+        @Override
+        public boolean readsThrough(Core.FieldAccess fa, E at) {
+            return of.readsThrough(fa, at);
+        }
+    }
 
     /**
      * {@code e} under the reductions this reading licenses, as far as they go.
@@ -371,16 +433,16 @@ public final class AffineForms {
      * value to; a name it would peel is one this leaves alone unless the reading says the two are
      * one value.
      */
-    private static <A, E> java.util.List<Standing<E>> standing(Core e, E at, Reading<A, E> reading,
-                                                               java.util.Set<BindingId> following) {
+    private static <A, E> java.util.List<Standing<A, E>> standing(
+            Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
         switch (e) {
             case Core.Read r -> {
                 ReadThrough<E> through = reading.readThrough(r, at);
                 if (through != null) {
                     if (through.value() == e || !following.add(r.binding())) {
-                        return java.util.List.of(new Standing<>(e, at));
+                        return java.util.List.of(new Standing<>(e, at, reading));
                     }
-                    java.util.List<Standing<E>> denoted =
+                    java.util.List<Standing<A, E>> denoted =
                             standing(through.value(), through.at(), reading, following);
                     following.remove(r.binding());
                     return denoted;
@@ -388,11 +450,11 @@ public final class AffineForms {
                 java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
                 if (alternatives == null || alternatives.isEmpty()
                         || !following.add(r.binding())) {
-                    return java.util.List.of(new Standing<>(e, at));
+                    return java.util.List.of(new Standing<>(e, at, reading));
                 }
-                java.util.List<Standing<E>> each = new java.util.ArrayList<>();
-                for (ReadThrough<E> one : alternatives) {
-                    each.addAll(standing(one.value(), one.at(), reading, following));
+                java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
+                for (Standing<A, E> one : membersOf(alternatives, reading)) {
+                    each.addAll(standing(one.value(), one.at(), one.reading(), following));
                 }
                 following.remove(r.binding());
                 return each;
@@ -401,18 +463,18 @@ public final class AffineForms {
                 return standing(li.body(), reading.inside(li, at), reading, following);
             }
             case Core.FieldAccess _, Core.TupleGet _ -> {
-                java.util.List<Standing<E>> written = eliminated(e, at, reading, following);
+                java.util.List<Standing<A, E>> written = eliminated(e, at, reading, following);
                 if (written == null) {
-                    return java.util.List.of(new Standing<>(e, at));
+                    return java.util.List.of(new Standing<>(e, at, reading));
                 }
-                java.util.List<Standing<E>> each = new java.util.ArrayList<>();
-                for (Standing<E> one : written) {
-                    each.addAll(standing(one.value(), one.at(), reading, following));
+                java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
+                for (Standing<A, E> one : written) {
+                    each.addAll(standing(one.value(), one.at(), one.reading(), following));
                 }
                 return each;
             }
             default -> {
-                return java.util.List.of(new Standing<>(e, at));
+                return java.util.List.of(new Standing<>(e, at, reading));
             }
         }
     }
@@ -442,20 +504,21 @@ public final class AffineForms {
      * to state is what the members agree on, and a member this could not eliminate is one it has
      * nothing to compare.
      */
-    private static <A, E> java.util.List<Standing<E>> eliminated(Core e, E at,
-                                                                 Reading<A, E> reading,
-                                                                 java.util.Set<BindingId> following) {
+    private static <A, E> java.util.List<Standing<A, E>> eliminated(
+            Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
         switch (e) {
             case Core.FieldAccess fa -> {
-                java.util.List<Standing<E>> out = new java.util.ArrayList<>();
-                for (Standing<E> target : standing(fa.target(), at, reading, following)) {
+                java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
+                for (Standing<A, E> target : standing(fa.target(), at, reading, following)) {
                     if (!(target.value() instanceof Core.Construct nd)) {
                         return null;
                     }
-                    Standing<E> given = null;
+                    Standing<A, E> given = null;
                     for (Core.FieldValue each : nd.values()) {
                         if (each.field().equals(fa.field())) {
-                            given = new Standing<>(each.value(), target.at());
+                            // What a member gives a field is read with what the member is read
+                            // with, which is how one plurality stays one over the parts of it.
+                            given = new Standing<>(each.value(), target.at(), target.reading());
                             break;
                         }
                     }
@@ -467,13 +530,14 @@ public final class AffineForms {
                 return out;
             }
             case Core.TupleGet get -> {
-                java.util.List<Standing<E>> out = new java.util.ArrayList<>();
-                for (Standing<E> tuple : standing(get.tuple(), at, reading, following)) {
+                java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
+                for (Standing<A, E> tuple : standing(get.tuple(), at, reading, following)) {
                     if (!(tuple.value() instanceof Core.Tuple written) || get.index() < 0
                             || get.index() >= written.elements().size()) {
                         return null;
                     }
-                    out.add(new Standing<>(written.elements().get(get.index()), tuple.at()));
+                    out.add(new Standing<>(written.elements().get(get.index()), tuple.at(),
+                            tuple.reading()));
                 }
                 return out;
             }
@@ -496,13 +560,13 @@ public final class AffineForms {
      * <p>Not a meet. There is no order being descended here and no weaker answer to fall back on:
      * the values agree or this walk has nothing to say about the position.
      */
-    private static <A, E> LinearForm<A> commonForm(java.util.List<Standing<E>> these,
-                                                   Reading<A, E> reading,
+    private static <A, E> LinearForm<A> commonForm(java.util.List<Standing<A, E>> these,
                                                    java.util.Set<BindingId> following,
                                                    Stop<A, E> stopped) {
         LinearForm<A> agreed = null;
-        for (Standing<E> each : these) {
-            LinearForm<A> here = formOf(each.value(), each.at(), reading, following, stopped);
+        for (Standing<A, E> each : these) {
+            LinearForm<A> here =
+                    formOf(each.value(), each.at(), each.reading(), following, stopped);
             if (here == null) {
                 return null;
             }
@@ -567,9 +631,10 @@ public final class AffineForms {
             // eliminate, the reading's own evidence that the projection keeps what it reads —
             // which is how a name a call was given is read through with no construction in sight.
             case Core.FieldAccess fa -> {
-                java.util.List<Standing<E>> eliminated = eliminated(fa, at, reading, following);
+                java.util.List<Standing<A, E>> eliminated =
+                        eliminated(fa, at, reading, following);
                 if (eliminated != null) {
-                    yield commonForm(eliminated, reading, following, stopped);
+                    yield commonForm(eliminated, following, stopped);
                 }
                 yield reading.readsThrough(fa, at)
                         ? formOf(fa.target(), at, reading, following, stopped) : null;
@@ -580,9 +645,9 @@ public final class AffineForms {
             // fall back on, because nothing declares a tuple transparent the way a newtype's
             // declaration does.
             case Core.TupleGet get -> {
-                java.util.List<Standing<E>> eliminated = eliminated(get, at, reading, following);
-                yield eliminated == null ? null
-                        : commonForm(eliminated, reading, following, stopped);
+                java.util.List<Standing<A, E>> eliminated =
+                        eliminated(get, at, reading, following);
+                yield eliminated == null ? null : commonForm(eliminated, following, stopped);
             }
             // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what a helper
             // becomes, so reading through it is reading what the author wrote at the call. Whether

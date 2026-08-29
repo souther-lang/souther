@@ -148,16 +148,34 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
     }
 
     /**
-     * A container a member of another container holds states nothing.
+     * A plurality standing inside a plurality is not read.
      *
-     * <p>Where the way to a written list runs through a name standing for several, the list is not
-     * one this reading arrives at: what a member holds is followed through the steps with one
-     * successor, and a member is not one of those. Every number written here is the same and it is
-     * still no answer.
+     * <p>The inner list is written out and every one of its members is a name standing for two
+     * values, so a reading that went on would be asking what every pairing of them agrees on: two
+     * members holding two each is four readings, and a rule written down a chain of these is two to
+     * the power of its depth. What a rule about a written container is is one container, and the
+     * members of it are read with no plurality in them.
      *
-     * <p>Which is also what keeps the reading of one rule linear in the members of one container. A
-     * plurality inside a plurality would be read once per member of the outer, and a reader that
-     * gained the inner one would want the cost of it measured before it did.
+     * <p>Every number written here is the same, which is what makes it worth writing out: what
+     * refuses this is the rule and not a disagreement between the members.
+     */
+    @Test
+    void aPluralityStandingInsideOneIsNotRead() {
+        assertEquals("stopped", cut("""
+                {
+                        let ks = [ Big { threshold = 100000 }, Big { threshold = 100000 } ]
+                        if List.any((k) -> List.any((j) -> n >= j.threshold, [k, k]), ks)
+                            then Yes else No
+                    }"""));
+    }
+
+    /**
+     * And a container a member holds is not one this reading arrives at either.
+     *
+     * <p>Beside the one above and refused before it rather than by it: the way to a written list is
+     * followed through the steps with one successor, and a member of a container is not one of
+     * those, so there is no second plurality here for the rule above to refuse. The two are written
+     * out apart because a reader gaining either would still meet the other.
      */
     @Test
     void aContainerAMemberHoldsStatesNoNumber() {

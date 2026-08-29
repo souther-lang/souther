@@ -180,6 +180,16 @@ sealed interface ComparisonAssessment {
      *
      * <p>The one way in. {@code answer} is the binding a clause calls what the behavior answers, or
      * null where the comparison is written in a body and there is nothing to be the answer.
+     *
+     * <p><b>The arithmetic answers before anything else is asked.</b> Which positions a rule is
+     * about is what the quantity it cuts is over: every atom of a form is a number of a location
+     * ({@link souther.compiler.inputs.InputNumber}), so a comparison that came to a line is about
+     * the positions of that line and there is nothing left to look up. What the walk over the
+     * expression says a side is made of is the answer for a rule that came to no line — where it is
+     * the only account there is — and asked first it is a second reading standing in front of the
+     * first, able to veto it and never to add to it. It did: two members of a written list holding
+     * one form written two ways agree as arithmetic and are made of different things, and the rule
+     * they state came back as one about no input at all.
      */
     static ComparisonAssessment of(String behavior, Core.Binary comparison, InputReads reads,
                                    Symbols symbols, Quantities quantities, BindingId answer,
@@ -191,20 +201,33 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison, answer)) {
             return new AnswerDependent();
         }
-        List<FilingCoordinate> filedAt = GuardThresholds.filedAt(comparison, reads, symbols);
-        if (filedAt.isEmpty()) {
-            return aboutNoPosition(comparison, reads, symbols);
-        }
         return switch (Cutting.read(behavior, comparison, reads, symbols, quantities)) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(comparison, cuts.cutting(), quantities, drawnByAnInvariant);
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
-            // of this compiler: `a <= a` holds of every row.
-            case Cutting.Read.CutsNothing _ -> new CutsNothing();
+            // of this compiler: `a <= a` holds of every row. Where the comparison names no position
+            // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
+            // constants and states nothing anywhere.
+            case Cutting.Read.CutsNothing _ ->
+                    namesAPosition(comparison, reads, symbols)
+                            ? new CutsNothing() : aboutNoPosition(comparison, reads, symbols);
             // And where the reading stopped, its own answer for having stopped — decided where it
-            // stopped rather than worked out again from the comparison afterwards.
-            case Cutting.Read.Stopped stopped -> new Unread(stopped.why(), filedAt);
+            // stopped rather than worked out again from the comparison afterwards. Here the walk
+            // over the expression is the only account of what the rule is about, which is what it
+            // is for.
+            case Cutting.Read.Stopped stopped -> {
+                List<FilingCoordinate> filedAt =
+                        GuardThresholds.filedAt(comparison, reads, symbols);
+                yield filedAt.isEmpty() ? aboutNoPosition(comparison, reads, symbols)
+                        : new Unread(stopped.why(), filedAt);
+            }
         };
+    }
+
+    /** Whether the walk over the expression names a position of the input in it. */
+    private static boolean namesAPosition(Core.Binary comparison, InputReads reads,
+                                          Symbols symbols) {
+        return !GuardThresholds.filedAt(comparison, reads, symbols).isEmpty();
     }
 
     /**

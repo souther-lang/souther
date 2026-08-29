@@ -70,11 +70,18 @@ final class BoundaryPolicy {
      * <p><b>How many times a run passes the comparison is not asked.</b> A recording holds that a
      * place was passed and not how many times, so two outcomes of one comparison in one run would
      * have to be told from two rows' outcomes — and what settles that is the reading of the
-     * comparison rather than anything about the construct it stands in. A reading comes to a line
-     * over positions of the input and no other atom, so every pass of a comparison that bears one
-     * reads what the row holds: at one occurrence of a position where the passes stand at different
-     * occurrences of one, and at the same values where they do not. A pass reading a value the row
-     * does not settle is one the arithmetic has no atom for and no line comes of it.
+     * comparison rather than anything about the construct it stands in.
+     *
+     * <p>What the reading settles is this: <b>every atom of a form it composed is a term the row
+     * decides.</b> A value at a position of the input is one, a number taken of one is one, and a
+     * number taken over the occurrences of one path in a single run is one — that last names no
+     * single position, and what makes the row decide it is the run naming exactly one sequence
+     * ({@link souther.compiler.inputs.RunSource}). What a row does not decide is not an atom at all:
+     * it enters a form only where it was written out and every value of it came to the same form
+     * ({@link souther.compiler.check.AffineForms}), after which it is a number and no longer an
+     * uncertainty. So every pass of a comparison that bears a line reads what the row holds — at one
+     * occurrence of a position where the passes stand at different occurrences of one, and at the
+     * same values where they do not — and a pass reading anything else is one no line came of.
      *
      * @param live whether what is computed at this position is read on the way to what the behavior
      *             answers with, which is {@link LiveFlow}'s answer carried down the walk
