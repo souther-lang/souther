@@ -2,7 +2,6 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -49,18 +48,18 @@ class CoverageSitesTest {
     private static Map<String, Core> bodiesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        TypeChecker.Checked checked = compilation.db()
+        Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
         return checked.behaviorBodies();
     }
 
     private static CoverageSites.Plan planOf(String source) {
-        return CoverageSites.of("leave.sou", bodiesOf(source));
+        return CoverageSites.of(bodiesOf(source), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
     }
 
     private static List<String> labels(CoverageSites.Plan plan) {
-        return plan.sites().stream().map(CoverageSites.Site::label).toList();
+        return plan.sites().stream().map(souther.compiler.report.ArmVocabulary::label).toList();
     }
 
     @Test
@@ -68,9 +67,8 @@ class CoverageSitesTest {
         CoverageSites.Plan plan = planOf(MODEL);
 
         assertEquals(List.of("case UnderThirty", "then", "else"), labels(plan));
-        assertEquals(List.of(CoverageSites.Site.Kind.CASE, CoverageSites.Site.Kind.THEN,
-                        CoverageSites.Site.Kind.ELSE),
-                plan.sites().stream().map(CoverageSites.Site::kind).toList());
+        assertEquals(List.of(OutcomeName.CASE, OutcomeName.THEN, OutcomeName.ELSE),
+                plan.sites().stream().map(CoverageSites.Site::name).toList());
     }
 
     /**
@@ -188,12 +186,46 @@ class CoverageSitesTest {
                                 | No  -> Score(3)
                         }
                 """);
-        CoverageSites.Plan plan = CoverageSites.of("dead.sou", bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
 
         Core.Match outer = (Core.Match) unwrap(bodies.get("scoreFor"));
         Core.Match inner = innerMatch(outer.cases().get(1).body());
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, CoverageSites.NO_SITE},
                 plan.probesOf(inner), "the emitter still finds it, and finds nothing to light");
+    }
+
+    /**
+     * An arm the condition never sends a run down is not an arm to cover.
+     *
+     * <p>Nothing whole is greater than the largest whole number, so the condition comes out false on
+     * every run and the first arm is one nobody enters. Numbered, it is a gap that stays open for
+     * ever — a row is owed for a combination the body has no run at — which is the same fault as
+     * counting an arm behind an abort and is caught by the same reading.
+     *
+     * <p>Read from the reading and not worked out here. Which arms a condition can reach is what the
+     * reading of what the body does already answers, and a second account of it in the numbering
+     * would be two answers to keep in step.
+     */
+    @Test
+    void anArmTheConditionNeverComesOutTheWayOfIsNotAnArmToCover() {
+        CoverageSites.Plan plan = planOf("""
+                module example.pinned
+
+                data Score = Int
+
+                behavior scoreFor : (a: Int) -> Score
+                    constructs Score
+
+                let scoreFor (a) =
+                    if a > 9223372036854775807 then Score(1) else Score(2)
+                """);
+
+        // The comparison keeps its site either way, which is deliberate and is said where the
+        // numbering is: a comparison is numbered wider than what any boundary is later drawn on.
+        // It comes first because the walk numbers where the source wrote it, and a condition is
+        // written before the arms it settles.
+        assertEquals(List.of("GT", "else"), labels(plan),
+                "the condition holds on no run, so only the arm it fails into is one to cover");
     }
 
     private static Core.Match innerMatch(Core arm) {
@@ -283,7 +315,7 @@ class CoverageSitesTest {
                         | Yes -> unreachable "the caller has already refused a yes"
                         | No  -> Score(0)
                 """);
-        CoverageSites.Plan plan = CoverageSites.of("order.sou", bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
 
         Core.Match match = (Core.Match) unwrap(bodies.get("scoreFor"));
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, 0}, plan.probesOf(match),
@@ -296,8 +328,8 @@ class CoverageSitesTest {
 
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
-        assertEquals("then", plan.site(guard.siteIndexThen()).label());
-        assertEquals("else", plan.site(guard.siteIndexElse()).label());
+        assertEquals("then", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexThen())));
+        assertEquals("else", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexElse())));
     }
 
     /** The comparison was evaluated to reach the arm that is left, so the line it draws is still one
@@ -310,7 +342,7 @@ class CoverageSitesTest {
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
         assertEquals(CoverageSites.NO_SITE, guard.siteIndexThen());
-        assertEquals("else", plan.site(guard.siteIndexElse()).label());
+        assertEquals("else", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexElse())));
     }
 
     /**
@@ -351,17 +383,17 @@ class CoverageSitesTest {
     @Test
     void aSiteIsFoundByTheNodeInstanceTheEmitterHolds() {
         Map<String, Core> bodies = bodiesOf(MODEL);
-        CoverageSites.Plan plan = CoverageSites.of("leave.sou", bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
 
         Core body = bodies.get("daysFor");
         Core.Match match = (Core.Match) unwrap(body);
         int[] arms = plan.probesOf(match);
         assertNotNull(arms, "the plan is keyed by the instances it was built from");
         assertEquals(2, arms.length);
-        assertEquals("case UnderThirty", plan.site(arms[0]).label());
+        assertEquals("case UnderThirty", souther.compiler.report.ArmVocabulary.label(plan.site(arms[0])));
 
         Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.origin(),
-                match.type(), match.pos());
+                match.type(), match.pos(), java.util.List.of());
         assertEquals(match, copy, "an equal node is easy to make");
         assertNull(plan.probesOf(copy),
                 "and it is not this one: a value-keyed plan would hand the emitter another arm's probe");
@@ -418,7 +450,7 @@ class CoverageSitesTest {
                 """);
 
         List<CoverageSites.Obligation> inner = plan.sites().stream()
-                .filter(s -> s.label().equals("case Yes"))
+                .filter(s -> souther.compiler.report.ArmVocabulary.label(s).equals("case Yes"))
                 .map(CoverageSites.Site::obligation).toList();
         assertEquals(inner.size(), inner.stream().distinct().count(),
                 "the two inner `case Yes` arms are two arms the author wrote");
@@ -434,6 +466,6 @@ class CoverageSitesTest {
 
     @Test
     void aModuleWithNoBodiesPlansNothing() {
-        assertSame(true, CoverageSites.of("x.sou", Map.of()).isEmpty());
+        assertSame(true, CoverageSites.of(Map.of(), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE).hasNoProbes());
     }
 }

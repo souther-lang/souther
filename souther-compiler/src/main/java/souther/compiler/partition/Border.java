@@ -1,0 +1,917 @@
+package souther.compiler.partition;
+
+import souther.compiler.check.NarrowedBounds;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
+
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * One line a rule drew, and what a row is owed at each of its four points.
+ *
+ * <p>The unit the technique keys on. Domain testing asks for an {@code ON}, an {@code OFF}, an
+ * {@code IN} and an {@code OUT} point per border, and the same value can be one role for one border
+ * and another role for the next — so what owes the four is a border, and nothing else can be asked.
+ * Two of the four used to be answered here as separate obligations, and the other two by the measure
+ * that counts how many of a position's classes some row is in: one technique's items split across two
+ * units, only one of which a report could say anything about a border with.
+ *
+ * <p><b>One reading, whatever the rule cut.</b> Where the four points are is a question about the
+ * order the quantity's own values sit on, and about nothing else — so a bound on a position, a rule
+ * relating two positions and a rule over an arithmetic form are read here by one procedure. Written
+ * as a procedure per shape of line, the two that existed answered the same question by different
+ * reasoning and a third would have been a third reasoning.
+ *
+ * <p><b>Total over {@link PointRole}.</b> Every border answers for every role, and the answer for a
+ * role nobody is owed a row in is a reason ({@link Demand.NotOwed}) rather than an entry left out.
+ * That is checked here and not by a test: the entries used to be built by a loop that added an
+ * obligation where it had one and did nothing where it did not, so four different facts — the rules
+ * refusing the far side, an order with no next value, a side one value wide, a rule that names a
+ * value instead of a side — all arrived as a shorter list. A role that goes missing now stops the
+ * build where the border is made.
+ *
+ * <p>Which rule drew it and which line of that rule is {@link #origin}'s, which reading of that line
+ * this is is the origin's too, and which of those readings are one line is {@link BoundaryLine}'s.
+ * This is not another identity: a border is a line together with what it owes, and two readings of
+ * one line owe the same four things.
+ *
+ * @param cut     where the line is: what is cut, and where on it
+ * @param origin  the rule that drew it, as this reading met it
+ * @param answers one entry per role, always four of them
+ */
+public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, PointAnswer> answers) {
+
+    public Border {
+        if (answers == null || !answers.keySet().equals(EnumSet.allOf(PointRole.class))) {
+            throw new IllegalArgumentException(
+                    "a border that does not answer for every point role: " + answers);
+        }
+        // And an answer at every one of them. A key with nothing under it is the same silence the
+        // roles were made total to stop, wearing the shape that was supposed to have refused it.
+        if (answers.containsValue(null)) {
+            throw new IllegalArgumentException(
+                    "a border with a point role it names and does not answer: " + answers);
+        }
+        // And an answer of the kind the role is. Which of the four points a line names a value at is
+        // the role's own answer, and a border that came back with a region where a value belongs
+        // would have every reader of it deciding what it was holding from the shape it happened to
+        // have.
+        for (Map.Entry<PointRole, PointAnswer> each : answers.entrySet()) {
+            boolean atTheLine = each.getValue() instanceof PointAnswer.AtLine;
+            boolean inARegion = each.getValue() instanceof PointAnswer.InRegion;
+            if (atTheLine && !each.getKey().againstTheLine()
+                    || inARegion && each.getKey().againstTheLine()) {
+                throw new IllegalArgumentException("the " + each.getKey() + " point of a border,"
+                        + " answered as " + each.getValue());
+            }
+        }
+        answers = java.util.Collections.unmodifiableMap(new EnumMap<>(answers));
+    }
+
+    /** What this border asks of the rows in one role. */
+    public Demand demand(PointRole role) {
+        return answers.get(role).demand();
+    }
+
+    /** What this border asks of the rows in one role, and what such a row would be owed for. */
+    public PointAnswer answer(PointRole role) {
+        return answers.get(role);
+    }
+
+    /**
+     * What a row in one role of this reading would be owed for, which is none where none is asked
+     * for and more than one where more than one thing stopped the region.
+     *
+     * <p>Made here, from the answer that settled both halves at once. Everything that accounts for
+     * rows asks this rather than building a point out of the parts it happened to know — which is
+     * how a debt came to carry the reading it was met at.
+     *
+     * <p>Whose account each point falls in is read here as well, and here only. Everything that
+     * settled the point has arrived by this line: its own rule, and whatever stops the region
+     * beside it. A caller handed the contributors would be deciding it again, and a caller that
+     * forgot to decide would measure a body against a line no row written for it is owed.
+     */
+    public java.util.List<OwedPoint> owes(PointRole role) {
+        BorderObligationId line = obligation();
+        // The line's own rule is behind every point of it, whatever else settled the region beside
+        // it: it is the line a row here stands at or beside, and an author moving it moves the
+        // point.
+        PointContributions own = PointContributions.by(origin.authoredLine());
+        return switch (answer(role)) {
+            case PointAnswer.NotOwed _ -> java.util.List.of();
+            case PointAnswer.AtLine _ -> java.util.List.of(
+                    new OwedPoint(new BorderObligationPoint.AtLine(line, role),
+                            PointAttribution.of(own)));
+            case PointAnswer.InRegion in -> in.claims().stream()
+                    .map(claim -> new OwedPoint(
+                            new BorderObligationPoint.InRegion(line, role, claim.basis()),
+                            PointAttribution.of(own.and(claim.contributions()))))
+                    .toList();
+        };
+    }
+
+    /**
+     * Whether this and {@code other} are one reading of one line.
+     *
+     * <p>What the records' own equality was being used for at the two places that ask it: finding
+     * the reading a debt was made from in a later assessment, and keeping one reading's lines from
+     * holding one line twice. Neither is asking whether everything about the two values matches —
+     * they are asking whether it is the same border, met in the same place, owing the same things.
+     *
+     * <p><b>The demands and what they are owed for, and not what is written beside them.</b> Two
+     * readings can ask a row for the same values and owe them to different things — the run below a
+     * line the rules already stop the quantity at is owed to the line as well as to that end — so
+     * the demands alone would call two borders one. What settles where a run stops, on the other
+     * hand, is settled by the model, while who can move it is a fact about the reading's
+     * surroundings and is no part of which border this is.
+     *
+     * <p>The quantity is compared as the value it is, and the place on it as a place. What a rule
+     * wrote a form's coefficients as is the rule's own text and is the same at every reading of it,
+     * so nothing here folds two spellings of one form.
+     */
+    public boolean sameReadingAs(Border other) {
+        if (other == null || !origin.equals(other.origin)
+                || !cut.of().equals(other.cut.of())
+                // The place, and not how the rule happened to write the number: a level keeps the
+                // spelling it was written in, so two readings of one line at one place can hold
+                // `0` and `0.00` — which is the mistake this whole comparison is here to stop
+                // being made about a border, and it would have been made about the border's own
+                // place by asking the records.
+                || !cut.cut().canonical().equals(other.cut.cut().canonical())) {
+            return false;
+        }
+        for (PointRole role : EnumSet.allOf(PointRole.class)) {
+            PointAnswer mine = answer(role);
+            PointAnswer also = other.answer(role);
+            // What a row here is owed for, as the set it is. Which of them a reading listed first is
+            // the order its arrangement was walked in, and reading that as part of the answer would
+            // put an accident of the derivation into the identity — which is the thing this method
+            // exists to keep out of it. One entry per basis is the answer's own invariant, so the
+            // set loses nothing.
+            if (!mine.demand().sameAs(also.demand())
+                    || !java.util.Set.copyOf(mine.bases()).equals(
+                            java.util.Set.copyOf(also.bases()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The same over all four roles, in role order. */
+    public java.util.List<OwedPoint> owes() {
+        return EnumSet.allOf(PointRole.class).stream().flatMap(role -> owes(role).stream()).toList();
+    }
+
+    /**
+     * What a row here is owed for, which several readings of this line share.
+     *
+     * <p>The line the author wrote, without the position it was read at. What folds readings
+     * together keys on {@link BoundaryLine}, which is this line and where it was read; this is what
+     * such a fold may not cross, and {@code Coverages} holds itself to that where it merges.
+     * Everything that says where a row would go reads {@link #cut}.
+     *
+     * <p>Both are here rather than one being worked out from the other by whoever needs it: a caller
+     * deriving a key from the parts it happened to know asks for one clause's row once per position
+     * of every behavior carrying the type.
+     */
+    public BorderObligationId obligation() {
+        return new BorderObligationId(origin.authoredLine(), cut.at());
+    }
+
+    /** Where the line is, as a report names it. Not what any one of its points asks for: that is
+     *  {@link #label(PointRole)}, and the two differ at three of the four. */
+    public String label() {
+        return cut.label();
+    }
+
+    /**
+     * The left of the line, qualified by the behavior it is an input of, as a report indexes by.
+     *
+     * <p>Asked of the shape of the line rather than of a field every shape was assumed to have,
+     * because what a line is drawn on is not always a position: a line between two positions is on
+     * neither of them and a line over a form is on none of them, and each shape says how it is
+     * named.
+     *
+     * <p><b>Not what tells one line from another.</b> A quantity over more than one position is
+     * named after the left of it, so every line from one position to a field of a sum has this same
+     * word — a heading a reader groups under, and half of a line where there are two. What says
+     * which line it is, is the whole of what it was drawn at ({@link #cut}); what a report writes to
+     * be read is {@link #label}, and what a document publishes beside this is the other end.
+     */
+    public String axis() {
+        return cut.named();
+    }
+
+    /** How one point relates a row's value to what it is against, or null where none is owed. */
+    public String operator(PointRole role) {
+        Criterion criterion = demand(role).criterion();
+        return criterion == null ? null : criterion.operator();
+    }
+
+    /** What that point is against, or null where none is owed. */
+    public String against(PointRole role) {
+        Criterion criterion = demand(role).criterion();
+        // Asked of the criterion, which is what knows whether it is written against a level or
+        // against a run of them. Two of the four points name a level and two name a run, and a
+        // reader that took a level from every shape wrote a value inside a run as though it were
+        // the run.
+        return criterion == null ? null : criterion.written(cut.of());
+    }
+
+    /** The rule that drew this line, as a report about {@code sectionSource} writes it. */
+    public String describe(souther.compiler.diag.SourceNameResolver names,
+                           souther.compiler.source.SourceId sectionSource) {
+        return origin.describe(names, sectionSource);
+    }
+
+    /**
+     * The class a row at one point of this line falls in, as one line of a class list is written.
+     *
+     * <p>One place, because more than one reader names it: the document a consumer joins a finding
+     * to its item by, the class a generated row is offered against, and a block that shows the line
+     * whosever the row at each point is. Written once per reader, the spellings agreed for a point
+     * on the line and had nothing to say to each other away from it.
+     *
+     * <p>A point on the line is the value it is at. A point away from it carries the relation as
+     * well, because what it is against alone names the border there rather than the side of it a row
+     * is owed in.
+     */
+    public String said(PointRole role) {
+        return role.againstTheLine() ? axis() + " = " + against(role)
+                : axis() + " " + operator(role) + " " + against(role);
+    }
+
+    /**
+     * How a row at one point of this border describes itself.
+     *
+     * <p>What the generator writes on the row it offers, so that a row and the note about the point
+     * it stands for name it the same way. Null where nothing is owed in this role — there is no row
+     * to label.
+     */
+    public String label(PointRole role) {
+        Criterion criterion = demand(role).criterion();
+        return criterion == null ? null : label(criterion);
+    }
+
+    /** The same of a criterion this border owes, for a caller that is holding one rather than a
+     *  role. One spelling, so that what a search reports and what a report prints agree. */
+    public String label(Criterion criterion) {
+        // A run names the quantity itself, because that is how a range of it reads — `10 < n <= 20`
+        // and not `n in 10 < n <= 20`. The two shapes that name a level do not, so the quantity is
+        // written in front of them here.
+        return criterion instanceof Criterion.Within
+                ? criterion.written(cut.of())
+                : cut.left() + " " + criterion.asked(cut.of());
+    }
+
+    /**
+     * The border a rule drew.
+     *
+     * <p>Total, and never null. Whether the quantity reaches the line is settled before this and by
+     * two different things: a comparison is asked through {@link #reaches} where its rule is read,
+     * and comes here only where the answer was yes ({@code ComparisonAssessment.OutsideTheDomain});
+     * a bound is not asked at all, because its line is an end of what it leaves and so is never
+     * outside it. The check below holds the second of those, which is an invariant of this compiler
+     * rather than anything a model states.
+     *
+     * <p>It used to be a third reading of the same question, answered with a null the two callers
+     * dropped without a word: a rule of the model went unmeasured, nothing recorded that it had, and
+     * the measure came back saying the behavior's rules draw no line anywhere (issue #1079).
+     *
+     * <p><b>Where the rule stops is not where a row is written.</b> The two are one value on a
+     * carrier that steps, because a strict end is moved onto the value it leaves before it ever gets
+     * here — {@code value > 5} on an {@code Int} arrives as an inclusive 6. A carrier with no step
+     * has no such move, so {@code value > 5.0m} arrives as an exclusive 5, and the point against
+     * that line is a value the order cannot name. Both are lines. Which value each of the four
+     * points stands at is asked of the order below, and never read off the cut.
+     *
+     * @param within what the rules leave the quantity, on the quantity's own order. Null where they
+     *               leave it everything
+     */
+    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within) {
+        return at(target, origin, within, java.util.List.of());
+    }
+
+    /**
+     * The same, told where else the rules part this quantity's values.
+     *
+     * <p>Which is what the two points away from the line are read off. An {@code IN} point is inside
+     * the partition this border bounds; read as everything past the line, it runs to the end of the
+     * order, and a row past the next line along answers for it while the partition between them has
+     * nothing in it (issue #880). The two are the same only where the quantity has one line through
+     * it, which is why nothing noticed for as long as a border was built one rule at a time.
+     *
+     * @param parted every place the rules part this quantity's values, this border's own among them
+     *               or not
+     */
+    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
+                            java.util.List<Parting> parted) {
+        return at(target, origin, within, parted, NarrowedBounds.NOTHING);
+    }
+
+    /**
+     * The same, told what the value the position sits in leaves it and which declarations hold each
+     * end of that.
+     *
+     * <p>Which is what a run stopping at one of those ends is owed to besides the line it lies
+     * against. Carried from the reading that placed the end, because nothing downstream can work it
+     * out: an end is where every rule about the position leaves off, and the number it leaves off at
+     * says nothing about who moved it.
+     *
+     * <p><b>The reading and not the names it came to.</b> What {@code within} leaves this quantity
+     * is a second reading — the behavior's own rules are in it, and the record's reading knows
+     * nothing of them — so the two can stop the position in different places, and a name worked out
+     * against one of them says nothing about the other. Which is why what arrives here is something
+     * that can be asked about an end, rather than an answer already given about somebody else's.
+     */
+    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
+                            java.util.List<Parting> parted, NarrowedBounds narrowed) {
+        NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
+        LevelSpace space = target.levels();
+        Level cut = target.at();
+        if (!reaches(cut,
+                Seam.of(space, cut, valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE),
+                satisfyingSide(origin), ordersAroundTheCut(origin), within)) {
+            // Asked and answered by whoever holds the rule. Reaching here is that reader and this
+            // one disagreeing about one line, which is not a state a model can put them in.
+            throw new IllegalStateException(
+                    "a border built on a line the quantity does not reach: " + target.left()
+                            + " at " + target.right());
+        }
+        Parting mine = partedBy(target, origin);
+        java.util.List<Parting> all = new java.util.ArrayList<>(parted);
+        if (mine != null) {
+            // Handed over as a candidate rather than told apart here. Whether this line is one the
+            // others already hold is a question about where the values part, and the arrangement is
+            // what answers it — asked here as well, this reading kept whichever of two lines at one
+            // place it met first and the other went unsaid.
+            all.add(mine);
+        }
+        QuantityArrangement arrangement = QuantityArrangement.of(space, all,
+                DomainEnds.leaving(space, cut, reach, narrowed));
+        boolean holdsHere = holdsAtTheValue(origin);
+        Map<PointRole, PointAnswer> demands = new EnumMap<>(PointRole.class);
+        if (!ordersAroundTheCut(origin)) {
+            aLineWithOneSide(demands, origin, target.of(), cut, holdsHere, space, reach,
+                    arrangement);
+            return new Border(target, origin, demands);
+        }
+        // Which way the rule is satisfied from the threshold, which is the one thing the two points
+        // are read off. The same `at` is the ON point of `<= 3000` and the OFF point of `< 3000`,
+        // and neither is the threshold at all where the quantity does not take it.
+        Towards satisfying = satisfyingSide(origin);
+        PointAnswer on = pointAt(space, cut, satisfying, holdsHere, reach);
+        PointAnswer off = pointAt(space, cut, satisfying.opposite(), !holdsHere, reach);
+        demands.put(PointRole.ON, on);
+        demands.put(PointRole.OFF, off);
+        // Each side runs from the point against the line on that side, where there is one, and from
+        // the line itself where there is not: the values one step away are not there to be left out,
+        // and everything past the line is then as far from the border as anything gets.
+        // The partition this border bounds and the one it keeps out, each without the value against
+        // the line — which is that side's own ON or OFF point and is not this one. A side the rules
+        // leave nothing in is not a run of the arrangement at all, and that is the answer here too.
+        // Each of the two is told which line it is named for: this border's own, which the run it
+        // asks for lies one way of. The `IN` point is inside the partition this border bounds, so
+        // the run runs the way the rule is satisfied; the `OUT` point is the other way. Worked out
+        // from the run instead, the two points that share a run — this border's `IN` and the next
+        // border's `OUT` — both started at the same end of it.
+        demands.put(PointRole.IN, runOf(space, satisfying == Towards.ABOVE
+                ? arrangement.above(mine) : arrangement.below(mine), against(on), satisfying));
+        demands.put(PointRole.OUT, runOf(space, satisfying == Towards.ABOVE
+                ? arrangement.below(mine) : arrangement.above(mine), against(off),
+                satisfying.opposite()));
+        return new Border(target, origin, demands);
+    }
+
+    /**
+     * Whether the quantity reaches the line at all, which is the one thing about a border that does
+     * not depend on the lines beside it.
+     *
+     * <p>Asked before the lines of one quantity are collected, because a rule that draws nothing has
+     * to be reported as drawing nothing rather than joining the arrangement: three times a length is
+     * never negative, and a rule comparing one against a negative draws no line for anything to be
+     * beside.
+     *
+     * <p><b>Asked of the side the rule keeps, and of where it parts the values there.</b> A rule
+     * draws somewhere exactly when the values it keeps are values the rules leave — so what is asked
+     * is one place and not the whole line, and it is the place the rule leaves rather than the
+     * number it wrote. Asked at the number, a rule refusing its own threshold on a carrier that
+     * counts parts the values one step inside the range and reads as one cutting outside it; asked
+     * of both sides, a line beyond the range has the side it refuses pulled back inside and reads as
+     * one cutting within.
+     *
+     * <p>Which keeps a carrier with no step drawing. Such a rule names no value beside its line —
+     * the quantity comes arbitrarily close and never arrives — and what it keeps is the line itself,
+     * so the question is asked there and answered. Asked as whether the rules leave the line's own
+     * value, every strict bound on a {@code Decimal} was read as drawing no line, and a model whose
+     * every rule was one came back adequate on the strength of no measure at all.
+     */
+    public static boolean reaches(Level cut, Seam parts, Towards kept, boolean ordersAroundTheCut,
+                                  NumericDomain.Bounds within) {
+        if (within == null) {
+            return true;
+        }
+        return standsAt(within, cut, parts, kept)
+                // A line with two sides owes a point against the line on each of them, so the line's
+                // own value is enough for it to be one somebody can write a row against: the side a
+                // rule is satisfied on may hold nothing while a row at the line settles which way
+                // the behavior went. Asked of the satisfying side alone, a guard the declarations
+                // can never satisfy took its whole line with it, and the row showing the behavior
+                // going the other way was never asked for.
+                //
+                // The line and not the whole of the other side. Every value a length takes is above
+                // a line drawn below zero, and the rule divides them into nothing — asked of that
+                // side, a rule that puts everything in one class came back as one with two.
+                || ordersAroundTheCut && admits(within, cut);
+    }
+
+    /**
+     * Whether the rules leave a value where this line parts them on one side.
+     *
+     * <p>The line itself where the seam has nothing to name there in the quantity's own units, which
+     * is a rule that wrote a multiple of the quantity and refuses its threshold. The line is where
+     * the values part to within one step of the quantity either way, and a caller with no place to
+     * ask about has nothing better to ask about than that.
+     */
+    private static boolean standsAt(NumericDomain.Bounds within, Level cut, Seam parts,
+                                    Towards side) {
+        Level leaves = parts.leaving(side);
+        return admits(within, leaves == null ? cut : leaves);
+    }
+
+    /** Whether {@code within} holds the value at {@code level}. */
+    private static boolean admits(NumericDomain.Bounds within, Level level) {
+        Place at = placeOf(level);
+        return (within.min() == null || at.compareTo(within.min().at()) >= 0)
+                && (within.max() == null || at.compareTo(within.max().at()) <= 0);
+    }
+
+    /**
+     * Which way a rule is satisfied from its threshold, from the two things every rule records about
+     * its own line.
+     *
+     * <p>One derivation, asked by whoever holds the pair. A line is read off a cutting before any
+     * rule has been named for it and off that rule's origin afterwards, and the two carry the same
+     * two facts — worked out separately, a line would be satisfied one way while it was a cutting
+     * and the other way once it had an origin.
+     */
+    static Towards satisfyingSide(boolean holdsAtTheValue, boolean valueBelongsBelow) {
+        return holdsAtTheValue == valueBelongsBelow ? Towards.BELOW : Towards.ABOVE;
+    }
+
+    /**
+     * Every border the lines of one behavior draw, each told about the others on its own quantity.
+     *
+     * <p>One place, so that a quantity is arranged once however many rules cut it. Grouped by what
+     * the rule cuts and not by how it was written: a form and any positive multiple of it order the
+     * rows the same way, so they are one quantity and their lines are one arrangement.
+     */
+    public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn) {
+        return allOf(drawn, java.util.Map.of(), new LinesRead());
+    }
+
+    /**
+     * The same, told where else the rules of this behavior part the quantities these lines are on.
+     *
+     * <p>Because a quantity is arranged once and not once per producer. A line that divides a
+     * position leaves its border on the position and its division on the axis; a line that divides
+     * one and has no value there leaves its border here. Read apart, the second knew only its own
+     * line — a rule cutting at a third beside a rule cutting at a fifth asked for a row anywhere at
+     * all, twice — and the first knew both only because the axis happened to carry them.
+     *
+     * @param alsoParted where the rules part each quantity, in the quantity's own units, by
+     *                   {@link QuantityKey#key}
+     */
+    public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn,
+                                               java.util.Map<String,
+                                                       java.util.List<Parting>> alsoParted,
+                                               LinesRead read) {
+        // Collected in the quantity's own units, because that is the only order the lines of one
+        // quantity are all on. Two rules can write one quantity at two scales — `3a + 6b > 48` and
+        // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
+        // are read as what they are a multiple of.
+        java.util.Map<String, java.util.List<Parting>> byQuantity = new java.util.LinkedHashMap<>();
+        alsoParted.forEach((key, parted) ->
+                byQuantity.computeIfAbsent(key, _ -> new java.util.ArrayList<>()).addAll(parted));
+        for (LineDrawn each : drawn) {
+            if (!ordersAroundTheCut(each.by())) {
+                continue;
+            }
+            // Every line as it was read. Two of them at one place are one place with two lines
+            // against it, which the arrangement says and this does not: told apart here, whichever
+            // was read first stood for the other and the second line was not written down anywhere.
+            byQuantity.computeIfAbsent(each.cuts().quantity().key(), _ -> new java.util.ArrayList<>())
+                    .add(Parting.by(each.cuts().seam(), each.by().authoredLine()));
+        }
+        java.util.List<Border> out = new java.util.ArrayList<>();
+        for (LineDrawn each : drawn) {
+            // And read back into the units this rule wrote, which is what its own quantity measures
+            // a row in. A border reads rows through the form it was written as, so a run handed to
+            // it in another scale would be held against numbers of a different size.
+            java.math.BigDecimal per = each.cuts().per();
+            java.util.List<Parting> beside =
+                    byQuantity.getOrDefault(each.cuts().quantity().key(), java.util.List.of())
+                            .stream().map(parting -> parting.scaledBy(per)).toList();
+            // One line drawn, one border. Which lines there are was settled by whoever read the
+            // rules — a comparison whose line the quantity does not reach is no line, and says so
+            // there ({@code ComparisonAssessment.OutsideTheDomain}) — so nothing here decides it
+            // again and nothing is dropped for having come back empty.
+            //
+            // Written down as it is met and again where it lands. One line met twice by this
+            // reading is one line, which is why the second of two equal borders is not a border
+            // this reading lost — the account is asked of the lines and not of how many times the
+            // loop went round.
+            read.found(each.cuts().target(), each.by());
+            Border made = at(each.cuts().target(), each.by(), each.cuts().within(), beside);
+            if (out.stream().noneMatch(had -> had.sameReadingAs(made))) {
+                out.add(read.drew(made));
+            }
+        }
+        return java.util.List.copyOf(out);
+    }
+
+    /**
+     * Where the rule this reading met parts the quantity's values, and the line it wrote there.
+     *
+     * <p>For a caller collecting every place one quantity is parted before any border is built. A
+     * border's two points away from the line are runs of the arrangement those places make, so a
+     * border built without them knows only its own line and reads each side to the end of the order.
+     *
+     * <p>The line travels with the place because what a run beside it is owed to is the line and not
+     * the place: two rules can part the values at one number, and each of them is one an author
+     * could move without touching the other.
+     */
+    public static Parting partedBy(BoundaryTarget target, OriginRef origin) {
+        Seam parts = parts(target, origin);
+        return parts == null ? null : Parting.by(parts, origin.authoredLine());
+    }
+
+    private static Seam parts(BoundaryTarget target, OriginRef origin) {
+        // Null for a rule that orders nothing around its line. A bound is where the quantity stops
+        // and not a place its values part — nothing outside one can be constructed, so there is no
+        // run on the far side (ADR-0090) — and a rule that singles a value out puts every other
+        // value on one side of it, which is not a run of the order either.
+        if (!ordersAroundTheCut(origin)) {
+            return null;
+        }
+        return Seam.of(target.levels(), target.at(),
+                valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE);
+    }
+
+    /**
+     * A row anywhere in one run but at the value against the line, or the reason the rules leave no
+     * run there.
+     *
+     * <p>Whether anything is left is the order's answer about the item's own values, and not a
+     * reading of where the run starts and stops: the rules may leave a side one value wide and that
+     * value be the border's own point, and they may leave a run between two lines that the quantity
+     * takes no value in at all. Told apart by comparing the two ends instead, the second was owed a
+     * row nobody can write and the report said the search stopped looking for it.
+     */
+    private static PointAnswer runOf(LevelSpace space, QuantityArrangement.Run run, Level except,
+                                     Towards away) {
+        if (run == null) {
+            return new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+        }
+        Criterion.Within inside = new Criterion.Within(run.values(), except, away);
+        // What the run is owed to, from the same reading that said what it asks: the line this point
+        // is named for is the border's own, and the far side is where the run stops — which is the
+        // end lying the way the run does.
+        return inside.region().parts().stream().anyMatch(part -> space.inspect(part).any())
+                ? new PointAnswer.InRegion(inside, run.endsAt(away))
+                : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+    }
+
+    /** The level a point against the line stands at, or null where no row is owed there. */
+    private static Level against(PointAnswer point) {
+        return point.criterion() instanceof Criterion.AtTheLevel at ? at.at() : null;
+    }
+
+    /**
+     * One of the two points of a line the rule orders the values around, or why no row is owed there.
+     *
+     * <p>Three reasons and one row, and the three used to be one silence. Whether the threshold is a
+     * level the quantity takes says whether either point is at the threshold itself; the order says
+     * whether it names a value the way this point lies; and what the rules leave says whether that
+     * level is one a row can be written at — {@code value >= 10} under {@code x < 10} would otherwise
+     * be owed a 9 the record refuses.
+     *
+     * @param isTheThreshold whether this point is the threshold itself, where the quantity takes it
+     */
+    private static PointAnswer pointAt(LevelSpace space, Level cut, Towards towards,
+                                       boolean isTheThreshold, NumericDomain.Bounds reach) {
+        if (isTheThreshold && space.attainable(cut)) {
+            // Admitted already: a threshold the rules refuse is a line this never made.
+            return new PointAnswer.AtLine(new Criterion.AtTheLevel(cut));
+        }
+        Optional<Level> at = beyond(space, cut, towards);
+        if (at.isEmpty()) {
+            return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
+        }
+        return reach.admits(placeOf(at.get()))
+                ? new PointAnswer.AtLine(new Criterion.AtTheLevel(at.get()))
+                : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+    }
+
+    /**
+     * The nearest level the quantity takes on one side of the threshold.
+     *
+     * <p>The value beside the threshold where the quantity takes the threshold, and the first value
+     * it does take otherwise. Two questions the order answers apart: {@code 2 * a <= 9} has no
+     * neighbour of 9 to ask for, because 9 is not a level it stands at, and the level it stands at
+     * below 9 is not one step from anything.
+     */
+    static Optional<Level> beyond(LevelSpace space, Level cut, Towards towards) {
+        return space.attainable(cut) ? space.neighbour(cut, towards)
+                : space.nearestAtOrBeyond(cut, towards);
+    }
+
+    /**
+     * The two sides of a line that has only one, which the two rules that draw one answer opposite
+     * ways.
+     *
+     * <p>Neither side is a run of the order from anywhere, so both are written as what the quantity
+     * takes other than the point — and which role that set belongs to is the whole of the difference.
+     * A bound leaves everything else <em>inside</em> it, because nothing outside can be constructed
+     * at all. An equality leaves everything else <em>outside</em>, because what it distinguishes is
+     * the one value from every other one. Read as one case, a bound's whole admitted range was
+     * offered as the {@code OUT} point of a border nothing can be outside of.
+     */
+    private static void aLineWithOneSide(Map<PointRole, PointAnswer> demands, OriginRef origin,
+                                         BorderQuantity of, Level cut, boolean holdsHere,
+                                         LevelSpace space, NumericDomain.Bounds within,
+                                         QuantityArrangement arrangement) {
+        Criterion rest = new Criterion.AnythingBut(cut);
+        switch (noSideOf(origin)) {
+            case THE_RULES_REFUSE_IT -> {
+                // Which way the bound keeps its values, from what the reading that placed the end
+                // recorded: a bound orders nothing around itself, so there is no side to read off
+                // the line, and which of the two ends it is is what says which way it runs. Held
+                // against the range below, which the same reading settled.
+                Towards kept = satisfyingSide(origin);
+                // Asked of a bound on a position and of nothing else. A position's range ends where
+                // its own bound is, so the two readings are answers to one question and are held
+                // against each other. What a rule relating positions cuts runs between whatever
+                // their ranges leave it, and its line falls inside that — so the range is no
+                // account of where this rule stops, and requiring the two to agree would refuse
+                // every relation a model states.
+                if (of.aBoundOnItEndsItsRange()) {
+                    requireItIsTheEndItKeeps(within, space, cut, kept, origin);
+                }
+                PointAnswer on = againstABound(space, cut, kept, holdsHere, within, origin);
+                demands.put(PointRole.ON, on);
+                demands.put(PointRole.OFF,
+                        new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
+                // The partition the bound bounds, without the value against the line. Everything
+                // else was what this asked for before, which is every value the rules leave —
+                // including the ones past the next line along, in a partition this border does not
+                // bound.
+                //
+                // Found by the point and not by the cut, and short of a point by the cut. The two
+                // are one level wherever the position holds the line's own value, and where it does
+                // not the run starts past the cut: looked up by the cut, the run a bound leaves was
+                // no run of the arrangement at all and its `IN` point came back refused.
+                Level against = against(on) != null ? against(on) : cut;
+                demands.put(PointRole.IN, runOf(space, arrangement.endmost(kept), against, kept));
+                demands.put(PointRole.OUT,
+                        new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
+            }
+            case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE -> {
+                // The value the rule names, which is the one point against this line: a rule that
+                // singles a value out orders nothing around it, so neither neighbour is nearer to
+                // being outside than the other. Which of the two roles the value serves as is
+                // whether the rule holds there — `x == 5` is met at five and `x /= 5` is not.
+                PointRole atTheCut = holdsHere ? PointRole.ON : PointRole.OFF;
+                demands.put(atTheCut, new PointAnswer.AtLine(new Criterion.AtTheLevel(cut)));
+                demands.put(atTheCut == PointRole.ON ? PointRole.OFF : PointRole.ON,
+                        new PointAnswer.NotOwed(NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE));
+                // The value's own class is the value, so the side the cut is on has nothing away
+                // from the border; the rest of the quantity is the other side. `x == 5` puts the cut
+                // inside and `x /= 5` puts it outside, which is what `holdsHere` says.
+                PointRole ofTheRest = holdsHere ? PointRole.OUT : PointRole.IN;
+                demands.put(ofTheRest, sideOf(rest, space, within));
+                demands.put(ofTheRest == PointRole.OUT ? PointRole.IN : PointRole.OUT,
+                        new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
+            }
+            // An order with no next value leaves the line its second side; it is the value on that
+            // side it has no name for, which is the point beside the cut and not the side itself.
+            case THE_CARRIER_NAMES_NO_NEIGHBOUR -> throw new IllegalStateException(
+                    "a line with no second side because of the order: " + origin.named());
+        }
+    }
+
+    /**
+     * The point against a bound's line: the value a row inside it is written at, or why there is
+     * none.
+     *
+     * <p>Asked of the order and never read off the cut. Where the position holds the line's own
+     * value that value is the point, and where it does not the point is the nearest value the rules
+     * leave — which on a carrier with no step is no value at all, and then the technique's point
+     * cannot be written down.
+     *
+     * <p><b>And a bound that stops short of its own line where the order does name a value beside
+     * it is refused, not repaired.</b> Such an end is not canonical: a strict bound is moved onto
+     * the value it leaves where the carrier steps, by {@code InvariantBound} for a type's own clause
+     * and by the solver for what a record leaves, so {@code value > 5} on an {@code Int} reaches
+     * here as an inclusive 6 and never as an exclusive 5. Answered by stepping to the 6 here, this
+     * would be a third place that normalizes ends — and the day either of the two above stopped
+     * doing it, the border would come out right and nothing would say the reading had been repaired
+     * on its way through.
+     *
+     * <p>No carrier is asked. What tells the two apart is whether the order names a value on the
+     * side the bound keeps, which is the question the point is about anyway.
+     */
+    private static PointAnswer againstABound(LevelSpace space, Level cut, Towards kept,
+                                             boolean holdsHere, NumericDomain.Bounds within,
+                                             OriginRef origin) {
+        if (holdsHere) {
+            return pointAt(space, cut, kept, true, within);
+        }
+        // And where it refuses its own threshold, the value beside it on the side it keeps — which
+        // is what every other role of every other line is offered. A rule refusing its threshold
+        // keeps the values from one count in, and that count is the row a person writes.
+        return pointAt(space, cut, kept, false, within);
+    }
+
+    /**
+     * That a bound's line stands where what the rules leave stops on the side the bound keeps.
+     *
+     * <p>Two readings of one rule held against each other. Which way the bound runs comes from the
+     * reading that placed the end and the range comes from the reading of everything the position
+     * is left with, and a bound's line is by construction the end of that range on the side it
+     * keeps. Where the two disagree, one of them is about a rule the other did not read — which is
+     * not a state a model can put them in, and a line inside the range is not one this rule drew.
+     *
+     * <p>The side and not either end. A rule leaving one value puts both ends at the line, and each
+     * of its two bounds answers for the end it placed rather than for whichever end matches.
+     */
+    private static void requireItIsTheEndItKeeps(NumericDomain.Bounds within, LevelSpace space,
+                                                 Level cut, Towards kept, OriginRef origin) {
+        Endpoint end = within == null ? null
+                : kept == Towards.ABOVE ? within.min() : within.max();
+        // Where the rule leaves off, which is not always the number it wrote. A carrier that counts
+        // has a next value, so a rule refusing its own threshold keeps the values from one count in
+        // — and the range this is held against stops there too. Held against the number instead,
+        // the two agree wherever a rule admits its threshold and are one count apart wherever it
+        // does not, which is half the operators an author can write.
+        Level leaves = Seam.of(space, cut,
+                valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE).leaving(kept);
+        if (end == null || !end.at().sameAs(placeOf(leaves))) {
+            throw new IllegalStateException(
+                    "a bound whose line is not where what it leaves stops: " + origin.named());
+        }
+    }
+
+    /**
+     * A side of the border, or the reason the rules leave nothing there for a row to be at.
+     *
+     * <p>What such a row is owed for is the line and no more. A rule that names a value leaves
+     * everything else, which is not a run and stops nowhere — so there is no far side to tell one
+     * of these from another, and the basis says so ({@link RegionBasis.TheRest}) rather than
+     * naming an end nobody wrote.
+     */
+    private static PointAnswer sideOf(Criterion side, LevelSpace space,
+                                      NumericDomain.Bounds within) {
+        return provablyHoldsNothing(side, space, within)
+                ? new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)
+                : new PointAnswer.InRegion(side, java.util.List.of(new RegionClaim(
+                        RegionBasis.TheRest.INSTANCE, PointContributions.none())));
+    }
+
+    /**
+     * Whether the order and the rules together leave a side no level at all, where that can be
+     * settled.
+     *
+     * <p>A proof and never a search that came up empty. Two facts and both of them proofs: the order
+     * itself may stop there — an enumeration at its last case — and the rules may have crossed. A
+     * side a search could not compose a value in is a different account and is
+     * {@link Realization}'s to give; read as emptiness it would take a coverage item away on the
+     * strength of what this compiler can build.
+     *
+     * <p>Not asked of adjacency. A side with no <em>next</em> value is not a side with no value:
+     * every pair of decimals further apart than a line is a pair, and reading the missing step as a
+     * missing side took the {@code IN} point off every border over them.
+     */
+    private static boolean provablyHoldsNothing(Criterion side, LevelSpace space,
+                                                NumericDomain.Bounds within) {
+        return switch (side) {
+            // A run the rules leave nothing in is not a run of the arrangement, so nothing that
+            // reaches here is one.
+            case Criterion.Within _ -> false;
+            // Both ends known, at the one place, and holding it: the rules leave that level and
+            // nothing else, so there is nothing else for a row to be written at.
+            case Criterion.AnythingBut other -> within.min() != null && within.max() != null
+                    && within.min().inclusive() && within.max().inclusive()
+                    && within.min().at().sameAs(placeOf(other.excluded()))
+                    && within.max().at().sameAs(placeOf(other.excluded()));
+            case Criterion.AtTheLevel _ -> false;
+        };
+    }
+
+    /** Where a side starts: the point against the line on that side, or the line where there is
+     *  none. */
+    private static Level levelOf(Demand against, Level line) {
+        return against.criterion() instanceof Criterion.AtTheLevel at ? at.at() : line;
+    }
+
+    /**
+     * A level as a place on the order it is a level of.
+     *
+     * <p>The one narrowing, so that what the rules leave — which is written as places, because it is
+     * read off the declarations — can be held against what the quantity takes. Both are on the
+     * quantity's own order by construction: the bounds handed in are the bounds of the thing being
+     * cut, and a caller that handed in a position's bounds for a border over something else would be
+     * answering a different question here as well.
+     */
+    private static Place placeOf(Level level) {
+        return switch (level) {
+            case Level.OnACarrier on -> on.at();
+            case Level.ACount count -> count.at();
+        };
+    }
+
+    /**
+     * Which way from the threshold the rule is satisfied.
+     *
+     * <p>Derived here from the two things a rule says about its own threshold, rather than asked of
+     * each producer. Which side the threshold's own value belongs to and whether the rule holds there
+     * are what every rule records ({@link OriginRef}); which way the rule is satisfied follows from
+     * the pair and is what a border is read off. Recorded a third time it would be free to disagree
+     * with them, and a line whose sides were the wrong way round asks for two rows that prove
+     * nothing.
+     */
+    private static Towards satisfyingSide(OriginRef origin) {
+        return holdsAtTheValue(origin) == valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE;
+    }
+
+    /**
+     * Whether the rule orders the values around its threshold at all.
+     *
+     * <p>Asked of the origin here rather than answered by it. Which rule drew a line and whether that
+     * line has two sides are two questions, and only the first is the rule's — the second is what
+     * this measure does with the answer, and reading it off the origin put the vocabulary of borders
+     * inside the identity every other measure of a rule shares.
+     */
+    private static boolean ordersAroundTheCut(OriginRef origin) {
+        return switch (origin) {
+            // Nothing outside a bound can be constructed, so a bound has no far side to order
+            // against however its own values run. Which is not what `singles` says of it, and
+            // reading the two as one question is why this is asked here and not answered by the
+            // rule.
+            case OriginRef.InvariantOrigin _ -> ordersAroundTheCut(true, false);
+            case OriginRef.NarrowedOrigin n -> ordersAroundTheCut(n.bound());
+            case OriginRef.ComparisonOrigin _, OriginRef.EnsuresOrigin _ ->
+                    ordersAroundTheCut(false, origin.lineFacts().singles());
+        };
+    }
+
+    /**
+     * The same, of a reading that has not named a rule for its line yet.
+     *
+     * <p>One derivation, asked by whoever holds the two facts. Whether a line has two sides is
+     * settled before a border is built — a reading has to know which points its line will owe
+     * before it can ask whether anything can stand at them — and it is settled again once the rule
+     * is named. Worked out twice, a line would owe one side while it was a reading and two once it
+     * had a rule.
+     *
+     * @param drawnByAnInvariant whether what drew it is a clause a value's declarations state.
+     *                           Nothing outside such a rule can be constructed, so there is no far
+     *                           side to order against. An {@code ensures} is written on a
+     *                           declaration too and is not one of these: what it states is a
+     *                           relation the behavior is held to, and both its sides hold values
+     * @param singles            whether the rule names a value rather than a side, which orders
+     *                           nothing around itself either
+     */
+    static boolean ordersAroundTheCut(boolean drawnByAnInvariant, boolean singles) {
+        return !drawnByAnInvariant && !singles;
+    }
+
+    /** Why a line has only one side, which is not the same answer for the two rules that leave it
+     *  with one. */
+    private static NotOwedReason noSideOf(OriginRef origin) {
+        return switch (origin) {
+            // Nothing outside a bound can be constructed, so the far side holds no value at all.
+            case OriginRef.InvariantOrigin _ -> NotOwedReason.THE_RULES_REFUSE_IT;
+            case OriginRef.NarrowedOrigin n -> noSideOf(n.bound());
+            // A rule that singles a value out orders nothing around it, so neither neighbour is
+            // nearer to being outside than the other.
+            case OriginRef.ComparisonOrigin _, OriginRef.EnsuresOrigin _ ->
+                    NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE;
+        };
+    }
+
+    /** Whether the threshold's own value satisfies the rule that drew the line. */
+    private static boolean holdsAtTheValue(OriginRef origin) {
+        return origin.lineFacts().holdsAtTheValue();
+    }
+
+    /** Which side of the line the threshold's own value belongs to. */
+    private static boolean valueBelongsBelow(OriginRef origin) {
+        return origin.lineFacts().valueBelongsBelow();
+    }
+}

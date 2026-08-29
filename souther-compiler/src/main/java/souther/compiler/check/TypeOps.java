@@ -1,21 +1,25 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.DataMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,33 +44,36 @@ public final class TypeOps {
     private TypeOps() {}
 
     /** Resolves a written type. Kept for the readers that name a parameter's type as such. */
-    public static Type resolveParamType(Ast.RetType t, Symbols symbols) {
-        return successType(t, symbols);
+    public static Type resolveParamType(Hir.RetType t) {
+        return successType(t);
     }
 
     /**
      * What a position may require of a type. {@link #EQUALITY} is what {@code ==} requires and what a
-     * {@code Set} requires of its element and a {@code Map} of its key; {@link #ORDERING} is what
-     * {@code sort} and a {@code sortBy} key require; {@link #EXTERNAL_FORM} is what a data's field, a
-     * newtype's base and a behavior's input and output require.
+     * {@code Set} requires of its element and a {@code Map} of its key; {@link #EXTERNAL_FORM} is
+     * what a data's field, a newtype's base and a behavior's input and output require.
+     *
+     * <p>Ordering is not one of these. Both of these are answered {@code true} or {@code false} and
+     * nothing more is wanted, while a reader that admits an ordered value goes on to ask what orders
+     * it — so the answer is a witness and lives in {@link Ordering}, and {@link #supportsOrdering}
+     * is that witness existing. Kept as a row here, the capability had one answer and the four
+     * places that emit a comparison each worked out the other for themselves (issue #856).
      */
-    public enum Requires { EQUALITY, ORDERING, EXTERNAL_FORM }
+    public enum Requires { EQUALITY, EXTERNAL_FORM }
 
     /**
-     * Whether {@code t} answers {@code required}. One table, so all three answers for a type
-     * constructor are read in one place, and neither switch carries a {@code default}: a constructor
-     * added to {@link Type}, or a fourth question added here, stops compiling until it is answered —
-     * which is where "can the representation actually do this?" gets asked.
+     * Whether {@code t} answers {@code required}. One table, so both answers for a type constructor
+     * are read in one place, and neither switch carries a {@code default}: a constructor added to
+     * {@link Type}, or a third question added here, stops compiling until it is answered — which is
+     * where "can the representation actually do this?" gets asked.
      *
-     * <p>The three are separate questions, and the arms combine their children differently. Equality
-     * and the external form descend into what a collection holds. An ordering does not: a collection
-     * has none of its own whatever it holds.
+     * <p>The two are separate questions, and the arms combine their children differently: a tuple
+     * carries values through a computation and is never encoded, whatever it holds.
      *
-     * <p>They are also asked at different times, which is why the question is a parameter rather than
-     * three fields computed together. Equality and the external form are answered by the shape of the
-     * type alone; only an ordering consults the module, to learn what a {@code Ref} denotes. A
-     * {@code Set}'s element is asked for equality while its own type is still being resolved, and
-     * there is no answer about ordering to be had yet.
+     * <p>Both are answered by the shape of the type alone. Ordering was the row that consulted the
+     * module, to learn what a {@code Ref} denotes, and it is no longer one of these — it is a
+     * witness rather than a yes, and {@link Ordering} holds it. The {@code symbols} parameter is
+     * what that row read and is threaded for a third question that needs it.
      *
      * <p>{@code Raw} answers yes to equality because its value's own {@code equals} answers, and that
      * is the only answer available: a Raw is an arbitrary Java object and the language promises
@@ -79,34 +86,27 @@ public final class TypeOps {
      */
     public static boolean answers(Type t, Requires required, Symbols symbols) {
         return switch (t) {
-            case Type.Prim p -> switch (required) {
+            case Type.Prim _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
-                case ORDERING -> isOrdered(p);
             };
-            case Type.Ref r -> switch (required) {
+            case Type.Ref _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
-                case ORDERING -> isOrdered(base(r, symbols)) || orderingEnumeration(r, symbols) != null;
             };
-            case Type.Union u -> switch (required) {
+            case Type.Union _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
-                case ORDERING -> orderingEnumeration(u, symbols) != null;
             };
             case Type.ListOf l -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(l.element(), required, symbols);
-                case ORDERING -> false;
             };
             case Type.SetOf s -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(s.element(), required, symbols);
-                case ORDERING -> false;
             };
             case Type.OptionOf o -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(o.element(), required, symbols);
-                case ORDERING -> false;
             };
             case Type.MapOf m -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(m.key(), required, symbols)
                         && answers(m.value(), required, symbols);
-                case ORDERING -> false;
             };
             case Type.TupleOf tu -> switch (required) {
                 case EQUALITY -> {
@@ -118,12 +118,11 @@ public final class TypeOps {
                     yield true;
                 }
                 // a tuple carries values through a computation and is never encoded, whatever it holds
-                case ORDERING, EXTERNAL_FORM -> false;
+                case EXTERNAL_FORM -> false;
             };
             case Type.FnOf _ -> false;
             case Type.Open _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
-                case ORDERING -> false;
             };
         };
     }
@@ -132,15 +131,21 @@ public final class TypeOps {
      * Whether values of this type can be compared for equality — what {@code ==} requires, and what
      * a {@code Set} requires of its element and a {@code Map} of its key (ADR-0009, ADR-0039).
      */
-    public static boolean supportsEquality(Type t, Symbols symbols) {
-        return answers(t, Requires.EQUALITY, symbols);
+    public static boolean supportsEquality(Type t) {
+        // No declaration is read to answer it: every declared type is compared by what it holds, so
+        // the question is settled by the shape of the type alone. Asked while a module is being
+        // resolved as well as after, which is what says it cannot need one.
+        return answers(t, Requires.EQUALITY, null);
     }
 
     /** Whether values of this type have an ordering — what {@code sort} and a {@code sortBy} key
-     * require of what they order. A single-value newtype is ordered by the value it wraps
-     * (ADR-0047), and an enumeration by the order its cases are declared in. */
+     * require of what they order, and what {@code <} requires of two operands of one type. A
+     * single-value newtype is ordered by the value it wraps (ADR-0047), and an enumeration by the
+     * order its cases are declared in (ADR-0069), so a newtype over an enumeration is ordered by
+     * that enumeration. This is {@link Ordering#of} having an answer, and asking it any other way is
+     * a second definition of the same word. */
     public static boolean supportsOrdering(Type t, Symbols symbols) {
-        return answers(t, Requires.ORDERING, symbols);
+        return Ordering.of(t, symbols) != null;
     }
 
     /**
@@ -179,49 +184,88 @@ public final class TypeOps {
 
     /** The type a field's written type stands for. A field whose type is not representable at the
      * boundary is refused where the data is checked; the type is read the same way either way. */
-    public static Type fieldType(Ast.Field f) {
-        return f.type() instanceof Ast.TypeRef ref ? ref.denotes() : resolveTerm(f.type(), null);
+    public static Type fieldType(Hir.Field f) {
+        return f.type() instanceof Hir.TypeRef ref ? ref.denotes() : resolveTerm(f.type());
     }
 
     /** The type one written term stands for. */
-    public static Type resolveTerm(Ast.TypeTerm t, Symbols symbols) {
+    public static Type resolveTerm(Hir.TypeTerm t) {
         return switch (t) {
-            case Ast.TypeRef ref -> ref.denotes();
-            case Ast.FnType ft -> {
+            case Hir.TypeRef ref -> ref.denotes();
+            case Hir.FnType ft -> {
                 List<Type> params = new ArrayList<>();
-                for (Ast.RetType p : ft.params()) {
-                    params.add(successType(p, symbols));
+                for (Hir.RetType p : ft.params()) {
+                    params.add(successType(p));
                 }
-                yield Type.fn(params, successType(ft.result(), symbols));
+                yield Type.fn(params, successType(ft.result()));
             }
         };
     }
 
-    /** The output type of a behavior return: a single case, or a union of two or more cases. */
-    public static Type successType(Ast.RetType ret, Symbols symbols) {
+    /**
+     * The output type of a behavior return: a single case, or a union of two or more cases.
+     *
+     * <p>An output with a member resting on a name that denotes nothing has no case set, and is the
+     * type that absorbs — the same answer a single such case already gives, so one mistake has one
+     * recovery wherever it is written. A check that would hold such an output against what is
+     * produced reads it here first, so that what is wrong with the union itself is still said, and
+     * then asks {@link #restsOnAnUnresolvedName} whether there is a case set to compare.
+     */
+    public static Type successType(Hir.RetType ret) {
         List<Type> members = new ArrayList<>();
-        for (Ast.TypeTerm t : ret.cases()) {
-            members.add(resolveTerm(t, symbols));
+        for (Hir.TypeTerm t : ret.cases()) {
+            members.add(resolveTerm(t));
         }
         if (members.size() == 1) {
             return members.get(0);
         }
-        Set<TypeName> names = new LinkedHashSet<>();
+        // The two ways a member can fail to be one are different mistakes, and the author owns only
+        // one of them. A member that cannot be written in an arm is theirs and is reported where it
+        // stands, as the first such member always was. A member whose name denotes nothing was
+        // reported where that name was written, and what this reading finds there is that same
+        // mistake: the output has no case set at all, so it takes the type that absorbs and this
+        // says nothing further. Finding one does not end the reading, because a member the author
+        // does own may be written after it.
+        Set<TypeSymbol> names = new LinkedHashSet<>();
+        boolean unknown = false;
         for (Type m : members) {
-            TypeName name = memberName(m);
-            if (name == null) {
-                throw CompileException.of(Diagnostic
+            switch (memberName(m)) {
+                case MemberName.Named named -> names.add(named.name());
+                case MemberName.NoType _ -> unknown = true;
+                case MemberName.NotAMember _ -> throw CompileException.of(Diagnostic
                                 .at(ret.pos()).say(new TypeMessage.NotAUnionMember(Type.show(m))).build());
             }
-            names.add(name);
         }
-        return Type.union(names);
+        return unknown ? Type.ERRONEOUS : Type.union(names);
     }
 
     /**
+     * What a union member goes by, which is three answers and not two.
+     *
+     * <p>A member the compiler could not work out a type for and a member whose type cannot be one
+     * are not the same finding, and a reader that gets one answer for both reports the second
+     * sentence about the first: that a name denoting nothing is not the kind of thing an arm can
+     * name. Kept apart here so that a reader has to say which of the two it is acting on, and a
+     * reader added later cannot decide it by not noticing.
+     */
+    sealed interface MemberName {
+
+        /** The case name this member is written and dispatched under. */
+        record Named(TypeSymbol name) implements MemberName {}
+
+        /** A type no arm can name, so no union can carry it. */
+        record NotAMember() implements MemberName {}
+
+        /** A member resting on a name that denotes nothing, reported where that name was written. */
+        record NoType() implements MemberName {}
+    }
+
+    private static final MemberName NOT_A_MEMBER = new MemberName.NotAMember();
+    private static final MemberName NO_TYPE = new MemberName.NoType();
+
+    /**
      * The case name a union member goes by: a data type's own name, or the name a primitive is
-     * written under in a match arm ({@code Int} in {@code Int | NoAnswer}). Null for a type that
-     * cannot be a member.
+     * written under in a match arm ({@code Int} in {@code Int | NoAnswer}).
      *
      * <p>A member has to be nominal and has to tell itself apart from the other members at run time,
      * because that is what a {@code match} arm and a Java {@code switch} both dispatch on. A
@@ -230,26 +274,32 @@ public final class TypeOps {
      * {@code Option} and a function fail it the same way. That they also have no arm form to write
      * is the surface showing the same fact.
      */
-    static TypeName memberName(Type m) {
+    static MemberName memberName(Type m) {
+        // The type that absorbs stands where the compiler could not work one out. It is not a shape
+        // this question has an answer about, and reading it as one is how the name that denotes
+        // nothing came to be reported a second time as a member an arm could not name.
+        if (m instanceof Type.Erroneous) {
+            return NO_TYPE;
+        }
         if (m instanceof Type.Ref r) {
-            return r.name();
+            return new MemberName.Named(r.name());
         }
         // Exhaustive over the primitives rather than a chain of comparisons, and reading the one
-        // spelling table rather than repeating it. A chain answers null for a primitive added later
-        // without asking anyone, and null here reads as "this is not a name a member can be written
-        // as" — which is the truth about Raw and about nothing else.
+        // spelling table rather than repeating it. A chain answers "not a member" for a primitive
+        // added later without asking anyone, and that answer is the truth about Raw and about
+        // nothing else.
         if (m instanceof Type.Prim p) {
             return switch (p) {
                 case INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT ->
-                        TypeName.primitive(p.shown());
-                case RAW -> null;
+                        new MemberName.Named(TypeSymbol.primitive(p.shown()));
+                case RAW -> NOT_A_MEMBER;
             };
         }
-        return null;
+        return NOT_A_MEMBER;
     }
 
     /** Builds a Ref (one name) or Union (two or more) from a set of case names. */
-    static Type caseSetType(Set<TypeName> names) {
+    static Type caseSetType(Set<TypeSymbol> names) {
         if (names.size() == 1) {
             return Type.ref(names.iterator().next());
         }
@@ -260,19 +310,30 @@ public final class TypeOps {
         return t instanceof Type.Ref || t instanceof Type.Union;
     }
 
-    public static Set<TypeName> namesOf(Type t) {
+    /**
+     * The case names {@code t} carries, which is none for a type that carries no name.
+     *
+     * <p>Both ways of carrying none are none here, on purpose: this asks which names are on a type
+     * and nothing about why a type has none. Where the difference matters is a declaration held
+     * against what is produced — an output resting on a name that denotes nothing has no case set
+     * rather than the empty one — and that is asked at those checks by
+     * {@link #restsOnAnUnresolvedName}, before either side is turned into names.
+     */
+    public static Set<TypeSymbol> namesOf(Type t) {
         if (t instanceof Type.Union u) {
             return u.members();
         }
-        TypeName name = memberName(t);
-        return name == null ? Set.of() : Set.of(name);
+        return switch (memberName(t)) {
+            case MemberName.Named named -> Set.of(named.name());
+            case MemberName.NotAMember _, MemberName.NoType _ -> Set.of();
+        };
     }
 
     /** Case names of a stage output, treating a {@code Raw} encoder output as the case {@code "Raw"}
      * so it can be unioned with propagated error cases (spec §sequential-composition, §case-propagation). */
-    static Set<TypeName> caseNamesOf(Type t) {
+    static Set<TypeSymbol> caseNamesOf(Type t) {
         if (t == Type.RAW) {
-            return Set.of(TypeName.primitive("Raw"));
+            return Set.of(TypeSymbol.primitive("Raw"));
         }
         return namesOf(t);
     }
@@ -282,7 +343,7 @@ public final class TypeOps {
         if (sub.equals(sup)) {
             return true;
         }
-        Set<TypeName> names = namesOf(sub);
+        Set<TypeSymbol> names = namesOf(sub);
         return !names.isEmpty() && sup instanceof Type.Union u && u.members().containsAll(names);
     }
 
@@ -290,66 +351,56 @@ public final class TypeOps {
      * sum. A {@code fold} whose seed is a case ({@code PricedCart}) and whose step grows and matches the
      * accumulator at the sum ({@code PricedCart | NotFound}) is typed at that sum, not the seed case. */
     public static Type enclosingSum(Type t, Symbols symbols) {
-        if (!(t instanceof Type.Ref ref) || symbols.get(ref.name()) instanceof Ast.SumData) {
+        // A case of a primitive-headed union belongs to no named sum: nothing declares it, so no
+        // module holds a sum it is a case of.
+        if (!(t instanceof Type.Ref(TypeSymbol.AtModule named))
+                || symbols.declarations().declaration(named) instanceof Hir.SumData) {
             return null;
         }
         // A sum and its cases are declared together, so only that module can hold the sum this case
         // belongs to. A case may belong to more than one; pick by name so the choice is deterministic
         // across runs rather than dependent on the symbol map's iteration order.
-        String chosen = null;
-        for (Ast.Def d : symbols.declaredIn(ref.name().module()).values()) {
-            if (d instanceof Ast.SumData sum && caseNames(sum).contains(ref.name())
-                    && (chosen == null || sum.name().compareTo(chosen) < 0)) {
-                chosen = sum.name();
+        Hir.SumData chosen = null;
+        for (Hir.Def d : symbols.declarations().declaredIn(named.module()).values()) {
+            if (d instanceof Hir.SumData sum && caseNames(sum).contains(named)
+                    && (chosen == null || sum.name().compareTo(chosen.name()) < 0)) {
+                chosen = sum;
             }
         }
-        return chosen == null ? null : Type.ref(ref.name().sibling(chosen));
+        // The identity is the one the declaration carries. Put together from this case's module and
+        // the sum's spelling instead, it would be an identity for whatever that address names.
+        return chosen == null ? null : Type.ref(chosen.declares());
     }
 
     public static boolean isSumType(Type t, Symbols symbols) {
         return t instanceof Type.Union
-                || (t instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.SumData);
+                || (t instanceof Type.Ref r && symbols.declarations().declaration(r.name()) instanceof Hir.SumData);
     }
 
-    /** The cases of {@code t} when it is a sum — a declared {@code data S = A | B} or the union a
-     * branch widened to — with a case that is itself a sum folded to its own cases. Null when
-     * {@code t} is not a sum at all. */
-    static List<TypeName> sumCases(Type t, Symbols symbols) {
-        return sumCases(t, symbols, new HashSet<>());
-    }
-
-    private static List<TypeName> sumCases(Type t, Symbols symbols, Set<TypeName> visiting) {
-        List<TypeName> names;
-        if (t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum) {
-            if (!visiting.add(ref.name())) {
-                return List.of();   // a sum reaching itself; DataChecker reports it, this must terminate
+    /**
+     * A sum's cases: what each name it lists denotes. A name that denotes nothing lists no case —
+     * it is reported where it is written, and a reader counting the cases counts what is there.
+     *
+     * <p>One layer, which is what a descent over the cases would be built out of: hold this and the
+     * declarations, and a transitive closure is a loop away. There is one such closure and it is
+     * {@link AtomSpace}. Package-private for that reason and not by accident of who happens to call
+     * it — every reader of a case list is in this package, so nothing outside it can write a second
+     * closure at all, and that much is javac's to say rather than a test's.
+     */
+    static List<TypeSymbol> caseNames(Hir.SumData sum) {
+        List<TypeSymbol> names = new ArrayList<>();
+        for (Hir.Name c : sum.cases()) {
+            if (c.answered() instanceof Hir.Name.Denoting named) {
+                names.add(named.type());
             }
-            names = caseNames(sum);
-        } else if (t instanceof Type.Union union) {
-            names = List.copyOf(union.members());
-        } else {
-            return null;
-        }
-        List<TypeName> leaves = new ArrayList<>();
-        for (TypeName name : names) {
-            List<TypeName> nested = symbols.get(name) instanceof Ast.SumData
-                    ? sumCases(Type.ref(name), symbols, visiting) : null;
-            if (nested == null) {
-                leaves.add(name);
-            } else {
-                leaves.addAll(nested);
-            }
-        }
-        return leaves;
-    }
-
-    /** A sum's cases: what each name it lists denotes. */
-    public static List<TypeName> caseNames(Ast.SumData sum) {
-        List<TypeName> names = new ArrayList<>();
-        for (Ast.Name c : sum.cases()) {
-            names.add(c.denotes());
         }
         return names;
+    }
+
+    /** The type a case holds when a value turns out to be it — {@link CaseSelector#heldBy}, which is
+     * where a selector reads it, under the name the callers outside a match know it by. */
+    public static Type caseBindType(TypeSymbol caseName) {
+        return CaseSelector.heldBy(caseName);
     }
 
     /**
@@ -368,14 +419,14 @@ public final class TypeOps {
      * and wrapped inside a sum — so {@code NeutralForm} reads the position and this stays about the
      * declaration.
      */
-    public static CaseShape caseShape(TypeName name, Symbols symbols) {
+    public static CaseShape caseShape(TypeSymbol name, Symbols symbols) {
         if (name.isPrimitive()) {
             return CaseShape.WRAPPED;   // a bare scalar carries no key the discriminator could go on
         }
-        return switch (symbols.get(name)) {
-            case Ast.Data d when d.newtype() -> CaseShape.WRAPPED;
-            case Ast.Data _ -> CaseShape.PRODUCT;
-            case Ast.UnitData _ -> CaseShape.UNIT;
+        return switch (symbols.declarations().declaration(name)) {
+            case Hir.Data d when d.newtype() -> CaseShape.WRAPPED;
+            case Hir.Data _ -> CaseShape.PRODUCT;
+            case Hir.UnitData _ -> CaseShape.UNIT;
             case null, default -> throw new IllegalStateException(
                     "`" + name + "` stands as a case but denotes no data");
         };
@@ -394,31 +445,31 @@ public final class TypeOps {
      * source. No pass added later can forget this gate — a pass that cannot work a type out puts an
      * error type in, and this finds it wherever it is.
      */
-    public static boolean holdsAnErroneousType(Ast.Module module) {
-        for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.Data d) {
-                for (Ast.Field f : d.fields()) {
+    public static boolean holdsAnErroneousType(Hir.Module module) {
+        for (Hir.Def def : module.defs()) {
+            if (def instanceof Hir.Data d) {
+                for (Hir.Field f : d.fields()) {
                     if (erroneous(f.type())) {
                         return true;
                     }
                 }
-                for (Ast.Name include : d.includes()) {
-                    if (include.denotes() != null && include.denotes().isUnresolved()) {
+                for (Hir.Name include : d.includes()) {
+                    if (erroneous(include)) {
                         return true;
                     }
                 }
             }
-            if (def instanceof Ast.SumData sum) {
-                for (Ast.Name c : sum.cases()) {
-                    if (c.denotes() != null && c.denotes().isUnresolved()) {
+            if (def instanceof Hir.SumData sum) {
+                for (Hir.Name c : sum.cases()) {
+                    if (erroneous(c)) {
                         return true;
                     }
                 }
             }
         }
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior spec) {
-                for (Ast.Param param : spec.params()) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.SpecBehavior spec) {
+                for (Hir.Param param : spec.params()) {
                     if (erroneous(param.type())) {
                         return true;
                     }
@@ -426,17 +477,17 @@ public final class TypeOps {
                 if (erroneous(spec.ret())) {
                     return true;
                 }
-                for (Ast.Name constructs : spec.constructs()) {
-                    if (constructs.denotes() != null && constructs.denotes().isUnresolved()) {
+                for (Hir.Name constructs : spec.constructs()) {
+                    if (erroneous(constructs)) {
                         return true;
                     }
                 }
-            } else if (b instanceof Ast.PipeBehavior pipe && erroneous(pipe.declaredOut())) {
+            } else if (b instanceof Hir.PipeBehavior pipe && erroneous(pipe.declaredOut())) {
                 return true;
             }
         }
-        for (Ast.FnDef fn : module.fns()) {
-            for (Ast.FnParam param : fn.params()) {
+        for (Hir.FnDef fn : module.fns()) {
+            for (Hir.FnParam param : fn.params()) {
                 if (erroneous(param.type())) {
                     return true;
                 }
@@ -448,16 +499,47 @@ public final class TypeOps {
         return false;
     }
 
-    private static boolean erroneous(Ast.RetType ret) {
+    /**
+     * Whether {@code name} is one resolution read and found no declaration for.
+     *
+     * <p>Named as the three states it is one of, so a name nothing has read yet is refused rather
+     * than answered no. A tree reaching here holding one is a pass that did not answer its own
+     * nodes, and calling it "not erroneous" would let that go by while every walk below read the
+     * module as though the author had written it that way.
+     */
+    private static boolean erroneous(Hir.Name name) {
+        return switch (name) {
+            case Hir.Name.Unanswered _ -> true;
+            case Hir.Name.Denoting _ -> false;
+        };
+    }
+
+    private static boolean erroneous(Hir.RetType ret) {
         return ret != null && ret.cases().stream().anyMatch(TypeOps::erroneous);
     }
 
-    private static boolean erroneous(Ast.TypeTerm term) {
+    /**
+     * Whether a written output rests on a name that denotes nothing.
+     *
+     * <p>Asked by the two checks that hold a declared output against what is produced. The case set
+     * of such an output is not the empty set — there is no answer to take a set from — and comparing
+     * against it says the declaration names nothing of what the body or the composition builds,
+     * which is the unresolved name arriving a second time under a sentence about the declaration.
+     * Those checks abandon instead, and the name is reported where it was written.
+     *
+     * <p>Read off what was written rather than off the type it stands for, because that is where
+     * the reference sits and there is nothing to lose on the way.
+     */
+    static boolean restsOnAnUnresolvedName(Hir.RetType ret) {
+        return erroneous(ret);
+    }
+
+    private static boolean erroneous(Hir.TypeTerm term) {
         return switch (term) {
             case null -> false;
-            case Ast.FnType ft ->
+            case Hir.FnType ft ->
                     ft.params().stream().anyMatch(TypeOps::erroneous) || erroneous(ft.result());
-            case Ast.TypeRef ref -> {
+            case Hir.TypeRef ref -> {
                 if (ref.denotes() instanceof Type.Erroneous) {
                     yield true;
                 }
@@ -515,8 +597,8 @@ public final class TypeOps {
             }
             return true;
         }
-        Set<TypeName> fa = leafCases(from, symbols);
-        Set<TypeName> ta = leafCases(to, symbols);
+        List<TypeSymbol> fa = AtomSpace.subjectAtoms(from, symbols);
+        List<TypeSymbol> ta = AtomSpace.subjectAtoms(to, symbols);
         return !fa.isEmpty() && !ta.isEmpty() && ta.containsAll(fa);
     }
 
@@ -581,7 +663,7 @@ public final class TypeOps {
             return Type.tuple(elements);
         }
         if (isDataLike(a) && isDataLike(b)) {
-            Set<TypeName> names = new HashSet<>(namesOf(a));
+            Set<TypeSymbol> names = new HashSet<>(namesOf(a));
             names.addAll(namesOf(b));
             return caseSetType(names);
         }
@@ -599,7 +681,7 @@ public final class TypeOps {
         if (!(expected instanceof Type.Union) || !subtypeOf(a, expected) || !subtypeOf(b, expected)) {
             return null;
         }
-        Set<TypeName> names = new LinkedHashSet<>(namesOf(a));
+        Set<TypeSymbol> names = new LinkedHashSet<>(namesOf(a));
         names.addAll(namesOf(b));
         return caseSetType(names);
     }
@@ -784,19 +866,24 @@ public final class TypeOps {
         };
     }
 
-    /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
     /**
      * Two effective members of {@code out} that go by one written name, or null when every member's
      * name is its own. Asked after a named sum is expanded to its leaves, since the leaves are what a
      * {@code match} arm names and what the {@code "type"} discriminator carries — a sum contributes
      * its cases, not itself.
      */
-    static TypeName[] ambiguousMembers(Type out, Symbols symbols) {
-        Map<String, TypeName> byName = new LinkedHashMap<>();
-        for (TypeName member : leafCases(out, symbols)) {
-            TypeName seen = byName.put(member.name(), member);
+    static TypeSymbol.AtModule[] ambiguousMembers(Type out, Symbols symbols) {
+        Map<String, TypeSymbol.AtModule> byName = new LinkedHashMap<>();
+        // Only a module's declarations can collide by spelling here: a module may not declare a
+        // name the language gives, so a union holding one holds it under a spelling nothing else
+        // in it has.
+        for (TypeSymbol atom : AtomSpace.subjectAtoms(out, symbols)) {
+            if (!(atom instanceof TypeSymbol.AtModule member)) {
+                continue;
+            }
+            TypeSymbol.AtModule seen = byName.put(member.name(), member);
             if (seen != null && !seen.equals(member)) {
-                return new TypeName[] {seen, member};
+                return new TypeSymbol.AtModule[] {seen, member};
             }
         }
         return null;
@@ -808,8 +895,8 @@ public final class TypeOps {
      * want one key: whichever is written second is the only one left. Asked of the leaves, since a
      * nested sum contributes its cases rather than itself.
      */
-    static TypeName memberCarryingField(Type out, String key, Symbols symbols) {
-        for (TypeName member : leafCases(out, symbols)) {
+    static TypeSymbol memberCarryingField(Type out, String key, Symbols symbols) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
             if (declaresField(member, key, symbols)) {
                 return member;
             }
@@ -819,43 +906,27 @@ public final class TypeOps {
 
     /** Whether {@code name} declares a field called {@code key}, spread fields included. A newtype's
      * one field is named {@code value} and a unit has none, so only a record can. */
-    static boolean declaresField(TypeName name, String key, Symbols symbols) {
-        return symbols.get(name) instanceof Ast.Data data && !data.newtype()
+    static boolean declaresField(TypeSymbol name, String key, Symbols symbols) {
+        return symbols.declarations().declaration(name) instanceof Hir.Data data && !data.newtype()
                 && fieldTypes(data, symbols).containsKey(key);
     }
 
     /**
-     * The cases a position of this type can be, when it can be more than one thing: the leaf cases of
+     * The cases a position of this type can be, when it can be more than one thing: the atoms of
      * a union or of a named sum, and nothing otherwise.
      *
      * <p>What a row's expected arm is held against, and what an adequacy report counts as declared. The
      * two have to agree — a report that read a wider set than the rows are checked against would name a
      * case no row is allowed to write — so the rule is here rather than stated twice.
+     *
+     * <p>An admission and not a second descent: what a type is made of is {@link AtomSpace}'s, and
+     * what is left here is which types this reader will take an answer about. A primitive output
+     * names one atom like any other type, and is not a case list.
      */
-    public static Set<TypeName> outputCases(Type t, Symbols symbols) {
-        return t instanceof Type.Union || t instanceof Type.Ref ? leafCases(t, symbols) : Set.of();
-    }
-
-    public static Set<TypeName> leafCases(Type t, Symbols symbols) {
-        Set<TypeName> out = new LinkedHashSet<>();
-        collectLeafCases(t, symbols, out, new HashSet<>());
-        return out;
-    }
-
-    private static void collectLeafCases(Type t, Symbols symbols, Set<TypeName> out,
-                                         Set<TypeName> visiting) {
-        for (TypeName name : namesOf(t)) {
-            if (symbols.get(name) instanceof Ast.SumData s) {
-                if (!visiting.add(name)) {
-                    continue;   // a sum reaching itself; DataChecker reports it, this must terminate
-                }
-                for (TypeName caseName : caseNames(s)) {
-                    collectLeafCases(Type.ref(caseName), symbols, out, visiting);
-                }
-            } else {
-                out.add(name);
-            }
-        }
+    public static Set<TypeSymbol> outputCases(Type t, Symbols symbols) {
+        return t instanceof Type.Union || t instanceof Type.Ref
+                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, symbols))
+                : Set.of();
     }
 
     /**
@@ -879,10 +950,26 @@ public final class TypeOps {
      * resolve against nothing. A caller reading its own declaration passes {@link Symbols#own}; a
      * caller reading one it reached passes the name it reached it by.
      */
-    public static Map<String, BindingId> fieldBindings(TypeName declared, Ast.Data data,
-                                                       Symbols symbols) {
+    public static Map<String, BindingId> fieldBindings(TypeSymbol.AtModule declared,
+                                                       Hir.Data data, Symbols symbols) {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
         walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
+        return bindings;
+    }
+
+    /**
+     * The same, of a declaration as it was written — what {@code Resolve} asks while it is resolving
+     * one.
+     *
+     * <p>A separate way in rather than the same one under a flag, because what an include is differs
+     * between the two: here it is a spelling this pass is about to answer, and there it is a name
+     * already answered. A reader after the pass cannot reach this one, so an unanswered include
+     * cannot be repaired from characters by anything that met one.
+     */
+    static Map<String, BindingId> fieldBindingsAsWritten(TypeSymbol.AtModule declared,
+                                                         Ast.Data data, SyntaxSymbols symbols) {
+        Map<String, BindingId> bindings = new LinkedHashMap<>();
+        walkWrittenFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
         return bindings;
     }
 
@@ -895,40 +982,68 @@ public final class TypeOps {
      * binding wherever it is checked or emitted.
      *
      * <p>A walk of its own, not the one {@link #fieldTypes} makes, because it answers where that one
-     * cannot: this runs while the declaration is being resolved, where an include may not yet say
-     * what it denotes, and a field has a name whether or not its type has been worked out. It
-     * therefore reaches the fields in an order of its own, which is why nothing reads one off the
-     * result. An include that names nothing is skipped, and a name an include repeats keeps the
-     * declaration's own — both are refused where the declaration is checked, and refusing them twice
-     * says nothing more.
+     * cannot: a field has a name whether or not its type has been worked out. It therefore reaches
+     * the fields in an order of its own, which is why nothing reads one off the result. An include
+     * that names nothing is skipped, and a name an include repeats keeps the declaration's own —
+     * both are refused where the declaration is checked, and refusing them twice says nothing more.
      */
-    private static void walkFields(Ast.Data data, TypeName declared, Symbols symbols,
-                                   Set<TypeName> seen, Map<String, BindingId> out) {
+    private static void walkFields(Hir.Data data, TypeSymbol.AtModule declared, Symbols symbols,
+                                   Set<TypeSymbol> seen, Map<String, BindingId> out) {
+        BindingOwner owner = new BindingOwner.OfFields(declared);
+        int ordinal = 0;
+        for (Hir.Field field : data.fields()) {
+            out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
+        }
+        for (Hir.Name include : data.includes()) {
+            TypeSymbol source = switch (include) {
+                case Hir.Name.Denoting denoting -> denoting.type();
+                // Reported where it is written. A name nothing declares brings in no fields, and
+                // saying so again here would be a second report about the one mistake.
+                case Hir.Name.Unanswered _ -> null;
+            };
+            // An include names a data, which a module declares; what the language gives is
+            // no declaration to walk, and the lookup below already answered nothing for one.
+            if (source instanceof TypeSymbol.AtModule at && seen.add(at)
+                    && symbols.declarations().declaration(at) instanceof Hir.Data included) {
+                walkFields(included, at, symbols, seen, out);
+            }
+        }
+    }
+
+    /** The same walk over a declaration as it was written: an include is a spelling, and what it
+     *  denotes is asked of the scope the declaration was written in. */
+    private static void walkWrittenFields(Ast.Data data, TypeSymbol.AtModule declared, SyntaxSymbols symbols,
+                                          Set<TypeSymbol> seen, Map<String, BindingId> out) {
         BindingOwner owner = new BindingOwner.OfFields(declared);
         int ordinal = 0;
         for (Ast.Field field : data.fields()) {
             out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
         }
         for (Ast.Name include : data.includes()) {
-            TypeName source = include.denotes() != null
-                    ? include.denotes() : symbols.resolve(include.written());
-            if (source != null && seen.add(source)
-                    && symbols.get(source) instanceof Ast.Data included) {
-                walkFields(included, source, symbols, seen, out);
+            TypeSymbol source = symbols.scope().resolve(include.name()).type();
+            if (source instanceof TypeSymbol.AtModule at && seen.add(at)
+                    && symbols.declarations().declaration(at) instanceof Ast.Data included) {
+                walkWrittenFields(included, at, symbols, seen, out);
             }
         }
     }
 
     /** Effective field name → type (included data flattened first, then own fields). */
-    public static Map<String, Type> fieldTypes(Ast.Data data, Symbols symbols) {
+    public static Map<String, Type> fieldTypes(Hir.Data data, Symbols symbols) {
         Map<String, Type> types = new LinkedHashMap<>();
         // Which spread put each field here, so a collision names the group that supplied the earlier
         // one. Reporting it against the taking data names a declaration that, where both fields came
         // through spreads, holds no such field at all.
         Map<String, String> suppliedBy = new LinkedHashMap<>();
-        for (Ast.Name inc : data.includes()) {
-            TypeName included = inc.denotes();
-            if (!(symbols.get(included) instanceof Ast.Data id)) {
+        for (Hir.Name inc : data.includes()) {
+            if (!(inc.answered() instanceof Hir.Name.Denoting names)) {
+                // Nothing declares it, which was reported where it is written. It brings in no
+                // fields, and complaining here that it is not a product data would be a second
+                // report about the one mistake.
+                continue;
+            }
+            TypeSymbol included = names.type();
+            if (!(symbols.declarations().declaration(included) instanceof Hir.Data id)) {
                 throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
                         .say(new DataMessage.SpreadIsNotAProductData(inc.written()))
                         .build());
@@ -943,7 +1058,7 @@ public final class TypeOps {
                 suppliedBy.put(e.getKey(), "..." + inc.written());
             }
         }
-        for (Ast.Field f : data.fields()) {
+        for (Hir.Field f : data.fields()) {
             if (types.put(f.name(), fieldType(f)) != null) {
                 throw CompileException.of(Diagnostic.at(f.pos())
                         .say(new DataMessage.FieldIsDeclaredMoreThanOnceIn(f.name(), data.name()))
@@ -960,14 +1075,14 @@ public final class TypeOps {
      * declaring module's position (issue #110). The duplicate-field checks {@link #fieldTypes} makes
      * belong to the declaring module's own check, which has already run.
      */
-    public static Type fieldType(Ast.Data data, String field, Symbols symbols) {
-        for (Ast.Field f : data.fields()) {
+    public static Type fieldType(Hir.Data data, String field, Symbols symbols) {
+        for (Hir.Field f : data.fields()) {
             if (f.name().equals(field)) {
                 return fieldType(f);
             }
         }
-        for (Ast.Name inc : data.includes()) {
-            Ast.Data included = spreadTarget(inc, symbols);
+        for (Hir.Name inc : data.includes()) {
+            Hir.Data included = spreadTarget(inc, symbols);
             if (included != null) {
                 Type t = fieldType(included, field, symbols);
                 if (t != null) {
@@ -981,19 +1096,21 @@ public final class TypeOps {
     /** The product data a spread names, or null when nothing here denotes it or what it denotes is
      * not a product. Only {@link #fieldTypes} turns those into a diagnostic, and every declared data
      * goes through it; the readers asked about one field or one invariant answer for what they see. */
-    private static Ast.Data spreadTarget(Ast.Name inc, Symbols symbols) {
-        return symbols.get(inc.denotes()) instanceof Ast.Data d ? d : null;
+    private static Hir.Data spreadTarget(Hir.Name inc, Symbols symbols) {
+        return inc.answered() instanceof Hir.Name.Denoting named
+                && symbols.declarations().declaration(named.type()) instanceof Hir.Data d
+                ? d : null;
     }
 
     /** Whether a data has a field of that name, without resolving any type. */
-    public static boolean hasField(Ast.Data data, String field, Symbols symbols) {
-        for (Ast.Field f : data.fields()) {
+    public static boolean hasField(Hir.Data data, String field, Symbols symbols) {
+        for (Hir.Field f : data.fields()) {
             if (f.name().equals(field)) {
                 return true;
             }
         }
-        for (Ast.Name inc : data.includes()) {
-            Ast.Data included = spreadTarget(inc, symbols);
+        for (Hir.Name inc : data.includes()) {
+            Hir.Data included = spreadTarget(inc, symbols);
             if (included != null && hasField(included, field, symbols)) {
                 return true;
             }
@@ -1002,24 +1119,31 @@ public final class TypeOps {
     }
 
     /**
-     * The fields a sum exposes: those contributed by a data that every one of its cases spreads,
-     * transitively. What holds of every case is a property of the sum, and a spread is nominal
-     * (ADR-0012), so what makes the fields shared is that the author wrote `...Common` in each case —
-     * not that two cases happen to agree on a field name, which would be the structural reading
-     * ADR-0012 declines. Empty when the cases share no spread, so the read stays the error it is.
+     * The part a sum's cases hold in common: the declarations every one of them spreads,
+     * transitively, and the fields those declare.
+     *
+     * <p>What holds of every case is a property of the sum, and a spread is nominal, so what makes
+     * the part shared is that the author wrote `...Common` in each case — not that two cases happen
+     * to agree on a field name, which is the structural reading the language declines.
+     * {@link Shape.CommonProduct.None} when they share no spread, so a read of a field stays the
+     * error it is.
+     *
+     * <p>Package-private, and the answer travels as {@link Shape.Sum#common}. Every reader of a
+     * sum's shared part is a reader of what a position is, which is {@link Shape}'s to say; asked
+     * here directly, a reader would have a second way to find out what kind of sum it is holding.
      */
-    public static Map<String, Type> commonSpreadFields(Ast.SumData sum, Symbols symbols) {
-        return commonSpreadFields(leafCases(sum, symbols), symbols);
+    static Shape.CommonProduct commonSpreadOf(Hir.SumData sum, Symbols symbols) {
+        return commonSpreadOf(AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols), symbols);
     }
 
-    /** As {@link #commonSpreadFields(Ast.SumData, Symbols)}, for cases already flattened to leaves. */
-    public static Map<String, Type> commonSpreadFields(List<TypeName> cases, Symbols symbols) {
+    /** As {@link #commonSpreadOf(Hir.SumData, Symbols)}, for cases already flattened to leaves. */
+    static Shape.CommonProduct commonSpreadOf(List<TypeSymbol> cases, Symbols symbols) {
         if (cases == null || cases.isEmpty()) {
-            return Map.of();
+            return new Shape.CommonProduct.None();
         }
-        Set<TypeName> common = null;
-        for (TypeName c : cases) {
-            Set<TypeName> spreads = symbols.get(c) instanceof Ast.Data d
+        Set<TypeSymbol> common = null;
+        for (TypeSymbol c : cases) {
+            Set<TypeSymbol> spreads = symbols.declarations().declaration(c) instanceof Hir.Data d
                     ? spreadAncestors(d, symbols) : Set.of();
             if (common == null) {
                 common = new LinkedHashSet<>(spreads);
@@ -1027,30 +1151,50 @@ public final class TypeOps {
                 common.retainAll(spreads);
             }
             if (common.isEmpty()) {
-                return Map.of();
+                return new Shape.CommonProduct.None();
             }
         }
         Map<String, Type> fields = new LinkedHashMap<>();
-        for (TypeName ancestor : common) {
-            if (symbols.get(ancestor) instanceof Ast.Data d) {
+        List<TypeSymbol> origins = new ArrayList<>();
+        for (TypeSymbol ancestor : common) {
+            if (symbols.declarations().declaration(ancestor) instanceof Hir.Data d) {
+                origins.add(ancestor);
                 fields.putAll(fieldTypes(d, symbols));
             }
         }
-        return fields;
+        // A data declaring no field is a unit data and is written without a body (E1008), so this
+        // is empty only where the cases share nothing at all.
+        return fields.isEmpty() ? new Shape.CommonProduct.None()
+                : new Shape.CommonProduct.Shared(origins, fields);
+    }
+
+    /**
+     * The declaration {@code name} denotes where it writes fields, with the name it was reached by,
+     * and null where it denotes none.
+     *
+     * <p>The one resolution. What kind of position a name makes is {@link Shape}'s answer and is
+     * settled before anything asks this; what is left is finding the declaration that answer is
+     * about, and a reader doing that for itself has a second way to decide what stands at a
+     * position.
+     */
+    static PositionReading.Owner writingFields(TypeSymbol name, Symbols symbols) {
+        return name instanceof TypeSymbol.AtModule at
+                && symbols.declarations().declaration(at) instanceof Hir.Data data
+                ? new PositionReading.Owner(at, data) : null;
     }
 
     /** Every data reachable from {@code data} through spreads, transitively — the set two cases are
      * intersected on. The data itself is not one of them: a case is not its own shared part. */
-    private static Set<TypeName> spreadAncestors(Ast.Data data, Symbols symbols) {
-        Set<TypeName> out = new LinkedHashSet<>();
+    private static Set<TypeSymbol> spreadAncestors(Hir.Data data, Symbols symbols) {
+        Set<TypeSymbol> out = new LinkedHashSet<>();
         collectSpreadAncestors(data, symbols, out);
         return out;
     }
 
-    private static void collectSpreadAncestors(Ast.Data data, Symbols symbols, Set<TypeName> out) {
-        for (Ast.Name inc : data.includes()) {
-            Ast.Data included = spreadTarget(inc, symbols);
-            if (included != null && out.add(inc.denotes())) {
+    private static void collectSpreadAncestors(Hir.Data data, Symbols symbols, Set<TypeSymbol> out) {
+        for (Hir.Name inc : data.includes()) {
+            Hir.Data included = spreadTarget(inc, symbols);
+            if (included != null && out.add(inc.answered().type())) {
                 collectSpreadAncestors(included, symbols, out);
             }
         }
@@ -1063,7 +1207,7 @@ public final class TypeOps {
      * <p>A clause keeps the name it was declared with wherever it arrives from, so a spread carries not
      * only the rule but what an attempt on the spreading type calls it.
      */
-    public static List<Ast.InvariantClause> effectiveInvariants(Ast.Data data, Symbols symbols) {
+    public static List<Hir.InvariantClause> effectiveInvariants(Hir.Data data, Symbols symbols) {
         return effectiveInvariants(null, data, symbols, _ -> null);
     }
 
@@ -1075,10 +1219,10 @@ public final class TypeOps {
      * declaration's name, and gets the settled one wherever {@code form} has nothing to say — which
      * is every declaration another module made, since what travels is the settled form.
      */
-    public static List<Ast.InvariantClause> effectiveInvariants(
-            TypeName named, Ast.Data data, Symbols symbols,
-            Function<TypeName, List<Ast.InvariantClause>> form) {
-        List<Ast.InvariantClause> invs = new ArrayList<>();
+    public static List<Hir.InvariantClause> effectiveInvariants(
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+            Function<TypeSymbol, List<Hir.InvariantClause>> form) {
+        List<Hir.InvariantClause> invs = new ArrayList<>();
         for (Declared one : declaredInvariants(named, data, symbols, form)) {
             invs.add(one.clause());
         }
@@ -1092,8 +1236,16 @@ public final class TypeOps {
      * have written, and a reader told which clause failed on a data that declares none of its own is
      * told about a declaration they would not find. {@code declaredOn} is null where the walk was
      * not given a name to start from.
+     *
+     * <p>{@code ordinal} is which of {@code declaredOn}'s own clauses this is, counted where that
+     * declaration writes them and not where this walk happened to reach it. Two spreads of one type
+     * bring one clause in twice, and a caller keeping one answer per clause has to be able to tell
+     * that from two clauses — which the pair says and neither half of it does. Every representation
+     * of a declaration writes its clauses in the order they were written, so the number means the
+     * same thing in each.
      */
-    public record Declared(TypeName declaredOn, Ast.InvariantClause clause) {}
+    public record Declared(TypeSymbol.AtModule declaredOn, int ordinal,
+                           Hir.InvariantClause clause) {}
 
     /**
      * The same clauses {@link #effectiveInvariants} answers, each with the declaration it was written
@@ -1104,26 +1256,29 @@ public final class TypeOps {
      * taken from it rather than walked again.
      */
     public static List<Declared> declaredInvariants(
-            TypeName named, Ast.Data data, Symbols symbols,
-            Function<TypeName, List<Ast.InvariantClause>> form) {
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+            Function<TypeSymbol, List<Hir.InvariantClause>> form) {
         List<Declared> invs = new ArrayList<>();
-        for (Ast.Name inc : data.includes()) {
-            Ast.Data id = spreadTarget(inc, symbols);
+        for (Hir.Name inc : data.includes()) {
+            Hir.Data id = spreadTarget(inc, symbols);
             if (id != null) {
-                invs.addAll(declaredInvariants(inc.denotes(), id, symbols, form));
+                invs.addAll(declaredInvariants(
+                        inc.answered().type() instanceof TypeSymbol.AtModule at ? at : null,
+                        id, symbols, form));
             }
         }
-        List<Ast.InvariantClause> own = named == null ? null : form.apply(named);
-        for (Ast.InvariantClause clause : own != null ? own : data.invariants()) {
-            invs.add(new Declared(named, clause));
+        List<Hir.InvariantClause> own = named == null ? null : form.apply(named);
+        List<Hir.InvariantClause> wrote = own != null ? own : data.invariants();
+        for (int ordinal = 0; ordinal < wrote.size(); ordinal++) {
+            invs.add(new Declared(named, ordinal, wrote.get(ordinal)));
         }
         return invs;
     }
 
     /** The type a newtype wraps ({@code data X = Y} gives {@code Y}), or null when {@code name} is not
      * a newtype — the implicit inner field is {@code value}. */
-    public static Type newtypeInner(TypeName name, Symbols symbols) {
-        if (symbols.get(name) instanceof Ast.Data d && d.newtype()) {
+    public static Type newtypeInner(TypeSymbol name, Symbols symbols) {
+        if (symbols.declarations().declaration(name) instanceof Hir.Data d && d.newtype()) {
             return fieldTypes(d, symbols).get("value");
         }
         return null;
@@ -1161,7 +1316,7 @@ public final class TypeOps {
      * given position is the position's own question — a behavior's boundary refuses a name the
      * language declares of its own operations, and a fixture's position asks something else again —
      * so what comes back says what the key converts through and nothing about where it may be
-     * written. A boundary turns one into a {@link BoundaryMapKey} once it has admitted the name.
+     * written. A boundary turns one into a {@link CrossingMapKey} once it has admitted the name.
      *
      * <p>The classification itself is this function's alone. A reader that builds a decoder, renders
      * an encoder's keys or lowers a key into the codec IR takes what it needs from the result; none
@@ -1172,7 +1327,7 @@ public final class TypeOps {
     }
 
     private static MapKeyRepresentation classifyMapKey(Type key, Symbols symbols,
-                                                       Set<TypeName> unwrapping) {
+                                                       Set<TypeSymbol> unwrapping) {
         // Exhaustive over the primitives: whether a key has a text form is a question about each one,
         // and a chain of comparisons answers "no" for a primitive added later without being asked.
         if (key instanceof Type.Prim p) {
@@ -1190,7 +1345,11 @@ public final class TypeOps {
         if (!(key instanceof Type.Ref r) || !unwrapping.add(r.name())) {
             return null;   // a newtype reaching itself; DataChecker reports it, this must terminate
         }
-        if (isUnitOnlySum(key, symbols)) {
+        // Whether a key renders as a bare name is the boundary's question and is asked of it. Asked
+        // as `isUnitOnlySum`, this read the language's notion of an enumeration for an answer about
+        // how a value is written, and the two would part the day either moved.
+        if (Boundary.of(key, symbols).representation()
+                instanceof Boundary.Representation.Enumeration) {
             return new MapKeyRepresentation.NamedKey(r.name());
         }
         Type base = newtypeInner(r.name(), symbols);
@@ -1206,30 +1365,21 @@ public final class TypeOps {
      * (issue #161, ADR-0040). A sum with even one field-bearing case keeps the discriminator object.
      */
     public static boolean isUnitOnlySum(Type t, Symbols symbols) {
-        return t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum
+        return t instanceof Type.Ref ref && symbols.declarations().declaration(ref.name()) instanceof Hir.SumData sum
                 && isUnitOnlySum(sum, symbols);
     }
 
-    public static boolean isUnitOnlySum(Ast.SumData sum, Symbols symbols) {
-        List<TypeName> leaves = leafCases(sum, symbols);
+    public static boolean isUnitOnlySum(Hir.SumData sum, Symbols symbols) {
+        List<TypeSymbol> leaves = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
         if (leaves.isEmpty()) {
             return false;
         }
-        for (TypeName leaf : leaves) {
-            if (!(symbols.get(leaf) instanceof Ast.UnitData)) {
+        for (TypeSymbol leaf : leaves) {
+            if (!(symbols.declarations().declaration(leaf) instanceof Hir.UnitData)) {
                 return false;
             }
         }
         return true;
-    }
-
-    /** A sum's leaf cases in declaration order, nested sums flattened where they are written. */
-    public static List<TypeName> leafCases(Ast.SumData sum, Symbols symbols) {
-        Set<TypeName> leaves = new LinkedHashSet<>();
-        for (TypeName c : caseNames(sum)) {
-            leaves.addAll(leafCases(Type.ref(c), symbols));
-        }
-        return List.copyOf(leaves);
     }
 
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
@@ -1250,48 +1400,25 @@ public final class TypeOps {
     }
 
 
-    /**
-     * Whether {@code name} is a type a model declares, as against one the language declares of its own
-     * operations. The two are already told apart where construction is governed — what a compilation
-     * declares answers to {@code constructs} and the language's vocabulary does not — and the same
-     * line decides what a boundary may carry.
-     *
-     * <p>A primitive is neither: it is a scalar the boundary writes, with no declaration anywhere.
-     * {@code Raw} is spelled as one and answers no, having no declaration to be found.
-     */
-    static boolean declaredByAModel(TypeName name, Symbols symbols) {
-        if (name.isPrimitive()) {
-            return !"Raw".equals(name.name());
-        }
-        return symbols.declaredByCompilation(name);
-    }
-
     public static boolean isSingleValueNewtype(Type t, Symbols symbols) {
         return t instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype();
-    }
-
-    /** The ordered primitives: the ones the JVM carries as {@link Comparable}, so {@code <}/{@code >}
-     * and {@code sort} work on them (spec §primitives, §stdlib-list). */
-    static boolean isOrdered(Type t) {
-        return switch (t) {
-            case Type.Prim p -> switch (p) {
-                case INT, STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> true;
-                case BOOL, RAW -> false;
-            };
-            case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
-                 Type.Union _, Type.FnOf _, Type.Open _, Type.Nothing _, Type.Never _,
-                 Type.TupleOf _, Type.Erroneous _ -> false;
-        };
+                && symbols.declarations().declaration(ref.name()) instanceof Hir.Data d && d.newtype();
     }
 
     /**
      * The enumeration two operands of {@code <}/{@code <=}/{@code >}/{@code >=} are ordered by, or
      * null when they are not both values of one. Either side may name it: {@code stage < Won}
      * carries the order on the left, and a case listed by two sums takes the one it is compared with.
+     *
+     * <p>Which types this is asked of decides what it means, so it is not visible outside this
+     * package. Asked of the operands as written it is the nominal admissibility rule, and that is
+     * {@code BinaryElaborator}'s alone: two different newtypes over one enumeration must not meet
+     * here. Asked of what they open to it is how the comparison emits, and that is
+     * {@link Ordering#ofComparison}. The backend reaching past both and asking this itself is how
+     * the same type came to be ordered to one reader and not to another (issue #856).
      */
-    public static TypeName comparisonEnumeration(Type lt, Type rt, Symbols symbols) {
-        TypeName named = orderingEnumeration(lt, symbols);
+    static TypeSymbol comparisonEnumeration(Type lt, Type rt, Symbols symbols) {
+        TypeSymbol named = orderingEnumeration(lt, symbols);
         if (named == null) {
             named = orderingEnumeration(rt, symbols);
         }
@@ -1300,9 +1427,9 @@ public final class TypeOps {
     }
 
     /** Whether {@code t} is that enumeration, one of its leaves, or a union of them. */
-    private static boolean isValueOfEnumeration(Type t, TypeName enumeration, Symbols symbols) {
+    private static boolean isValueOfEnumeration(Type t, TypeSymbol enumeration, Symbols symbols) {
         if (t instanceof Type.Union union) {
-            for (TypeName member : union.members()) {
+            for (TypeSymbol member : union.members()) {
                 if (!isValueOfEnumeration(Type.ref(member), enumeration, symbols)) {
                     return false;
                 }
@@ -1310,8 +1437,8 @@ public final class TypeOps {
             return !union.members().isEmpty();
         }
         return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
-                || (symbols.get(enumeration) instanceof Ast.SumData sum
-                    && leafCases(sum, symbols).contains(ref.name())));
+                || (symbols.declarations().declaration(enumeration) instanceof Hir.SumData sum
+                    && AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols).contains(ref.name())));
     }
 
     /**
@@ -1324,8 +1451,8 @@ public final class TypeOps {
      * be a case of two sums, which place it differently, so no one order is the value's own. The
      * order therefore belongs to the sum and not to the case value.
      */
-    public static TypeName orderingEnumeration(Type t, Symbols symbols) {
-        Set<TypeName> candidates = orderingCandidates(t, symbols);
+    static TypeSymbol orderingEnumeration(Type t, Symbols symbols) {
+        Set<TypeSymbol> candidates = orderingCandidates(t, symbols);
         return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
     }
 
@@ -1335,11 +1462,11 @@ public final class TypeOps {
      * types, and what orders it is the enumeration that lists all of them — so the candidates are
      * intersected across the members rather than each member having to name one on its own.
      */
-    private static Set<TypeName> orderingCandidates(Type t, Symbols symbols) {
+    private static Set<TypeSymbol> orderingCandidates(Type t, Symbols symbols) {
         if (t instanceof Type.Union union) {
-            Set<TypeName> shared = null;
-            for (TypeName member : union.members()) {
-                Set<TypeName> owners = orderingCandidates(Type.ref(member), symbols);
+            Set<TypeSymbol> shared = null;
+            for (TypeSymbol member : union.members()) {
+                Set<TypeSymbol> owners = orderingCandidates(Type.ref(member), symbols);
                 if (owners == null) {
                     return null;
                 }
@@ -1351,24 +1478,26 @@ public final class TypeOps {
             }
             return shared;
         }
-        if (!(t instanceof Type.Ref ref)) {
+        // What the language gives is declared by no module, so no module holds an enumeration
+        // listing it; the lookups below answered nothing for one before they were asked this way.
+        if (!(t instanceof Type.Ref(TypeSymbol.AtModule named))) {
             return null;
         }
-        if (symbols.get(ref.name()) instanceof Ast.SumData sum) {
-            return isUnitOnlySum(sum, symbols) ? Set.of(ref.name()) : null;
+        if (symbols.declarations().declaration(named) instanceof Hir.SumData sum) {
+            return isUnitOnlySum(sum, symbols) ? Set.of(named) : null;
         }
-        if (!(symbols.get(ref.name()) instanceof Ast.UnitData)) {
+        if (!(symbols.declarations().declaration(named) instanceof Hir.UnitData)) {
             return null;
         }
         // A sum and its cases are declared together (a case declared elsewhere cannot join a union
         // here, E1606), so every enumeration that lists this case is in the case's own module. Asking
         // that module rather than what is visible keeps the answer the same in every module that
         // reads the value.
-        Set<TypeName> owners = new LinkedHashSet<>();
-        for (Ast.Def def : symbols.declaredIn(ref.name().module()).values()) {
-            if (def instanceof Ast.SumData s && isUnitOnlySum(s, symbols)
-                    && leafCases(s, symbols).contains(ref.name())) {
-                owners.add(ref.name().sibling(s.name()));
+        Set<TypeSymbol> owners = new LinkedHashSet<>();
+        for (Hir.Def def : symbols.declarations().declaredIn(named.module()).values()) {
+            if (def instanceof Hir.SumData s && isUnitOnlySum(s, symbols)
+                    && AtomSpace.subjectAtoms(Type.ref(s.declares()), symbols).contains(named)) {
+                owners.add(s.declares());
             }
         }
         return owners;
@@ -1397,10 +1526,10 @@ public final class TypeOps {
      */
     public static NewtypeSpine newtypeSpine(Type t, Symbols symbols) {
         List<Layer> layers = new ArrayList<>();
-        Set<TypeName> worn = new LinkedHashSet<>();
+        Set<TypeSymbol> worn = new LinkedHashSet<>();
         Type at = t;
         while (isSingleValueNewtype(at, symbols) && worn.add(((Type.Ref) at).name())) {
-            Ast.Data data = (Ast.Data) symbols.get(((Type.Ref) at).name());
+            Hir.Data data = (Hir.Data) symbols.declarations().declaration(((Type.Ref) at).name());
             layers.add(new Layer(((Type.Ref) at).name(), data));
             Type inner = fieldTypes(data, symbols).get("value");
             if (inner == null) {
@@ -1421,7 +1550,7 @@ public final class TypeOps {
      * it — a failure names a clause of a type, and dropping which type that was leaves a diagnostic
      * with nothing to point at.
      */
-    public record Layer(TypeName named, Ast.Data data) {}
+    public record Layer(TypeSymbol named, Hir.Data data) {}
 
     /**
      * The names wrapped round a value of {@code t}, outermost first.
@@ -1455,7 +1584,7 @@ public final class TypeOps {
      * with that newtype), or {@code null} for anything that is not one. */
     static Type wrapped(Type t, Symbols symbols) {
         if (isSingleValueNewtype(t, symbols)) {
-            return fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
+            return fieldTypes((Hir.Data) symbols.declarations().declaration(((Type.Ref) t).name()), symbols).get("value");
         }
         return null;
     }
@@ -1481,7 +1610,7 @@ public final class TypeOps {
         return null;
     }
 
-    public static Type primType(Ast.RawKind kind) {
+    public static Type primType(Hir.RawKind kind) {
         return switch (kind) {
             case TEXT -> Type.STRING;
             case INT -> Type.INT;
@@ -1508,16 +1637,40 @@ public final class TypeOps {
     }
 
     /**
+     * A reference whose parts have been resolved and whose own type has not been decided yet.
+     *
+     * <p>The one moment there is such a thing, and it is inside {@code Resolve}: the arguments are
+     * {@link Hir} because they have been answered, and there is no {@link Hir.TypeRef} yet because
+     * what it denotes is what {@link #denoted} is being asked for. Naming it is what keeps a
+     * half-built reference — one carrying a type standing in for the answer — from existing at all.
+     */
+    record Reference(WrittenName written, Hir.TypeTerm arg, List<Hir.TypeTerm> tupleElems,
+                     SourcePos anchor) {
+
+        String name() {
+            return written == null ? null : written.canonical();
+        }
+
+        boolean isTuple() {
+            return written == null && tupleElems != null;
+        }
+
+        SourcePos pos() {
+            return written == null ? anchor : written.pos();
+        }
+    }
+
+    /**
      * The type {@code ref} denotes, computed from the reference and the scope it was written in. The
      * one place a written type becomes a {@link Type}; {@code Resolve} calls it once per reference and
-     * everything else reads {@link Ast.TypeRef#denotes()}. Its own arguments are already resolved, so
+     * everything else reads {@link Hir.TypeRef#denotes()}. Its own arguments are already resolved, so
      * a nested reference is read rather than recomputed.
      */
-    static Type denoted(Ast.TypeRef ref, Symbols symbols) {
+    static Type denoted(Reference ref, NameSense symbols) {
         if (ref.isTuple()) {
             List<Type> elems = new ArrayList<>();
-            for (Ast.TypeTerm e : ref.tupleElems()) {
-                elems.add(resolveTerm(e, symbols));
+            for (Hir.TypeTerm e : ref.tupleElems()) {
+                elems.add(resolveTerm(e));
             }
             return Type.tuple(elems);   // (A, B, ...) — a helper/stdlib signature only (ADR-0036)
         }
@@ -1537,7 +1690,7 @@ public final class TypeOps {
                 // a set holds no duplicates, which is a question about equality of its elements
                 Type element = typeArg(ref, symbols, "set", 3,
                         "Set needs a type argument, e.g. Set<String>");
-                requireEquality(element, symbols, ref, false,
+                requireEquality(element, ref, false,
                         "a Set has no duplicate elements, and a function has no value to compare");
                 yield Type.set(element);
             }
@@ -1549,8 +1702,8 @@ public final class TypeOps {
                 // type is a data field or a behavior's input/output.
                 Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
                 Type key = ref.tupleElems() == null
-                        ? Type.STRING : resolveTerm(ref.tupleElems().get(0), symbols);
-                requireEquality(key, symbols, ref, true,
+                        ? Type.STRING : resolveTerm(ref.tupleElems().get(0));
+                requireEquality(key, ref, true,
                         "a Map finds a value by its key, and a function has no value to compare");
                 yield Type.map(key, value);
             }
@@ -1558,17 +1711,24 @@ public final class TypeOps {
                 if (ref.name().startsWith("'")) {
                     yield Type.var(ref.name());   // a type variable, admitted only in the core
                 }
-                TypeName resolved = symbols.resolve(ref.name());
-                if (resolved != null) {
-                    yield resolved.isUnresolved() ? Type.ERRONEOUS : Type.ref(resolved);
+                switch (symbols.scope().resolve(ref.written())) {
+                    case Denotation.Denotes d -> {
+                        yield Type.ref(d.type());
+                    }
+                    // In scope denoting nothing: the import line that could not bring it in was
+                    // reported there, and a use of it takes the error type rather than being
+                    // reported again here.
+                    case Denotation.StandsForNothing ignored -> {
+                        yield Type.ERRONEOUS;
+                    }
+                    case Denotation.NotInScope ignored -> { }
                 }
                 // A union's case names a type where a type goes. A `match` arm has always read it
                 // that way; a declaration reads it the same, which is what lets `Int |
                 // DivisionByZero` be written rather than only met. Asked after the module's own
                 // declarations, so a name a model declares keeps its meaning.
-                TypeName asCase = symbols.resolveCase(ref.name());
-                if (asCase != null && !asCase.isUnresolved()) {
-                    yield Type.ref(asCase);
+                if (symbols.scope().resolveCase(ref.written()) instanceof Denotation.Denotes asCase) {
+                    yield Type.ref(asCase.type());
                 }
                 throw unknownType(ref, symbols);
             }
@@ -1596,10 +1756,10 @@ public final class TypeOps {
      */
     public static UncomparableIn uncomparableCollection(Type t, Symbols symbols) {
         return switch (t) {
-            case Type.SetOf s -> !supportsEquality(s.element(), symbols)
+            case Type.SetOf s -> !supportsEquality(s.element())
                     ? new UncomparableIn.SetElement(s.element())
                     : uncomparableCollection(s.element(), symbols);
-            case Type.MapOf m -> !supportsEquality(m.key(), symbols)
+            case Type.MapOf m -> !supportsEquality(m.key())
                     ? new UncomparableIn.MapKey(m.key())
                     : firstNonNull(uncomparableCollection(m.key(), symbols),
                             uncomparableCollection(m.value(), symbols));
@@ -1623,9 +1783,9 @@ public final class TypeOps {
     }
 
     /** Refuses a collection whose element or key a function makes uncomparable. */
-    private static void requireEquality(Type t, Symbols symbols, Ast.TypeRef at, boolean aMapKey,
+    private static void requireEquality(Type t, Reference at, boolean aMapKey,
                                         String message) {
-        if (!supportsEquality(t, symbols)) {
+        if (!supportsEquality(t)) {
             throw CompileException.of(Diagnostic.at(at.pos())
                     .say(aMapKey
                             ? new TypeMessage.AMapKeyIsComparedAndAFunctionIsNot(Type.show(t))
@@ -1635,7 +1795,7 @@ public final class TypeOps {
     }
 
     /** The single type argument of a built-in constructor, or the error that says it is missing. */
-    private static Type typeArg(Ast.TypeRef ref, Symbols symbols, String key, int width,
+    private static Type typeArg(Reference ref, NameSense symbols, String key, int width,
                                 String message) {
         if (ref.arg() == null) {
             throw CompileException.of(Diagnostic.at(ref.pos(), width)
@@ -1647,7 +1807,7 @@ public final class TypeOps {
                     })
                     .build());
         }
-        return resolveTerm(ref.arg(), symbols);
+        return resolveTerm(ref.arg());
     }
 
     /**
@@ -1655,33 +1815,33 @@ public final class TypeOps {
      * wrong, since the qualifier narrows it: the qualifier names no module, the module declares no
      * such type, or it declares it and does not expose it.
      */
-    private static CompileException unknownType(Ast.TypeRef ref, Symbols symbols) {
+    private static CompileException unknownType(Reference ref, NameSense symbols) {
         return unknownType(ref.written(), symbols);
     }
 
-    static CompileException unknownType(WrittenName written, Symbols symbols) {
+    public static CompileException unknownType(WrittenName written, NameSense symbols) {
         String canonical = written.canonical();
         int dot = canonical.lastIndexOf('.');
         if (dot >= 0) {
             String qualifier = canonical.substring(0, dot);
             String name = canonical.substring(dot + 1);
-            String module = symbols.moduleOfQualifier(qualifier);
+            String module = symbols.scope().moduleOfQualifier(qualifier);
             if (module == null) {
                 return CompileException.of(Diagnostic.say(new ModuleMessage.NoModuleOfThatName(qualifier, name))
                                 .at(written.reportedAt())
-                                .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
+                                .suggestion(Suggest.candidate(qualifier, symbols.scope().qualifiers()))
                                 .build());
             }
-            boolean declared = symbols.contains(new TypeName(module, name));
+            boolean declared = symbols.declares(new TypeKey(module, name));
             return CompileException.of(Diagnostic.at(written.reportedAt())
                             .say(declared
                                     ? new ModuleMessage.ItIsDeclaredThereAndNotExposed(name, module)
                                     : new ModuleMessage.TheModuleDeclaresNoSuchQualifiedName(name,
                                             module))
-                            .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
+                            .suggestion(Suggest.candidate(name, symbols.declaredNamesIn(module)))
                             .build());
         }
-        Set<String> known = symbols.namesInScope();
+        Set<String> known = symbols.scope().namesInScope();
         return CompileException.of(Diagnostic
                         .at(written.reportedAt())
                         

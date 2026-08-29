@@ -1,9 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.stdlib.LibraryNames;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 
 import java.util.List;
@@ -31,12 +31,13 @@ final class StdlibNames {
      * reader the other does not exist. Both ways of reaching the library are offered too, because
      * both are what the language says: write the qualifier, or import the name and write it bare.
      */
-    static CompileException writtenBare(String written, String bare, Region region) {
-        List<String> candidates = Prelude.qualifiedCandidates(bare);
+    static CompileException writtenBare(LibraryNames library, String written, String bare,
+                                        Region region) {
+        List<String> candidates = library.qualifiedCandidates(bare);
         if (candidates.isEmpty()) {
             return null;
         }
-        String list = Prelude.candidateList(bare);
+        String list = library.candidateList(bare);
         return CompileException.of(Diagnostic
                         .at(region).say(new NameMessage.WriteAStandardLibraryNameQualified(written, list)).build());
     }

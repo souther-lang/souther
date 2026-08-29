@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import java.util.List;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Severity;
 
@@ -94,6 +95,16 @@ class CompileInvariantDischargeTest {
                 .filter(d -> d.severity() == Severity.WARNING).count();
     }
 
+    /** Every warning code a compile answered with, in order. Asked for by code where a model has
+     *  something other than a construction to be told about, so that the silence this check is
+     *  about is measured rather than the silence of every check at once. */
+    private static List<String> warningCodes(Compiler.Compiled c) {
+        return c.warnings().stream()
+                .filter(d -> d.severity() == Severity.WARNING)
+                .map(souther.compiler.diag.Diagnostic::code)
+                .toList();
+    }
+
     private static boolean hasWarning(Compiler.Compiled c, String code) {
         return c.warnings().stream()
                 .anyMatch(d -> d.severity() == Severity.WARNING && code.equals(d.code()));
@@ -169,7 +180,7 @@ class CompileInvariantDischargeTest {
                 data Empty
                 data Tags = Set<String>
                     invariant Bool.not(Set.isEmpty(value))
-                behavior build : (s: Set<String>) -> Tags | Empty constructs Tags, Empty
+                behavior build : (s: Set<String>) -> Tags | Empty constructs Tags
                 let build (s) = {
                     guard Set.size(s) >= 1
                         else Empty
@@ -187,7 +198,7 @@ class CompileInvariantDischargeTest {
                 data Empty
                 data Items = List<String>
                     invariant Bool.not(List.isEmpty(value))
-                behavior build : (xs: List<String>) -> Items | Empty constructs Items, Empty
+                behavior build : (xs: List<String>) -> Items | Empty constructs Items
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else Empty
@@ -205,7 +216,7 @@ class CompileInvariantDischargeTest {
                 data Empty
                 data Rates = Map<String, Int>
                     invariant Bool.not(Map.isEmpty(value))
-                behavior build : (m: Map<String, Int>) -> Rates | Empty constructs Rates, Empty
+                behavior build : (m: Map<String, Int>) -> Rates | Empty constructs Rates
                 let build (m) = {
                     guard Map.size(m) >= 1
                         else Empty
@@ -223,7 +234,7 @@ class CompileInvariantDischargeTest {
                 data Empty
                 data Code = String
                     invariant Bool.not(String.isEmpty(value))
-                behavior build : (s: String) -> Code | Empty constructs Code, Empty
+                behavior build : (s: String) -> Code | Empty constructs Code
                 let build (s) = {
                     guard String.length(s) >= 1
                         else Empty
@@ -294,7 +305,7 @@ class CompileInvariantDischargeTest {
                 data NoItems
                 data Lines = List<Int>
                     invariant List.length(value) >= 1
-                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else NoItems
@@ -314,7 +325,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Int>
                     invariant List.length(value) >= 1
                 behavior build : (xs: List<Int>, ys: List<Int>) -> Lines | NoItems
-                    constructs Lines, NoItems
+                    constructs Lines
                 let build (xs, ys) = {
                     guard List.length(ys) >= 1
                         else NoItems
@@ -332,7 +343,7 @@ class CompileInvariantDischargeTest {
                 data TooShort
                 data Name = String
                     invariant String.length(value) >= 3
-                behavior build : (s: String) -> Name | TooShort constructs Name, TooShort
+                behavior build : (s: String) -> Name | TooShort constructs Name
                 let build (s) = {
                     guard String.length(s) >= 3
                         else TooShort
@@ -363,7 +374,7 @@ class CompileInvariantDischargeTest {
                 data Empty
                 data Tags = Set<String>
                     invariant Set.size(value) >= 1
-                behavior build : (s: Set<String>) -> Tags | Empty constructs Tags, Empty
+                behavior build : (s: Set<String>) -> Tags | Empty constructs Tags
                 let build (s) = {
                     guard Set.size(s) >= 1
                         else Empty
@@ -381,7 +392,7 @@ class CompileInvariantDischargeTest {
                 data Empty
                 data Index = Map<String, Int>
                     invariant Map.size(value) >= 1
-                behavior build : (m: Map<String, Int>) -> Index | Empty constructs Index, Empty
+                behavior build : (m: Map<String, Int>) -> Index | Empty constructs Index
                 let build (m) = {
                     guard Map.size(m) >= 1
                         else Empty
@@ -432,7 +443,7 @@ class CompileInvariantDischargeTest {
                 data Matches = { accounts: List<Int>, contacts: List<Int> }
                     invariant List.length(accounts) + List.length(contacts) >= 1
                 behavior build : (xs: List<Int>, ys: List<Int>) -> Matches | Empty
-                    constructs Matches, Empty
+                    constructs Matches
                 let build (xs, ys) = {
                     guard List.length(xs) + List.length(ys) >= 1
                         else Empty
@@ -451,7 +462,7 @@ class CompileInvariantDischargeTest {
                 data Matches = { accounts: List<Int>, contacts: List<Int> }
                     invariant List.length(accounts) + List.length(contacts) >= 2
                 behavior build : (xs: List<Int>, ys: List<Int>) -> Matches | Empty
-                    constructs Matches, Empty
+                    constructs Matches
                 let build (xs, ys) = {
                     guard List.length(xs) + List.length(ys) >= 1
                         else Empty
@@ -487,7 +498,7 @@ class CompileInvariantDischargeTest {
                 data Name = String
                 data Person = { name: Name }
                     invariant String.length(name.value) >= 3
-                behavior build : (n: Name) -> Person | TooShort constructs Person, TooShort
+                behavior build : (n: Name) -> Person | TooShort constructs Person
                 let build (n) = {
                     guard String.length(n.value) >= 3
                         else TooShort
@@ -508,7 +519,7 @@ class CompileInvariantDischargeTest {
                 data Outer = Inner
                 data Box = { held: Outer }
                     invariant String.length(held.value.value) >= 3
-                behavior build : (o: Outer) -> Box | TooShort constructs Box, TooShort
+                behavior build : (o: Outer) -> Box | TooShort constructs Box
                 let build (o) = {
                     guard String.length(o.value.value) >= 3
                         else TooShort
@@ -544,7 +555,7 @@ class CompileInvariantDischargeTest {
                 data Person = { name: Name }
                     invariant String.length(name.value) >= 3
                 behavior build : (n: Name, other: Name) -> Person | TooShort
-                    constructs Person, TooShort
+                    constructs Person
                 let build (n, other) = {
                     guard String.length(other.value) >= 3
                         else TooShort
@@ -564,7 +575,7 @@ class CompileInvariantDischargeTest {
                 data NoItems
                 data Lines = List<Int>
                     invariant List.length(value) >= 1
-                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else NoItems
@@ -584,7 +595,7 @@ class CompileInvariantDischargeTest {
                 data Duplicate
                 data Lines = List<Int>
                     invariant List.allDistinctBy(x -> x, value)
-                behavior build : (xs: List<Int>) -> Lines | Duplicate constructs Lines, Duplicate
+                behavior build : (xs: List<Int>) -> Lines | Duplicate constructs Lines
                 let build (xs) = {
                     guard List.allDistinctBy(x -> x, xs)
                         else Duplicate
@@ -617,7 +628,7 @@ class CompileInvariantDischargeTest {
                 data Row = { a: Int, b: Int }
                 data Rows = List<Row>
                     invariant List.allDistinctBy(r -> r.b, value)
-                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows
                 let build (xs) = {
                     guard List.allDistinctBy(r -> r.a, xs)
                         else Duplicate
@@ -637,7 +648,7 @@ class CompileInvariantDischargeTest {
                 data Row = { a: Int, b: Int }
                 data Rows = List<Row>
                     invariant List.allDistinctBy(r -> r.a, value)
-                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows
                 let build (xs) = {
                     guard List.allDistinctBy(row -> row.a, xs)
                         else Duplicate
@@ -656,7 +667,7 @@ class CompileInvariantDischargeTest {
                 data Row = { a: Int, b: Int }
                 data Rows = List<Row>
                     invariant List.allDistinctBy(.a, value)
-                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows
                 let build (xs) = {
                     guard List.allDistinctBy(r -> r.a, xs)
                         else Duplicate
@@ -674,7 +685,7 @@ class CompileInvariantDischargeTest {
                 data Unknown
                 data Known = String
                     invariant List.contains(value, ["a", "b"])
-                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                behavior build : (s: String) -> Known | Unknown constructs Known
                 let build (s) = {
                     guard List.contains(s, ["a", "b"])
                         else Unknown
@@ -693,7 +704,7 @@ class CompileInvariantDischargeTest {
                 data Unknown
                 data Known = String
                     invariant List.contains(value, ["a\\", \\"b"])
-                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                behavior build : (s: String) -> Known | Unknown constructs Known
                 let build (s) = {
                     guard List.contains(s, ["a", "b"])
                         else Unknown
@@ -711,7 +722,7 @@ class CompileInvariantDischargeTest {
                 data Unknown
                 data Known = String
                     invariant List.contains(value, ["a\\nb"])
-                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                behavior build : (s: String) -> Known | Unknown constructs Known
                 let build (s) = {
                     guard List.contains(s, ["a\\\\nb"])
                         else Unknown
@@ -729,7 +740,7 @@ class CompileInvariantDischargeTest {
                 data Malformed
                 data Code = String
                     invariant String.matches("[A-Z]{2}-[0-9]{4}", value)
-                behavior build : (s: String) -> Code | Malformed constructs Code, Malformed
+                behavior build : (s: String) -> Code | Malformed constructs Code
                 let build (s) = {
                     guard String.matches("[A-Z]{2}-[0-9]{4}", s)
                         else Malformed
@@ -747,7 +758,7 @@ class CompileInvariantDischargeTest {
                 data Malformed
                 data Code = String
                     invariant String.matches("[A-Z]{2}-[0-9]{4}", value)
-                behavior build : (s: String) -> Code | Malformed constructs Code, Malformed
+                behavior build : (s: String) -> Code | Malformed constructs Code
                 let build (s) = {
                     guard String.matches("[A-Z]{3}-[0-9]{4}", s)
                         else Malformed
@@ -782,7 +793,7 @@ class CompileInvariantDischargeTest {
                 data Ok
                 data Lines = List<Int>
                     invariant List.allDistinctBy(x -> x, value)
-                behavior build : (xs: List<Int>) -> Lines | Ok constructs Lines, Ok
+                behavior build : (xs: List<Int>) -> Lines | Ok constructs Lines
                 let build (xs) = {
                     guard Bool.not(List.allDistinctBy(x -> x, xs))
                         else Ok
@@ -838,7 +849,7 @@ class CompileInvariantDischargeTest {
                 data Bounded = { items: List<Int>, floor: Int }
                     invariant List.all(x -> x >= floor, items)
                 behavior build : (xs: List<Int>, lo: Int, hi: Int) -> Bounded | TooSmall
-                    constructs Bounded, TooSmall
+                    constructs Bounded
                 let build (xs, lo, hi) = {
                     guard List.all(x -> x >= hi, xs)
                         else TooSmall
@@ -856,7 +867,7 @@ class CompileInvariantDischargeTest {
                 data Duplicate
                 data Lines = List<Int>
                     invariant List.allDistinctBy(x -> x, value)
-                behavior build : (xs: List<Int>) -> Lines | Duplicate constructs Lines, Duplicate
+                behavior build : (xs: List<Int>) -> Lines | Duplicate constructs Lines
                 let build (xs) = {
                     guard List.allDistinctBy(x -> x, xs)
                         else Duplicate
@@ -877,7 +888,7 @@ class CompileInvariantDischargeTest {
                 data NoItems
                 data Lines = List<Int>
                     invariant List.length(value) >= 1
-                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else NoItems
@@ -895,7 +906,7 @@ class CompileInvariantDischargeTest {
                 data NoItems
                 data Lines = List<Int>
                     invariant List.length(value) >= 1
-                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else NoItems
@@ -914,7 +925,7 @@ class CompileInvariantDischargeTest {
                 data NoItems
                 data Lines = List<Int>
                     invariant List.length(value) >= 1
-                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else NoItems
@@ -934,7 +945,7 @@ class CompileInvariantDischargeTest {
                 data TooMany
                 data Lines = List<Int>
                     invariant List.length(value) <= 10
-                behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines, TooMany
+                behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines
                 let build (xs) = {
                     guard List.length(xs) <= 10
                         else TooMany
@@ -953,7 +964,7 @@ class CompileInvariantDischargeTest {
                 data Row = { a: Int }
                 data Rows = List<Row>
                     invariant List.allDistinctBy(r -> r.a, value)
-                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows
                 let build (xs) = {
                     guard List.allDistinctBy(r -> r.a, xs)
                         else Duplicate
@@ -972,7 +983,7 @@ class CompileInvariantDischargeTest {
                 data Row = { a: Int }
                 data Rows = List<Row>
                     invariant List.all(r -> r.a >= 1, value)
-                behavior build : (xs: List<Row>) -> Rows | OutOfRange constructs Rows, OutOfRange
+                behavior build : (xs: List<Row>) -> Rows | OutOfRange constructs Rows
                 let build (xs) = {
                     guard List.all(r -> r.a >= 1, xs)
                         else OutOfRange
@@ -990,7 +1001,7 @@ class CompileInvariantDischargeTest {
                 data Missing
                 data Rows = List<Int>
                     invariant List.contains(1, value)
-                behavior build : (xs: List<Int>) -> Rows | Missing constructs Rows, Missing
+                behavior build : (xs: List<Int>) -> Rows | Missing constructs Rows
                 let build (xs) = {
                     guard List.contains(1, xs)
                         else Missing
@@ -1009,7 +1020,7 @@ class CompileInvariantDischargeTest {
                 data Duplicate
                 data Rows = List<Int>
                     invariant List.allDistinctBy(x -> x, value)
-                behavior build : (xs: List<Int>) -> Rows | Duplicate constructs Rows, Duplicate
+                behavior build : (xs: List<Int>) -> Rows | Duplicate constructs Rows
                 let build (xs) = {
                     guard List.allDistinctBy(x -> x, xs)
                         else Duplicate
@@ -1034,7 +1045,7 @@ class CompileInvariantDischargeTest {
                     invariant List.allDistinctBy(.product, value)
                 let toLine (r: Row): Line = Line { product = r.product, label = r.note }
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
-                    constructs Lines, Line, Duplicate
+                    constructs Lines, Line
                 let build (xs) = {
                     guard List.allDistinctBy(.product, xs)
                         else Duplicate
@@ -1056,7 +1067,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Line>
                     invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
-                    constructs Lines, Line, Duplicate
+                    constructs Lines, Line
                 let build (xs) = {
                     guard List.allDistinctBy(.sku, xs)
                         else Duplicate
@@ -1082,7 +1093,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Line>
                     invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>, spare: Row) -> Lines | Duplicate
-                    constructs Lines, Line, Duplicate
+                    constructs Lines, Line
                 let build (xs, spare) = {
                     guard List.allDistinctBy(.sku, xs)
                         else Duplicate
@@ -1109,7 +1120,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Line>
                     invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
-                    constructs Lines, Line, Duplicate
+                    constructs Lines, Line
                 let build (xs) = {
                     guard List.allDistinctBy(.sku, xs)
                         else Duplicate
@@ -1130,7 +1141,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Line>
                     invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
-                    constructs Lines, Line, Duplicate
+                    constructs Lines, Line
                 let build (xs) = {
                     guard List.allDistinctBy(.name, xs)
                         else Duplicate
@@ -1152,7 +1163,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Line>
                     invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
-                    constructs Lines, Line, Duplicate
+                    constructs Lines, Line
                 let build (xs) = {
                     guard List.allDistinctBy(.sku, xs)
                         else Duplicate
@@ -1176,7 +1187,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Line>
                     invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate | NoLines
-                    constructs Lines, Line, Duplicate, NoLines
+                    constructs Lines, Line
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else NoLines
@@ -1199,7 +1210,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Line>
                     invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
-                    constructs Lines, Line, Duplicate
+                    constructs Lines, Line
                 let build (xs) = {
                     guard List.allDistinctBy(.product, xs)
                         else Duplicate
@@ -1239,7 +1250,7 @@ class CompileInvariantDischargeTest {
                 data Ok
                 data AtLeastTwo = Int
                     invariant value >= 2
-                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo, Ok
+                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo
                 let build (a, b) = {
                     guard a <= b
                         else Ok
@@ -1250,7 +1261,10 @@ class CompileInvariantDischargeTest {
                     AtLeastTwo(a)
                 }
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+        // The guards contradict, so the construction under them is not a value the model builds
+        // and nothing is said about it. What is said is that the branch is dead, which is the other
+        // reading of the same contradiction and the thing an author can act on.
+        assertEquals(List.of("E1327"), warningCodes(Compiler.compileWithWarnings(m)),
                 "an unreachable construction is neither violated nor possibly violated");
     }
 
@@ -1261,7 +1275,7 @@ class CompileInvariantDischargeTest {
                 data Ok
                 data AtLeastTwo = Int
                     invariant value >= 2
-                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo, Ok
+                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo
                 let build (a, b) = {
                     guard a >= 1
                         else Ok
@@ -1272,7 +1286,7 @@ class CompileInvariantDischargeTest {
                     AtLeastTwo(a)
                 }
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+        assertEquals(List.of("E1327"), warningCodes(Compiler.compileWithWarnings(m)),
                 "the difference asserted last closes the same contradiction");
     }
 
@@ -1284,7 +1298,7 @@ class CompileInvariantDischargeTest {
                 data Ok
                 data Pair = { left: Int, right: Int }
                     invariant left /= right
-                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair, Ok
+                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair
                 let build (a, b) =
                     if a == b then Ok else Pair { left = a, right = b }
                 """;
@@ -1299,7 +1313,7 @@ class CompileInvariantDischargeTest {
                 data Ok
                 data Pair = { left: Int, right: Int }
                     invariant right /= left
-                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair, Ok
+                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair
                 let build (a, b) =
                     if a == b then Ok else Pair { left = a, right = b }
                 """;
@@ -1331,7 +1345,7 @@ class CompileInvariantDischargeTest {
                 data Lines = List<Int>
                     invariant List.length(value) >= 1
                            && List.length([1 | List.length(value) >= 1]) >= 1
-                behavior build : (xs: List<Int>) -> Lines | Ok constructs Lines, Ok
+                behavior build : (xs: List<Int>) -> Lines | Ok constructs Lines
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else Ok
@@ -1359,7 +1373,7 @@ class CompileInvariantDischargeTest {
                     invariant nonNegative = value >= 0m
                 data Bal = { principal: Yen, outstanding: Decimal }
                     invariant outstandingWithinPrincipal = outstanding <= principal.value
-                behavior take : (bal: Bal, x: Decimal, y: Decimal) -> M | No constructs M, No
+                behavior take : (bal: Bal, x: Decimal, y: Decimal) -> M | No constructs M
                 let take (bal, x, y) = {
                     guard x - y <= bal.outstanding else No
                     M { cap = bal.principal.value, v = x - y }
@@ -1380,7 +1394,7 @@ class CompileInvariantDischargeTest {
                     invariant nonNegative = value >= 0m
                 data Bal = { principal: Yen, outstanding: Decimal }
                     invariant outstandingWithinPrincipal = outstanding <= principal.value
-                behavior take : (bal: Bal, x: Decimal, y: Decimal) -> M | No constructs M, No
+                behavior take : (bal: Bal, x: Decimal, y: Decimal) -> M | No constructs M
                 let take (bal, x, y) = {
                     let d = x - y
                     guard d <= bal.outstanding else No
@@ -1402,7 +1416,7 @@ class CompileInvariantDischargeTest {
                 data Small = { s: Decimal }
                     invariant under = s <= 100m
                 behavior take : (cap: Capped, x: Decimal, y: Decimal) -> Small | No
-                    constructs Small, No
+                    constructs Small
                 let take (cap, x, y) = {
                     guard x - y <= cap.c else No
                     Small { s = x - y }

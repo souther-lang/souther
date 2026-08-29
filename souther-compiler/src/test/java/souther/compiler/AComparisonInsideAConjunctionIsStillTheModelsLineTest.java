@@ -1,10 +1,12 @@
 package souther.compiler;
 
+import souther.compiler.query.Measurement;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
@@ -40,11 +42,9 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
             data Manual
 
             behavior alone : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let alone (r) = if r.cost <= 100000 then Auto else Manual
 
             behavior inAConjunction : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let inAConjunction (r) =
                 if r.cost >= 0 && r.cost <= 100000 then Auto else Manual
 
@@ -57,7 +57,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
 
     private static String blockOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
         StringBuilder block = new StringBuilder();
@@ -84,14 +84,14 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
     /** And the position is no longer one nothing was established about. */
     @Test
     void thePositionIsNoLongerReportedAsUnread() {
-        assertFalse(blockOf("inAConjunction").contains("not read: r.cost"),
+        assertFalse(notReadAbout(blockOf("inAConjunction"), "r.cost"),
                 blockOf("inAConjunction"));
     }
 
     /** The edge a row can reach through the arm that proves the comparison ran is owed as ever. */
     @Test
     void theEdgeOnTheSideTheConjunctionAdmitsIsStillOwed() {
-        assertTrue(blockOf("inAConjunction").contains("no row is at inAConjunction/r.cost = 100000"),
+        assertTrue(blockOf("inAConjunction").contains("no row is at the ON point inAConjunction/r.cost = 100000"),
                 blockOf("inAConjunction"));
     }
 
@@ -104,23 +104,38 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
      */
     @Test
     void theEdgeOnTheOtherSideIsOwedTheSame() {
-        assertEquals(new BoundaryAssessment.Coverage.Missed(),
-                coverageAt("inAConjunction", "inAConjunction/r.cost", "100001"));
+        assertEquals(new ItemAssessment.Coverage.NoHit(),
+coverageAt("inAConjunction", "inAConjunction/r.cost", "100001").made().orElseThrow());
     }
 
     /** What the rows established about one line of one behavior. */
-    private static BoundaryAssessment.Coverage coverageAt(String behavior, String axis,
+    private static Measurement<ItemAssessment.Coverage> coverageAt(String behavior, String axis,
                                                           String value) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, List<BoundaryAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
+        Map<String, List<BorderAssessment>> boundaries =
+                Adequacy.boundariesOf(compilation.db(), "example.repro");
         assertNotNull(boundaries, "the model under test compiles");
-        return boundaries.get(behavior).stream()
-                .filter(line -> line.axis().equals(axis) && line.value().equals(value))
+        return BorderAssessment.pointsOf(boundaries.get(behavior)).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .filter(p -> p.border().axis().equals(axis) && value.equals(p.against()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no line at " + axis + " = " + value))
-                .coverage();
+                .owed().coverage();
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

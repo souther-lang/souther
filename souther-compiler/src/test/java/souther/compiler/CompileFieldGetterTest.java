@@ -35,7 +35,7 @@ class CompileFieldGetterTest {
         BytesClassLoader loader = new BytesClassLoader(
                 Compiler.compile(NEWTYPE.formatted(mapExpr)), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("ids", List.of("a", "b", "c")));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         return (List<Object>) m.get("vs");
@@ -90,7 +90,7 @@ class CompileFieldGetterTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("rows", List.of(Map.of("n", 1L), Map.of("n", 2L))));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(List.of(1L, 2L), m.get("ns"));
     }

@@ -1,11 +1,16 @@
 package souther.compiler;
 
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.observe.ArmObservation;
+import souther.compiler.source.SourceId;
+
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
+import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import java.util.List;
@@ -13,6 +18,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -46,17 +52,17 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
             """;
 
     private static ModulePath published() {
-        Map<String, byte[]> classes = Compiler.compile(PUBLISHED);
-        return classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compile(PUBLISHED);
+        return ModulePath.of(classes);
     }
 
     private static RowOutcome onlyRowOf(String source, EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(List.of(source), published());
         compilation.withEvaluationPolicy(policy);
         compilation.answerEverything();
-        String sourceId = compilation.exampleSourcesOf("app.uses").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("app.uses").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("app.uses", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("app.uses", sourceId, ArmObservation.OMIT))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);
@@ -109,7 +115,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                 """, EvaluationPolicy.of(50_000L));
 
         assertEquals(FailurePhase.STEP_LIMIT, row.failurePhase());
-        assertEquals(50_000L, row.stepsSpent(), "it spent the budget inside the dependency");
+        assertEquals(50_000L, steps(row), "it spent the budget inside the dependency");
     }
 
     /**
@@ -122,7 +128,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
      */
     @Test
     void aBehaviorBodyThatStaysInTheJarIsCountedToo() {
-        Map<String, byte[]> jar = Compiler.compile("""
+        Map<String, ClassFileImage> jar = Compiler.compile("""
                 module lib.svc exposing ( Amount, spin )
 
                 data Amount = Int
@@ -147,18 +153,18 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
 
                 example bill
                   | "reaches the dependency body": (Amount(1)) -> Receipt { total = Amount(0) }
-                """), jar::get);
+                """), ModulePath.of(jar));
         compilation.withEvaluationPolicy(EvaluationPolicy.of(50_000L));
         compilation.answerEverything();
 
         assertFalse(compilation.db()
-                        .ask(new Output.EvaluationLinked("app.calls", Output.CoverageMode.NONE))
-                        .value().containsKey("lib.svc.Spin$Impl"),
+                        .ask(new Output.EvaluationLinked("app.calls", ArmObservation.OMIT))
+                        .value().classes().containsKey(Emitted.impl("lib.svc", "spin")),
                 "the body is not regenerated here — it is taken from the jar and counted there");
 
-        String sourceId = compilation.exampleSourcesOf("app.calls").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("app.calls").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("app.calls", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("app.calls", sourceId, ArmObservation.OMIT))
                 .value().rows();
 
         assertEquals(FailurePhase.STEP_LIMIT, rows.get(0).failurePhase(),
@@ -180,10 +186,18 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                 """), name -> null);
         compilation.answerEverything();
 
-        assertNull(compilation.failure(compilation.db().allReports()));
+        assertNull(compilation.failure());
         assertTrue(compilation.db()
-                        .ask(new Output.EvaluationLinked("app.alone", Output.CoverageMode.NONE))
+                        .ask(new Output.EvaluationLinked("app.alone", ArmObservation.OMIT))
                         .value() != null,
                 "nothing on the path is not a class this compile failed to produce");
     }
+
+    /** What a row spent: the counted work of its whole evaluation, fixtures and application alike,
+     * from a row whose counting was read. */
+    private static long steps(RowOutcome row) {
+        return assertInstanceOf(Counting.Read.class, row.run().counting(),
+                "the row came back, so its counting was read").steps();
+    }
+
 }

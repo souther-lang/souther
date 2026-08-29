@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.types.BinOp;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
@@ -32,11 +33,47 @@ public record InvariantBound(boolean lower, Endpoint end) {
     private static final String VALUE = "value";
 
     /**
-     * What {@code clause} says about a value on {@code carrier}, or empty where it says nothing a
-     * range can hold.
+     * What a reading of one ordered rule came to.
+     *
+     * <p>Three answers and not two. A rule either places an end, or states none this reads, or
+     * states one the order does not reach — and the third was being given the second's answer. They
+     * are opposite facts: nothing follows about a position from a rule nobody read, and everything
+     * follows from a rule that steps past the last value there is. Told apart here, at the one place
+     * an ordered rule is read, so that a reader cannot arrive at the wrong one by leaving a case out.
+     */
+    public sealed interface Read {
+
+        /** The end the rule places. */
+        record AnEnd(InvariantBound bound) implements Read {}
+
+        /**
+         * The rule states no end this reading has a word for.
+         *
+         * <p>An equality states both ends at once and a disequality states neither; a literal the
+         * order does not read is not an end either. What they share is that this says nothing about
+         * where the position stops, and a reader may narrow nothing by them.
+         */
+        record NoEnd() implements Read {}
+
+        /**
+         * The rule states an end past the last value of the order, so it admits nothing.
+         *
+         * <p>Reached where a strict end is sharpened onto the value beside the one named and the
+         * order has none there: one past the last case of an enumeration, one past the last day a
+         * calendar reaches, one past the greatest whole number. The position holds no value, which
+         * is a fact about the rule and not a limit of this reading.
+         */
+        record PastWhereTheOrderStops() implements Read {}
+    }
+
+    private static final Read NO_END = new Read.NoEnd();
+    private static final Read PAST_THE_END = new Read.PastWhereTheOrderStops();
+
+    /**
+     * What {@code clause} says about a value on {@code carrier}.
      *
      * <p>The one reading of an ordered rule. Which literals a rule may be bounded by and how its
-     * values are spaced are facts about what carries the value, so both come from the carrier; the
+     * values are spaced are facts about the order the value sits on, so both come from the carrier; the
      * shape of the clause, which side of it the value is on, and where a strict comparison leaves the
      * end are the same questions whatever the values are.
      *
@@ -45,43 +82,43 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * another reader called unreadable, and every boundary of the value it sat in — its siblings'
      * included — was downgraded to one nothing promises is writable.
      */
-    public static Optional<InvariantBound> of(Ast.Expr clause, Carrier carrier) {
-        if (carrier == null || !(clause instanceof Ast.Binary bin)) {
-            return Optional.empty();
+    public static Read of(Hir.Expr clause, Carrier carrier) {
+        if (carrier == null || !(clause instanceof Hir.Binary bin)) {
+            return NO_END;
         }
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
-        Ast.Expr left = bin.left();
-        Ast.Expr right = bin.right();
-        Ast.BinOp op = bin.op();
+        Hir.Expr left = bin.left();
+        Hir.Expr right = bin.right();
+        BinOp op = bin.op();
         if (!isValue(left) && isValue(right)) {
-            Ast.Expr swap = left;
+            Hir.Expr swap = left;
             left = right;
             right = swap;
             op = mirrored(op);
         }
         if (!isValue(left)) {
-            return Optional.empty();
+            return NO_END;
         }
         Place bound = carrier.literalOf(right);
         if (bound == null) {
-            return Optional.empty();
+            return NO_END;
         }
         return ordered(op, bound, carrier);
     }
 
     /**
-     * What {@code clause} says about the number {@code measure} takes of the value, or empty where it
-     * says nothing a range can hold.
+     * What {@code clause} says about the number {@code measure} takes of the value.
      *
      * <p>The same reading one operand in. A size is a whole number, so a strict bound names the
      * adjacent one exactly as an {@code Int}'s does, and which size call this is does not come into
      * it — every one of them counts something.
      */
-    public static Optional<InvariantBound> ofSize(Ast.Expr clause, ValueName measure) {
+    public static Read ofSize(Hir.Expr clause, ValueName measure) {
         // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
         // where one does.
         return sizeComparedIn(clause, measure, VALUE)
-                .flatMap(read -> ordered(read.op(), Count.of(read.count()), Carrier.WHOLE));
+                .map(read -> ordered(read.op(), Count.of(read.count()), Carrier.WHOLE))
+                .orElse(NO_END);
     }
 
     /**
@@ -90,7 +127,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param op    the operator, with the count on the left however the clause was spelled
      * @param count what it is compared against
      */
-    public record SizeComparison(Ast.BinOp op, BigDecimal count) {}
+    public record SizeComparison(BinOp op, BigDecimal count) {}
 
     /**
      * The comparison {@code clause} makes about {@code measure} taken of {@code subject}, or empty
@@ -103,16 +140,16 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * itself. Recognised here so that the shape is read in one place and what it means in as many as
      * there are questions.
      */
-    public static Optional<SizeComparison> sizeComparedIn(Ast.Expr clause, ValueName measure,
+    public static Optional<SizeComparison> sizeComparedIn(Hir.Expr clause, ValueName measure,
                                                           String subject) {
-        if (!(clause instanceof Ast.Binary bin)) {
+        if (!(clause instanceof Hir.Binary bin)) {
             return Optional.empty();
         }
-        Ast.Expr left = bin.left();
-        Ast.Expr right = bin.right();
-        Ast.BinOp op = bin.op();
+        Hir.Expr left = bin.left();
+        Hir.Expr right = bin.right();
+        BinOp op = bin.op();
         if (!takesSizeOf(left, measure, subject) && takesSizeOf(right, measure, subject)) {
-            Ast.Expr swap = left;
+            Hir.Expr swap = left;
             left = right;
             right = swap;
             op = mirrored(op);
@@ -139,89 +176,54 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param op    the comparison, with the coordinate on its left
      * @param bound what the coordinate is compared against
      */
-    static Optional<InvariantBound> at(Ast.BinOp op, Ast.Expr bound, Carrier carrier) {
+    static Read at(BinOp op, Hir.Expr bound, Carrier carrier) {
         if (carrier == null || bound == null) {
-            return Optional.empty();
+            return NO_END;
         }
         Place at = carrier.literalOf(bound);
-        return at == null ? Optional.empty() : ordered(op, at, carrier);
+        return at == null ? NO_END : ordered(op, at, carrier);
     }
 
     /** Which comparison an operand on the right states of one on the left. */
-    static Ast.BinOp flipped(Ast.BinOp op) {
+    static BinOp flipped(BinOp op) {
         return mirrored(op);
     }
 
     /** Whether {@code op} says where values stop rather than which one a value is. */
-    static boolean ordering(Ast.BinOp op) {
-        return orders(op);
-    }
-
-    /**
-     * Whether {@code clause} says where the value stops, however this reading turned out.
-     *
-     * <p>Two questions, and only the second was being asked. Whether a bound was read is
-     * {@link #of}'s; whether the model states one at all is this, and a caller with only the first
-     * answer reports "the model bounds this position no way" about a declaration two lines above it.
-     * A rule of another shape — a format, a quantifier over what the value holds — is not one of
-     * these: it says which values exist and not where they stop, and naming it as a line nothing read
-     * would send an author after a boundary nobody wrote.
-     *
-     * <p>An equality is not one either. It names a value rather than an end, is not read by
-     * {@link #of}, and a report has nowhere to put one — so saying it went unread would state an
-     * obligation that does not exist yet.
-     *
-     * @param measure the operation the number is taken by, or null where the number is the value
-     *                itself
-     */
-    public static boolean statesAnEnd(Ast.Expr clause, ValueName measure) {
-        if (!(clause instanceof Ast.Binary bin) || !orders(bin.op())) {
-            return false;
-        }
-        return measure == null
-                ? isValue(bin.left()) || isValue(bin.right())
-                : takesSizeOfValue(bin.left(), measure) || takesSizeOfValue(bin.right(), measure);
-    }
-
-    /** Whether an operator says where values stop rather than which one a value is. */
-    private static boolean orders(Ast.BinOp op) {
-        return switch (op) {
-            case LT, LE, GT, GE -> true;
-            case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
+    static boolean ordering(BinOp op) {
+        return ComparisonClaim.orders(op);
     }
 
     /** One end, from the comparison and how the carrier's counts are spaced. */
-    private static Optional<InvariantBound> ordered(Ast.BinOp op, Place bound, Carrier carrier) {
+    private static Read ordered(BinOp op, Place bound, Carrier carrier) {
         boolean steps = carrier.spacing() == Granularity.DISCRETE;
         return switch (op) {
-            case GE -> Optional.of(new InvariantBound(true, Endpoint.inclusive(bound)));
-            case LE -> Optional.of(new InvariantBound(false, Endpoint.inclusive(bound)));
+            case GE -> placed(true, Endpoint.inclusive(bound));
+            case LE -> placed(false, Endpoint.inclusive(bound));
             case GT -> steps ? stepped(true, carrier.onTheGrid(Count.number(bound).plus(1)))
-                    : Optional.of(new InvariantBound(true, Endpoint.exclusive(bound)));
+                    : placed(true, Endpoint.exclusive(bound));
             case LT -> steps ? stepped(false, carrier.onTheGrid(Count.number(bound).minus(1)))
-                    : Optional.of(new InvariantBound(false, Endpoint.exclusive(bound)));
-            default -> Optional.empty();
+                    : placed(false, Endpoint.exclusive(bound));
+            default -> NO_END;
         };
     }
 
+    private static Read placed(boolean lower, Endpoint end) {
+        return new Read.AnEnd(new InvariantBound(lower, end));
+    }
+
     /**
-     * Whether the expression is {@code measure} applied to the newtype's value.
+     * Whether {@code e} is {@code measure} applied to the named subject: {@code value} inside a
+     * newtype's rule, a field's name inside the rule of the record that has it.
      *
      * <p>Asked of the name the application resolved to, not of how it was spelled: an import lets a
      * library operation be written without its qualifier, and a reader comparing text would miss
      * every clause written that way while looking as though it had read them.
      */
-    private static boolean takesSizeOfValue(Ast.Expr e, ValueName measure) {
-        return takesSizeOf(e, measure, VALUE);
-    }
-
-    /** The same of a named subject: {@code value} inside a newtype's rule, a field's name inside the
-     * rule of the record that has it. */
-    private static boolean takesSizeOf(Ast.Expr e, ValueName measure, String subject) {
-        return e instanceof Ast.Apply call && call.args().size() == 1
-                && call.args().get(0) instanceof Ast.Var arg && arg.name().equals(subject)
-                && call.function() instanceof Ast.Var fn && measure.equals(fn.denotes());
+    private static boolean takesSizeOf(Hir.Expr e, ValueName measure, String subject) {
+        return e instanceof Hir.Apply call && call.args().size() == 1
+                && call.args().get(0) instanceof Hir.Var arg && arg.name().equals(subject)
+                && call.function() instanceof Hir.Var.Denoting fn && measure.equals(fn.denotes());
     }
 
     /**
@@ -232,43 +234,44 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * count no case is at: it reached a cut, an obligation, and the reader that writes an obligation
      * as the value it stands for, which asked the carrier for a case that is not there.
      *
-     * <p>No end where the carrier has no count there. Which is not the same as the rule being
-     * unsatisfiable, and this does not say which — the two look alike from here, and an end nothing
-     * can be written at is the one thing that must not be claimed.
+     * <p>Where the carrier has no count there, the rule admits nothing. That is said as itself. It was
+     * answered "no end this reading could make of it", which is what a rule of another shape gets —
+     * so a position the rules leave empty read exactly like a position nothing was written about,
+     * and the count deciding whether the type has any value never heard of the rule.
      */
-    private static Optional<InvariantBound> stepped(boolean lower, Place onto) {
-        return onto == null ? Optional.empty()
-                : Optional.of(new InvariantBound(lower, Endpoint.inclusive(onto)));
+    private static Read stepped(boolean lower, Place onto) {
+        return onto == null ? PAST_THE_END
+                : placed(lower, Endpoint.inclusive(onto));
     }
 
-    private static boolean isValue(Ast.Expr e) {
-        return e instanceof Ast.Var v && v.name().equals(VALUE);
+    private static boolean isValue(Hir.Expr e) {
+        return e instanceof Hir.Var v && v.name().equals(VALUE);
     }
 
-    private static Ast.BinOp mirrored(Ast.BinOp op) {
+    private static BinOp mirrored(BinOp op) {
         return switch (op) {
-            case LT -> Ast.BinOp.GT;
-            case LE -> Ast.BinOp.GE;
-            case GT -> Ast.BinOp.LT;
-            case GE -> Ast.BinOp.LE;
+            case LT -> BinOp.GT;
+            case LE -> BinOp.GE;
+            case GT -> BinOp.LT;
+            case GE -> BinOp.LE;
             default -> op;
         };
     }
 
     /** A whole number a literal names, or null where it names one with a fraction: a value that
      *  steps one at a time is not bounded at a place between two of its values. */
-    public static BigDecimal wholeLiteral(Ast.Expr e) {
+    public static BigDecimal wholeLiteral(Hir.Expr e) {
         BigDecimal read = literalOf(e);
         return read == null || read.stripTrailingZeros().scale() > 0 ? null : read;
     }
 
     /** A numeric literal, negation included. A bare integer counts against a decimal, since a literal
      * takes the other side's type. */
-    public static BigDecimal literalOf(Ast.Expr e) {
+    public static BigDecimal literalOf(Hir.Expr e) {
         return switch (e) {
-            case Ast.IntLit lit -> BigDecimal.valueOf(lit.value());
-            case Ast.DecimalLit lit -> normalized(lit.value());
-            case Ast.Neg neg -> negated(literalOf(neg.operand()));
+            case Hir.IntLit lit -> BigDecimal.valueOf(lit.value());
+            case Hir.DecimalLit lit -> normalized(lit.value());
+            case Hir.Neg neg -> negated(literalOf(neg.operand()));
             case null, default -> null;
         };
     }

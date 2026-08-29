@@ -1,6 +1,5 @@
 package souther.compiler.numeric;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 
@@ -29,15 +28,31 @@ public final class Dates {
             return null;   // a date-time, whose step is not a day
         }
         try {
-            return Count.of(LocalDate.parse(iso).toEpochDay());
+            return dayOf(LocalDate.parse(iso));
         } catch (DateTimeParseException _) {
             return null;
         }
     }
 
+    /** The day {@code date} counts to. */
+    public static Count dayOf(LocalDate date) {
+        return Count.of(date.toEpochDay());
+    }
+
+    /**
+     * The date {@code day} counts to.
+     *
+     * <p>The one place a count becomes a calendar again, as {@link #dayOf} is the one place a
+     * calendar becomes a count. What a date is written as and what parts it has are both read off
+     * this, so a report and a fixture cannot come to different dates from the same day.
+     */
+    public static LocalDate dateAt(Place day) {
+        return LocalDate.ofEpochDay(Count.number(day).at().longValueExact());
+    }
+
     /** The date {@code day} counts to, written the way a model writes one. */
     public static String written(Place day) {
-        return LocalDate.ofEpochDay(Count.number(day).at().longValueExact()).toString();
+        return dateAt(day).toString();
     }
 
     private Dates() {}

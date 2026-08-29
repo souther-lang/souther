@@ -1,13 +1,12 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -72,12 +71,16 @@ public final class BottomInfer {
      * <p>Which library names those are is the library's to say, so this asks what the name denotes
      * and whether its declaration was written with a parameter list — not how it was spelled.
      */
-    static boolean isEmptyCollectionLiteral(Ast.Expr e) {
-        if (e instanceof Ast.ListLit l) {
+    static boolean isEmptyCollectionLiteral(Stdlib stdlib, Hir.Expr e) {
+        if (e instanceof Hir.ListLit l) {
             return l.elements().isEmpty();
         }
-        return e instanceof Ast.Var v && v.denotes() instanceof ValueName.Stdlib lib
-                && Prelude.isEmptyCollectionValue(lib.qualified());
+        if (e instanceof Hir.RowCollection row) {
+            return row.elements().isEmpty();
+        }
+        return e instanceof Hir.Var.Denoting v
+                && v.denotes() instanceof ValueName.Stdlib.Operation lib
+                && stdlib.isEmptyCollectionValue(lib);
     }
 
     /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context
@@ -128,14 +131,20 @@ public final class BottomInfer {
      *       accumulator whose type is the fold's result. A higher-order function that merely takes a
      *       closure and an empty collection ({@code List.map}/{@code filter} over {@code []}) does not
      *       match, so its step failure is not relabelled as a fold-seed error; and</li>
-     *   <li>the seed's source position differs from the call's. A combinator inlined onto its call
-     *       site (e.g. {@code List.map}'s internal {@code []} accumulator, which desugars to a
-     *       {@code List.foldFrom}) carries the call's own position; the caller never wrote an empty
-     *       seed there, so it is excluded.</li>
+     *   <li>the seed is written where it stands. A combinator whose body this compile cannot show
+     *       (e.g. {@code List.map}'s internal {@code []} accumulator, which desugars to a
+     *       {@code List.foldFrom}) is copied onto the call, and its seed stands in for a line of
+     *       {@code souther.list}; the caller never wrote an empty seed there, so it is excluded.</li>
      * </ul>
+     *
+     * <p>Asked of the seed rather than worked out from its coordinate. Comparing the seed's position
+     * with the call's answered this by the fact that a copy is given the call's own — which was true
+     * and was a coincidence: it is the same inference from a coordinate that had a helper of another
+     * module reported at its caller, and it says nothing about a seed written where the copy came
+     * from. The position says which it is now, so it is read.
      */
-    static int untypedEmptySeed(List<Ast.Expr> args, Type.FnOf fn, Map<String, Type> bind,
-                                        SourcePos callPos) {
+    static int untypedEmptySeed(Stdlib stdlib, List<Hir.Expr> args, Type.FnOf fn,
+                                Map<String, Type> bind) {
         int seed = 1;
         if (fn.params().size() <= seed || args.size() <= seed) {
             return -1;
@@ -144,8 +153,8 @@ public final class BottomInfer {
                 && !(fn.params().get(seed) instanceof Type.FnOf)
                 && fn.params().get(seed).equals(fn.result());
         if (foldShaped
-                && isEmptyCollectionLiteral(args.get(seed))
-                && !args.get(seed).pos().equals(callPos)
+                && isEmptyCollectionLiteral(stdlib, args.get(seed))
+                && !args.get(seed).pos().wasCopiedHere()
                 && Type.mentions(TypeOps.substitute(fn.params().get(seed), bind), BottomInfer::isBottom)) {
             return seed;
         }

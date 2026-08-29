@@ -1,13 +1,10 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
-import souther.compiler.numeric.Cardinality;
-import souther.compiler.numeric.CardinalityCuts;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -23,10 +20,11 @@ import java.util.Set;
  * reachable — a set cannot be filled from an element with fewer values than it holds, and knowing
  * that means counting the element.
  *
- * <p>Rising from none rather than narrowing from anything. A value of a type is built, and a type
- * written in terms of itself with nowhere to stop is one no building ever finishes — so the reading
- * starts by granting nothing and grants a value only where one is shown. Each round bounds the values
- * built in one more step than the last, and where nothing moves, nothing further can be built.
+ * <p>Rising from nothing shown rather than narrowing from anything. A value of a type is built, and a
+ * type written in terms of itself with nowhere to stop is one no building ever finishes — so the
+ * reading starts by granting nothing and grants a value only where one is shown. Each round bounds
+ * the values built in one more step than the last, and where nothing moves, nothing further can be
+ * built.
  *
  * <p>Two kinds of place, told apart because only one of them needs the rising. Declarations written
  * in terms of each other are answered together and their answers are rounded to the counts some rule
@@ -34,6 +32,14 @@ import java.util.Set;
  * settles the answers one at a time, and nothing is rounded: a sum of two values is two, and rounding
  * it up to the next count anybody asked about would leave a set drawing on it unable to say it is too
  * small.
+ *
+ * <p>The bottom the rising starts from is not an answer and never becomes one. A member the rising
+ * has not finished with is at the bottom in {@link Answers}, and a reading resting on one of those is
+ * a reading resting on an assumption: writing it down as a proof would have {@code A} shown to have
+ * no value because {@code B} has none and {@code B} because {@code A} has, which shows neither.
+ * What is true once the rising stops is that the least fixed point was reached with those members
+ * still at nothing, so no value of any of them is built in finitely many steps — and that is
+ * {@link Emptiness.NoBaseInComponent}, written here and nowhere else.
  *
  * <p>This says nothing about which declaration is at fault for an answer of none. That is a question
  * about the graph rather than about any one type, and it is asked of these answers rather than while
@@ -43,18 +49,19 @@ public final class TypeCardinality {
 
     private TypeCardinality() {}
 
-    /** How many values each declaration the module reaches has at most. */
-    public static Cardinalities solve(Ast.Module module, Symbols symbols) {
-        Map<TypeName, Ast.Def> declared = reached(module, symbols);
-        Map<TypeName, Set<TypeName>> edges = new LinkedHashMap<>();
+    /** How many values each declaration {@code declarations} reaches has at most. */
+    public static Cardinalities solve(List<Hir.Def> declarations, Symbols symbols,
+                                      ReadingPolicy policy) {
+        Map<TypeSymbol, Hir.Def> declared = reached(declarations, symbols);
+        Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
         // Fixed before the rising starts. What makes it stop is that there are finitely many answers
         // to rise through, and a count discovered part way would give it somewhere new to go.
-        CardinalityCuts cuts = CardinalityCuts.keeping(asked(declared, symbols));
-        List<List<TypeName>> components = TypeComponents.of(edges);
+        CardinalityCuts cuts = CardinalityCuts.keeping(asked(declared, symbols, policy));
+        List<List<TypeSymbol>> components = TypeComponents.of(edges);
         return new Cardinalities(
-                Map.copyOf(pass(components, declared, edges, cuts, symbols, Set.of())),
-                components, declared, edges, cuts, symbols);
+                Map.copyOf(pass(components, declared, edges, cuts, symbols, policy, Set.of())),
+                components, declared, edges, cuts, symbols, policy);
     }
 
     /**
@@ -67,38 +74,40 @@ public final class TypeCardinality {
      */
     public static final class Cardinalities {
 
-        private final Map<TypeName, Cardinality> upper;
-        private final List<List<TypeName>> components;
-        private final Map<TypeName, Ast.Def> declared;
-        private final Map<TypeName, Set<TypeName>> edges;
+        private final Map<TypeSymbol, Cardinality> upper;
+        private final List<List<TypeSymbol>> components;
+        private final Map<TypeSymbol, Hir.Def> declared;
+        private final Map<TypeSymbol, Set<TypeSymbol>> edges;
         private final CardinalityCuts cuts;
         private final Symbols symbols;
+        private final ReadingPolicy policy;
 
-        private Cardinalities(Map<TypeName, Cardinality> upper, List<List<TypeName>> components,
-                              Map<TypeName, Ast.Def> declared,
-                              Map<TypeName, Set<TypeName>> edges, CardinalityCuts cuts,
-                              Symbols symbols) {
+        private Cardinalities(Map<TypeSymbol, Cardinality> upper, List<List<TypeSymbol>> components,
+                              Map<TypeSymbol, Hir.Def> declared,
+                              Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
+                              Symbols symbols, ReadingPolicy policy) {
             this.upper = upper;
             this.components = components;
             this.declared = declared;
             this.edges = edges;
             this.cuts = cuts;
             this.symbols = symbols;
+            this.policy = policy;
         }
 
         /** How many values every declaration reached has at most. */
-        public Map<TypeName, Cardinality> all() {
+        public Map<TypeSymbol, Cardinality> all() {
             return upper;
         }
 
         /** How many values {@code name} has at most, nothing being known of a name not reached. */
-        public Cardinality of(TypeName name) {
+        public Cardinality of(TypeSymbol name) {
             return upper.getOrDefault(name, Cardinality.UNKNOWN);
         }
 
         /** The declarations with no value, in the order they were reached. */
-        Set<TypeName> withNoValue() {
-            Set<TypeName> none = new LinkedHashSet<>();
+        Set<TypeSymbol> withNoValue() {
+            Set<TypeSymbol> none = new LinkedHashSet<>();
             declared.keySet().forEach(each -> {
                 if (of(each).none()) {
                     none.add(each);
@@ -108,12 +117,12 @@ public final class TypeCardinality {
         }
 
         /** The declarations that had to be answered together, each before any that reads it. */
-        List<List<TypeName>> components() {
+        List<List<TypeSymbol>> components() {
             return components;
         }
 
         /** What each declaration reads. */
-        Map<TypeName, Set<TypeName>> edges() {
+        Map<TypeSymbol, Set<TypeSymbol>> edges() {
             return edges;
         }
 
@@ -124,10 +133,12 @@ public final class TypeCardinality {
          * been: a record whose only field is an absent value has one value because what the field
          * would hold has none, and one is too few to fill a set of two — so a set with no value can
          * be a set nothing is the matter with, and no reading of which names it reads directly finds
-         * that out. Granting the names and taking the answers afresh does.
+         * that out. Granting the names and taking the answers afresh does. The proofs come back with
+         * the counts, so what a declaration is shown by under one supposing is not read off what it
+         * was shown by under another.
          */
-        Map<TypeName, Cardinality> granting(Set<TypeName> granted) {
-            return pass(components, declared, edges, cuts, symbols, granted);
+        Map<TypeSymbol, Cardinality> granting(Set<TypeSymbol> granted) {
+            return pass(components, declared, edges, cuts, symbols, policy, granted);
         }
     }
 
@@ -140,17 +151,18 @@ public final class TypeCardinality {
      * because of a granted name is answered afresh — a record holding nothing but an absent value has
      * one value, and once the value it lacks is granted it has as many as anything.
      */
-    private static Map<TypeName, Cardinality> pass(List<List<TypeName>> components,
-                                                   Map<TypeName, Ast.Def> declared,
-                                                   Map<TypeName, Set<TypeName>> edges,
+    private static Map<TypeSymbol, Cardinality> pass(List<List<TypeSymbol>> components,
+                                                   Map<TypeSymbol, Hir.Def> declared,
+                                                   Map<TypeSymbol, Set<TypeSymbol>> edges,
                                                    CardinalityCuts cuts, Symbols symbols,
-                                                   Set<TypeName> granted) {
-        Map<TypeName, Cardinality> solution = new HashMap<>();
-        for (List<TypeName> component : components) {
-            List<TypeName> asked = new ArrayList<>();
-            for (TypeName each : component) {
+                                                   ReadingPolicy policy,
+                                                   Set<TypeSymbol> granted) {
+        Answers answers = Answers.empty();
+        for (List<TypeSymbol> component : components) {
+            List<TypeSymbol> asked = new ArrayList<>();
+            for (TypeSymbol each : component) {
                 if (granted.contains(each)) {
-                    solution.put(each, Cardinality.UNKNOWN);
+                    answers.settle(each, Cardinality.UNKNOWN);
                 } else {
                     asked.add(each);
                 }
@@ -159,14 +171,14 @@ public final class TypeCardinality {
                 continue;
             }
             if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
-                TypeName one = asked.get(0);
-                solution.put(one, CardinalityTransfer.upperOf(
-                        one, declared.get(one), symbols, solution, granted::contains));
+                TypeSymbol one = asked.get(0);
+                answers.settle(one, CardinalityTransfer.upperOf(
+                        one, declared.get(one), symbols, policy, answers, granted::contains));
                 continue;
             }
-            rise(asked, declared, symbols, cuts, solution, granted);
+            rise(asked, declared, policy, symbols, cuts, answers, granted);
         }
-        return solution;
+        return answers.everySettled();
     }
 
     /**
@@ -176,42 +188,117 @@ public final class TypeCardinality {
      * those too would put the loss of precision at every edge of the graph rather than at the one
      * place the rising needs it.
      */
-    private static void rise(List<TypeName> component, Map<TypeName, Ast.Def> declared,
+    private static void rise(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
+                             ReadingPolicy policy,
                              Symbols symbols, CardinalityCuts cuts,
-                             Map<TypeName, Cardinality> solution, Set<TypeName> granted) {
-        for (TypeName each : component) {
-            solution.put(each, Cardinality.NO_VALUE);
-        }
+                             Answers answers, Set<TypeSymbol> granted) {
+        component.forEach(answers::atBottom);
         boolean moved = true;
         while (moved) {
             moved = false;
-            for (TypeName each : component) {
-                Cardinality next = cuts.round(CardinalityTransfer.upperOf(
-                        each, declared.get(each), symbols, solution, granted::contains));
-                if (!next.equals(solution.get(each))) {
-                    solution.put(each, next);
+            for (TypeSymbol each : component) {
+                Cardinality before = answers.settledAt(each);
+                Cardinality next = round(cuts, CardinalityTransfer.upperOf(
+                        each, declared.get(each), symbols, policy, answers, granted::contains));
+                // Written every round, and the rising is over the counts alone. Two readings that
+                // come to none are the same answer to rise through however they were shown, so
+                // comparing the proofs would keep a settled rising moving; and taking the earlier
+                // proof would leave a declaration carrying what it was shown by before the answers
+                // it rests on were what they are.
+                answers.settle(each, next);
+                if (before == null || !sameCount(before, next)) {
                     moved = true;
                 }
             }
         }
+        discharge(component, answers);
+    }
+
+    /** Whether two answers are the same one to rise through, which the proofs have no part in. */
+    private static boolean sameCount(Cardinality one, Cardinality other) {
+        return one instanceof Cardinality.None
+                ? other instanceof Cardinality.None : one.equals(other);
+    }
+
+    private static Cardinality round(CardinalityCuts cuts, Cardinality of) {
+        return of instanceof Cardinality.Standing standing ? cuts.round(standing) : of;
     }
 
     /**
-     * Every declaration the module's own reach, itself included.
+     * The members left with nothing to bottom out, told what showed it once the rising has stopped.
+     *
+     * <p>A member whose proof rests on another member of the same component was, while the rising
+     * ran, resting on an assumption. Which of them were shown something is asked here: a member with
+     * a count is one, and so is a member whose proof reaches outside the component or stops at rules
+     * of its own — and then any member resting only on those, and so on until nothing more is added.
+     * What is left is a set every member of which needs the others, which is a lack no finite
+     * building bottoms out of, and the least fixed point having been reached is the proof of it.
+     */
+    private static void discharge(List<TypeSymbol> component, Answers answers) {
+        Set<TypeSymbol> shown = new HashSet<>();
+        Set<TypeSymbol> within = Set.copyOf(component);
+        boolean added = true;
+        while (added) {
+            added = false;
+            for (TypeSymbol each : component) {
+                if (shown.contains(each)) {
+                    continue;
+                }
+                Cardinality count = answers.settledAt(each);
+                if (!(count instanceof Cardinality.None it) || restsOn(it.why(), within, shown)) {
+                    shown.add(each);
+                    added = true;
+                }
+            }
+        }
+        if (shown.size() == component.size()) {
+            return;
+        }
+        List<TypeSymbol> without = component.stream().filter(each -> !shown.contains(each)).toList();
+        for (TypeSymbol each : without) {
+            answers.settle(each, Cardinality.none(new Emptiness.NoBaseInComponent(
+                    without, answers.settledAt(each).why())));
+        }
+    }
+
+    /** Whether every member of {@code within} this proof reaches has been shown something. */
+    private static boolean restsOn(Emptiness why, Set<TypeSymbol> within, Set<TypeSymbol> shown) {
+        return switch (why) {
+            case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _,
+                 Emptiness.EmptyOrderedInterval _,
+                 Emptiness.SetRequiresTooManyDistinctValues _,
+                 Emptiness.NoAllowedCollectionSize _ -> true;
+            case Emptiness.TheNameHasNone it ->
+                    !within.contains(it.name()) || shown.contains(it.name());
+            // Not reachable. A proof read here was built from what a name answers, which is the
+            // proof that stops at the name, and this is the only writer of the other one. Answered
+            // the way that keeps a member out of the set that was shown something, which is what it
+            // would mean if it ever were reached.
+            case Emptiness.NoBaseInComponent _ -> false;
+            case Emptiness.AtAField it -> restsOn(it.under(), within, shown);
+            case Emptiness.NonEmptyCollectionWithNoElement it ->
+                    restsOn(it.element(), within, shown);
+            case Emptiness.AcrossEveryCase it ->
+                    it.cases().stream().allMatch(each -> restsOn(each, within, shown));
+        };
+    }
+
+    /**
+     * Everything {@code declarations} reach, themselves included.
      *
      * <p>A type of another module is one of these. What a declaration comes to is settled by what it
      * is written in terms of wherever that was declared, and stopping at the edge of the module would
      * answer a record by the module its field's type happens to sit in.
      */
-    private static Map<TypeName, Ast.Def> reached(Ast.Module module, Symbols symbols) {
-        Map<TypeName, Ast.Def> declared = new LinkedHashMap<>();
-        List<TypeName> left = new ArrayList<>();
-        for (Ast.Def def : module.defs()) {
-            left.add(symbols.own(def.name()));
+    private static Map<TypeSymbol, Hir.Def> reached(List<Hir.Def> declarations, Symbols symbols) {
+        Map<TypeSymbol, Hir.Def> declared = new LinkedHashMap<>();
+        List<TypeSymbol> left = new ArrayList<>();
+        for (Hir.Def def : declarations) {
+            left.add(def.declares());
         }
         while (!left.isEmpty()) {
-            TypeName name = left.remove(left.size() - 1);
-            if (declared.containsKey(name) || !(symbols.get(name) instanceof Ast.Def def)) {
+            TypeSymbol name = left.remove(left.size() - 1);
+            if (declared.containsKey(name) || !(symbols.declarations().declaration(name) instanceof Hir.Def def)) {
                 continue;
             }
             declared.put(name, def);
@@ -229,12 +316,17 @@ public final class TypeCardinality {
      *
      * @param among the names to keep, or null to keep them all
      */
-    private static Set<TypeName> read(Ast.Def def, Symbols symbols, Set<TypeName> among) {
-        Set<TypeName> named = new LinkedHashSet<>();
+    private static Set<TypeSymbol> read(Hir.Def def, Symbols symbols, Set<TypeSymbol> among) {
+        Set<TypeSymbol> named = new LinkedHashSet<>();
         switch (def) {
-            case Ast.UnitData _ -> { }
-            case Ast.SumData sum -> sum.cases().forEach(each -> named.add(each.denotes()));
-            case Ast.Data data ->
+            case Hir.UnitData _ -> { }
+            // A case naming nothing names no declaration for this to have read.
+ 	    case Hir.SumData sum -> sum.cases().forEach(each -> {
+                if (each.answered() instanceof Hir.Name.Denoting names) {
+                    named.add(names.type());
+                }
+            });
+            case Hir.Data data ->
                     TypeOps.fieldTypes(data, symbols).values().forEach(each -> names(each, named));
         }
         if (among != null) {
@@ -243,7 +335,7 @@ public final class TypeCardinality {
         return named;
     }
 
-    private static void names(Type type, Set<TypeName> into) {
+    private static void names(Type type, Set<TypeSymbol> into) {
         if (type instanceof Type.Ref ref) {
             into.add(ref.name());
             return;
@@ -263,13 +355,16 @@ public final class TypeCardinality {
      * written at the position, and a count missed here is precision lost and nothing else: the
      * answers still tell apart everything the questions found.
      */
-    private static Set<Long> asked(Map<TypeName, Ast.Def> declared, Symbols symbols) {
+    private static Set<Long> asked(Map<TypeSymbol, Hir.Def> declared, Symbols symbols,
+                                   ReadingPolicy policy) {
         Set<Long> counts = new HashSet<>();
         declared.forEach((name, def) -> {
-            if (!(def instanceof Ast.Data data)) {
+            // A data is a declaration a module wrote, so the second half never decides anything;
+            // it is how the name says so rather than a reader assuming it.
+            if (!(def instanceof Hir.Data data) || !(name instanceof TypeSymbol.AtModule at)) {
                 return;
             }
-            OccurrenceCounts held = OccurrenceCounts.of(name, data, symbols);
+            OccurrenceCounts held = OccurrenceCounts.of(at, data, symbols, policy);
             for (String path : data.newtype() ? Set.of(FieldDomains.THE_VALUE)
                     : TypeOps.fieldTypes(data, symbols).keySet()) {
                 long least = held.leastHeldAt(path);

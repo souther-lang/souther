@@ -21,7 +21,7 @@ class CompileValueSpreadTest {
     }
 
     private static Object aged(BytesClassLoader loader) throws Exception {
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", Map.of("n", 1L)));
         return ((Map<?, ?>) Codecs.encode(loader, "demo.Person", out)).get("age");
     }
@@ -75,7 +75,7 @@ class CompileValueSpreadTest {
                 let update (base) = Person { ...base, age = 20 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Update$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "update").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.Person", Map.of("name", "argument", "age", 1L));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Person",
                 Codecs.apply(behavior, in));
@@ -100,7 +100,7 @@ class CompileValueSpreadTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Update$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "update").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("name", "local"));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Person",
                 Codecs.apply(behavior, in));
@@ -115,14 +115,14 @@ class CompileValueSpreadTest {
      */
     @Test
     void aPublishedValueCarriesTheValueItSpreads() {
-        ModulePath library = Compiler.compile("""
+        ModulePath library = ModulePath.of(Compiler.compile("""
                 module shared.people exposing ( Person, listed )
 
                 data Person = { name: String, age: Int }
 
                 let base = Person { name = "A", age = 20 }
                 let listed = Person { ...base, age = 21 }
-                """)::get;
+                """));
 
         assertDoesNotThrow(() -> Compiler.compileModules(java.util.List.of("""
                 module app.roster exposing ( Entry )

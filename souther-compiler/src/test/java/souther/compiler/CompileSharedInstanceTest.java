@@ -3,6 +3,8 @@ package souther.compiler;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +26,7 @@ class CompileSharedInstanceTest {
             data Flag = Bool
             data Tally = { n: Int }
 
-            behavior marks : (f: Flag) -> List<Mark> constructs Mark
+            behavior marks : (f: Flag) -> List<Mark>
             let marks (f) = [Mark | f.value]
 
             behavior sumUp : (xs: List<Int>) -> Tally constructs Tally
@@ -39,7 +41,7 @@ class CompileSharedInstanceTest {
             """;
 
     /** The module compiled once: the four tests only read, so they can share one loader. */
-    private static final Map<String, byte[]> CLASSES = Compiler.compile(MODULE);
+    private static final Map<String, ClassFileImage> CLASSES = Compiler.compile(MODULE);
     private static final BytesClassLoader LOADER =
             new BytesClassLoader(CLASSES, CompileSharedInstanceTest.class.getClassLoader());
 
@@ -49,16 +51,13 @@ class CompileSharedInstanceTest {
 
     /**
      * The {@code INSTANCE} field of the one synthetic lambda class in this module that interned
-     * itself. Located by shape rather than by the {@code $FnN} name, whose counter shifts whenever
-     * anything else emits a lambda first. The field is package-private, as every use site the
-     * compiler emits is in the module's own package.
+     * itself. The lambdas are asked for by number rather than picked out of the emitted names by
+     * shape, since which number a lambda gets shifts whenever anything else emits one first. The
+     * field is package-private, as every use site the compiler emits is in the module's own package.
      */
     private static Field interningLambdaField(BytesClassLoader loader) throws Exception {
         List<Field> found = new ArrayList<>();
-        for (String name : CLASSES.keySet()) {
-            if (!name.contains(".$Fn")) {
-                continue;
-            }
+        for (String name : Emitted.lambdas(CLASSES.keySet(), "demo")) {
             for (Field f : loader.loadClass(name).getDeclaredFields()) {
                 if (f.getName().equals("INSTANCE")) {
                     f.setAccessible(true);
@@ -74,7 +73,7 @@ class CompileSharedInstanceTest {
     void aUnitDataHasExactlyOneValue() throws Exception {
         BytesClassLoader loader = compiled();
         Object flag = Codecs.decoded(loader, "demo.Flag", true);
-        Object impl = loader.loadClass("demo.Marks$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "marks").getConstructor().newInstance();
 
         List<?> first = (List<?>) Codecs.apply(impl, flag);
         List<?> second = (List<?>) Codecs.apply(impl, flag);
@@ -110,12 +109,12 @@ class CompileSharedInstanceTest {
         // `x -> x > 0` closes over neither a local nor an injected behavior, so its class carries the
         // one instance every evaluation of that lambda loads. It is handed to `List.find`, which takes
         // its predicate as a value — a fold's step is not a lambda that escapes, being emitted as the
-        // loop body where it stands. Found by shape rather than by name: the `$FnN` counter shifts
-        // whenever anything else in the module emits a lambda.
+        // loop body where it stands. Found among the lambdas the module emitted, not by its number,
+        // which shifts whenever anything else in the module emits one first.
         java.lang.reflect.Field instance = interningLambdaField(loader);
         assertSame(instance.get(null), instance.get(null));
 
-        Object impl = loader.loadClass("demo.SumUp$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "sumUp").getConstructor().newInstance();
         Object result = Codecs.apply(impl, List.of(1L, 2L, 3L));
         java.lang.reflect.Field n = result.getClass().getDeclaredField("n");
         n.setAccessible(true);

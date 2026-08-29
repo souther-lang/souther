@@ -1,8 +1,11 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import java.util.ArrayDeque;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.DiagnosticPlace;
+import souther.compiler.diag.Primary;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,11 +39,58 @@ import java.util.Set;
  * builds against what a module declares, not against its bodies. Both are maps of records, and
  * {@code IncrementalCompilationTest} pins both.
  *
- * <p>It does not hold everywhere. A module's classes are a {@code Map<String, byte[]>}, and arrays
- * compare by identity, so regenerating them always counts as a change — and every module's examples
- * read every module's classes. Comparing the bytes would not help: after a real edit they differ.
- * What would is for an example to depend on the classes it reaches rather than on all of them,
- * which is per-definition work and not here.
+ * <p>A module's classes carry it too. Each is a {@link souther.compiler.jvm.ClassFileImage}, which
+ * is what its bytes say, so a module regenerated to what it already was leaves the examples that
+ * load it alone. What that does not reach is an example of one module and an edit to another it
+ * merely imports: the classes it is run against are the ones its module reaches, so they change
+ * when any of those does. Narrowing that to the classes an example actually loads is per-definition
+ * work and is not here.
+ *
+ * <p>Two rules run through the rest of them, and an answer can break either one.
+ *
+ * <p>A computed node is a value. What {@code equals} says is what stops work, so such an answer says
+ * what it means and not where it came from; one that never equals the answer it replaces leaves
+ * nothing downstream of it ever kept, while every test of what the compiler says stays green. That
+ * rules out a kind of thing and not a missing method: an object that reads this store when it is
+ * asked — a registry, a scope over one, a loader — is the same as another when the store is, which
+ * is where it came from. Those are built inside a {@code compute} and used there, which is also what
+ * makes their reads land on the question being answered. {@link Names#derivedSymbols} is one, handed
+ * out and not kept.
+ *
+ * <p>A supplied node is whatever was supplied. An {@link Input} is not computed and its answer is
+ * what somebody handed in, so what its equality decides is not whether a compile came to the same
+ * thing — it is whether the outside changed. A way of running something may be handed in that way
+ * and there is no compute to build it inside; what it costs is that a new one reads as a change,
+ * which is a conservative answer about the outside rather than a wrong answer about a compile.
+ *
+ * <p>{@code EverythingAnAnswerHoldsMeansSomethingTest} is what says which answers still break the
+ * first rule, and {@code EveryAnswerThisCompilerDeclaresIsSettledTest} what says which of the two a
+ * question is read under.
+ *
+ * <p>An edge is what its consumer means. A collection gathered per module is an index, and a
+ * question asked per definition depends on the entries it reaches rather than on the index. Read
+ * whole, an index hands the finer question the coarser one's identity: an edit anywhere in the
+ * module — or in a module it imports — arrives as an edit to every definition in it, and again no
+ * test of what the compiler answers can see the difference. Keeping the index is fine, and so is
+ * reading one to answer a question about a single entry — {@link Bodies.Stated} does exactly that.
+ * What a per-definition question may not do is take the index as its own dependency.
+ *
+ * <p>Which does not mean every producer has to be split. What the consumer reads has to stop where
+ * its meaning stops, and a key between the two is where that happens: the broad answer is
+ * recomputed as often as its own inputs move, and the cut is what the consumer depends on.
+ * {@link Names.Meanings} is what a module's names mean, cut from the whole assembly they are read
+ * off — so declaring a behavior, which adds a value name, stops there. {@link Bodies.CalleeSigsForBody}
+ * is the signatures one body names, cut from its module's index of everything callable in it.
+ * {@link Bodies.ContractsForBody} is a body's contracts asked entry by entry.
+ *
+ * <p>A cut is one way to stop an index short of a reader. The other is to hand the reader the
+ * questions rather than the table, so that the index is asked for when it is read and not when it
+ * is built — which is what {@link souther.compiler.check.Registry} does for a module's declarations
+ * and {@link souther.compiler.check.Denoting} for what its names mean. It answers what a cut cannot
+ * here: which of a module's meanings a body needs is a question about what a body's scope is, and
+ * nothing has to decide it, because a body that reads none of them depends on none of them and the
+ * one report that reads every name in sight depends on every name in sight. That is issue #835,
+ * and {@code IncrementalCompilationTest} holds both halves.
  *
  * <p>One store is one workspace over time, not one compile. It is not thread-safe and does not need
  * to be: the work inside a compile is a graph walk, not a set of independent jobs.
@@ -88,6 +138,56 @@ public final class Db {
     private final Set<Key<?>> hasSpoken = new LinkedHashSet<>();
 
     /**
+     * What runs this compilation's programs, for the questions the language can only answer by
+     * running one.
+     *
+     * <p>Beside the memos and not in them. An answer is a value — this store stops work by
+     * comparing one with the one it replaces, and everything under an answer has to mean something
+     * by {@code equals} for that to hold. What runs a program is not a value and has no business
+     * being compared: it is a term of the compilation, set where the compilation is set up, and it
+     * is the same one for as long as the store lives.
+     */
+    private souther.compiler.execute.ProgramExecution execution;
+
+    /**
+     * Names what runs this compilation's programs, and it may be named once.
+     *
+     * <p>Set once because nothing here would notice it changing. What a key read to run a program
+     * is not a read this store recorded — the runner is beside the memos, not in them — so an
+     * answer worked out under one runner is not invalidated by a second being named, and the store
+     * would go on handing out the first one's answers for as long as they stood. What is held here
+     * is that there is never a second one; naming it before anything is asked is the caller's to
+     * get right, and a compilation does it where it is set up.
+     *
+     * @throws IllegalStateException where one has already been named
+     */
+    public Db running(souther.compiler.execute.ProgramExecution execution) {
+        if (execution == null) {
+            throw new IllegalArgumentException("a compilation runs its programs with something");
+        }
+        if (this.execution != null) {
+            throw new IllegalStateException("this store already has something that runs its"
+                    + " programs, and answers have been worked out with it");
+        }
+        this.execution = execution;
+        return this;
+    }
+
+    /**
+     * What runs this compilation's programs.
+     *
+     * <p>Raises where nothing was named. A store built by hand and asked a question that has to run
+     * the program is a caller that set up half a compilation; saying so here names what is missing,
+     * where the alternative is a null reference thrown from inside whatever was about to run.
+     */
+    public souther.compiler.execute.ProgramExecution execution() {
+        if (execution == null) {
+            throw new IllegalStateException("nothing was named to run this compilation's programs");
+        }
+        return execution;
+    }
+
+    /**
      * Gives an input its value. An input set to what it already held changes nothing, so a caller
      * may hand over a whole workspace on every keystroke. Returns this store, so a compilation can
      * be set up in one expression.
@@ -111,7 +211,7 @@ public final class Db {
      * asked about again is held for nothing. Dropping an answer is always safe: the next question
      * that wants it computes it.
      */
-    public void forget(String sourceId, String moduleName) {
+    public void forget(SourceId sourceId, String moduleName) {
         set(new Front.Text(sourceId), null);
         // Dropping by module name is exact, not approximate. Every question about a module reads its
         // declaring source through the workspace layout, and the layout names one source per module
@@ -238,7 +338,7 @@ public final class Db {
     }
 
     /** One thing the author is told, wherever it was found: a problem, on a file. */
-    private record Told(String module, String sourceId, Diagnostic.Identity problem) {}
+    private record Told(String module, SourceId sourceId, Diagnostic.Identity problem) {}
 
     /** What {@code key} read while it was answered, empty if it has not been asked. */
     public Set<Key<?>> dependenciesOf(Key<?> key) {
@@ -253,40 +353,67 @@ public final class Db {
     }
 
     /**
+     * Every answer being kept, by the question it answers.
+     *
+     * <p>For the one reader that is about the store rather than about a compile: whether the answers
+     * it keeps are values is a question about all of them at once, and there is no question to ask
+     * that would enumerate them. Nothing in a compile reads this — a pass wanting an answer asks for
+     * the one it wants.
+     */
+    Map<Key<?>, Answer<?>> everyAnswer() {
+        Map<Key<?>, Answer<?>> out = new LinkedHashMap<>();
+        memos.forEach((key, memo) -> out.put(key, memo.answer()));
+        return out;
+    }
+
+    /**
      * A report, the module it is about, and the source the key that found it names — either of which
      * may be null.
      *
-     * <p>Where the report is said is read off this rather than stored beside it, so there is one
-     * answer and not two that can come apart. A module named but no source is the last fallback, and
-     * only a caller holding the module layout can apply it —
-     * {@link Compilation#publishSourceIdsOf(Found)} is where the whole answer is worked out.
+     * <p>Which source the report is anchored in is read off this rather than stored beside it, so
+     * there is one answer and not two that can come apart. A module named but no source is the last
+     * fallback, and only a caller holding the module layout can apply it —
+     * {@link Compilation#sourceIdOf(Found)} is where that answer is finished.
+     *
+     * <p>Where the report is said is a further question and not this one. A problem written in more
+     * than one file is said in each, which the check that found it states about the regions it
+     * points at ({@link souther.compiler.diag.msg.FindingRegion}) and nothing here knows;
+     * {@link Compilation#publishSourceIdsOf(Found)} is what reads the two together.
      */
-    public record Found(String module, String sourceId, Report report) {
+    public record Found(String module, SourceId sourceId, Report report) {
 
         /**
          * The source this report claims, before a compile decides whether it has it: the one the
-         * report named, else the one its primary position was read from, else the one the key asked
-         * about. Null when none of the three says, which leaves the module's own source as the last
-         * word — a fallback only a caller that knows the module layout can apply.
+         * report's primary position was read from, else the one the key asked about. Null when
+         * neither says, which leaves the module's own source as the last word — a fallback only a
+         * caller that knows the module layout can apply.
          *
          * <p>The position comes before the key, and that ordering is the whole of what a reader
          * needs. A key says which input was asked about; a position says where the caret sits, and
          * the line under the caret is quoted out of the file this names. Where the two disagree,
          * answering with the key's shows a reader a line they did not write — which is what a
          * question asked about a module whose rows were written in an attached {@code examples for}
-         * file did (issue #309). A report that belongs somewhere other than where its caret sits says
-         * so itself, which is what {@link Report.Delivery} is for, and that is why it comes first.
+         * file did.
+         *
+         * <p>Nothing a report carries beside its position is read here. A report used to be able to
+         * name its own file, and the two sites that did read that name off a value holding it beside
+         * the place — so the answer was the position's, spelled somewhere else, with nothing keeping
+         * the two the same.
+         *
+         * <p>Anchored, not owned. What this settles is the file the report is filed under and quoted
+         * from; whether the problem is also written in some other file is a question about the
+         * regions it points at, and is asked of them.
          */
-        public String claimedSourceId() {
-            String said = report.delivery().primarySourceId();
-            if (said != null) {
-                return said;
-            }
-            SourcePos at = report.diagnostic().pos();
-            if (at != null && at.sourceId() != null) {
-                return at.sourceId();
-            }
-            return sourceId;
+        public SourceId claimedSourceId() {
+            return switch (report.diagnostic().primary()) {
+                case Primary.InSource(DiagnosticPlace.InSource place) -> place.source();
+                // Everything else is filed under the source this answer was being read for. Which is
+                // a choice this makes and not something the report said: a place in a text nobody
+                // named, a report about code out of sight and one about no stretch of text at all
+                // have no file of their own, and a report has to be filed somewhere for anybody to
+                // be shown it.
+                case Primary.InAnUnnamedText _, Primary.Unavailable _, Primary.Nowhere _ -> sourceId;
+            };
         }
     }
 

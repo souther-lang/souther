@@ -43,7 +43,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW;
 
         /** How this primitive is written. One table, read forwards by everything that shows a type
-         *  and backwards by {@link TypeName#primitiveKind()} — a primitive case name is minted from
+         *  and backwards by {@link TypeSymbol#primitiveKind()} — a primitive case name is minted from
          *  this spelling, so recovering the primitive has to read the same one and not a copy. */
         public String shown() {
             return switch (this) {
@@ -168,12 +168,55 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     }
 
     /** A reference to a named data type (product or sum). */
-    record Ref(TypeName name) implements Leaf {
+    record Ref(TypeSymbol name) implements Leaf {
         public Ref {
             if (name == null) {
                 throw new IllegalArgumentException("a type reference needs a resolved name");
             }
         }
+    }
+
+    /**
+     * What a container of this type hands one at a time, or null where it holds no such thing: a
+     * list's or set's element, a map's value, an option's payload, and a function's first parameter
+     * where what is held is the closure itself.
+     *
+     * <p>A fact about the type, so it is here. Held inside a reader, every other reader that had to
+     * say what a container holds either asked that one or answered for itself.
+     *
+     * <p>A map's key is the other parameter a closure is handed and is not what this answers.
+     */
+    static Type elementOf(Type t) {
+        return switch (t) {
+            case ListOf list -> list.element();
+            case SetOf set -> set.element();
+            case MapOf map -> map.value();
+            case OptionOf option -> option.element();
+            case FnOf fn when !fn.params().isEmpty() -> fn.params().get(0);
+            case null, default -> null;
+        };
+    }
+
+    /**
+     * What a container of this type holds many of, or null where it is no container: a list's or a
+     * set's element, and a map's value.
+     *
+     * <p>Beside {@link #elementOf} and narrower than it. That one answers what is handed out one at
+     * a time, which an option's payload and a closure's first parameter also are; this one answers
+     * what a construction holds many of, which neither of them is. A reader that asks the wider
+     * question where it means this one is told an {@code Option<Int>} has elements, and goes on to
+     * say what became of them.
+     *
+     * <p>The element and not a yes. Whether a type is a container and what it holds are wanted
+     * together wherever either is wanted at all, and asking them separately is two answers that can
+     * come apart — which is what a check testing for the constructor here and reading the element
+     * over there had.
+     */
+    static Type elementOfAContainer(Type t) {
+        return switch (t) {
+            case ListOf _, SetOf _, MapOf _ -> elementOf(t);
+            case null, default -> null;
+        };
     }
 
     /** A homogeneous list of {@code element}. */
@@ -192,7 +235,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     record OptionOf(Type element) implements Compound {}
 
     /** An anonymous union of data types (a behavior's multi-success output). */
-    record Union(java.util.Set<TypeName> members) implements Leaf {}
+    record Union(java.util.Set<TypeSymbol> members) implements Leaf {}
 
     /** A function type {@code (params...) -> result}. Written only on a helper {@code fn}'s
      * parameter (spec §fn-declaration); a value of this type is never stored in a data field, so it
@@ -232,7 +275,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     /** The type of {@code unreachable "reason"} (see {@link Never}). */
     Type NEVER = new Never();
 
-    static Type ref(TypeName name) {
+    static Type ref(TypeSymbol name) {
         return new Ref(name);
     }
 
@@ -258,7 +301,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         return new SetOf(element);
     }
 
-    static Type union(java.util.Set<TypeName> members) {
+    static Type union(java.util.Set<TypeSymbol> members) {
         return new Union(members);
     }
 
@@ -389,13 +432,13 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      * module, so a mismatch does not read as {@code Mid} against {@code Mid}.
      */
     static String show(Type t, Type against) {
-        java.util.Map<String, TypeName> here = new java.util.HashMap<>();
+        java.util.Map<String, TypeSymbol> here = new java.util.HashMap<>();
         collectNames(t, here);
-        java.util.Map<String, TypeName> there = new java.util.HashMap<>();
+        java.util.Map<String, TypeSymbol> there = new java.util.HashMap<>();
         collectNames(against, there);
         java.util.Set<String> ambiguous = new java.util.HashSet<>();
-        for (java.util.Map.Entry<String, TypeName> e : here.entrySet()) {
-            TypeName other = there.get(e.getKey());
+        for (java.util.Map.Entry<String, TypeSymbol> e : here.entrySet()) {
+            TypeSymbol other = there.get(e.getKey());
             if (other != null && !other.equals(e.getValue())) {
                 ambiguous.add(e.getKey());
             }
@@ -403,47 +446,62 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         return show(t, ambiguous);
     }
 
-    /** Every name {@code t} mentions, by the simple name it would be written under. A simple name
-     * that covers two different types in one type is already ambiguous within it, and is recorded
-     * under whichever came first — the pair rendering only has to tell the two sides apart.
+    /**
+     * Every name {@code t} mentions, in the order the type writes them.
      *
      * <p>Every constructor is named here rather than answered by {@link Leaf} and {@link Compound},
      * because what this asks is not what those divide types by. They say whether one holds a type;
      * this asks whether one holds a name, and {@link Ref} and {@link Union} are leaves that do. A
      * constructor added later has to answer for itself, so it stops the build here. Only the descent
-     * is delegated: which positions a compound holds is still {@link #atChildren}'s to say. */
-    private static void collectNames(Type t, java.util.Map<String, TypeName> out) {
+     * is delegated: which positions a compound holds is still {@link #atChildren}'s to say.
+     *
+     * <p>The one walk over the names of a type. Rendering asks it which names it will have to spell
+     * and a reader asks it which it will have to reach; a second walk written beside it would be a
+     * second answer to which names a type mentions, and the two would part company at whichever
+     * constructor was added after one of them.
+     */
+    static void forEachName(Type t, java.util.function.Consumer<TypeSymbol> f) {
         switch (t) {
-            case Ref r -> out.putIfAbsent(r.name().name(), r.name());
-            case Union u -> u.members().forEach(m -> out.putIfAbsent(m.name(), m));
+            case Ref r -> f.accept(r.name());
+            case Union u -> u.members().forEach(f);
             case ListOf _, SetOf _, OptionOf _, MapOf _, TupleOf _, FnOf _ ->
-                    forEachChild(t, held -> collectNames(held, out));
+                    forEachChild(t, held -> forEachName(held, f));
             case Prim _, Var _, MetaVar _, Nothing _, Never _, Erroneous _ -> { }
         }
     }
 
-    /**
-     * {@code t} with every name written with its module. This is the form a signature takes when it
-     * is published for another project to read: nothing is known there about what the reading module
-     * imports, so no name is left to be resolved by whatever happens to be in scope.
-     */
-    static String showQualified(Type t) {
-        java.util.Map<String, TypeName> names = new java.util.HashMap<>();
-        collectNames(t, names);
-        return show(t, names.keySet());
+    /** Every name {@code t} mentions, by the simple name it would be written under. A simple name
+     * that covers two different types in one type is already ambiguous within it, and is recorded
+     * under whichever came first — the pair rendering only has to tell the two sides apart. */
+    private static void collectNames(Type t, java.util.Map<String, TypeSymbol> out) {
+        forEachName(t, name -> out.putIfAbsent(name.name(), name));
     }
 
     /** {@code name}, written with its module when the simple name is one of {@code qualify}. */
-    private static String showName(TypeName name, java.util.Set<String> qualify) {
-        return qualify.contains(name.name()) ? name.qualified() : name.name();
+    private static String showName(TypeSymbol name, java.util.Set<String> qualify) {
+        // What the language gives has no module to write, and two of them never share a spelling,
+        // so a name of one is never the ambiguous one this is disambiguating.
+        return qualify.contains(name.name()) && name instanceof TypeSymbol.AtModule at
+                ? at.key().qualified() : name.name();
     }
 
     private static String show(Type t, java.util.Set<String> qualify) {
         return show(t, qualify, false);
     }
 
+    private static String show(Type t, java.util.Set<String> qualify, boolean inside) {
+        return showAs(t, name -> showName(name, qualify), inside);
+    }
+
     /**
-     * {@code inside} says whether {@code t} stands in a type argument or a tuple's member rather
+     * {@code t} in surface syntax, with every name it mentions written as {@code naming} spells it.
+     *
+     * <p>The one renderer. What differs between a message and a published signature is how a name is
+     * spelled and nothing else, so that is the parameter: a caller with a spelling rule of its own
+     * says it here rather than walking the type a second time, which is what a second renderer would
+     * have to do and would get subtly differently.
+     *
+     * <p>{@code inside} says whether {@code t} stands in a type argument or a tuple's member rather
      * than as a whole type, which decides how an optional is spelled: {@code ?} marks where an
      * optional is made and is written on a whole type only, so a nested one is named
      * {@code Option<T>} (spec {@code [#an-optional-is-not-written-inside-another-type]}). A message
@@ -451,10 +509,11 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      *
      * <p>A function type's parameter and its result are whole types, so they are not inside one.
      */
-    private static String show(Type t, java.util.Set<String> qualify, boolean inside) {
+    static String showAs(Type t, java.util.function.Function<TypeSymbol, String> naming,
+                         boolean inside) {
         return switch (t) {
             case Prim p -> p.shown();
-            case Ref r -> showName(r.name(), qualify);
+            case Ref r -> naming.apply(r.name());
             // A variable the core wrote is shown as the core wrote it; the name carries the `'`
             // (`'a`), so it is not added twice. One the compiler minted is shown as `_`: its spelling
             // is an internal name an author never wrote and could not write, so it says nothing to
@@ -471,20 +530,20 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
             // and finds a mismatch to describe. If one does, say what it is rather than a shape the
             // author could go looking for.
             case Erroneous _ -> "?";
-            case ListOf l -> "List<" + show(l.element(), qualify, true) + ">";
-            case SetOf s -> "Set<" + show(s.element(), qualify, true) + ">";
+            case ListOf l -> "List<" + showAs(l.element(), naming, true) + ">";
+            case SetOf s -> "Set<" + showAs(s.element(), naming, true) + ">";
             case OptionOf o -> inside
-                    ? "Option<" + show(o.element(), qualify, true) + ">"
-                    : show(o.element(), qualify, true) + "?";
-            case MapOf m -> "Map<" + show(m.key(), qualify, true) + ", "
-                    + show(m.value(), qualify, true) + ">";
-            case Union u -> u.members().stream().map(n -> showName(n, qualify))
+                    ? "Option<" + showAs(o.element(), naming, true) + ">"
+                    : showAs(o.element(), naming, true) + "?";
+            case MapOf m -> "Map<" + showAs(m.key(), naming, true) + ", "
+                    + showAs(m.value(), naming, true) + ">";
+            case Union u -> u.members().stream().map(naming)
                     .collect(java.util.stream.Collectors.joining(" | "));
-            case TupleOf tu -> tu.elements().stream().map(e -> show(e, qualify, true))
+            case TupleOf tu -> tu.elements().stream().map(e -> showAs(e, naming, true))
                     .collect(java.util.stream.Collectors.joining(", ", "(", ")"));
-            case FnOf f -> f.params().stream().map(p -> show(p, qualify, false))
+            case FnOf f -> f.params().stream().map(p -> showAs(p, naming, false))
                     .collect(java.util.stream.Collectors.joining(", ", "(", ")"))
-                    + " -> " + show(f.result(), qualify, false);
+                    + " -> " + showAs(f.result(), naming, false);
         };
     }
 

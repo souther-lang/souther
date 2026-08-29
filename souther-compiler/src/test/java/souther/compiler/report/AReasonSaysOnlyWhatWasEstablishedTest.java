@@ -1,5 +1,7 @@
 package souther.compiler.report;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -27,8 +29,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
 
     @Test
     void aSourceWithNoObservationSaysThatAndNotWhyItHadNone() {
-        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                Incompleteness.Scope.SOURCE, "1"), id -> "trip.sou");
+        String said = Reasons.said(Incompleteness.ofSource(
+                Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1")), id -> "trip.sou");
 
         assertEquals("no rows were read from `trip.sou`, so what they cover is unknown", said);
     }
@@ -43,10 +45,10 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
      */
     @Test
     void theSubjectOfASourceIsTheNameAndNotTheId() {
-        Incompleteness gap = Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                Incompleteness.Scope.SOURCE, "1");
+        Incompleteness gap = Incompleteness.ofSource(
+                Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1"));
 
-        String said = Reasons.said(gap, id -> "1".equals(id) ? "b/model.sou" : id);
+        String said = Reasons.said(gap, id -> "1".equals(id.value()) ? "b/model.sou" : id.value());
 
         assertTrue(said.contains("`b/model.sou`"), said);
         assertFalse(said.contains("`1`"), "an id is not what a person is shown: " + said);

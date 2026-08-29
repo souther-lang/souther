@@ -2,11 +2,12 @@ package souther.compiler;
 
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -26,7 +27,7 @@ class ThePrimitiveAMemberNamesIsReadOffTheNameItWasMintedFromTest {
     @Test
     void aNameMintedFromAPrimitiveReadsBackAsThatPrimitive() {
         for (Type.Prim prim : Type.Prim.values()) {
-            assertEquals(prim, TypeName.primitive(prim).primitiveKind(), prim.toString());
+            assertEquals(prim, TypeSymbol.primitive(prim).primitiveKind(), prim.toString());
             assertEquals(prim.shown(), Type.show(prim), prim.toString());
         }
     }
@@ -35,16 +36,16 @@ class ThePrimitiveAMemberNamesIsReadOffTheNameItWasMintedFromTest {
      *  a table happens to have, and a declared type is not a primitive at all. */
     @Test
     void aNameThatNamesNoPrimitiveAnswersNothing() {
-        assertNull(TypeName.SOME.primitiveKind());
-        assertNull(TypeName.NONE.primitiveKind());
-        assertNull(new TypeName("demo", "Int").primitiveKind());
+        assertNull(TypeSymbol.SOME.primitiveKind());
+        assertNull(TypeSymbol.NONE.primitiveKind());
+        assertNull(TypeSymbols.declared(new TypeKey("demo", "Int")).primitiveKind());
     }
 
     /** `Raw` is a primitive and no scalar a leaf codec exists for, which is the one place the two
      *  questions come apart. */
     @Test
     void theReservedPrimitiveIsAPrimitiveAndNoLeafScalar() {
-        assertEquals(Type.Prim.RAW, TypeName.primitive(Type.Prim.RAW).primitiveKind());
+        assertEquals(Type.Prim.RAW, TypeSymbol.primitive(Type.Prim.RAW).primitiveKind());
         assertNull(LeafScalar.of(Type.Prim.RAW));
     }
 

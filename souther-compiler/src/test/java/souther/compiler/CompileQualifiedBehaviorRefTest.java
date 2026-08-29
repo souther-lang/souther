@@ -2,10 +2,12 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,9 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code >->} stage and as a {@code depends on}. What the qualifier says is which module the behavior
  * comes from, which is what an import says, so it needs no import line.
  *
- * <p>Unlike a type, a behavior's name is also a member name in the generated class (an injected
- * behavior is a field), so two behaviors of the same name cannot both be reached here. Qualifying
- * them does not separate the fields, and the collision is reported rather than one of them winning.
+ * <p>A behavior is the module that declares it and its name, so two modules declaring one name
+ * declare two behaviors and a qualified reference says which is meant. What cannot be told apart is
+ * a bare spelling two import lines both claim: that is a question about what this module writes,
+ * and it is refused where the lines are read.
  */
 class CompileQualifiedBehaviorRefTest {
 
@@ -48,7 +51,7 @@ class CompileQualifiedBehaviorRefTest {
 
     @Test
     void aStageMayNameItsBehaviorThroughItsModule() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(UP, """
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(UP, """
                 module d exposing ( Out, flow : Out )
                 data Out = { n: Int }
                 behavior plus : (m: up.Mid) -> Out constructs Out
@@ -56,7 +59,7 @@ class CompileQualifiedBehaviorRefTest {
                 behavior flow = up.twice >-> plus
                 """));
 
-        assertTrue(classes.containsKey("d.Flow$Impl"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.impl("d", "flow")), classes.keySet().toString());
     }
 
     @Test
@@ -74,7 +77,7 @@ class CompileQualifiedBehaviorRefTest {
     /** The injected field keeps the bare name, so the Java surface is what it was. */
     @Test
     void aRequiresMayNameItsBehaviorThroughItsModule() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(LOOKUP, """
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(LOOKUP, """
                 module d exposing ( Out, run )
                 data Out = { n: Int }
                 behavior run : (i: up2.In) -> Out constructs Out depends on up2.lookup
@@ -84,7 +87,7 @@ class CompileQualifiedBehaviorRefTest {
                 }
                 """));
 
-        assertTrue(classes.containsKey("d.Run$Impl"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.impl("d", "run")), classes.keySet().toString());
     }
 
     @Test
@@ -126,19 +129,22 @@ class CompileQualifiedBehaviorRefTest {
         assertTrue(e.getMessage().contains("up") && e.getMessage().contains("other"), e.getMessage());
     }
 
-    /** Qualifying does not separate them either: the field would still be one name. */
+    /**
+     * Qualifying does separate them. Each stage is typed against the behavior it names, so a module
+     * may reach both — the reference says which, and nothing here rests on the spelling.
+     */
     @Test
-    void qualifyingTwoSameNamedBehaviorsIsReportedToo() {
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(UP, OTHER, """
-                        module d exposing ( Out, flow : Out )
-                        data Out = { n: Int }
-                        behavior plus : (m: up.Mid) -> Out constructs Out
-                        let plus (m) = Out { n = m.n + 1 }
-                        behavior flow = up.twice >-> other.twice >-> plus
-                        """)));
-
-        assertTrue(e.getMessage().contains("twice"), e.getMessage());
+    void twoSameNamedBehaviorsReachedQualifiedAreToldApart() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(UP, OTHER, """
+                module d exposing ( Out, fromUp : Out, fromOther : Out )
+                data Out = { n: Int }
+                behavior plus : (m: up.Mid) -> Out constructs Out
+                let plus (m) = Out { n = m.n + 1 }
+                behavior plusOther : (m: other.Mid) -> Out constructs Out
+                let plusOther (m) = Out { n = m.n + 1 }
+                behavior fromUp = up.twice >-> plus
+                behavior fromOther = other.twice >-> plusOther
+                """)));
     }
 
     @Test

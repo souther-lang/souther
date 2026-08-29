@@ -1,23 +1,19 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.InvariantMessage;
-import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.CodecMessage;
 import souther.compiler.diag.msg.DataMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
-import souther.compiler.types.ValueName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,32 +45,43 @@ public final class DataChecker {
      * {@code type} says which module declared it — the check runs that module's generated class, not
      * one named after the module the construction is written in. {@code typeName} is what was
      * written, which is what the message quotes. */
-    public record ConstCheck(String typeName, TypeName type, Object value, SourcePos pos) {}
+    public record ConstCheck(String typeName, TypeSymbol.AtModule type, Object value,
+                             SourcePos pos) {}
 
     /**
      * Every {@code 金額(constant)} in the module: a newtype construction whose argument folds to a
      * compile-time constant. The compiler runs each through the generated {@code $Ctfe.check}
      * (CTFE) so a violation becomes a compile error rather than a run-time abort (ADR-0032).
+     *
+     * <p>Desugared definitions, because that is what this finds them by. A construction is matched
+     * as {@link Hir.NewData}, and a body that has not been desugared writes {@code 金額(500)} as an
+     * application — so the walk matches nothing, the list comes back empty, and the compile goes on
+     * with no check made and nothing said. Over a compile of the suite that is 174 constructions
+     * found against 1: the state in the signature is what stops a caller handing over the bodies
+     * from a rung below and being told the module is clean.
      */
-    public static List<ConstCheck> constNewtypeChecks(Ast.Module module, Symbols symbols) {
+    public static List<ConstCheck> constNewtypeChecks(List<Desugared.Fn> fns, Symbols symbols) {
         List<ConstCheck> out = new ArrayList<>();
-        for (Ast.FnDef fn : module.fns()) {
-            collectConstChecks(fn.writtenBody(), symbols, out);
+        for (Desugared.Fn fn : fns) {
+            collectConstChecks(fn.read().writtenBody(), symbols, out);
         }
         return out;
     }
 
-    private static void collectConstChecks(Ast.Expr e, Symbols symbols, List<ConstCheck> out) {
-        if (e instanceof Ast.NewData nd && symbols.get(nd.typeName().denotes()) instanceof Ast.Data nt
-                && nt.newtype() && isInvariantBearing(nd.typeName().denotes(), symbols)) {
-            CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
-                    out.add(new ConstCheck(nd.typeName().written(), nd.typeName().denotes(), v, nd.pos())));
+    private static void collectConstChecks(Hir.Expr e, Symbols symbols, List<ConstCheck> out) {
+        if (e instanceof Hir.NewData nd
+                && nd.typeName().answered() instanceof Hir.Name.Denoting built
+                && built.type() instanceof TypeSymbol.AtModule constructed
+                && symbols.declarations().declaration(constructed) instanceof Hir.Data nt
+                && nt.newtype() && isInvariantBearing(constructed, symbols)) {
+            CallElaborator.newtypeConstantArg(nd, symbols).ifPresent(v ->
+                    out.add(new ConstCheck(nd.typeName().written(), constructed, v, nd.pos())));
         }
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
     }
 
-    public static boolean isInvariantBearing(TypeName typeName, Symbols symbols) {
-        return typeName != null && symbols.get(typeName) instanceof Ast.Data d
+    public static boolean isInvariantBearing(TypeSymbol typeName, Symbols symbols) {
+        return typeName != null && symbols.declarations().declaration(typeName) instanceof Hir.Data d
                 && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
     }
 
@@ -84,9 +91,9 @@ public final class DataChecker {
      * by spread as often as between two written here — and either way an arm naming it would answer
      * neither rule in particular.
      */
-    private static void checkClauseNames(Ast.Data data, Symbols symbols) {
+    private static void checkClauseNames(Hir.Data data, Symbols symbols) {
         Set<String> seen = new HashSet<>();
-        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+        for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
             String name = clause.name().orElse(null);
             if (name != null && !seen.add(name)) {
                 throw CompileException.of(Diagnostic
@@ -96,24 +103,31 @@ public final class DataChecker {
     }
 
     /**
-     * What a body builds, in the two kinds a permission check tells apart: {@code originated} is what
-     * this body is answerable for, {@code carried} what another module's published value or helper
-     * built and this body was handed. Each maps the type to the spelling it was written with, so a
-     * report quotes the source.
+     * What a body builds <b>that a construction set is made of</b>, in the two kinds a permission
+     * check tells apart: {@code originated} is what this body is answerable for, {@code carried}
+     * what another module's published value or helper built and this body was handed. Each maps the
+     * type to the spelling it was written with, so a report quotes the source.
+     *
+     * <p><b>Not every construction is in here, and the two questions are not the same one</b> (spec
+     * §constructs-excludes-unit-data). {@code let f (_) = Domestic} constructs the unit and this
+     * answers {@code builds(Domestic) == false}, because a unit carries no construction authority to
+     * be declared or checked. A reader wanting every construction — for a walk over what a body
+     * makes, rather than over what its clause must name — wants its own reader and not this one.
      *
      * <p>The split is what makes the carried ones invisible to the requirement and still visible to
      * the redundancy check: a behavior does not have to declare `constructs` for a construction that
      * came in with a published body — it may have no name for the type — and a behavior that declares
      * one anyway is not told it builds nothing.
      */
-    public record Constructs(Map<TypeName, String> originated, Map<TypeName, String> carried) {
+    public record Constructs(Map<TypeSymbol, String> originated, Map<TypeSymbol, String> carried) {
 
         public static Constructs empty() {
             return new Constructs(new LinkedHashMap<>(), new LinkedHashMap<>());
         }
 
-        /** Whether {@code built} is built here at all, however it got here. */
-        public boolean builds(TypeName built) {
+        /** Whether {@code built} is in the set this body contributes, however it got here.
+         *  A unit data never is, whatever the body writes (spec §constructs-excludes-unit-data). */
+        public boolean builds(TypeSymbol built) {
             return originated.containsKey(built) || carried.containsKey(built);
         }
 
@@ -124,7 +138,7 @@ public final class DataChecker {
         /** The same set with everything counted as carried — what a body reached through something
          * it was handed rather than wrote, and so answers for none of. */
         public Constructs allCarried() {
-            Map<TypeName, String> all = new LinkedHashMap<>(carried);
+            Map<TypeSymbol, String> all = new LinkedHashMap<>(carried);
             originated.forEach(all::putIfAbsent);
             return new Constructs(new LinkedHashMap<>(), all);
         }
@@ -133,10 +147,10 @@ public final class DataChecker {
          * whether that added anything. */
         public boolean absorb(Constructs other) {
             boolean added = false;
-            for (Map.Entry<TypeName, String> e : other.originated.entrySet()) {
+            for (Map.Entry<TypeSymbol, String> e : other.originated.entrySet()) {
                 added |= originated.putIfAbsent(e.getKey(), e.getValue()) == null;
             }
-            for (Map.Entry<TypeName, String> e : other.carried.entrySet()) {
+            for (Map.Entry<TypeSymbol, String> e : other.carried.entrySet()) {
                 added |= carried.putIfAbsent(e.getKey(), e.getValue()) == null;
             }
             return added;
@@ -144,13 +158,17 @@ public final class DataChecker {
     }
 
     /**
-     * The data types {@code e} constructs.
+     * What {@code e} contributes to the construction set of the behavior it belongs to.
+     *
+     * <p>Narrower than "the data types {@code e} constructs", and the difference is the unit data
+     * (spec §constructs-excludes-unit-data). A bare unit name still constructs its value and is not
+     * collected.
      *
      * <p>{@code bound} carries the names in scope, because a bare identifier is a unit data's
      * construction only when nothing has bound it — a local of the same name wins (spec §unit-data).
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
-    static void collectConstructs(Ast.Expr e, Map<TypeName, String> out, Symbols symbols,
+    static void collectConstructs(Hir.Expr e, Map<TypeSymbol, String> out, Symbols symbols,
                                   Map<String, Constructs> recConstructs) {
         Constructs all = Constructs.empty();
         collectConstructs(e, all, symbols, recConstructs);
@@ -158,27 +176,27 @@ public final class DataChecker {
     }
 
     /** Whether {@code nd} arrived here already made, rather than being written here. */
-    private static boolean carried(Ast.NewData nd, TypeName built) {
+    private static boolean carried(Hir.NewData nd, TypeSymbol.AtModule built) {
         return nd.origin().carried(built);
     }
 
-    static void collectConstructs(Ast.Expr e, Constructs out, Symbols symbols,
+    static void collectConstructs(Hir.Expr e, Constructs out, Symbols symbols,
                                           Map<String, Constructs> recConstructs) {
         switch (e) {
-            case Ast.LetIn li -> {
+            case Hir.LetIn li -> {
                 collectConstructs(li.value(), out, symbols, recConstructs);
                 collectConstructs(li.body(), out, symbols, recConstructs);
             }
             // An expansion builds what its arguments build and what the callee's body builds. What a
             // function argument builds is counted from the body, where the callee applies it; counted
             // here as well, one lambda's construction would be recorded twice.
-            case Ast.Expansion ex -> {
-                for (Ast.Bound b : ex.bound()) {
+            case Hir.Expansion ex -> {
+                for (Hir.Bound b : ex.bound()) {
                     collectConstructs(b.value(), out, symbols, recConstructs);
                 }
                 collectConstructs(ex.body(), out, symbols, recConstructs);
             }
-            case Ast.NewData nd -> {
+            case Hir.NewData nd -> {
                 // A construction this body was handed is not this body's. It is handed one two ways.
                 // A module's published value or helper carries its own: publishing the definition is
                 // what states that origination, and the reader has no name to declare a type the
@@ -188,17 +206,22 @@ public final class DataChecker {
                 // which it can. A value carries the construction its definition made, whatever module
                 // declares the type: the definition is where the value is made, and a body that names
                 // it compares against a limit rather than setting one.
-                Map<TypeName, String> side = carried(nd, nd.typeName().denotes())
-                        ? out.carried() : out.originated();
-                side.putIfAbsent(nd.typeName().denotes(), nd.typeName().name().quoted());
-                for (Ast.FieldInit init : nd.inits()) {
+                // A construction naming nothing builds no type to record; it is reported where the
+                // name is written, and the fields written under it are still walked.
+                if (nd.typeName().answered() instanceof Hir.Name.Denoting built) {
+                    Map<TypeSymbol, String> side =
+                            built.type() instanceof TypeSymbol.AtModule made && carried(nd, made)
+                                    ? out.carried() : out.originated();
+                    side.putIfAbsent(built.type(), nd.typeName().name().quoted());
+                }
+                for (Hir.FieldInit init : nd.inits()) {
                     collectConstructs(init.value(), out, symbols, recConstructs);
                 }
             }
-            case Ast.FieldAccess fa -> collectConstructs(fa.target(), out, symbols, recConstructs);
-            case Ast.Tuple tup -> tup.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
-            case Ast.TupleGet tg -> collectConstructs(tg.tuple(), out, symbols, recConstructs);
-            case Ast.Apply call -> {
+            case Hir.FieldAccess fa -> collectConstructs(fa.target(), out, symbols, recConstructs);
+            case Hir.Tuple tup -> tup.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
+            case Hir.TupleGet tg -> collectConstructs(tg.tuple(), out, symbols, recConstructs);
+            case Hir.Apply call -> {
                 // a recursive helper is not inlined, so its own (transitive) constructions are
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be —
                 // each as the kind it already is, so one another module published stays that
@@ -206,64 +229,63 @@ public final class DataChecker {
                 // on a value, none of them are this body's: the value's definition is what reached
                 // the helper, and the call is standing in for constructions that would have been
                 // marked had the helper been expandable.
-                Constructs viaHelper = recConstructs.get(call.reaches());
+                Constructs viaHelper = call.answered() == null
+                        ? null : recConstructs.get(call.answered().reaches());
                 if (viaHelper != null) {
                     out.absorb(call.origin().viaValueReference() ? viaHelper.allCarried() : viaHelper);
                 }
                 call.args().forEach(a -> collectConstructs(a, out, symbols, recConstructs));
             }
-            case Ast.Binary bin -> {
+            case Hir.Binary bin -> {
                 collectConstructs(bin.left(), out, symbols, recConstructs);
                 collectConstructs(bin.right(), out, symbols, recConstructs);
             }
-            case Ast.Neg neg -> collectConstructs(neg.operand(), out, symbols, recConstructs);
-            case Ast.Match m -> {
+            case Hir.Neg neg -> collectConstructs(neg.operand(), out, symbols, recConstructs);
+            case Hir.Match m -> {
                 collectConstructs(m.scrutinee(), out, symbols, recConstructs);
-                for (Ast.Case c : m.cases()) {
+                for (Hir.Case c : m.cases()) {
                     collectConstructs(c.body(), out, symbols, recConstructs);
                 }
             }
-            case Ast.If iff -> {
+            case Hir.If iff -> {
                 collectConstructs(iff.cond(), out, symbols, recConstructs);
                 collectConstructs(iff.then(), out, symbols, recConstructs);
                 collectConstructs(iff.els(), out, symbols, recConstructs);
             }
             // an attempt builds the value on its success branch, so it needs the same permission a
             // plain construction does — what it does not do is abort when it fails
-            case Ast.IfConstructed ic -> {
+            case Hir.IfConstructed ic -> {
                 collectConstructs(ic.construct(), out, symbols, recConstructs);
                 collectConstructs(ic.then(), out, symbols, recConstructs);
                 ic.els().forEach(arm ->
                         collectConstructs(arm.body(), out, symbols, recConstructs));
             }
-            case Ast.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
-            case Ast.ListComp comp -> {
+            case Hir.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
+            // Whichever collection the brackets turn out to be, what a row writes in them is what it
+            // builds: the notation decides the container and not what is put in it.
+            case Hir.RowCollection row ->
+                    row.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
+            case Hir.ListComp comp -> {
                 collectConstructs(comp.element(), out, symbols, recConstructs);
                 comp.guards().forEach(g -> collectConstructs(g, out, symbols, recConstructs));
             }
             // a block builds under the enclosing behavior's permission (spec §blocks)
-            case Ast.Block block -> collectConstructs(block.body(), out, symbols, recConstructs);
-            // a bare name that denotes a unit data is that unit's construction (spec §unit-data). Read off
-            // what the name denotes rather than resolved again from its spelling: a reader with a
-            // unit data spelled like the one another module's published body builds was recording
-            // its own type as the one built. Carried or not is asked of the name for the same reason
-            // it is asked of a construction node — it is the same question about the same thing.
-            // `constructs` governs what this compilation declares; a unit the language gives
-            // (`HALF_UP`) is vocabulary, not business data — as `None` is.
-            case Ast.Var v when v.denotes() instanceof ValueName.OfType named
-                    && symbols.declaredByCompilation(named.type())
-                    && symbols.get(named.type()) instanceof Ast.UnitData -> {
-                Map<TypeName, String> side = named.origin().carried(named.type())
-                        ? out.carried() : out.originated();
-                side.putIfAbsent(named.type(), v.written().quoted());
-            }
-            case Ast.IntLit _ -> { }
-            case Ast.DecimalLit _ -> { }
-            case Ast.StringLit _ -> { }
-            case Ast.BoolLit _ -> { }
-            case Ast.Var _ -> { }
+            case Hir.Block block -> collectConstructs(block.body(), out, symbols, recConstructs);
+            case Hir.IntLit _ -> { }
+            case Hir.DecimalLit _ -> { }
+            case Hir.StringLit _ -> { }
+            case Hir.BoolLit _ -> { }
+            // A bare name denoting a unit data constructs that unit's value (spec §unit-data) and
+            // is still not collected here. A construction set records what a behavior holds authority to
+            // build, and a unit needs none: it has no fields, can carry no invariant, and has one
+            // value, so minting another is not tellable from passing the existing one through — which
+            // is the distinction the clause exists to record (spec §constructs-excludes-unit-data).
+            // Collected, it made the position a unit name is written in decide the clause: comparing
+            // against a case (`r.kind == Domestic`) demanded an entry that opening the same case
+            // with `match` did not, since only the first is an expression.
+            case Hir.Var _ -> { }
             // it builds nothing: no value is made where it stands
-            case Ast.Unreachable _ -> { }
+            case Hir.Unreachable _ -> { }
         }
     }
 
@@ -289,10 +311,16 @@ public final class DataChecker {
      * As above for a list of type names. Two entries are the same when they denote one type, so
      * `Amount` an import brings in and `up.Amount` are the duplicate a spelling comparison misses.
      */
-    static void rejectDuplicateTypes(List<Ast.Name> names, String where, SourcePos pos) {
-        Set<TypeName> seen = new HashSet<>();
-        for (Ast.Name n : names) {
-            if (!seen.add(n.denotes())) {
+    static void rejectDuplicateTypes(List<Hir.Name> names, String where, SourcePos pos) {
+        Set<TypeSymbol> seen = new HashSet<>();
+        for (Hir.Name n : names) {
+            // A name nothing declares denotes no type, so there is no type here for another to be
+            // the same as. It was reported where it is written; calling it a duplicate as well
+            // would be a second report about the one mistake.
+            if (n.answered() == null) {
+                continue;
+            }
+            if (!seen.add(n.answered().type())) {
                 throw duplicate(n.written(), where, pos);
             }
         }
@@ -300,8 +328,8 @@ public final class DataChecker {
 
     /** Where to point at a field the data declares — the field's own name — or at the data header for
      * one that arrived through a {@code ...} spread, which is written in the data it came from. */
-    private static Region fieldRegion(Ast.Data data, String field) {
-        for (Ast.Field f : data.fields()) {
+    private static Region fieldRegion(Hir.Data data, String field) {
+        for (Hir.Field f : data.fields()) {
             if (f.name().equals(field)) {
                 return Region.ofWidth(f.pos(), field.length());
             }
@@ -314,119 +342,99 @@ public final class DataChecker {
      * it has no leaf to dispatch a codec over and no case list a {@code match} could be exhaustive
      * against. Reported here rather than left to the walks, which would recurse until the stack ran
      * out — codec derivation runs before this check and stops at the repeat for the same reason. */
-    private static List<String> sumCycle(TypeName target, Symbols symbols,
-                                         LinkedHashSet<TypeName> path) {
-        if (!(symbols.get(path.isEmpty() ? target : last(path)) instanceof Ast.SumData s)) {
+    private static List<String> sumCycle(TypeSymbol target, Symbols symbols,
+                                         LinkedHashSet<TypeSymbol> path) {
+        if (!(symbols.declarations().declaration(
+                path.isEmpty() ? target : last(path)) instanceof Hir.SumData s)) {
             return null;
         }
-        for (Ast.Name caseName : s.cases()) {
-            if (target.equals(caseName.denotes())) {
+        for (Hir.Name caseName : s.cases()) {
+            // A case naming nothing is no step of a cycle, and it is reported on the declaration
+            // that writes it — which may be another module's, and not one this check was handed.
+            if (!(caseName.answered() instanceof Hir.Name.Denoting names)) {
+                continue;
+            }
+            if (target.equals(names.type())) {
                 List<String> out = new ArrayList<>();
-                for (TypeName seen : path) {
+                for (TypeSymbol seen : path) {
                     out.add(seen.name());
                 }
                 out.add(caseName.written());
                 return out;
             }
-            if (symbols.get(caseName.denotes()) instanceof Ast.SumData && path.add(caseName.denotes())) {
+            if (symbols.declarations().declaration(names.type()) instanceof Hir.SumData
+                    && path.add(names.type())) {
                 List<String> found = sumCycle(target, symbols, path);
                 if (found != null) {
                     return found;
                 }
-                path.remove(caseName.denotes());
+                path.remove(names.type());
             }
         }
         return null;
     }
 
-    private static TypeName last(LinkedHashSet<TypeName> path) {
-        TypeName out = null;
-        for (TypeName t : path) {
+    private static TypeSymbol last(LinkedHashSet<TypeSymbol> path) {
+        TypeSymbol out = null;
+        for (TypeSymbol t : path) {
             out = t;
         }
         return out;
     }
 
-    static void checkSum(Ast.SumData sum, Symbols symbols) {
+    /**
+     * The declaration a name written in the declaration being checked names.
+     *
+     * <p>Every name written in one of these was answered. A declaration holding a name that names
+     * nothing has no meaning to check — {@code Names.Unbuilt} collects it and {@code Names.Definition}
+     * hands it to nobody — and {@code TypeChecker} checks only the declarations it was handed. One
+     * arriving here is this compiler checking a declaration that was not among them.
+     */
+    private static TypeSymbol names(Hir.Name name) {
+        return switch (name) {
+            case Hir.Name.Denoting d -> d.type();
+            case Hir.Name.Unanswered u -> throw u.unexpectedHere();
+        };
+    }
+
+    static void checkSum(Hir.SumData sum, Symbols symbols) {
         rejectDuplicateTypes(sum.cases(), "the sum `" + sum.name() + "`", sum.pos());
         // A generated sum is a sealed interface, and its `permits` is settled when its own module is
         // generated — a case of another module cannot implement it, so it would be permitted without
         // being a member: no value satisfies the type and an exhaustive switch over it has no arms
         // (ADR-0057, the declared-sum counterpart of E1606).
-        for (Ast.Name c : sum.cases()) {
-            if (symbols.isForeign(c.denotes())) {
+        for (Hir.Name c : sum.cases()) {
+            // A case the language gives is declared by no module and so by none of this one's;
+            // the module a case is declared in is what the message is about, and it has one.
+            if (names(c) instanceof TypeSymbol.AtModule at && symbols.scope().isForeign(at)) {
                 throw CompileException.of(Diagnostic
                                 .at(c.name().reportedAt())
                                 
-                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), c.denotes().module())).build());
+                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), at.module())).build());
             }
         }
-        List<String> cycle = sumCycle(symbols.own(sum.name()), symbols, new LinkedHashSet<>());
+        List<String> cycle = sumCycle(sum.declares(), symbols, new LinkedHashSet<>());
         if (cycle != null) {
             throw CompileException.of(Diagnostic
                             .at(sum.pos()).say(new BehaviorMessage.ASumContainsItself(sum.name(), String.join(" | ", cycle))).build());
         }
-        sum.decoder().ifPresent(disc -> {
-            // a derived codec dispatches over the leaves, so a nested sum's cases count too (§sum-data,
-            // §sum-discrimination)
-            Set<TypeName> dispatchable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
-            for (Ast.Variant v : disc.variants()) {
-                Ast.Def caseDef = symbols.get(v.caseType().denotes());
-                if (!dispatchable.contains(v.caseType().denotes())) {
-                    throw CompileException.of(Diagnostic.at(v.pos())
-                            .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
-                            .build());
-                }
-                // a unit-data case has an implicit (field-less) decoder generated on its class;
-                // a case may itself be a sum (spec §sum-data's nested `自社負担 | 先方負担`)
-                boolean caseDecodes = caseDef instanceof Ast.UnitData
-                        || (caseDef instanceof Ast.Data d && d.decoder().isPresent())
-                        || (caseDef instanceof Ast.SumData s && s.decoder().isPresent());
-                if (!caseDecodes) {
-                    throw CompileException.of(Diagnostic.at(v.pos())
-                            .say(new CodecMessage.CaseNeedsADecoder(v.caseType().written()))
-                            .build());
-                }
-            }
-        });
-        sum.encoder().ifPresent(enc -> {
-            // A case lays its fields flatly beside the discriminator the sum writes, so a case
-            // declaring a field of that name and the tag want one key. Refused here rather than
-            // written over where it is encoded, which would lose the value with nothing said.
-            TypeName carrying = TypeOps.memberCarryingField(
-                    Type.ref(symbols.own(sum.name())), enc.key(), symbols);
+        // A case lays its fields flatly beside the discriminator the sum writes, so a case declaring
+        // a field of that name and the tag want one key. Refused here rather than written over where
+        // it is encoded, which would lose the value with nothing said.
+        //
+        // The key is read off the settled representation and not written here. A behavior's output
+        // union is under the same rule and reads it from the same place (`SpecChecker`), so the two
+        // cannot come to be checked against different keys — and an enumeration, which writes no key,
+        // is not asked.
+        if (Boundary.of(Type.ref(sum.declares()), symbols).representation()
+                instanceof Boundary.Representation.Discriminated(String key)) {
+            TypeSymbol carrying = TypeOps.memberCarryingField(Type.ref(sum.declares()), key, symbols);
             if (carrying != null) {
                 throw CompileException.of(Diagnostic
                                 .at(sum.pos())
-                                .hint(new DataMessage.TheTagAndTheFieldWantOneKey(enc.key())).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), enc.key(), sum.name())).build());
+                                .hint(new DataMessage.TheTagAndTheFieldWantOneKey(key)).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), key, sum.name())).build());
             }
-            Set<TypeName> covered = new HashSet<>();
-            Set<TypeName> encodable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
-            for (Ast.EncVariant v : enc.variants()) {
-                if (!encodable.contains(v.caseType().denotes())) {
-                    throw CompileException.of(Diagnostic.at(v.pos())
-                            .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
-                            .build());
-                }
-                Ast.Def caseDef = symbols.get(v.caseType().denotes());
-                boolean caseEncodes = caseDef instanceof Ast.UnitData
-                        || (caseDef instanceof Ast.Data d && d.encoder().isPresent())
-                        || (caseDef instanceof Ast.SumData s && s.encoder().isPresent());
-                if (!caseEncodes) {
-                    throw CompileException.of(Diagnostic.at(v.pos())
-                            .say(new CodecMessage.CaseNeedsAnEncoder(v.caseType().written()))
-                            .build());
-                }
-                covered.add(v.caseType().denotes());
-            }
-            for (TypeName caseName : encodable) {
-                if (!covered.contains(caseName)) {
-                    throw CompileException.of(Diagnostic.at(enc.pos())
-                            .say(new CodecMessage.TheEncoderIsMissingACase(sum.name(), caseName.name()))
-                            .build());
-                }
-            }
-        });
+        }
     }
 
     /**
@@ -439,26 +447,124 @@ public final class DataChecker {
      * and rules that cannot all hold leave none. All of them are one count coming to nothing.
      *
      * <p>What that count is and how it is reached is {@link TypeCardinality}; which of the
-     * declarations with no value to say so about is {@link UninhabitableTypes}. What is left here is
-     * saying it.
+     * declarations with no value to say so about, and what showed it of the one the report sits at,
+     * is {@link UninhabitableTypes}. What is left here is saying it.
+     *
+     * <p>The proof arrives with the group and nothing here reads the declaration again to work out
+     * which sentence to write. That is the whole of why it arrives: a reader that picked between two
+     * sentences by looking at the declaration a second time would be a second reader of a question
+     * the count already answered, free to pick the sentence the count did not mean.
      */
-    static List<CompileException> typesWithNoValue(Ast.Module module, Symbols symbols) {
+    static List<CompileException> typesWithNoValue(List<Hir.Def> declarations, Symbols symbols,
+                                                   ReadingPolicy policy) {
+        List<UninhabitableTypes.UninhabitableGroup> groups = UninhabitableTypes.withNoValueOfTheirOwn(
+                declarations, TypeCardinality.solve(declarations, symbols, policy));
+        // How many of the lacks reported here each declaration is part of. A declaration in one of
+        // them is a declaration whose lack the group accounts for entirely, and a suggestion about
+        // that group is a way out. A declaration in two is in neither's: what a group is established
+        // by is a reading with every other lack granted, so undoing one leaves the other where it
+        // was, and a suggestion read off either would be an untrue way out written as a certainty.
+        Map<TypeSymbol, Integer> lacks = new HashMap<>();
+        for (UninhabitableTypes.UninhabitableGroup group : groups) {
+            group.members().forEach(each -> lacks.merge(each, 1, Integer::sum));
+        }
         List<CompileException> found = new ArrayList<>();
-        for (List<TypeName> group : UninhabitableTypes.withNoValueOfTheirOwn(module, symbols,
-                TypeCardinality.solve(module, symbols))) {
-            // The group is one thing to say and is said at the first of them the module declares.
-            // Which one that is settles where the report sits and not what it is about: the others
-            // have no value in the same way and for the same reason.
-            Ast.Def at = (Ast.Def) symbols.get(group.get(0));
-            found.add(CompileException.of(Diagnostic.at(at.pos())
-                    .say(new DataMessage.DataCannotBeConstructed(at.name()))
-                    .build()));
+        for (UninhabitableTypes.UninhabitableGroup group : groups) {
+            Hir.Def at = symbols.declarations().declaration(group.reportedAt());
+            found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
+                    FieldDomains.THE_VALUE, group.why(),
+                    lacks.get(group.reportedAt()) == 1).build()));
         }
         return found;
     }
 
-    static void checkData(CheckContext ctx,
-                                  Map<String, Type> recursiveHelperFns) {
+    /**
+     * The one place a proof of having no value is read as a sentence.
+     *
+     * <p>Exhaustive over {@link Emptiness}, which is what makes a proof added later a build that
+     * stops here rather than a refusal quietly told one of the sentences already written.
+     *
+     * <p>{@link Emptiness.AtAField} is descended through and the rest are not. It says where a lack
+     * sits and states nothing of its own, so the sentence is its child's and the position it names is
+     * carried down for the child to write; every other shape asserts something — a sum has none
+     * because all of its cases do, and picking one of them to speak for the rest would answer a
+     * question about which case is at fault that nothing asked.
+     *
+     * <p>Three of the arms have no model that reaches them. A declaration is reported for a group no
+     * smaller group holds inside, and a proof of its that stops at a name — on its own, under a
+     * collection, or across every case — names only declarations in the group; had any of those been
+     * shown something, the group without this one would hold and this group would not be the
+     * smallest. So what reaches those arms today is nothing, and they are written because being
+     * exhaustive over the proofs is what makes the next proof a build that stops here. Do not read
+     * the switch as a list of sentences anybody has seen.
+     *
+     * @param path where in the declaration the proof so far has reached
+     * @param alone whether the declaration this is said at has no other lack reported of it, which
+     *              is what a suggestion has to be true of
+     */
+    private static Diagnostic.Builder told(Diagnostic.Builder at, String data, String path,
+                                           Emptiness why, boolean alone) {
+        return switch (why) {
+            case Emptiness.AtAField it -> told(at, data, it.path(), it.under(), alone);
+            case Emptiness.NoBaseInComponent it -> {
+                Diagnostic.Builder said = at.say(new DataMessage.DataCannotBeConstructed(data));
+                yield alone ? suggested(said, data, it.through()) : said;
+            }
+            case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _ ->
+                    at.say(new DataMessage.ItsRulesCannotAllHold(data));
+            case Emptiness.EmptyOrderedInterval _ ->
+                    at.say(new DataMessage.NothingIsLeftForThatPositionToHold(
+                            data, written(path)));
+            case Emptiness.SetRequiresTooManyDistinctValues it ->
+                    at.say(new DataMessage.ASetCannotBeFilledFromItsElement(
+                            data, written(path), it.available()));
+            case Emptiness.NoAllowedCollectionSize _ ->
+                    at.say(new DataMessage.NoSizeItsRulesAdmit(data, written(path)));
+            case Emptiness.NonEmptyCollectionWithNoElement _ ->
+                    at.say(new DataMessage.ACollectionThatCannotBeEmptyHasNothingToHold(
+                            data, written(path)));
+            case Emptiness.AcrossEveryCase _ -> at.say(new DataMessage.NoCaseOfItHasAValue(data));
+            case Emptiness.TheNameHasNone it ->
+                    at.say(new DataMessage.ItHoldsATypeWithNoValue(data, it.name().name()));
+        };
+    }
+
+    /**
+     * What would give a self-referring declaration a value, where anything can be said.
+     *
+     * <p>Read off how this one reaches the others and not off the refusal. What makes a recursion
+     * bottom out depends on the way round it runs, and one suggestion written for all of them told
+     * an author holding a non-empty list of itself to write a list. Where the shape is one nothing
+     * safe can be said about, nothing is: a refusal owes the author the reason and does not owe an
+     * invented way out.
+     *
+     * <p>What a newtype wraps is one of those. It is at no position of its own, and writing the `?`
+     * there is refused where a newtype is read — so the way out is at whatever uses the name, which
+     * is not something this can say without reading declarations it is not looking at.
+     */
+    private static Diagnostic.Builder suggested(Diagnostic.Builder at, String data,
+                                                Emptiness through) {
+        return switch (through) {
+            case Emptiness.AtAField it when it.under() instanceof Emptiness.TheNameHasNone
+                    && !FieldDomains.THE_VALUE.equals(it.path()) ->
+                    at.hint(new DataMessage.ItWouldHaveOneIfTheFieldCouldBeAbsent(
+                            data, written(it.path())));
+            case Emptiness.AtAField it
+                    when it.under() instanceof Emptiness.NonEmptyCollectionWithNoElement ->
+                    at.hint(new DataMessage.ItWouldHaveOneIfTheCollectionCouldBeEmpty(
+                            data, written(it.path())));
+            case Emptiness.AcrossEveryCase _ ->
+                    at.hint(new DataMessage.ACaseThatDoesNotHoldItWouldGiveItOne(data));
+            default -> at;
+        };
+    }
+
+    /** How a position is written in the model, what a newtype wraps being spelled `value`. */
+    private static String written(String path) {
+        return FieldDomains.THE_VALUE.equals(path) ? "value" : path;
+    }
+
+    static void checkData(CheckContext ctx) {
         Map<String, Type> fields = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
 
         // A newtype wraps one value and takes its representation, so there is nothing for it to be
@@ -498,21 +604,10 @@ public final class DataChecker {
             }
         }
 
-        for (Ast.InvariantClause clause : ctx.data().invariants()) {
-            // A total recursive helper — the stdlib fold behind the list quantifiers, or a user helper
-            // proven total — is callable from an invariant, so its signature must be in scope here. A
-            // field of the same name as a helper wins: a bare name in an invariant is a field reference.
-            Scope invEnv = fieldScope(ctx).reaching(recursiveHelperFns);
-            // A clause is the declaration's, not the body's. Reached from a construction, this is
-            // where one tree stops and another starts, so what the tree being walked keeps standing
-            // is left behind: what this one keeps is its own to say, and a permission inherited by
-            // being reached from somewhere is not a permission a representation gave.
-            Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx.inAnotherRepresentation());
-            if (t != Type.BOOL) {
-                throw CompileException.of(Diagnostic.at(clause.expr().pos())
-                                .say(new DeclarationMessage.AnInvariantExpressionIsBool(Type.show(t))).build());
-            }
-        }
+        // That a clause is a condition is not asked here. Elaborating it is what answers that, and
+        // the elaboration a clause has is `Shapes.ValueShapes`'s — which is the one that runs
+        // (issue #1080). Asked here as well, this would be the second reading of the clause, which
+        // is what having one owner is for.
         checkClauseNames(ctx.data(), ctx.symbols());
 
         ctx.data().decoder().ifPresent(dec -> checkDecoder(dec, ctx, fields));
@@ -520,7 +615,7 @@ public final class DataChecker {
     }
 
     private static Scope fieldScope(CheckContext ctx) {
-        return fieldScope(ctx.symbols().own(ctx.data().name()), ctx.data(), ctx.symbols());
+        return fieldScope(ctx.data().declares(), ctx.data(), ctx.symbols());
     }
 
     /**
@@ -531,7 +626,7 @@ public final class DataChecker {
      * bound where it was written, so that is what the scope offers, and the clause carried in with the
      * declaration finds the very bindings it names.
      */
-    static Scope fieldScope(TypeName declared, Ast.Data data, Symbols symbols) {
+    static Scope fieldScope(TypeSymbol.AtModule declared, Hir.Data data, Symbols symbols) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
         TypeOps.fieldBindings(declared, data, symbols).forEach((name, binding) ->
@@ -539,57 +634,89 @@ public final class DataChecker {
         return Scope.of(bindings);
     }
 
-    private static void checkDecoder(Ast.DecoderDef dec, CheckContext ctx, Map<String, Type> fields) {
+    private static void checkDecoder(Hir.DecoderDef dec, CheckContext ctx, Map<String, Type> fields) {
         switch (dec) {
-            case Ast.PrimDecoder prim -> {
+            case Hir.PrimDecoder prim -> {
                 Type inputType = TypeOps.primType(prim.from());
                 Scope env = Scope.NONE.with(prim.input(), inputType);
-                for (Ast.DecStmt stmt : prim.stmts()) {
+                for (Hir.DecStmt stmt : prim.stmts()) {
                     switch (stmt) {
-                        case Ast.Let let ->
+                        case Hir.Let let ->
                                 env = env.with(let.binder(), Elaborator.typeOf(let.value(), env, ctx));
                     }
                 }
                 checkConstruct(prim.result(), ctx, fields, env);
             }
-            case Ast.ObjectDecoder obj -> {
+            case Hir.ObjectDecoder obj -> {
                 Scope env = Scope.NONE;
-                for (Ast.Bind bind : obj.binds()) {
+                for (Hir.Bind bind : obj.binds()) {
                     env = env.with(bind.binder(), decRefType(bind.ref(), ctx.symbols()));
                 }
                 checkConstruct(obj.result(), ctx, fields, env);
             }
-            case Ast.NewtypeDecoder nt -> {
+            case Hir.NewtypeDecoder nt -> {
                 Scope env = Scope.NONE.with(nt.input(), decRefType(nt.inner(), ctx.symbols()));
                 checkConstruct(nt.result(), ctx, fields, env);
             }
         }
     }
 
-    private static Type decRefType(Ast.DecRef ref, Symbols symbols) {
+    /**
+     * Whether a codec is there to be reached for (spec {@code [#a-codec-reached-for-exists]}).
+     *
+     * <p>Read of the declaration and not of a node on it. A unit data carries no derived decoder — it
+     * has no field for one to read — and is decoded all the same, by the one its class is generated
+     * with, which ignores its input and answers the single value there is. Reading the node refused a
+     * field written from a unit data while the same type crossed a behavior's boundary, which is a
+     * disagreement about the compiler's representation rather than about the model.
+     *
+     * <p>Whose vocabulary the name is, is asked before this and elsewhere
+     * ({@code CrossingNominal}), so what is left here is the specification's other rule: a codec
+     * named where none was derived and none was given.
+     */
+    private static boolean hasDecoder(Hir.Def def) {
+        return switch (def) {
+            case Hir.Data d -> d.decoder().isPresent();
+            // A sum is always read: how its alternatives are told apart is derived from the
+            // declaration wherever it is wanted, so there is no state in which it has no decoder —
+            // the same reason a unit data has none to carry and is decoded all the same.
+            case Hir.SumData _ -> true;
+            case Hir.UnitData _ -> true;
+            case null -> false;
+        };
+    }
+
+    /** As {@link #hasDecoder}, for the other direction. */
+    private static boolean hasEncoder(Hir.Def def) {
+        return switch (def) {
+            case Hir.Data d -> d.encoder().isPresent();
+            case Hir.SumData _ -> true;
+            case Hir.UnitData _ -> true;
+            case null -> false;
+        };
+    }
+
+    private static Type decRefType(Hir.DecRef ref, Symbols symbols) {
         return switch (ref) {
-            case Ast.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
-            case Ast.PrimDecRef p -> TypeOps.primType(p.kind());
-            case Ast.DataDecRef d -> {
-                Ast.Def def = symbols.get(d.typeName().denotes());
-                boolean hasDecoder = (def instanceof Ast.Data dd && dd.decoder().isPresent())
-                        || (def instanceof Ast.SumData s && s.decoder().isPresent());
-                if (!hasDecoder) {
+            case Hir.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
+            case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
+            case Hir.DataDecRef d -> {
+                if (!hasDecoder(symbols.declarations().declaration(names(d.typeName())))) {
                     throw CompileException.of(Diagnostic.at(d.pos())
                             .say(new CodecMessage.HasNoDecoder(d.typeName().written()))
                             .build());
                 }
-                yield Type.ref(d.typeName().denotes());
+                yield Type.ref(names(d.typeName()));
             }
-            case Ast.ListDecRef l -> Type.list(decRefType(l.element(), symbols));
-            case Ast.OptionDecRef o -> Type.option(decRefType(o.element(), symbols));
-            case Ast.MapDecRef mp -> Type.map(mp.key().type(), decRefType(mp.value(), symbols));
+            case Hir.ListDecRef l -> Type.list(decRefType(l.element(), symbols));
+            case Hir.OptionDecRef o -> Type.option(decRefType(o.element(), symbols));
+            case Hir.MapDecRef mp -> Type.map(mp.key().type(), decRefType(mp.value(), symbols));
         };
     }
 
-    private static void checkConstruct(Ast.Construct c, CheckContext ctx, Map<String, Type> fields,
+    private static void checkConstruct(Hir.Construct c, CheckContext ctx, Map<String, Type> fields,
                                        Scope env) {
-        if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data().name()))) {
+        if (!names(c.typeName()).equals(ctx.data().declares())) {
             throw CompileException.of(Diagnostic.at(c.pos())
                     .say(new CodecMessage.TheDecoderBuildsAnotherType(ctx.data().name(),
                             c.typeName().written()))
@@ -600,14 +727,33 @@ public final class DataChecker {
         checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(), fields, env, ctx);
     }
 
-    static List<Core.FieldInit> checkConstruction(String typeName, List<Ast.FieldInit> inits,
+    /**
+     * What each declared field of a construction is given, in declaration order — the one place that
+     * answers it. A field written out is given what was written; one no field init names is given the
+     * read of that field off the value spread into the construction, which is a field read like the
+     * one an author writes. So a construction carries no spread past here, and every reader of it
+     * asks the same values in the same order rather than working the spread out again.
+     *
+     * <p>Where several spreads carry one field, the first of them supplies it — one field is given
+     * one value, and which is decided here and not by whichever reader looks.
+     */
+    static List<Core.FieldValue> checkConstruction(String typeName, List<Hir.FieldInit> inits,
                                           List<Core.Read> spreads,
                                           SourcePos pos, Map<String, Type> fields, Scope env,
                                           CheckContext ctx) {
-        Map<String, Ast.FieldInit> byName = new HashMap<>();
-        List<Core.FieldInit> elaborated = new ArrayList<>();
-        for (Ast.FieldInit init : inits) {
-            if (byName.put(init.name(), init) != null) {
+        return checkConstruction(typeName, inits, spreads, pos, fields, env, ctx,
+                Hir.Fields.EVERY_ONE_WRITTEN);
+    }
+
+    /** As above, where {@code written} says whether a field left out is one the construction had to
+     *  write. Only a row leaves an optional out (spec §example-evaluable). */
+    static List<Core.FieldValue> checkConstruction(String typeName, List<Hir.FieldInit> inits,
+                                          List<Core.Read> spreads,
+                                          SourcePos pos, Map<String, Type> fields, Scope env,
+                                          CheckContext ctx, Hir.Fields mayOmit) {
+        Map<String, Core.FieldValue> written = new LinkedHashMap<>();
+        for (Hir.FieldInit init : inits) {
+            if (written.containsKey(init.name())) {
                 throw CompileException.of(Diagnostic.at(init.pos())
                         .say(new DataMessage.FieldIsDefinedMoreThanOnce(init.name()))
                         .build());
@@ -626,7 +772,7 @@ public final class DataChecker {
             CheckContext making = ctx.makingAnOptional(ft instanceof Type.OptionOf);
             Core value = Elaborator.liftIntoOption(
                     Elaborator.elaborate(init.value(), env, making, ft), ft, ctx.symbols());
-            elaborated.add(new Core.FieldInit(init.name(), value, init.pos()));
+            written.put(init.name(), new Core.FieldValue(init.name(), value, init.pos()));
             Type vt = value.type();
             // a case value widens to its sum-typed field (spec §sum-data)
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {
@@ -636,21 +782,21 @@ public final class DataChecker {
                                 .diff(Type.show(vt, ft), Type.show(ft, vt)).say(new DataMessage.AFieldExpectsAnotherType(init.name(), Type.show(ft), Type.show(vt))).build());
             }
         }
-        Map<String, Type> provided = new HashMap<>();
         // the sums spread here, which a field the construction still wants was not in the shared part
         // of — all of them, because naming one of several would pick by position and send the author
         // to open a sum whose cases never had the field
         Set<String> fromSums = new LinkedHashSet<>();
-        for (Core.Read spread : spreads) {
-            String sp = spread.name();
-            Type bound = env.typeOf(spread.binding());
+        List<Spread> spread = new ArrayList<>();
+        for (Core.Read read : spreads) {
+            String sp = read.name();
+            Type bound = env.typeOf(read.binding());
             if (bound instanceof Type.Ref ref
-                    && ctx.symbols().get(ref.name()) instanceof Ast.SumData sum) {
+                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.SumData sum) {
                 fromSums.add(Type.show(bound));
-                provided.putAll(spreadOfSum(sp, sum, bound, pos, ctx));
+                spread.add(new Spread(read, spreadOfSum(sp, sum, bound, pos, ctx)));
             } else if (bound instanceof Type.Ref ref
-                    && ctx.symbols().get(ref.name()) instanceof Ast.Data sd) {
-                provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
+                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.Data sd) {
+                spread.add(new Spread(read, TypeOps.fieldTypes(sd, ctx.symbols())));
             } else {
                 Diagnostic.Builder d = Diagnostic.at(pos)
                         .say(new DataMessage.SpreadIsNotADataValue(sp));
@@ -660,12 +806,23 @@ public final class DataChecker {
                 throw CompileException.of(d.build());
             }
         }
+        List<Core.FieldValue> values = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
-            if (byName.containsKey(f.getKey())) {
+            Core.FieldValue own = written.get(f.getKey());
+            if (own != null) {
+                values.add(own);
                 continue;
             }
-            Type pv = provided.get(f.getKey());
-            if (pv == null) {
+            Spread from = supplying(spread, f.getKey());
+            if (from == null && mayOmit == Hir.Fields.OPTIONALS_MAY_BE_OMITTED
+                    && f.getValue() instanceof Type.OptionOf) {
+                // A row writes the value a field holds and writes nothing where it holds none, so a
+                // field left out is the absent value it declares rather than a field with no value.
+                values.add(new Core.FieldValue(f.getKey(),
+                        new Core.OptionNone(f.getValue(), pos), pos));
+                continue;
+            }
+            if (from == null) {
                 Diagnostic.Builder d = Diagnostic.at(pos)
                         .say(new DataMessage.ConstructionIsMissingAField(typeName, f.getKey()));
                 // one rule broken in one of several ways, and the hint is where the way is said. What
@@ -685,14 +842,33 @@ public final class DataChecker {
                 }
                 throw CompileException.of(d.build());
             }
+            Type pv = from.fields().get(f.getKey());
             if (!TypeOps.assignable(pv, f.getValue(), ctx.symbols())) {
                 throw CompileException.of(Diagnostic.at(pos)
                         .say(new DataMessage.SpreadSuppliesTheWrongType(f.getKey(), Type.show(pv),
                                 typeName, Type.show(f.getValue())))
                         .diff(Type.show(pv, f.getValue()), Type.show(f.getValue(), pv)).build());
             }
+            // The value is read at the type the source declares the field, which is the type the
+            // backend loads it at; that it fits the field being given it was decided just above.
+            values.add(new Core.FieldValue(f.getKey(),
+                    new Core.FieldAccess(from.read(), f.getKey(), pv, from.read().pos()),
+                    from.read().pos()));
         }
-        return elaborated;
+        return values;
+    }
+
+    /** A value a construction spreads, and the fields it carries. */
+    private record Spread(Core.Read read, Map<String, Type> fields) {}
+
+    /** The first of {@code spreads} carrying {@code field}, or null where none does. */
+    private static Spread supplying(List<Spread> spreads, String field) {
+        for (Spread s : spreads) {
+            if (s.fields().containsKey(field)) {
+                return s;
+            }
+        }
+        return null;
     }
 
     /** What a spread of a sum copies: the fields of the data every one of its cases spreads. This is
@@ -701,33 +877,33 @@ public final class DataChecker {
      * to copy — cases that merely declare a field of the same name have not shared it — and that is
      * reported here rather than left to the missing-field report, which would name a field the author
      * can see in every case. */
-    private static Map<String, Type> spreadOfSum(String name, Ast.SumData sum, Type bound,
+    private static Map<String, Type> spreadOfSum(String name, Hir.SumData sum, Type bound,
                                                  SourcePos pos, CheckContext ctx) {
-        Map<String, Type> shared = TypeOps.commonSpreadFields(sum, ctx.symbols());
-        if (shared.isEmpty()) {
+        if (!(TypeView.of(Type.ref(sum.declares()), ctx.symbols()).shape() instanceof Shape.Sum shape)
+                || !(shape.common() instanceof Shape.CommonProduct.Shared shared)) {
             throw CompileException.of(Diagnostic.at(pos)
                     .say(new DataMessage.SpreadOfASumWhoseCasesShareNothing(name, Type.show(bound)))
                     .build());
         }
-        return shared;
+        return shared.fields();
     }
 
-    private static void checkEncoder(Ast.EncoderDef enc, CheckContext ctx) {
-        Scope env = Scope.NONE.with(enc.self(), Type.ref(ctx.symbols().own(ctx.data().name())));
+    private static void checkEncoder(Hir.EncoderDef enc, CheckContext ctx) {
+        Scope env = Scope.NONE.with(enc.self(), Type.ref(ctx.data().declares()));
         checkRawExpr(enc.result(), env, ctx);
     }
 
-    private static void checkRawExpr(Ast.RawExpr raw, Scope env, CheckContext ctx) {
+    private static void checkRawExpr(Hir.RawExpr raw, Scope env, CheckContext ctx) {
         switch (raw) {
-            case Ast.TextRaw t -> Elaborator.requireType(t.arg(), Type.STRING, env, ctx,
+            case Hir.TextRaw t -> Elaborator.requireType(t.arg(), Type.STRING, env, ctx,
                     "argument of Text");
-            case Ast.IntRaw i -> Elaborator.requireType(i.arg(), Type.INT, env, ctx,
+            case Hir.IntRaw i -> Elaborator.requireType(i.arg(), Type.INT, env, ctx,
                     "argument of Int");
-            case Ast.BoolRaw b -> Elaborator.requireType(b.arg(), Type.BOOL, env, ctx,
+            case Hir.BoolRaw b -> Elaborator.requireType(b.arg(), Type.BOOL, env, ctx,
                     "argument of Bool");
-            case Ast.DecimalRaw d -> Elaborator.requireType(d.arg(), Type.DECIMAL, env, ctx,
+            case Hir.DecimalRaw d -> Elaborator.requireType(d.arg(), Type.DECIMAL, env, ctx,
                     "argument of Decimal");
-            case Ast.IsoTextRaw t -> {
+            case Hir.IsoTextRaw t -> {
                 Type at = Elaborator.typeOf(t.arg(), env, ctx);
                 // Asked of each primitive, so a temporal added later is admitted where it is
                 // declared rather than being refused here by a comparison written before it existed.
@@ -741,7 +917,7 @@ public final class DataChecker {
                             .build());
                 }
             }
-            case Ast.OptionRaw o -> {
+            case Hir.OptionRaw o -> {
                 Type at = Elaborator.typeOf(o.access(), env, ctx);
                 if (!(at instanceof Type.OptionOf oo)) {
                     throw CompileException.of(Diagnostic.at(o.pos())
@@ -750,24 +926,22 @@ public final class DataChecker {
                 }
                 checkRawExpr(o.inner(), env.with(o.elem(), oo.element()), ctx);
             }
-            case Ast.ObjectRaw o -> {
-                for (Ast.RawEntry entry : o.entries()) {
+            case Hir.ObjectRaw o -> {
+                for (Hir.RawEntry entry : o.entries()) {
                     checkRawExpr(entry.value(), env, ctx);
                 }
             }
-            case Ast.EncodeRaw e -> {
-                Ast.Def encDef = ctx.symbols().get(e.typeName().denotes());
-                boolean hasEncoder = (encDef instanceof Ast.Data ed && ed.encoder().isPresent())
-                        || (encDef instanceof Ast.SumData sd && sd.encoder().isPresent());
-                if (!hasEncoder) {
+            case Hir.EncodeRaw e -> {
+                if (!hasEncoder(ctx.symbols().declarations()
+                        .declaration(names(e.typeName())))) {
                     throw CompileException.of(Diagnostic.at(e.pos())
                             .say(new CodecMessage.HasNoEncoder(e.typeName().written()))
                             .build());
                 }
-                Elaborator.requireType(e.arg(), Type.ref(e.typeName().denotes()), env, ctx,
+                Elaborator.requireType(e.arg(), Type.ref(names(e.typeName())), env, ctx,
                         "argument of " + e.typeName().written() + ".encode");
             }
-            case Ast.ListEnc le -> {
+            case Hir.ListEnc le -> {
                 Type st = Elaborator.typeOf(le.source(), env, ctx);
                 if (!(st instanceof Type.ListOf lo)) {
                     throw CompileException.of(Diagnostic.at(le.pos())
@@ -776,7 +950,7 @@ public final class DataChecker {
                 }
                 checkEncElem(le.elem(), lo.element(), le.pos(), ctx.symbols());
             }
-            case Ast.SetEnc se -> {
+            case Hir.SetEnc se -> {
                 Type st = Elaborator.typeOf(se.source(), env, ctx);
                 if (!(st instanceof Type.SetOf so)) {
                     throw CompileException.of(Diagnostic.at(se.pos())
@@ -785,7 +959,7 @@ public final class DataChecker {
                 }
                 checkEncElem(se.elem(), so.element(), se.pos(), ctx.symbols());
             }
-            case Ast.MapEnc me -> {
+            case Hir.MapEnc me -> {
                 Type st = Elaborator.typeOf(me.source(), env, ctx);
                 if (!(st instanceof Type.MapOf mo)) {
                     throw CompileException.of(Diagnostic.at(me.pos())
@@ -797,37 +971,37 @@ public final class DataChecker {
         }
     }
 
-    private static void checkEncElem(Ast.EncElem elem, Type elemType, SourcePos pos,
+    private static void checkEncElem(Hir.EncElem elem, Type elemType, SourcePos pos,
                                      Symbols symbols) {
         switch (elem) {
-            case Ast.PrimEnc p -> {
+            case Hir.PrimEnc p -> {
                 if (!elemType.equals(TypeOps.primType(p.kind()))) {
                     throw elemEncMismatch(Type.show(TypeOps.primType(p.kind())), elemType, pos);
                 }
             }
-            case Ast.DataEnc d -> {
+            case Hir.DataEnc d -> {
                 // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec §encoder-derivation)
-                Ast.Def def = symbols.get(d.typeName().denotes());
-                boolean hasEncoder = (def instanceof Ast.Data dd && dd.encoder().isPresent())
-                        || (def instanceof Ast.SumData sd && sd.encoder().isPresent());
-                if (!elemType.equals(Type.ref(d.typeName().denotes())) || !hasEncoder) {
+                Hir.Def def = symbols.declarations().declaration(names(d.typeName()));
+                boolean hasEncoder = (def instanceof Hir.Data dd && dd.encoder().isPresent())
+                        || def instanceof Hir.SumData;
+                if (!elemType.equals(Type.ref(names(d.typeName()))) || !hasEncoder) {
                     throw elemEncMismatch(d.typeName().written(), elemType, pos);
                 }
             }
             // a collection element is itself a collection: descend both the encoder and the type
-            case Ast.ListElemEnc l -> {
+            case Hir.ListElemEnc l -> {
                 if (!(elemType instanceof Type.ListOf lo)) {
                     throw elemEncMismatch("List", elemType, pos);
                 }
                 checkEncElem(l.elem(), lo.element(), pos, symbols);
             }
-            case Ast.SetElemEnc s -> {
+            case Hir.SetElemEnc s -> {
                 if (!(elemType instanceof Type.SetOf so)) {
                     throw elemEncMismatch("Set", elemType, pos);
                 }
                 checkEncElem(s.elem(), so.element(), pos, symbols);
             }
-            case Ast.MapElemEnc m -> {
+            case Hir.MapElemEnc m -> {
                 if (!(elemType instanceof Type.MapOf mo)) {
                     throw elemEncMismatch("Map", elemType, pos);
                 }
@@ -835,7 +1009,7 @@ public final class DataChecker {
             }
             // an absent member is written null, so the element encoder is one level above what the
             // option holds, as the type is
-            case Ast.OptionElemEnc o -> {
+            case Hir.OptionElemEnc o -> {
                 if (!(elemType instanceof Type.OptionOf oo)) {
                     throw elemEncMismatch("Option", elemType, pos);
                 }

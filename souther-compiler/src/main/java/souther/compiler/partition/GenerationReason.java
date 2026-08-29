@@ -25,6 +25,17 @@ public sealed interface GenerationReason {
     record PositionWithheld(AxisId axis) implements GenerationReason {}
 
     /**
+     * No value was composed anywhere, because the build asked for none.
+     *
+     * <p>A row offered at a boundary is a value that went through the module's decoders, and
+     * composing one costs a decoder run per point — which is work a build that asked to read what
+     * its rows already established did not ask for. What the report says about those points is
+     * unchanged; what is missing is the row a person could paste.
+     */
+    record NoValuesWereAskedFor(String behavior) implements GenerationReason {}
+
+
+    /**
      * Rows exist that nothing read, so nothing was offered at all.
      *
      * <p>What is left uncovered cannot be worked out from rows that were not read, and a generated
@@ -43,8 +54,36 @@ public sealed interface GenerationReason {
         }
     }
 
-    /** The search ended before it had covered everything, with this many combinations left. */
-    record SearchLimit(String behavior, int combinations) implements GenerationReason {}
+    /**
+     * The search ended before it had walked the whole plan, with this many things left on it.
+     *
+     * <p>Classes and arms, which is what a plan is made of. A combination is where a witness for an
+     * arm is looked for and is not a thing the plan holds, so a count of them was a number about a
+     * space nobody is owed anything in — and the number handed here was never that anyway.
+     */
+    record SearchLimit(String behavior, int owed) implements GenerationReason {}
+
+    /**
+     * Groups of the body's decisions this did not offer any combination of, because each was wider
+     * than the walk offers.
+     *
+     * <p>Beside {@link SearchLimit} rather than folded into it. That one is a budget that ran out
+     * part way through a plan and is lifted by allowing more rows; this is a group nothing walked
+     * at all, and no number of rows reaches it. A reader acting on the first would raise a limit
+     * that changes nothing here.
+     *
+     * <p>And only the ones an arm was left waiting on. What a run owes is the classes and the arms
+     * a caller names; walking a group is how a row for an arm is looked for, not something anybody
+     * is owed. So a group claiming nothing this run was asked for cost it nothing — and neither did
+     * one whose arms another group reached, or whose arms the row budget stopped at first, since
+     * those arms have an entry of their own saying what happened to them.
+     *
+     * @param groups how many were held back with an arm still waiting on them at the end, which is
+     *               the group's own count and not a count of the combinations in them — the whole
+     *               of what this says is that the walk was never made, so how many cells it would
+     *               have had is not something anything counted
+     */
+    record GroupsNotOffered(String behavior, int groups) implements GenerationReason {}
 
     /**
      * The module's classes were not there to put a candidate through.
@@ -55,6 +94,19 @@ public sealed interface GenerationReason {
      * printed where they were, states something that did not happen.
      */
     record NothingToBuildAgainst(String behavior) implements GenerationReason {}
+
+    /**
+     * Rows were offered for combinations of the body's decisions that nothing ran to confirm.
+     *
+     * <p>Which is not that they are wrong. A row is composed by narrowing each position to the
+     * classes the combination leaves it, and whether such a row reaches the meeting is settled by
+     * running it; where nothing could, what the row is offered for is what the reading says.
+     *
+     * <p>Said because silence about it reads as confirmation. The rows are worth offering either
+     * way — this is the account a generation could always give of them — but an author acting on
+     * one is acting on a reading, and that is theirs to know.
+     */
+    record RowsNotConfirmed(String behavior) implements GenerationReason {}
 
     /**
      * The generated classes would not link, so the decoders could not be reached.

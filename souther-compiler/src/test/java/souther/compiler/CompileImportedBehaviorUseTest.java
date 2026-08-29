@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -60,8 +61,8 @@ class CompileImportedBehaviorUseTest {
 
                 behavior allocateAndShip = allocate >-> instruct
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(INVENTORY, shipping));
-        assertTrue(classes.containsKey("probe.shipping.AllocateAndShip$Impl"),
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(INVENTORY, shipping));
+        assertTrue(classes.containsKey(Emitted.impl("probe.shipping", "allocateAndShip")),
                 "the pipeline is generated: " + classes.keySet());
     }
 
@@ -79,7 +80,7 @@ class CompileImportedBehaviorUseTest {
 
                 behavior allocateAndShip = allocate >-> instruct
                 """;
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compileModules(List.of(INVENTORY, shipping)));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compileModules(List.of(INVENTORY, shipping)));
         classes.put("probe.inventory.AllocateImpl",
                 compileSubclass(classes, "probe.inventory.AllocateImpl", ALLOCATE_IMPL));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -117,7 +118,7 @@ class CompileImportedBehaviorUseTest {
                     Shipped { sku = a.sku, quantity = a.quantity }
                 }
                 """;
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compileModules(List.of(INVENTORY, shipping)));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compileModules(List.of(INVENTORY, shipping)));
         classes.put("probe.inventory.AllocateImpl",
                 compileSubclass(classes, "probe.inventory.AllocateImpl", ALLOCATE_IMPL));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -158,8 +159,8 @@ class CompileImportedBehaviorUseTest {
                     Shipped { sku = a.sku }
                 }
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
-        assertTrue(classes.containsKey("probe.ship1.Ship$Impl"), classes.keySet().toString());
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(inventory, shipping));
+        assertTrue(classes.containsKey(Emitted.impl("probe.ship1", "ship")), classes.keySet().toString());
     }
 
     @Test
@@ -213,7 +214,7 @@ class CompileImportedBehaviorUseTest {
                     | Shortage as s -> s
                 """;
         for (String consumer : List.of(asAStage, asADependency)) {
-            Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, consumer));
+            Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(inventory, consumer));
             String pkg = consumer == asAStage ? "probe.ship2" : "probe.ship3";
             String result = consumer == asAStage ? "AllocateAndShipResult" : "ShipResult";
             BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -225,13 +226,14 @@ class CompileImportedBehaviorUseTest {
     }
 
     /** Compiles {@code source} against the generated classes and returns the class bytes. */
-    private static byte[] compileSubclass(Map<String, byte[]> generated, String className, String source)
+    private static ClassFileImage compileSubclass(Map<String, ClassFileImage> generated,
+                                                  String className, String source)
             throws Exception {
         java.nio.file.Path classesDir = Files.createTempDirectory("souther-gen");
-        for (Map.Entry<String, byte[]> e : generated.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> e : generated.entrySet()) {
             java.nio.file.Path p = classesDir.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(p.getParent());
-            Files.write(p, e.getValue());
+            Files.write(p, e.getValue().bytes());
         }
         java.nio.file.Path srcFile = classesDir.resolve(className.replace('.', '/') + ".java");
         Files.writeString(srcFile, source);
@@ -242,6 +244,7 @@ class CompileImportedBehaviorUseTest {
         if (rc != 0) {
             throw new IllegalStateException("javac failed for " + className + " (rc=" + rc + ")");
         }
-        return Files.readAllBytes(outDir.resolve(className.replace('.', '/') + ".class"));
+        return ClassFileImage.of(
+                Files.readAllBytes(outDir.resolve(className.replace('.', '/') + ".class")));
     }
 }

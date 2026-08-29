@@ -7,11 +7,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Rows at the edges a model draws on a measure taken of a value.
@@ -49,23 +47,32 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
                 """.formatted(declaration, written);
     }
 
-    /** What the generator answers for the lines that behavior draws and no row sits on. */
+    /**
+     * What the generator answers at the lines this behavior's values are held to and no row sits on.
+     *
+     * <p>Both authorities. The lines here are an {@code invariant}'s, so the two points against each
+     * of them are the declaration's and are resolved once for the module (issue #1076); the regions
+     * either side are this reading's. What a person reading the block beside {@code label} sees is
+     * both, and that is what this asks for.
+     */
     private static Generator.GenerationResult boundaries(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).toList(), "the model under test compiles");
-        Map<String, Adequacy.Filling> all = compilation.db()
-                .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
-        assertNotNull(all, "the rows come back");
-        return all.get("label").boundaries();
+        assertNotNull(Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)),
+                "the rows come back");
+        // Both authorities, because the lines here are an `invariant`'s: one is owed once over
+        // every behavior carrying the type and is resolved for the module, and what a person
+        // reading the block beside `label` sees is that row beside the behavior's own.
+        return OfferedAtTheLines.of(compilation, compilation.modules().get(0), "label");
     }
 
     /** The row offered at {@code edge}, as the text an author is handed for its first input. */
     private static String rowAt(Generator.GenerationResult filled, String edge) {
         for (Generator.GeneratedRow row : filled.rows()) {
-            if (row.classes().contains(edge)) {
+            if (row.labels().contains(edge)) {
                 return row.inputs().get(0).text();
             }
         }
@@ -176,7 +183,7 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
     /** The second input of the row offered at {@code edge}, or null where none was. */
     private static String sizeAt(Generator.GenerationResult filled, String edge) {
         for (Generator.GeneratedRow row : filled.rows()) {
-            if (row.classes().contains(edge)) {
+            if (row.labels().contains(edge)) {
                 return row.inputs().get(1).text();
             }
         }

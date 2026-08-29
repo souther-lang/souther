@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -31,15 +33,16 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
-        TypeName named = new TypeName(module, type);
-        Ast.Data data = (Ast.Data) symbols.get(named);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
+        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
         assertNotNull(data, "no `" + type + "` in " + module);
-        return FieldDomains.of(named, data, symbols);
+        return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
-    private static void assertBounds(NumericDomain.Bounds bounds, long min, long max) {
+    private static void assertBounds(NarrowedBounds narrowed, long min, long max) {
+        NumericDomain.Bounds bounds = narrowed.bounds();
         assertNotNull(bounds, "nothing bounds this field");
         assertEquals(0, BigDecimal.valueOf(min).compareTo(souther.compiler.numeric.Count.number(bounds.min().at()).at()),
                 "min was " + bounds.min());
@@ -66,7 +69,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("startsAt"), 0, 1439);
         assertBounds(domains.at("endsAt"), 1, 1440);
-        assertTrue(domains.allRulesRead(), "both rules were read");
+        assertTrue(domains.projection().isCertified(), "both rules were read");
     }
 
     /** Without the sibling rule the field's own type is the whole answer, so nothing moves. Held so
@@ -135,17 +138,25 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("low"), 0, 1);
         assertBounds(domains.at("high"), 0, 1);
-        assertTrue(domains.at("low").min().inclusive(), "a low of 0 needs no room under it");
-        assertFalse(domains.at("low").max().inclusive(), "a low of 1 leaves no room above it");
-        assertFalse(domains.at("high").min().inclusive(), "nor a high of 0 below it");
-        assertTrue(domains.at("high").max().inclusive(), "and a high of 1 needs none");
-        assertTrue(domains.allRulesRead(), "and every rule of the record was taken into these");
+        assertTrue(domains.at("low").bounds().min().inclusive(), "a low of 0 needs no room under it");
+        assertFalse(domains.at("low").bounds().max().inclusive(),
+                "a low of 1 leaves no room above it");
+        assertFalse(domains.at("high").bounds().min().inclusive(), "nor a high of 0 below it");
+        assertTrue(domains.at("high").bounds().max().inclusive(), "and a high of 1 needs none");
+        assertTrue(domains.projection().isCertified(), "and every rule of the record was taken into these");
     }
 
-    /** A rule that skips a value is a hole in a range, and a range is all the domain holds. The bound
-     * stays where the type left it and says it is not the whole story. */
+    /**
+     * A rule that skips a value at the edge of a range moves the edge; a range is all the domain
+     * hands over, and an edge is somewhere a range can go.
+     *
+     * <p>Which side of the hole the value lies is not something the rule says on its own — it is
+     * something the type's own bound says, and the two together leave the field at one or above.
+     * With the edge moved there is nothing left over: every value the range holds is one a row can
+     * write, which is what makes the projection exact rather than merely sound.
+     */
     @Test
-    void aRuleThatSkipsAValueLeavesTheAnswerInexact() {
+    void aRuleThatSkipsAValueAtTheEdgeMovesTheEdge() {
         FieldDomains domains = domainsIn("""
                 module example.skip
 
@@ -158,8 +169,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant nonzero = a.value /= 0
                 """, "R");
 
-        assertBounds(domains.at("a"), 0, 10);
-        assertFalse(domains.allRulesRead(), "0 is in these bounds and no row can write it");
+        assertBounds(domains.at("a"), 1, 10);
+        assertTrue(domains.projection().isCertified(),
+                "and the range is now the whole of it: every value in it is one a row can write");
     }
 
     /** A length is a whole number like any other, so a rule relating one to a field is in the
@@ -186,7 +198,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "WorkInterval");
 
         assertBounds(domains.at("startsAt"), 2, 1439);
-        assertTrue(domains.allRulesRead(), "both rules are comparisons of whole numbers");
+        assertTrue(domains.projection().isCertified(), "both rules are comparisons of whole numbers");
     }
 
     /**
@@ -217,7 +229,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "WorkInterval");
 
         assertBounds(domains.at("startsAt"), 0, 1439);
-        assertFalse(domains.allRulesRead(),
+        assertFalse(domains.projection().isCertified(),
                 "the pattern narrows no minute, and whether a minute of 1439 can be written is a"
                         + " question about a whole interval, which has a label in it");
     }
@@ -236,8 +248,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                 """, "Entry");
 
-        assertNull(domains.at("note"), "a string has no numbers to bound");
-        assertNull(domains.at("count"), "an Int the model draws no line through is unbounded");
+        assertNull(domains.at("note").bounds(), "a string has no numbers to bound");
+        assertNull(domains.at("count").bounds(),
+                "an Int the model draws no line through is unbounded");
     }
 
     /**
@@ -295,27 +308,29 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 data Forecast = { total: Amount }
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope("example.report")).value();
+        Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         assertNotNull(symbols, "the model did not compile");
-        TypeName named = new TypeName("example.report", "Forecast");
-        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
+        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-        assertTrue(domains.allRulesRead(),
+        assertTrue(domains.projection().isCertified(),
                 "the rule is `value >= 0.0m` wherever it is declared");
-        assertEquals(0, BigDecimal.ZERO.compareTo(souther.compiler.numeric.Count.number(domains.at("total").min().at()).at()),
+        assertEquals(0, BigDecimal.ZERO.compareTo(
+                        souther.compiler.numeric.Count.number(
+                                domains.at("total").bounds().min().at()).at()),
                 "and it reaches the domain from there too");
     }
 
     /**
      * A doubt reaches as far as the bound it is about.
      *
-     * <p>`a` has no rule of its own that the domain could not hold. Its upper bound is `b`'s, carried
-     * by the equality, and `b` holds a hole the domain cannot keep — so `a = 10` wants the `b` the
-     * hole refuses. A bound arrives along a path through the differences, and the doubt takes the
-     * same path or it is not about the same bound.
+     * <p>`a` has no rule of its own beyond its type's. Its upper bound is `b`'s, carried by the
+     * equality — and `b`'s own upper bound is ten with ten held away from it, which leaves `b` at
+     * nine. So `a` is at nine as well: the hole moved `b`'s edge and the equality carried the edge,
+     * rather than leaving ten in `a`'s range with a note that something about it was doubtful.
      */
     @Test
-    void aBoundReachedThroughAnotherAtomCarriesThatAtomsDoubt() {
+    void aBoundReachedThroughAnotherAtomTakesThatAtomsMovedEdge() {
         FieldDomains domains = domainsIn("""
                 module example.paired
 
@@ -330,9 +345,38 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant notTen = b.value /= 10
                 """, "R");
 
-        assertBounds(domains.at("a"), 0, 10);
-        assertFalse(domains.allRulesRead(),
-                "a's edge is b's edge, carried by the equality, and b holds a hole this cannot keep");
+        assertBounds(domains.at("a"), 0, 9);
+        assertTrue(domains.projection().isCertified(),
+                "and nothing is left over: `a = 9` is written with `b = 9`, which the hole admits");
+    }
+
+    /**
+     * An edge the rules put at a value no decimal writes is handed over rounded past it, and the
+     * reading says so.
+     *
+     * <p>{@code 3 * value <= 1} leaves the field at a third, and a third does not terminate — no
+     * decimal a model writes is one. The reasoning reaches the edge exactly; the number standing for
+     * it is a hair outside. That is not a rule the range failed to state, so it is its own cause: a
+     * reader placing a row at this edge is being given an edge the rules did not draw.
+     */
+    @Test
+    void anEdgeNoDecimalWritesIsSaidToBeRounded() {
+        FieldDomains domains = domainsIn("""
+                module example.third
+
+                data D = Decimal
+                    invariant atLeastNone = value >= 0.0m
+                    invariant aThird = 3.0m * value <= 1.0m
+
+                data R =
+                    { d: D
+                    }
+                """, "R");
+
+        assertTrue(domains.projection() instanceof ProjectionEvidence.NotCertified approximate
+                        && approximate.causes().stream()
+                                .anyMatch(cause -> cause instanceof ProjectionEvidence.Cause.Rounded),
+                "the edge is a third and no decimal is: " + domains.projection());
     }
 
     /**
@@ -362,13 +406,13 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope("example.pair")).value();
-        TypeName named = new TypeName("example.pair", "Pair");
-        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+        Symbols symbols = Scopes.derived(compilation.db(), "example.pair").value();
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
+        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertBounds(domains.at("a"), 0, 9);
         assertBounds(domains.at("b"), 1, 10);
-        assertTrue(domains.allRulesRead());
+        assertTrue(domains.projection().isCertified());
     }
 
     /**
@@ -403,7 +447,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "Root");
 
         assertBounds(domains.at("n"), 0, 10);
-        assertFalse(domains.allRulesRead(),
+        assertFalse(domains.projection().isCertified(),
                 "the pattern is three records down and a Root cannot be built without going through"
                         + " it");
     }
@@ -430,7 +474,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "Root");
 
         assertBounds(domains.at("n"), 0, 10);
-        assertTrue(domains.allRulesRead(),
+        assertTrue(domains.projection().isCertified(),
                 "a Root with no note and no others is a Root, and the pattern never runs");
     }
 
@@ -463,19 +507,19 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope("example.report")).value();
-        TypeName named = new TypeName("example.report", "Pair");
-        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+        Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
+        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertBounds(domains.at("a"), 0, 9);
         assertBounds(domains.at("b"), 1, 10);
-        assertTrue(domains.allRulesRead(),
+        assertTrue(domains.projection().isCertified(),
                 "a local `Amount` of another shape says nothing about the one these fields are");
     }
 
     /** A newtype has no siblings, so there is nothing here to project. */
     @Test
     void aNewtypeHasNothingToProjectOnto() {
-        assertNull(domainsIn(TIMESHEET, "MinuteOfDay").at("value"));
+        assertNull(domainsIn(TIMESHEET, "MinuteOfDay").at("value").bounds());
     }
 }

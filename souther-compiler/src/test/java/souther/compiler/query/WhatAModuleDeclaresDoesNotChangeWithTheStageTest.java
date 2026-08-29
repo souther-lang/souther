@@ -1,7 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.Compiler;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.DefinitionRole;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.meta.ModulePath;
 
@@ -15,6 +16,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -43,12 +45,17 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
             """;
 
     private static final String APP = """
-            module app exposing ( own )
+            module app exposing ( own, Bag, run )
 
             import lib ( flatten )
 
+            data Bag = List<Int>
+
             let own (xs: List<Int>) : List<Int> = List.map({ (x) -> x + 1 }, xs)
             let both (xs: List<List<Int>>) : List<Int> = own(flatten(xs))
+
+            behavior run : (xs: List<List<Int>>) -> Bag constructs Bag
+            let run (xs) = Bag { value = both(xs) }
             """;
 
     private static Db db() {
@@ -57,16 +64,29 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     }
 
     /** Every stage that hands a module over, by the name of the stage. */
-    private static Map<String, Ast.Module> stagesOf(Db db, String name) {
-        Map<String, Key<Ast.Module>> keys = new LinkedHashMap<>();
-        keys.put("resolved", new Names.Resolved(name));
-        keys.put("derived", new Shapes.Derived(name));
-        keys.put("desugared", new Shapes.Desugared(name));
-        keys.put("prepared", new Shapes.Prepared(name));
+    private static Map<String, Hir.Module> stagesOf(Db db, String name) {
+        Map<String, Key<Hir.Module>> keys = new LinkedHashMap<>();
+        // Resolution answers with the tree and the claim that it has been read, which the stages
+        // below it hand on as an ordinary module.
+        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
+        assertTrue(resolved.present(), "resolved of " + name + ": " + resolved.reports());
+        // The derived stage answers with the module where every declaration came out; what is asked
+        // about here is the tree it holds, which is a question about the payload and not about that.
+        Answer<souther.compiler.check.Derived.Module> derived = db.ask(new Shapes.Derived(name));
+        assertTrue(derived.present(), "derived of " + name + ": " + derived.reports());
+        Answer<souther.compiler.check.Desugared.Module> desugared =
+                db.ask(new Shapes.Desugared(name));
+        assertTrue(desugared.present(), "desugared of " + name + ": " + desugared.reports());
+        Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+        assertTrue(prepared.present(), "prepared of " + name + ": " + prepared.reports());
         keys.put("settled", new Bodies.Settled(name));
-        Map<String, Ast.Module> out = new LinkedHashMap<>();
+        Map<String, Hir.Module> out = new LinkedHashMap<>();
+        out.put("resolved", resolved.value());
+        out.put("derived", derived.value().tree());
+        out.put("desugared", desugared.value().tree());
+        out.put("prepared", prepared.value().tree());
         keys.forEach((stage, key) -> {
-            Answer<Ast.Module> answer = db.ask(key);
+            Answer<Hir.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());
             out.put(stage, answer.value());
         });
@@ -82,43 +102,65 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     }
 
     /**
-     * And this module does take helpers on, so no stage passes by having none to confuse a
-     * declaration with. Asked of what the module emits, which is a different question and a different
-     * answer.
+     * And this module does emit helpers it did not declare, so no stage passes by having none to
+     * confuse a declaration with. What it emits is a different question from what it declares, and
+     * it is answered after its trees have been expanded rather than before: a recursion is emitted
+     * here because an expansion of this module could not remove a call to it.
      */
     @Test
-    void theModuleTakesOnHelpersItDidNotDeclare() {
+    void theModuleEmitsHelpersItDidNotDeclare() {
         Db db = db();
-        assertEquals(Set.of("List.foldFrom", "lib.flatten"),
-                db.ask(new Bodies.RecursiveHelpers("app")).value());
+        Set<String> emitted = new java.util.LinkedHashSet<>();
+        db.ask(new Bodies.RequiredRecursiveDefs("app")).value()
+                .forEach(reference -> emitted.add(reference.rendered()));
+        assertEquals(Set.of("List.foldFrom", "lib.flatten"), emitted);
+        assertEquals(Set.of("own", "both"),
+                HelperInliner.helpersOf(db.ask(new Bodies.Settled("app")).value()).keySet(),
+                "and what it declares is unchanged by that");
     }
 
     /**
-     * Which of the two a fn is in is what the declaration says of it, at every stage.
+     * Which of the two a fn is in is what the fn says of itself, at every stage.
      *
-     * <p>Asked of {@link Ast.FnDef#declaredBy} and not of the names. A reach name carries a dot and a
-     * source identifier cannot, so the two key sets never meet whatever the components hold — a test
-     * written over the names would pass however wrongly a pass filed one.
+     * <p>Asked of {@link Hir.FnDef#declaredBy} and {@link Hir.FnDef#role}, not of the names. A reach
+     * name carries a dot and a source identifier cannot, so the two key sets never meet whatever the
+     * components hold — a test written over the names would pass however wrongly a pass filed one.
+     *
+     * <p>Two things are taken on and only one of them is another module's. A method minted for a
+     * row's operand is emitted into this module's own program and is declared by it, so the
+     * declaring module does not tell that one from a declaration; what it is does.
      */
     @Test
-    void eachComponentHoldsWhatItsNameSays() {
+    void eachComponentHoldsWhatItsFnsSayTheyAre() {
         Db db = db();
         stagesOf(db, "app").forEach((stage, module) -> {
-            module.fns().forEach(fn -> assertTrue(fn.declaredBy("app"),
-                    "the " + stage + " tree of `app` has `" + fn.name() + "` among its declarations,"
-                            + " and " + fn.declaredIn() + " declared it"));
-            module.takenOn().forEach(fn -> assertFalse(fn.declaredBy("app"),
-                    "the " + stage + " tree of `app` took on `" + fn.name() + "`, which it declared"));
+            module.fns().forEach(fn -> {
+                assertTrue(fn.declaredBy("app"),
+                        "the " + stage + " tree of `app` has `" + fn.name() + "` among its"
+                                + " declarations, and " + fn.declaredIn() + " declared it");
+                assertInstanceOf(DefinitionRole.Ordinary.class, fn.role(),
+                        "the " + stage + " tree of `app` declares `" + fn.name() + "`");
+            });
+            module.takenOn().forEach(fn -> assertTrue(
+                    !fn.declaredBy("app") || fn.role() instanceof DefinitionRole.RowValue,
+                    "the " + stage + " tree of `app` took on `" + fn.name() + "`, which it declared"
+                            + " and which is not one of its rows' values"));
         });
     }
 
     /**
-     * A row applies a published helper that does not recurse. It is taken on for that reason alone —
-     * a row runs a helper rather than expanding it (ADR-0077) — so what a module takes on is not only
-     * what it reaches recursively, and a component holding only the recursive ones would drop it.
+     * A row is emitted as a method per operand, and the helper the row names is not one of them: the
+     * operand is a definition of this module and the call in it is expanded into it, the way a call
+     * in a body is. So nothing is taken on for a row at all.
+     *
+     * <p>The row's own methods are a family of their own and not among what the module holds. A row
+     * operand is reached from a row and from nothing a source can spell, so it is no declaration a
+     * name resolves to — and it is told from one by what it was made as. Its declaration cannot tell
+     * them apart: this module is what declared it, so {@link Hir.FnDef#declaredIn} says the same of
+     * both, and the shape of its name says nothing either.
      */
     @Test
-    void aHelperOnlyARowAppliesIsTakenOnToo() {
+    void aRowIsEmittedAsItsOwnMethodsAndNothingIsTakenOnForIt() {
         Db db = Compilation.ofDocuments(Map.of("rules.sou", """
                 module rules exposing ( doubled )
 
@@ -138,15 +180,38 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
                     | "a row applies a published helper" : (In { n = doubled(3) }) -> Out { m = 6 }
                 """), Set.of(), ModulePath.EMPTY).db();
 
-        Ast.Module prepared = db.ask(new Shapes.Prepared("app")).value();
+        souther.compiler.check.Prepared state = db.ask(new Shapes.Prepared("app")).value();
+        Hir.Module prepared = state.tree();
         // `run` implements a behavior, which is not a helper and is lowered on its own.
         assertEquals(Set.of(), HelperInliner.helpersOf(prepared).keySet());
-        assertEquals(Set.of("rules.doubled"), HelperInliner.takenOnBy(prepared).keySet());
-        assertEquals(Set.of(), db.ask(new Bodies.RecursiveHelpers("app")).value(),
-                "nothing here recurses, so this is the row's doing and not a recursion's");
-        assertEquals(Set.of("rules.doubled"),
+        // A method per row operand — the row's input and its expected value each run as one — read
+        // off the correspondence the preparation constructed rather than spelled here.
+        Set<String> rowMethods = Set.copyOf(state.operandMethods().values());
+        assertEquals(2, rowMethods.size(), "one input and one expectation, each emitted for the row");
+        assertEquals(Set.of(), HelperInliner.takenOnBy(prepared).keySet(),
+                "`rules.doubled` is expanded into the operand, and nothing is taken on beside it");
+        assertEquals(rowMethods, db.ask(new Bodies.RowFixtureDefs("app")).value().keySet(),
+                "the operands' methods are their own family");
+        // And not in the table a call expands against. Nothing a source can write reaches one, so a
+        // name has nothing to resolve to there — and every rule keyed on what that table holds had a
+        // synthetic method among its subjects while it did.
+        souther.compiler.check.HelperTable table =
+                db.ask(new Bodies.Expanding("app", souther.compiler.check.InliningPolicy.FULL))
+                        .value().table();
+        rowMethods.forEach(method -> assertFalse(
+                table.reaches(new souther.compiler.types.ReachName.Own(
+                        new souther.compiler.types.ValueName.Helper("app", method))),
+                method + " is reachable by name"));
+        assertEquals(Set.of(), Set.copyOf(db.ask(new Bodies.RequiredRecursiveDefs("app")).value()),
+                "and nothing here recurses, so nothing else needs a method");
+        assertEquals(rowMethods,
                 db.ask(new Bodies.Lowering("app")).value().lowered().takenOn().stream()
-                        .map(Ast.FnDef::name).collect(java.util.stream.Collectors.toSet()));
+                        .map(Hir.FnDef::name).collect(java.util.stream.Collectors.toSet()));
+        // Each of them says what it is. The declaration cannot: this module is what declared them.
+        db.ask(new Bodies.RowFixtureDefs("app")).value().values().forEach(fn -> {
+            assertTrue(fn.declaredBy("app"), fn.name() + " is emitted into `app`'s own program");
+            assertInstanceOf(DefinitionRole.RowValue.class, fn.role(), fn.name());
+        });
     }
 
     /**
@@ -184,13 +249,13 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     @Test
     void theTreeTheBackendEmitsFromKeepsThemApart() {
         Db db = db();
-        Ast.Module lowered = db.ask(new Bodies.Lowering("app")).value().lowered();
+        Hir.Module lowered = db.ask(new Bodies.Lowering("app")).value().lowered();
 
         lowered.fns().forEach(fn -> assertTrue(fn.declaredBy("app"),
                 "`" + fn.name() + "` is emitted as a declaration of `app`, and "
                         + fn.declaredIn() + " declared it"));
         assertEquals(Set.of("List.foldFrom", "lib.flatten"),
-                lowered.takenOn().stream().map(Ast.FnDef::name)
+                lowered.takenOn().stream().map(Hir.FnDef::name)
                         .collect(java.util.stream.Collectors.toSet()));
     }
 }

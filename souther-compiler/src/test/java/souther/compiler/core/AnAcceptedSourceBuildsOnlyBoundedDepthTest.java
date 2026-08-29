@@ -2,7 +2,7 @@ package souther.compiler.core;
 
 import souther.compiler.Compiler;
 import org.junit.jupiter.api.Test;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.query.Bodies;
@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * charge still passed.
  *
  * <p>So it is measured rather than argued. Sources are written at the bound, each loading a
- * different producer, and what the compiler built from them is walked and counted — the {@code Ast}
+ * different producer, and what the compiler built from them is walked and counted — the {@code Hir}
  * after expansion, which is what the checks descend, and the {@code Core} after elaboration, which
  * is what everything below them does.
  *
@@ -329,12 +329,14 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
             Compilation compilation = Compiler.compiled(one.source(), "m");
             for (String module : compilation.modules()) {
                 for (String behavior : compilation.declaredBehaviors(module)) {
-                    say(tooDeep, one.what(), behavior, "the Ast it expanded",
+                    say(tooDeep, one.what(), behavior, "the Hir it expanded",
                             depthOf(compilation.db()
-                                    .ask(new Bodies.LoweredBody(module, behavior)).value()));
+                                    .ask(new Bodies.LoweredBody(module,
+                                            new souther.compiler.ast.DefinitionName(behavior)))
+                                    .value().value()));
                     say(tooDeep, one.what(), behavior, "the Core it elaborated",
                             Depth.of(compilation.db()
-                                    .ask(new Bodies.CheckedBehavior(module, behavior)).value()));
+                                    .ask(new Bodies.CheckedBehavior(module, behavior)).value().body()));
                 }
             }
         }
@@ -351,20 +353,20 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
     }
 
     /** The longest way down a written body, counted the way {@link Depth} counts a {@code Core}. */
-    private static int depthOf(Ast.FnDef fn) {
-        if (fn == null || !(fn.body() instanceof Ast.FnBody.Written written)) {
+    private static int depthOf(Hir.FnDef fn) {
+        if (fn == null || !(fn.body() instanceof Hir.FnBody.Written written)) {
             return 0;
         }
-        List<Ast.Expr> nodes = new ArrayList<>();
+        List<Hir.Expr> nodes = new ArrayList<>();
         List<Integer> above = new ArrayList<>();
         nodes.add(written.expr());
         above.add(0);
         int most = 0;
         while (!nodes.isEmpty()) {
-            Ast.Expr node = nodes.remove(nodes.size() - 1);
+            Hir.Expr node = nodes.remove(nodes.size() - 1);
             int here = above.remove(above.size() - 1) + 1;
             most = Math.max(most, here);
-            Ast.forEachChild(node, child -> {
+            Hir.forEachChild(node, child -> {
                 if (child != null) {
                     nodes.add(child);
                     above.add(here);

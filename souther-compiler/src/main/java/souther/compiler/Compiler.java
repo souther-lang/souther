@@ -1,19 +1,19 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.jvm.JvmClassName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Located;
-import souther.compiler.examples.Deadline;
-import souther.compiler.examples.EvaluationPolicy;
-import souther.compiler.examples.ExampleVerifier;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Acceptance;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Db;
-import souther.compiler.query.Report;
-import souther.compiler.query.Output;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -36,7 +36,7 @@ public final class Compiler {
     /** Compiles a single self-contained module (no imports) into binary class name → bytecode.
      * A source that omits the {@code module} header is named {@code Main} (the string API has no
      * file name to derive from; {@code souther run} passes the file-name stem instead). */
-    public static Map<String, byte[]> compile(String source) {
+    public static Map<String, ClassFileImage> compile(String source) {
         return compile(source, "Main");
     }
 
@@ -47,7 +47,7 @@ public final class Compiler {
      * @param classes the generated classes, by binary name
      * @param locatedWarnings the warnings, each with the source that holds it
      */
-    public record Compiled(Map<String, byte[]> classes, List<Located> locatedWarnings) {
+    public record Compiled(Map<String, ClassFileImage> classes, List<Located> locatedWarnings) {
 
         /** The warnings on their own, for a caller that only reads what they say. */
         public List<Diagnostic> warnings() {
@@ -64,16 +64,16 @@ public final class Compiler {
      * {@code defaultModuleName} (so the CLI's filename-stem naming can surface warnings too). */
     public static Compiled compileWithWarnings(String source, String defaultModuleName) {
         List<Located> warnings = new ArrayList<>();
-        Map<String, byte[]> classes = compile(source, defaultModuleName, warnings);
+        Map<String, ClassFileImage> classes = compile(source, defaultModuleName, warnings);
         return new Compiled(classes, warnings);
     }
 
     /** As {@link #compile(String)}, but a header-less source is named {@code defaultModuleName}. */
-    public static Map<String, byte[]> compile(String source, String defaultModuleName) {
+    public static Map<String, ClassFileImage> compile(String source, String defaultModuleName) {
         return compile(source, defaultModuleName, new ArrayList<>());
     }
 
-    private static Map<String, byte[]> compile(String source, String defaultModuleName,
+    private static Map<String, ClassFileImage> compile(String source, String defaultModuleName,
                                                List<Located> warningsOut) {
         return compiling(source, defaultModuleName, warningsOut);
     }
@@ -116,7 +116,7 @@ public final class Compiler {
      * <p>No position is claimed: where the stack ended is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).build());
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).nowhere().build());
     }
 
     /**
@@ -127,7 +127,7 @@ public final class Compiler {
      * with its own position rather than tagged with the file it came from, because there is only
      * the one.
      */
-    private static Map<String, byte[]> compiling(String source, String defaultModuleName,
+    private static Map<String, ClassFileImage> compiling(String source, String defaultModuleName,
                                                  List<Located> warningsOut) {
         return driven(() -> classesOf(compiled(source, defaultModuleName, warningsOut)));
     }
@@ -177,12 +177,12 @@ public final class Compiler {
         return compiled(source, defaultModuleName, warningsOut, measure, null, null, policy);
     }
 
-    /** As above, with what a row or a reading is given to finish within said outright — for a test
-     *  stating which work does not come back rather than timing it. */
+    /** As above, running the rows under an arrangement of the caller's — for a test stating which
+     *  work does not come back rather than timing it. */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut, Adequacy.Asked measure,
-                                java.time.Duration exampleBudget, Deadline deadline) {
-        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, deadline, null);
+                                java.time.Duration exampleBudget, JvmExampleDeadlines arrangement) {
+        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, arrangement, null);
     }
 
     /**
@@ -197,68 +197,34 @@ public final class Compiler {
 
     private static Compilation compiled(String source, String defaultModuleName,
                                         List<Located> warningsOut, Adequacy.Asked measure,
-                                        java.time.Duration exampleBudget, Deadline deadline,
+                                        java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                         EvaluationPolicy policy) {
         return driven(() -> compilingSource(source, defaultModuleName, warningsOut, measure,
-                exampleBudget, deadline, policy, ModulePath.EMPTY));
+                exampleBudget, arrangement, policy, ModulePath.EMPTY));
     }
 
     private static Compilation compilingSource(String source, String defaultModuleName,
                                                List<Located> warningsOut, Adequacy.Asked measure,
-                                               java.time.Duration exampleBudget, Deadline deadline,
+                                               java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                                EvaluationPolicy policy, ModulePath path) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName, path);
-        if (exampleBudget != null) {
-            compilation.withExampleBudget(exampleBudget);
-        }
-        if (deadline != null) {
-            compilation.withDeadline(deadline);
-        }
+        // The terms first and the wait after, because the wait is one of them: said the other way
+        // round, a caller that asked for both would have the policy put the default wait back over
+        // the one it asked for, and nothing would say so.
         if (policy != null) {
             compilation.withEvaluationPolicy(policy);
         }
+        if (exampleBudget != null) {
+            compilation.withExampleBudget(exampleBudget);
+        }
+        if (arrangement != null) {
+            compilation.withJvmExampleDeadlines(arrangement);
+        }
         compilation.measure(measure);
-        Db db = compilation.db();
 
-        CompileException structural = compilation.failure(compilation.structuralReports());
-        if (structural != null) {
-            throw structural;
-        }
-
-        db.ask(new Output.All());
-        CompileException failed = compilation.failure(db.allReports());
-        if (failed != null) {
-            throw failed;
-        }
-        for (String module : compilation.modules()) {
-            if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.failure(db.allReports());
-                if (bad != null) {
-                    throw bad;
-                }
-            }
-            List<Diagnostic> failures = new ArrayList<>();
-            for (String id : compilation.exampleSourcesOf(module)) {
-                // Only the errors: this key also carries what a clean run wants to say about how well
-                // the rows cover the model, and a warning is not a reason to fail the build.
-                for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
-                    failures.add(failure.diagnostic());
-                }
-            }
-            // Asked whether or not the rows ran: what two written statements say about each other
-            // is readable when nothing is.
-            db.ask(new Output.SaidDisagreements(module));
-            if (failures.size() == 1) {
-                throw CompileException.of(failures.get(0));
-            }
-            if (!failures.isEmpty()) {
-                throw CompileException.ofAll(failures, ExampleVerifier.legacySummary(failures));
-            }
-        }
-        for (String module : compilation.modules()) {
-            compilation.answerWarnings(module);
-        }
-        warningsOut.addAll(compilation.warnings(db.allReports()));
+        // What the language refuses over, asked where it is written down. Read here rather than
+        // repeated: a second reading is a second answer to whether this program is accepted.
+        Acceptance.of(compilation, warningsOut);
         return compilation;
     }
 
@@ -302,17 +268,17 @@ public final class Compiler {
         return driven(() -> {
             compilation.measure(measure);
             compilation.answerEverything();
-            warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
+            warningsOut.addAll(compilation.warnings());
             return compilation;
         });
     }
 
-    private static Map<String, byte[]> classesOf(Compilation compilation) {
+    private static Map<String, ClassFileImage> classesOf(Compilation compilation) {
         return new LinkedHashMap<>(compilation.classes());
     }
 
     /** Compiles a set of modules together, resolving explicit imports and rejecting cycles. */
-    public static Map<String, byte[]> compileModules(List<String> sources) {
+    public static Map<String, ClassFileImage> compileModules(List<String> sources) {
         return compileModules(sources, ModulePath.EMPTY);
     }
 
@@ -322,7 +288,7 @@ public final class Compiler {
      * module found there is read for its declarations and nothing else: its classes are already
      * built, and this compile neither re-emits them nor re-runs its examples.
      */
-    public static Map<String, byte[]> compileModules(List<String> sources, ModulePath path) {
+    public static Map<String, ClassFileImage> compileModules(List<String> sources, ModulePath path) {
         return compileModules(sources, path, new ArrayList<>());
     }
 
@@ -339,19 +305,11 @@ public final class Compiler {
         return new Compiled(compileModules(sources, path, warnings), warnings);
     }
 
-    private static Map<String, byte[]> compileModules(List<String> sources, ModulePath path,
+    private static Map<String, ClassFileImage> compileModules(List<String> sources, ModulePath path,
                                                       List<Located> warningsOut) {
         return linking(sources, path, warningsOut);
     }
 
-    /**
-     * Links a set of sources by asking one compilation for its classes.
-     *
-     * <p>What is left here is only what a batch compile decides and an editor decides differently:
-     * that a structural problem stops everything, that the first error is raised rather than
-     * collected, and that every module's examples are evaluated before any failing one is reported
-     * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
-     */
     /**
      * The compilation of a module set, driven to completion, with the first error raised — what
      * {@link #linking} returns the classes of, for a caller that wants more than the classes.
@@ -370,7 +328,15 @@ public final class Compiler {
         return linked(sources, path, warningsOut, measure);
     }
 
-    private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
+    /**
+     * Links a set of sources by asking one compilation for its classes.
+     *
+     * <p>What is left here is only what a batch compile decides and an editor decides differently:
+     * that a structural problem stops everything, that the first error is raised rather than
+     * collected, and that every module's examples are evaluated before any failing one is reported
+     * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
+     */
+    private static Map<String, ClassFileImage> linking(List<String> sources, ModulePath path,
                                                List<Located> warningsOut) {
         return driven(() -> new LinkedHashMap<>(
                 linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes()));
@@ -392,11 +358,11 @@ public final class Compiler {
         return linked(sources, path, warningsOut, measure, null, null, policy);
     }
 
-    /** As above, with what a row or a reading is given to finish within said outright. */
+    /** As above, running the rows under an arrangement of the caller's. */
     static Compilation compiledModules(List<String> sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure,
-                                       java.time.Duration exampleBudget, Deadline deadline) {
-        return linked(sources, path, warningsOut, measure, exampleBudget, deadline, null);
+                                       java.time.Duration exampleBudget, JvmExampleDeadlines arrangement) {
+        return linked(sources, path, warningsOut, measure, exampleBudget, arrangement, null);
     }
 
     private static Compilation linked(List<String> sources, ModulePath path,
@@ -406,70 +372,32 @@ public final class Compiler {
 
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure,
-                                      java.time.Duration exampleBudget, Deadline deadline,
+                                      java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                       EvaluationPolicy policy) {
         return driven(() -> linkingSources(sources, path, warningsOut, measure, exampleBudget,
-                deadline, policy));
+                arrangement, policy));
     }
 
     private static Compilation linkingSources(List<String> sources, ModulePath path,
                                               List<Located> warningsOut, Adequacy.Asked measure,
-                                              java.time.Duration exampleBudget, Deadline deadline,
+                                              java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                               EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(sources, path);
-        if (exampleBudget != null) {
-            compilation.withExampleBudget(exampleBudget);
-        }
-        if (deadline != null) {
-            compilation.withDeadline(deadline);
-        }
+        // The terms first and the wait after, for the reason compilingSource gives.
         if (policy != null) {
             compilation.withEvaluationPolicy(policy);
         }
+        if (exampleBudget != null) {
+            compilation.withExampleBudget(exampleBudget);
+        }
+        if (arrangement != null) {
+            compilation.withJvmExampleDeadlines(arrangement);
+        }
         compilation.measure(measure);
-        Db db = compilation.db();
 
-        CompileException structural = compilation.failure(compilation.structuralReports());
-        if (structural != null) {
-            throw structural;
-        }
-
-        db.ask(new Output.All());
-        CompileException failed = compilation.failure(db.allReports());
-        if (failed != null) {
-            throw failed;
-        }
-
-        // Every module's classes are now present, so a constant construction and an example can
-        // resolve a cross-module reference — including into a dependency, whose classes come off the
-        // same path its declarations were read from.
-        List<Diagnostic> exampleFailures = new ArrayList<>();
-        List<String> exampleSources = new ArrayList<>();
-        for (String module : compilation.modules()) {
-            if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.failure(db.allReports());
-                if (bad != null) {
-                    throw bad;
-                }
-                continue;
-            }
-            for (String id : compilation.exampleSourcesOf(module)) {
-                for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
-                    exampleFailures.add(failure.diagnostic());
-                    // a row from an `examples for` file is positioned in that file, not this one
-                    exampleSources.add(id);
-                }
-            }
-            db.ask(new Output.SaidDisagreements(module));
-        }
-        for (String module : compilation.modules()) {
-            compilation.answerWarnings(module);
-        }
-        warningsOut.addAll(compilation.warnings(db.allReports()));
-        if (!exampleFailures.isEmpty()) {
-            throw CompileException.ofAllInSources(exampleFailures, exampleSources,
-                    ExampleVerifier.legacySummary(exampleFailures));
-        }
+        // What the language refuses over, asked where it is written down. Read here rather than
+        // repeated: a second reading is a second answer to whether this program is accepted.
+        Acceptance.of(compilation, warningsOut);
         return compilation;
     }
     /**
@@ -483,7 +411,7 @@ public final class Compiler {
      * examples land on that module's id, and an {@code examples for X} file's examples land on that
      * file's id — never on the target module. A source with no problem maps to an empty list.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById) {
         return diagnoseModules(sourcesById, Set.of());
     }
 
@@ -493,8 +421,8 @@ public final class Compiler {
      * errors). Their importers are skipped rather than told the module is unknown — the error belongs
      * to the broken file, which reports it separately, not to the importer.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
-                                                             Set<String> brokenModuleNames) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                               Set<String> brokenModuleNames) {
         return diagnoseModules(sourcesById, brokenModuleNames, ModulePath.EMPTY);
     }
 
@@ -506,9 +434,9 @@ public final class Compiler {
      * <p>A path that is itself wrong — a module missing behind a module — is not reported here. The
      * editor's job is the source in front of the author, and a broken path is the build's to say.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
-                                                             Set<String> brokenModuleNames,
-                                                             ModulePath path) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                               Set<String> brokenModuleNames,
+                                                               ModulePath path) {
         return Compilation.ofDocuments(sourcesById, brokenModuleNames, path).diagnostics();
     }
     /**
@@ -528,10 +456,10 @@ public final class Compiler {
     }
     /** Compiles source and writes each generated class under {@code outDir}. */
     public static void compileToDir(String source, Path outDir) throws IOException {
-        for (Map.Entry<String, byte[]> entry : compile(source).entrySet()) {
-            Path file = outDir.resolve(entry.getKey().replace('.', '/') + ".class");
+        for (Map.Entry<String, ClassFileImage> entry : compile(source).entrySet()) {
+            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue());
+            Files.write(file, entry.getValue().bytes());
         }
     }
 }

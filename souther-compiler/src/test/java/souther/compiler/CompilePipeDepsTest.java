@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 
 import javax.tools.ToolProvider;
@@ -40,8 +42,8 @@ class CompilePipeDepsTest {
             """;
 
     private static String impl(String cls, String param, String inType, String midValue) {
-        // the generated behavior base class capitalizes its first letter (spec §jvm-behavior)
-        String base = Character.toUpperCase(param.charAt(0)) + param.substring(1);
+        // what a Java implementation of an injected behavior extends — the class the compiler
+        // emitted, asked for rather than spelled
         return """
                 package demo;
                 import net.unit8.raoh.Ok;
@@ -53,12 +55,12 @@ class CompilePipeDepsTest {
                         return (Mid) ((Ok) d.decode("%s", Path.ROOT)).value();
                     }
                 }
-                """.formatted(cls, base, inType, midValue);
+                """.formatted(cls, Emitted.behaviorInterface("demo", param), inType, midValue);
     }
 
     @Test
     void pipelineCollectsEveryStagesRequirements() throws Exception {
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(MODULE));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(MODULE));
         classes.put("demo.FetchImpl", compileSubclass(classes, "demo.FetchImpl", impl("FetchImpl", "fetch", "In", "m")));
         classes.put("demo.TagImpl", compileSubclass(classes, "demo.TagImpl", impl("TagImpl", "tag", "Mid", "T")));
 
@@ -97,7 +99,7 @@ class CompilePipeDepsTest {
 
                 behavior outer = handle >-> relabel
                 """;
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(src));
         classes.put("demo.FetchImpl", compileSubclass(classes, "demo.FetchImpl", impl("FetchImpl", "fetch", "In", "m")));
         classes.put("demo.TagImpl", compileSubclass(classes, "demo.TagImpl", impl("TagImpl", "tag", "Mid", "T")));
 
@@ -117,13 +119,14 @@ class CompilePipeDepsTest {
         assertEquals("m", o.get("b"));
     }
 
-    private static byte[] compileSubclass(Map<String, byte[]> generated, String className, String source)
+    private static ClassFileImage compileSubclass(Map<String, ClassFileImage> generated,
+                                                  String className, String source)
             throws Exception {
         java.nio.file.Path classesDir = Files.createTempDirectory("souther-gen");
-        for (Map.Entry<String, byte[]> e : generated.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> e : generated.entrySet()) {
             java.nio.file.Path p = classesDir.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(p.getParent());
-            Files.write(p, e.getValue());
+            Files.write(p, e.getValue().bytes());
         }
         java.nio.file.Path srcFile = classesDir.resolve(className.replace('.', '/') + ".java");
         Files.writeString(srcFile, source);
@@ -134,6 +137,7 @@ class CompilePipeDepsTest {
         if (rc != 0) {
             throw new IllegalStateException("javac failed for " + className + " (rc=" + rc + ")");
         }
-        return Files.readAllBytes(outDir.resolve(className.replace('.', '/') + ".class"));
+        return ClassFileImage.of(
+                Files.readAllBytes(outDir.resolve(className.replace('.', '/') + ".class")));
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -9,6 +10,7 @@ import souther.compiler.types.Type;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,23 +39,48 @@ class OneNameIsOneValueTest {
 
     @Test
     void oneKeyIsRefusedASecondKindOfNumber() {
-        Terms terms = new Terms(Symbols.none());
+        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId binding = binding();
-        Denotations at = Denotations.none().location(binding);
-        String whole = terms.atomOf(new Core.Read("n", binding, Type.INT, POS), at);
+        Denotations at = Denotations.none().location(binding, AsPlaces.of(binding), AsPlaces.term(binding));
+        FactSubject whole = terms.atomOf(new Core.Read("n", binding, Type.INT, POS), at);
         assertNotNull(whole, "a location is an atom");
-        Terms.OneKeyTwoKinds refused = assertThrows(Terms.OneKeyTwoKinds.class,
+        Terms.OneTermTwoKinds refused = assertThrows(Terms.OneTermTwoKinds.class,
                 () -> terms.atomOf(new Core.Read("n", binding, Type.DECIMAL, POS), at),
                 "the same name, standing for a number spaced the other way");
-        assertTrue(refused.getMessage().contains(whole),
+        assertTrue(refused.getMessage().contains(whole.rendered()),
                 "and it says which name: " + refused.getMessage());
+    }
+
+    /**
+     * Two values one writing of them once ran together are two terms.
+     *
+     * <p>A term was a string built out of its parts' strings, and the punctuation the string used was
+     * punctuation a value could hold: the one-element list below and the two-element one wrote the
+     * same characters, so a guard about either discharged a clause about the other. What separates
+     * them now is that neither is written at all — a term holds its parts, and a list of one is a
+     * list of one whatever that one spells.
+     */
+    @Test
+    void twoValuesThatOnceWroteOneNameAreTwoTerms() {
+        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Denotations at = Denotations.none();
+        Core.Str awkward = new Core.Str("a\", \"b", Type.STRING, POS);
+
+        Term one = terms.bodyKey(new Core.ListLit(java.util.List.of(awkward),
+                Type.list(Type.STRING), POS), at);
+        Term two = terms.bodyKey(new Core.ListLit(java.util.List.of(
+                new Core.Str("a", Type.STRING, POS), new Core.Str("b", Type.STRING, POS)),
+                Type.list(Type.STRING), POS), at);
+
+        assertNotNull(one);
+        assertNotEquals(one, two, "a list of one element and a list of two are two values");
     }
 
     @Test
     void theCheckDoesNotSwallowItsOwnContradiction() {
-        assertThrows(Terms.OneKeyTwoKinds.class,
+        assertThrows(Terms.OneTermTwoKinds.class,
                 () -> InvariantChecker.gaveUp("analyze",
-                        new Terms.OneKeyTwoKinds("atom `n` is DISCRETE and DENSE")),
+                        new Terms.OneTermTwoKinds("atom `n` is DISCRETE and DENSE")),
                 "recording it would leave a behavior looking like one with nothing to report");
     }
 

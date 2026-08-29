@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
+
 /**
  * What names an axis across a report: the behavior it is an input of, and the number of that input
  * it measures — a location, or something taken of one.

@@ -8,6 +8,7 @@ import souther.compiler.frontend.CstFrontend;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.jvm.ClassFileImage;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -89,7 +90,7 @@ class ANameIsCanonicalWhereverItEntersTest {
 
     @Test
     void theGeneratedClassesAreNamedByTheCanonicalModule() {
-        Map<String, byte[]> classes = Compiler.compile(HEADERLESS, NFD);
+        Map<String, ClassFileImage> classes = Compiler.compile(HEADERLESS, NFD);
         assertTrue(classes.containsKey(NFC + ".Greet"),
                 "generated: " + classes.keySet());
     }

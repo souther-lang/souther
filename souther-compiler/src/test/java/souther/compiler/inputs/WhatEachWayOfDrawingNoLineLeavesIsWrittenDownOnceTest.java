@@ -1,0 +1,412 @@
+package souther.compiler.inputs;
+
+import org.junit.jupiter.api.Test;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import souther.compiler.check.CoverageObligation;
+import souther.compiler.partition.ReportedReason;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+/**
+ * Every way a reading comes back without a line, and what each of them leaves behind, in one table.
+ *
+ * <p>The seal already refuses a reason nobody answered for: {@link BlockReason.RuleReadingStopped}
+ * switches over its members with no {@code default}, so a fourteenth is a build failure. What it
+ * does not refuse is a reason moved from one arm to another. Both switches keep compiling when a
+ * reason changes which measure it leaves short or which word a document writes for it, and every
+ * sentence built on the old answer goes on being written and is now wrong.
+ *
+ * <p>Which is not hypothetical here. Six of the nine rules below say both measures are short of
+ * something and three say neither is, and that difference is what decides whether a behavior is
+ * taken out of the verdict — a reason that quietly stopped leaving the border measure short would
+ * let a model be called adequate over a rule this compiler never read. Issue #1079 is what that
+ * costs when the answer is arrived at rather than written down.
+ *
+ * <p>So the answers are here, written out, and this is where they are changed. A reason that moves
+ * fails this test and is meant to: what it is asking is not whether the code is right but whether
+ * the person moving it meant to move it.
+ */
+class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
+
+    /**
+     * Every rule this compiler read and drew no line from, and what it leaves.
+     *
+     * <p>Written as {@code partition/boundary/word}: which of the two measures the rule leaves short
+     * of something, and the word a document writes for it. A reason that leaves neither measure
+     * short is one the model states rather than one this compiler fell short on.
+     */
+    private static Map<String, String> theRulesWithNoLine() {
+        Map<String, String> table = new LinkedHashMap<>();
+        // Read partway. What the rule would have divided or bounded is exactly the part that was
+        // not read, so neither measure knows what it is missing and both are short.
+        table.put("UnreadComparisonForm", "short/short/UNSUPPORTED_SYNTAX");
+        table.put("UnreadComparisonDomain", "short/short/UNSUPPORTED_DOMAIN");
+        table.put("RuleAboutADerivedValue", "short/short/RULE_ABOUT_A_DERIVED_VALUE");
+        table.put("UnreadValueRule", "short/short/UNSUPPORTED_SYNTAX");
+        // A pattern read to the end and larger than this will make a machine of. Both measures are
+        // short because both are read off the set it names: a class is a part of it and an end is
+        // where it stops. Its own word and not the one above — that one sends an author after the
+        // form their rule is written in, and here the form was read and the rule is simply large.
+        //
+        // What is not here is the answer nobody could work out, which leaves the position short of
+        // the same two things and is not a rule without a line. This table is what a rule leaves,
+        // and that one is not about a rule.
+        table.put("PatternTooCostly", "short/short/EXACT_VALUES_TOO_COSTLY");
+        // And a rule this would not read that far in, which is short of both for the same reason:
+        // what the rule says is unknown, so what it would have divided or bounded is unknown too.
+        // Its own word and not the one above — that one reached the values and this did not.
+        table.put("PatternTooDeeplyNested", "short/short/PATTERN_TOO_DEEPLY_NESTED");
+        // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
+        // readings of `a < b`, opposite sentences about this compiler, and a document promises
+        // its reader which kind of thing stopped a derivation rather than which reader stopped.
+        table.put("ValueRuleRelatingTwoPositions", "short/short/UNSUPPORTED_PARTITION_SHAPE");
+        table.put("CompetingCoordinates", "short/short/COMPETING_COORDINATES");
+        // Read to the end, and placed nowhere. Its own word beside the two above: the comparison
+        // was taken apart, a line came out of it and every name it is between reached positions —
+        // what was not reached is which of those positions the line runs between. Both measures are
+        // short, because a row either side of the line is owed and there is nowhere to ask for one.
+        table.put("CasePairingNotDetermined", "short/short/UNRESOLVED_CASE_PAIRING");
+        // Read to the end. Whatever the rule places has been placed, and there is none to be owed.
+        table.put("ComparisonCuttingNothing", "whole/whole/RULE_CUTS_NOTHING");
+        table.put("ComparisonCuttingOutsideDomain",
+                "whole/whole/RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS");
+        table.put("ComparisonBetweenPositions", "whole/whole/UNSUPPORTED_PARTITION_SHAPE");
+        // Its own word beside the one above, because what a reader does about it differs: a rule
+        // between two positions is waiting on a class about the pair, and a rule about what the
+        // values at one come to has nothing to wait for — the position has no class from it and
+        // its border is drawn.
+        table.put("ComparisonOverARun", "whole/whole/RULE_ABOUT_A_RUN");
+        return table;
+    }
+
+    /**
+     * And every way the reading never got to a rule at all, which names a position and no rule.
+     *
+     * <p>Apart from the above because there is nothing to ask them: a reason with no rule behind it
+     * has no {@code leavesShort} to answer, and the position it is about is short for both measures
+     * by the position rather than by anything written about it.
+     */
+    private static Map<String, String> theStopsAtAPosition() {
+        Map<String, String> table = new LinkedHashMap<>();
+        table.put("TypeUnresolved", "TYPE_UNRESOLVED");
+        table.put("RecursiveExpansion", "RETURNS_TO_A_DECLARATION_ALREADY_READ");
+        table.put("UnsupportedTraversal", "UNSUPPORTED_TRAVERSAL");
+        table.put("ValueRulesNotReached", "RULES_NOT_READ_AT_ALL");
+        return table;
+    }
+
+    /**
+     * And every reason that is neither of those, which is what a question is left standing by.
+     *
+     * <p>Its own table because the two above are answers about a line: what a rule with none of one
+     * leaves, and what a position nothing was reached at leaves. A rule nothing established an
+     * interpretation of is neither — nothing stopped on it and nothing drew a line it is the
+     * absence of — so it has no {@code leavesShort} to answer and no position to be the account of.
+     *
+     * <p>What it does have is a word a document writes, which is why it is here at all: the whole
+     * of the coarsening is meant to be reviewable in one place, and a reason with a capability of
+     * its own would otherwise be projected where nothing reads the collapse back.
+     */
+    private static Map<String, String> theOtherReasonsAboutARule() {
+        Map<String, String> table = new LinkedHashMap<>();
+        // Not `UNSUPPORTED_SYNTAX`, which promises a rule was read and could not be used: nothing
+        // engaged with this one. Not `RULES_NOT_READ_AT_ALL` either, which promises the rule was
+        // never arrived at: it was.
+        table.put("NoReadingTookItIn", "RULE_NOT_INTERPRETED_HERE");
+        // Here because it is in neither capability, which is the fact rather than an oversight. It
+        // is not a rule without a line — it is about no rule — and it is not a position whose rules
+        // were never reached, since every one of them arrived and was understood. What was not
+        // worked out is what they leave between them.
+        //
+        // One word with `PatternTooCostly` all the same. Out there the two are the same kind of
+        // thing: the values are wider than the rules leave them because working them out was too
+        // much. Which of them it was decides whether a rule can be named, and that is this
+        // compiler's question rather than a promise the document makes.
+        table.put("ExactValuesTooCostly", "EXACT_VALUES_TOO_COSTLY");
+        return table;
+    }
+
+    /**
+     * The table, held against what the reasons answer.
+     *
+     * <p>Every member of the seal is here: the map is built from the reasons themselves, so one
+     * added and left out of the table above comes back with no expectation beside it and fails.
+     */
+    @Test
+    void everyRuleWithNoLineSaysWhatItLeavesAndWhatItIsCalled() {
+        Map<String, String> said = new LinkedHashMap<>();
+        for (BlockReason.RuleWithoutLineReason each : everyRuleWithoutALine()) {
+            said.put(each.getClass().getSimpleName(),
+                    (each.leavesShort(CoverageObligation.Measure.PARTITION) ? "short" : "whole")
+                            + "/"
+                            + (each.leavesShort(CoverageObligation.Measure.BOUNDARY)
+                                    ? "short" : "whole")
+                            + "/" + ReportedReason.of((BlockReason) each).name());
+        }
+
+        assertEquals(theRulesWithNoLine(), said);
+    }
+
+    /** The same of the reasons that name a position and no rule. */
+    @Test
+    void everyStopAtAPositionSaysWhatItIsCalled() {
+        Map<String, String> said = new LinkedHashMap<>();
+        for (BlockReason.AboutThePosition each : everyStopAtAPosition()) {
+            said.put(each.getClass().getSimpleName(), ReportedReason.of(each).name());
+        }
+
+        assertEquals(theStopsAtAPosition(), said);
+    }
+
+    /** And of the reasons that are in neither of those capabilities. */
+    @Test
+    void everyOtherReasonAboutARuleSaysWhatItIsCalled() {
+        Map<String, String> said = new LinkedHashMap<>();
+        for (BlockReason each : theOtherReasons()) {
+            said.put(each.getClass().getSimpleName(), ReportedReason.of(each).name());
+        }
+
+        assertEquals(theOtherReasonsAboutARule(), said);
+    }
+
+    /**
+     * Which half a reason is in decides both answers, and the table says the same thing.
+     *
+     * <p>The rule under the thirteen rows: a reading that stopped leaves whatever the rule states
+     * unknown, so both measures are short of it; a rule read from end to end has had whatever it
+     * places placed, so neither is. Said as a rule beside the rows, a reason added to the table with
+     * the wrong pair of words fails here as well — the rows are what someone changing an answer has
+     * to write, and this is what says whether the answer they wrote is one the halves allow.
+     */
+    @Test
+    void aReadingThatStoppedLeavesBothShortAndOneThatFinishedLeavesNeither() {
+        for (BlockReason.RuleWithoutLineReason each : everyRuleWithoutALine()) {
+            boolean stopped = each instanceof BlockReason.RuleReadingStopped;
+            assertEquals(stopped, each.leavesShort(CoverageObligation.Measure.PARTITION),
+                    each.getClass().getSimpleName());
+            assertEquals(stopped, each.leavesShort(CoverageObligation.Measure.BOUNDARY),
+                    each.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Every member of the seal is in the lists above.
+     *
+     * <p>The lists are written out rather than found by reflection, because what this test is about
+     * is the answers and a list that built itself from the reasons would move with them. That is
+     * what this check is for: written out, a list is a thing to forget, and a fourteenth reason
+     * added and answered for in {@code leavesShort} would leave the rows above passing over
+     * thirteen.
+     */
+    @Test
+    void everyReasonThereIsHasARowAbove() {
+        java.util.Set<String> written = new java.util.LinkedHashSet<>();
+        written.addAll(theRulesWithNoLine().keySet());
+        written.addAll(theStopsAtAPosition().keySet());
+        written.addAll(theOtherReasonsAboutARule().keySet());
+
+        assertEquals(reasons(BlockReason.class), written,
+                "a reason a document has a word for, and no row saying which word");
+    }
+
+    /**
+     * Every reason there is, which is what {@link ReportedReason} is asked about.
+     *
+     * <p>Read from {@link BlockReason} itself and down through whatever seals stand under it,
+     * rather than from the capabilities. The capabilities are what is true of a reason and a reason
+     * may be in more than one of them, so a list per capability is a list per way of being asked —
+     * and a reason in a capability nobody enumerated is one this compiler projects to a published
+     * word with nothing reading the collapse back. Which is what happened: a reason moved out of
+     * both capabilities kept its projection and left the tables passing.
+     *
+     * <p>What the switch already refuses is a reason with no word at all. What it cannot refuse is
+     * a word whose promise the reason does not meet, and that is the whole of what the rows are
+     * for.
+     */
+    private static java.util.Set<String> reasons(Class<?> seal) {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (Class<?> each : seal.getPermittedSubclasses()) {
+            if (each.isSealed()) {
+                out.addAll(reasons(each));
+            } else {
+                out.add(each.getSimpleName());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * One of each reason there is, and nothing about which capability any of them is in.
+     *
+     * <p>The list is here to make a value of each, because a reason with an argument cannot be made
+     * from its class alone. Which capabilities one is in is the reason's own answer and is asked of
+     * the type below — written out per capability, the lists are a second declaration of
+     * membership, and a reason that gained one would keep whichever list it was put in.
+     *
+     * <p>That it holds every reason is not this list's word either: {@link
+     * #everyReasonThereIsHasARowAbove} reads the seal.
+     */
+    private static List<BlockReason> everyReason() {
+        return List.of(
+                new BlockReason.UnreadComparisonForm(),
+                new BlockReason.UnreadComparisonDomain(),
+                new BlockReason.RuleAboutADerivedValue(),
+                new BlockReason.UnreadValueRule(),
+                new BlockReason.PatternTooCostly(),
+                new BlockReason.PatternTooDeeplyNested(),
+                new BlockReason.ExactValuesTooCostly(),
+                new BlockReason.ValueRuleRelatingTwoPositions(),
+                new BlockReason.CompetingCoordinates(),
+                new BlockReason.CasePairingNotDetermined(),
+                new BlockReason.ComparisonCuttingNothing(),
+                new BlockReason.ComparisonCuttingOutsideDomain(),
+                new BlockReason.ComparisonBetweenPositions(),
+                new BlockReason.ComparisonOverARun(),
+                new BlockReason.TypeUnresolved(),
+                new BlockReason.RecursiveExpansion(
+                        souther.compiler.types.TypeSymbols.declared(
+                                new souther.compiler.types.TypeKey("g", "Chain")),
+                        TermPath.of("c")),
+                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
+                new BlockReason.ValueRulesNotReached(),
+                new BlockReason.NoReadingTookItIn());
+    }
+
+    /** Those of them that are rules with no line, asked of each rather than listed. */
+    private static List<BlockReason.RuleWithoutLineReason> everyRuleWithoutALine() {
+        return everyReason().stream()
+                .filter(BlockReason.RuleWithoutLineReason.class::isInstance)
+                .map(BlockReason.RuleWithoutLineReason.class::cast).toList();
+    }
+
+    /**
+     * A surface of the document admits the words its own reasons reach, and no others.
+     *
+     * <p>Two surfaces, and each is fed by the capabilities its producers hold. An entry about a
+     * position is written from a rule that came to no line and from a stop at the position itself;
+     * a question's is written from what is short about a rule. Neither contains the other: a type
+     * that could not be worked out is a stop at a position and reaches no question, and a rule
+     * nothing claimed is about a rule and reaches no position.
+     *
+     * <p>Each held to its own capabilities and not to the other surface. Written as one vocabulary
+     * and the other plus a word, the question's admitted everything a position's did — a type
+     * nothing could work out among them, which no question can be left standing by — and a
+     * difference is all a check of two sets one of which is defined as the other can ever see.
+     */
+    @Test
+    void eachSurfaceAdmitsTheWordsItsOwnReasonsReach() throws Exception {
+        JsonNode schema = schema();
+
+        java.util.Set<String> aPosition = new java.util.LinkedHashSet<>(
+                projected(everyRuleWithoutALine()));
+        aPosition.addAll(projected(everyStopAtAPosition()));
+        // The walk stopping after a count of steps, which nothing writes any more. A word of this
+        // surface and of no other: documents of this version carry it where a position's reading
+        // ran out, and the question's vocabulary is new in this version and never carried it.
+        aPosition.add("depth_limit");
+
+        assertEquals(aPosition, words(schema, "notReadReason"),
+                "an entry about a position admits what a position's readings can be short of");
+        assertEquals(projected(everyReasonAboutARule()), words(schema, "questionStoppedReason"),
+                "a question admits what can be short about a rule");
+    }
+
+    /**
+     * And every word a document has is one some reason reaches.
+     *
+     * <p>Beside the two above, which are about which surface may carry a word. This is about the
+     * words themselves: one no reason projects to is a promise to a reader that nothing can keep,
+     * and the surfaces would both be right about it by neither of them admitting it.
+     */
+    @Test
+    void everyPublishedWordIsOneSomeReasonReaches() {
+        assertEquals(java.util.Arrays.stream(
+                                souther.compiler.partition.UndividedPosition.Reason.values())
+                        .map(each -> each.name().toLowerCase(java.util.Locale.ROOT))
+                        .collect(java.util.stream.Collectors
+                                .toCollection(java.util.LinkedHashSet::new)),
+                projected(everyReason()),
+                "a word a document may carry that no reason comes to");
+    }
+
+    /** The words {@code these} come to, which is what a document writes for each of them. */
+    private static java.util.Set<String> projected(List<? extends BlockReason> these) {
+        return these.stream().map(each -> ReportedReason.of(each).name())
+                .map(java.lang.String::toLowerCase)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    /** The words the schema allows at one of its definitions, following what it is written as. */
+    private static java.util.Set<String> words(JsonNode schema, String def) {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        JsonNode node = schema.get("$defs").get(def);
+        assertNotNull(node, "the schema has no " + def);
+        if (node.has("enum")) {
+            node.get("enum").forEach(each -> out.add(each.asString()));
+        }
+        if (node.has("anyOf")) {
+            for (JsonNode each : node.get("anyOf")) {
+                if (each.has("const")) {
+                    out.add(each.get("const").asString());
+                }
+                if (each.has("enum")) {
+                    each.get("enum").forEach(word -> out.add(word.asString()));
+                }
+                if (each.has("$ref")) {
+                    out.addAll(words(schema,
+                            each.get("$ref").asString().substring("#/$defs/".length())));
+                }
+            }
+        }
+        return out;
+    }
+
+    private static JsonNode schema() throws Exception {
+        try (java.io.InputStream in = souther.compiler.report.AdequacyReport.class
+                .getResourceAsStream(
+                        souther.compiler.report.AdequacyReport.SCHEMA_RESOURCE)) {
+            assertNotNull(in, "the schema ships beside the compiler");
+            return JsonMapper.builder().build().readTree(
+                    new java.lang.String(in.readAllBytes(),
+                            java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
+     * And those in neither, which is what a question is left standing by and no surface about a
+     * position can carry.
+     *
+     * <p>Asked of the two capabilities and not named. A reason that gained one of them belongs in
+     * the list beside this and would keep its row here — so the rows would go on saying what a
+     * document writes for it while what may carry it had moved, which is the whole of what the
+     * schema's two vocabularies are held against.
+     */
+    private static List<BlockReason> theOtherReasons() {
+        return everyReason().stream()
+                .filter(each -> !(each instanceof BlockReason.RuleWithoutLineReason))
+                .filter(each -> !(each instanceof BlockReason.AboutThePosition))
+                .toList();
+    }
+
+    /** And those of them that are a shortfall about a rule, which is what a question stands on. */
+    private static List<BlockReason.AboutARule> everyReasonAboutARule() {
+        return everyReason().stream()
+                .filter(BlockReason.AboutARule.class::isInstance)
+                .map(BlockReason.AboutARule.class::cast).toList();
+    }
+
+    /** And those of them that name a position and no rule. */
+    private static List<BlockReason.AboutThePosition> everyStopAtAPosition() {
+        return everyReason().stream()
+                .filter(BlockReason.AboutThePosition.class::isInstance)
+                .map(BlockReason.AboutThePosition.class::cast).toList();
+    }
+}

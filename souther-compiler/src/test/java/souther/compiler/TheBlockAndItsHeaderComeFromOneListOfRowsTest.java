@@ -23,7 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>A boundary is probed once per obligation, and a probe fills the positions its edge does not name
  * from the bottom of each one's own domain — which is the value a minimum edge names. So two edges of
  * one behavior compose the same input, and offering a row per obligation offers a reader two rows they
- * cannot tell apart. What is offered is a row, and a row that stands on two edges says both.
+ * cannot tell apart. What is offered is a row, and it is offered without a name: an edge cannot name
+ * it, since which of the two is still owed is what an unrelated row changes, and a name that moved
+ * with that would be a name for the state of the generation rather than for the row.
  *
  * <p>The sentence above the block describes the block. Counted from the obligations instead, it is a
  * number about work the reader cannot see, and the line telling them to answer each placeholder is
@@ -59,7 +61,13 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
             """;
 
     /**
-     * The same model with a rule relating the two fields, which no candidate this composes satisfies.
+     * The same model with a rule the composing cannot reason through, so no candidate it puts
+     * together satisfies it.
+     *
+     * <p>A product of two fields and not a sum. A sum was what this used to say, and a sum is a rule
+     * the interval algebra now narrows both fields through — the composing finds
+     * {@code rate = 0, cap = 10} and the block it produces has rows in it, which is the right answer
+     * and the wrong fixture. What is wanted here is a rule outside what the algebra reasons in.
      *
      * <p>Here for the shape of the block it produces — explanations and no rows — and not for why the
      * search failed. Whether that failure may be read as a fact about the model is #602's question.
@@ -69,18 +77,20 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
             behavior fee""", """
                 }
-                invariant together = rate.value + cap.value >= 10
+                invariant together = rate.value * cap.value >= 10
 
             behavior fee""");
 
     private static String block(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> generated =
-                compilation.db().ask(new Adequacy.Generated(module)).value();
+                Adequacy.generatedOf(compilation.db(), module);
         assertNotNull(generated, "the model under test compiles");
-        return GeneratedRows.of(module, generated, true, SourceNameResolver.identity());
+        return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(module, true)),
+                Map.of(), SourceNameResolver.identity()).text();
     }
 
     /** Where each row starts. A row the formatter wrapped is still one row, and one {@code |}. */
@@ -103,14 +113,12 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
     /** Which says the count as well: two edges meet at this input, and one {@code |} is written. */
     @Test
-    void theRowNamesEveryEdgeItStandsOn() {
+    void twoEdgesMeetingAtOneInputAreOneRow() {
         String block = block(POLICY, "example.policy");
 
         assertEquals(List.of(
                         "// example fee",
-                        "//     | \"policy.rate = 0 x policy.cap = 0\"",
-                        "//         : (0, Policy { rate = Rate(0), cap = Cap(0) })",
-                        "//         -> <?>"),
+                        "//     | (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>"),
                 written(block));
     }
 

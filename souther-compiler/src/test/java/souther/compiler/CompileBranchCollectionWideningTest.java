@@ -48,7 +48,7 @@ class CompileBranchCollectionWideningTest {
 
     @Test
     void bothArmsNonEmptyListsOfDifferentCases() {
-        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly, NoAuthority") + """
+        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly") + """
                 let reasons (total: Int): List<Reason> =
                     if total >= 100 then [ Costly { threshold = 100 } ] else [ NoAuthority ]
                 let make (total) = Reasons { reasons = reasons(total) }
@@ -57,7 +57,7 @@ class CompileBranchCollectionWideningTest {
 
     @Test
     void matchArmsOfDifferentCaseLists() {
-        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly, NoAuthority, Big, Small") + """
+        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly") + """
                 data Big
                 data Small
                 data Size = Big | Small
@@ -74,7 +74,7 @@ class CompileBranchCollectionWideningTest {
     void noExpectedTypeInScope() {
         // a local binding with no annotation: nothing pushes List<Reason> down, so the join is the
         // only thing that can widen the two arms
-        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly, NoAuthority") + """
+        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly") + """
                 let make (total) = {
                     let rs = if total >= 100 then [ Costly { threshold = 100 } ] else [ NoAuthority ]
                     Reasons { reasons = rs }
@@ -86,7 +86,7 @@ class CompileBranchCollectionWideningTest {
     void setArmsOfDifferentCases() {
         assertDoesNotThrow(() -> Compiler.compile(HEAD + """
                 data ReasonSet = { reasons: Set<Reason> }
-                behavior collect : (total: Int) -> ReasonSet constructs ReasonSet, Costly, NoAuthority
+                behavior collect : (total: Int) -> ReasonSet constructs ReasonSet, Costly
                 let reasons (total: Int): Set<Reason> =
                     if total >= 100
                         then Set.insert(Costly { threshold = 100 }, Set.empty)
@@ -128,7 +128,7 @@ class CompileBranchCollectionWideningTest {
 
     @Test
     void tupleOfCaseListsInEachArm() {
-        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly, NoAuthority") + """
+        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly") + """
                 let reasons (total: Int): (List<Reason>, Int) =
                     if total >= 100 then ([ Costly { threshold = 100 } ], 1) else ([ NoAuthority ], 0)
                 let make (total) = {
@@ -141,9 +141,9 @@ class CompileBranchCollectionWideningTest {
     @Test
     void nestedListElementsOfDifferentCases() {
         // the element rule that types a literal and `++` is the same join, so it descends too
-        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly, NoAuthority") + """
+        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly") + """
                 data Grouped = { groups: List<List<Reason>> }
-                behavior group : () -> Grouped constructs Grouped, Costly, NoAuthority
+                behavior group : () -> Grouped constructs Grouped, Costly
                 let group = Grouped { groups = [ [ Costly { threshold = 100 } ], [ NoAuthority ] ] }
                 let make (total) = Reasons { reasons = [ Costly { threshold = 100 }, NoAuthority ] }
                 """));
@@ -169,13 +169,13 @@ class CompileBranchCollectionWideningTest {
                 data Reason = Costly | NoAuthority
                 data Trip = { total: Int }
                 data Reasons = { reasons: List<Reason> }
-                behavior decide : (t: Trip) -> Reasons constructs Reasons, Costly, NoAuthority
+                behavior decide : (t: Trip) -> Reasons constructs Reasons, Costly
                 let reasons (total: Int): List<Reason> =
                     if total >= 100 then [ Costly { threshold = 100 } ] else [ NoAuthority ]
                 let decide (t) = Reasons { reasons = reasons(t.total) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Decide$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "decide").getConstructor().newInstance();
 
         assertEquals(Map.of("type", "Costly", "threshold", 100L), reasons(loader, impl, 100).get(0));
         assertEquals(Map.of("type", "NoAuthority"), reasons(loader, impl, 1).get(0));
@@ -198,7 +198,7 @@ class CompileBranchCollectionWideningTest {
                 let decide (t) = Reasons { reasons = reasons(t.total) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Decide$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "decide").getConstructor().newInstance();
 
         assertEquals(Map.of("type", "Costly", "threshold", 100L), reasons(loader, impl, 100).get(0));
         assertEquals(List.of(), reasons(loader, impl, 1));

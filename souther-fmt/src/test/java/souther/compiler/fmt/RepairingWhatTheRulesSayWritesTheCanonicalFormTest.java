@@ -6,13 +6,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.cst.CstParser;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,31 +34,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
 
-    static Stream<Path> sources() throws IOException {
-        List<Path> out = new ArrayList<>();
-        try (Stream<Path> walk = Files.walk(Path.of(".."))) {
-            walk.filter(p -> p.toString().endsWith(".sou"))
-                    .filter(p -> !p.toString().contains("target"))   // a build's copy of one
-                    .sorted().forEach(out::add);
-        }
-        return out.stream();
+    static Stream<Path> sources() {
+        return FormatterCorpus.paths().stream();
     }
 
-    private static String read(Path p) {
-        try {
-            return Files.readString(p, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+    /**
+     * What the rules have against each source, taken once.
+     *
+     * <p>{@link Deviations#of} is a function of its text and the two checks here ask about the same
+     * files, so a source that departs from the canonical form had its report written twice — once
+     * to hold it against the formatter, once to count what it said.
+     */
+    private static final Map<Path, Deviations.Report> REPORTS = new ConcurrentHashMap<>();
+
+    private static Deviations.Report reportOn(Path path) {
+        return REPORTS.computeIfAbsent(path, p -> Deviations.of(FormatterCorpus.textOf(p)));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("sources")
     void everySourceIsWhollyNamed(Path path) {
-        String source = read(path);
+        String source = FormatterCorpus.textOf(path);
         assertEquals(List.of(), CstParser.parse(source).errors(), "this source does not parse");
 
-        Deviations.Report report = Deviations.of(source);
+        Deviations.Report report = reportOn(path);
 
         assertTrue(report.whole(),
                 "repairing what the rules say does not write the canonical form of " + path
@@ -74,14 +71,14 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
      * the report would be empty and repairing nothing would write the text back.
      */
     @Test
-    void andSomeOfThemHaveSomethingAgainstThem() throws IOException {
+    void andSomeOfThemHaveSomethingAgainstThem() {
         List<Path> differ = new ArrayList<>();
         int deviations = 0;
-        for (Path path : sources().toList()) {
-            String source = read(path);
+        for (Path path : FormatterCorpus.paths()) {
+            String source = FormatterCorpus.textOf(path);
             if (!Formatter.format(source).equals(source)) {
                 differ.add(path);
-                deviations += Deviations.of(source).deviations().size();
+                deviations += reportOn(path).deviations().size();
             }
         }
 

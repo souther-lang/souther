@@ -1,11 +1,11 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -31,13 +31,56 @@ import java.util.List;
 public final class DeclaredBounds {
 
     /**
-     * One end of a range, and every name that put it there.
+     * One rule that put an end here, and which number of the declaration it was written about.
      *
-     * <p>Names, plural. Two layers can state the same bound — a wrapper repeating what it wraps — and
+     * <p>The pair and not the rule alone. One clause can bound two numbers of one declaration —
+     * {@code invariant both = String.length(name) >= 1 && String.length(code) >= 1} places two ends
+     * at one value — and they are two lines an author drew: a row whose {@code name} is one
+     * character says nothing about {@code code}. Held as the rule, the two came out as one thing to
+     * write a row for, which is the mistake issue #1062 is about with the halves the other way round.
+     *
+     * <p><b>The conjunct and not the number it was written about.</b> Which coordinate a clause
+     * bounded is read from whatever value the reading started at — {@code Day}'s own clause is about
+     * {@code value} read from {@code Day} and about {@code d} read from the {@code Span} holding it
+     * — so two readings of one line spell the coordinate two ways, and an identity built on it calls
+     * one authored line two. The conjunct is the clause's own text: it is the same number whichever
+     * value the reading started at, and it is what tells the ends of {@code value >= 0 && value <=
+     * 10} apart.
+     *
+     * <p>Counted over every conjunct and not over the ones a line came out of, so that a reading
+     * that could make nothing of one conjunct still numbers the next the same as a reading that
+     * could.
+     */
+    public record Drawn(RuleRef.Invariant rule, int conjunct) {
+
+        public Drawn {
+            if (rule == null) {
+                throw new IllegalArgumentException("a rule put an end here, and this is which");
+            }
+            if (conjunct < 0) {
+                throw new IllegalArgumentException(
+                        "a conjunct of a clause is counted from zero: " + conjunct);
+            }
+        }
+    }
+
+    /**
+     * One end of a range, and every rule that put it there.
+     *
+     * <p>Rules, plural. Two layers can state the same bound — a wrapper repeating what it wraps — and
      * they are two rules a row could be owed to, which is the accounting a cut already keeps. Holding
      * one would drop an obligation rather than a line of text.
+     *
+     * <p>The clauses and not the declarations they are written on. Held as declarations, two clauses
+     * of one declaration at one value came out as one rule, and a report owed one line for a
+     * boundary two rules had drawn ({@link Clause}).
+     *
+     * <p>Each as the rule a report names it by. An end here is read by the measure that turns it
+     * into lines to write rows at, and that measure names the rule that drew it — handed the clause
+     * reference, it built the identity back for itself, which is a decision about what a rule is
+     * being taken by whoever happened to consume one.
      */
-    public record End(Endpoint at, List<TypeName> from) {
+    public record End(Endpoint at, List<Drawn> from) {
 
         public Place value() {
             return at.at();
@@ -62,7 +105,7 @@ public final class DeclaredBounds {
             if (had.value().compareTo(one.value()) != 0) {
                 return at == had.at() ? had : one;
             }
-            List<TypeName> both = new ArrayList<>(had.from());
+            List<Drawn> both = new ArrayList<>(had.from());
             one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
             return new End(at, List.copyOf(both));
         }
@@ -79,6 +122,19 @@ public final class DeclaredBounds {
 
         public boolean isEmpty() {
             return min == null && max == null;
+        }
+
+        /**
+         * The end on one side, or null where nothing stops the values that way.
+         *
+         * <p>Asked by the side rather than by name, so that a reader walking both ends chooses which
+         * it is on once. Everything an end is read beside — where the position's own type stops,
+         * which declarations hold it, which way a bound keeps its values — is a second answer to
+         * that same choice, and a reader making it once per lookup makes it as many times as it
+         * looks.
+         */
+        public End at(souther.compiler.numeric.EndSide side) {
+            return side == souther.compiler.numeric.EndSide.LOWER ? min : max;
         }
     }
 
@@ -105,14 +161,35 @@ public final class DeclaredBounds {
         // alone says so. How far that reaches is asked of `TypeOps` rather than walked again here,
         // and every layer that put an end where it is is kept, because each is a rule a row is owed.
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
-                    InvariantBound read = (measure == null ? InvariantBound.of(each, carrier)
-                            : InvariantBound.ofSize(each, measure)).orElse(null);
-                    if (read == null) {
+            // The clauses with the declaration each was written on, which is what names the line
+            // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
+            // spread it, and two clauses of one declaration were one rule.
+            // A layer wraps a declaration a module wrote, which is what having a `Hir.Data` for it
+            // says; the pattern is where the layer's name says so.
+            if (!(layer.named() instanceof TypeSymbol.AtModule named)) {
+                continue;
+            }
+            for (TypeOps.Declared declared
+                    : TypeOps.declaredInvariants(named, layer.data(), symbols, _ -> null)) {
+                RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
+                // Which conjunct of the clause each end came out of, counted over all of them in
+                // the order the clause was written. The other reading of these clauses counts them
+                // the same way, which is what makes an end read here and an end read through the
+                // value this type sits in one line rather than two.
+                int conjunct = -1;
+                for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
+                    conjunct++;
+                    // An end and nothing else. A rule this reads no end from narrows nothing here,
+                    // and a rule stepping past the last value of the order states an end no value is
+                    // at — which is a declaration with no value, answered where counts are and not
+                    // by a bound written at a place nothing can be.
+                    if (!((measure == null ? InvariantBound.of(each, carrier)
+                            : InvariantBound.ofSize(each, measure))
+                            instanceof InvariantBound.Read.AnEnd placed)) {
                         continue;
                     }
-                    End end = new End(read.end(), List.of(layer.named()));
+                    InvariantBound read = placed.bound();
+                    End end = new End(read.end(), List.of(new Drawn(rule, conjunct)));
                     if (read.lower()) {
                         min = End.tighter(min, end, false);
                     } else {
@@ -125,20 +202,6 @@ public final class DeclaredBounds {
     }
 
     /**
-     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
-     * require none.
-     *
-     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
-     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
-     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
-     * and a size chained after the mapping that drops duplicates would count the wrong things — and
-     * that absence is a fact about the decoder rather than about what the rule says.
-     *
-     * <p>What is being counted follows from the type. A string's rule reaches this as readily as a
-     * list's, and comes back a floor on characters; a caller reading every floor above zero as a
-     * collection that cannot be empty would be answering a question this did not.
-     */
-    /**
      * The ends {@code placed} puts on one coordinate, or null where it puts none there.
      *
      * <p>The clauses of the value a position sits in, read as what they are: a clause naming one
@@ -147,18 +210,20 @@ public final class DeclaredBounds {
      * rules a type states rather than beside the reader of them, because an end is an end whichever
      * declaration wrote it and both come out as the same {@link Bounds}.
      *
-     * @param measured which of the position's coordinates these are wanted for — the count taken of
-     *                 it, or its value
+     * @param kind which of the position's numbers these are wanted for — its own value, or what
+     *             some operation answers of it. The operation and not a flag, since a path measured
+     *             two ways by two operations has two of these and a flag brings them to one. The
+     *             path is the caller's already, which is what {@code placed} is a list of
      */
-    public static Bounds placed(List<FieldDomains.Placed> placed, boolean measured,
-                                Carrier carrier) {
+    public static Bounds placed(List<FieldDomains.Placed> placed,
+                                FieldDomains.CoordinateKind kind, Carrier carrier) {
         End min = null;
         End max = null;
         for (FieldDomains.Placed each : placed) {
-            if (each.measured() != measured) {
+            if (!each.at().kind().equals(kind)) {
                 continue;
             }
-            End end = new End(each.end(), List.of(each.from()));
+            End end = new End(each.end(), List.of(new Drawn(each.from(), each.conjunct())));
             if (each.lower()) {
                 min = End.tighter(min, end, false);
             } else {
@@ -187,6 +252,20 @@ public final class DeclaredBounds {
                 had.carrier() == null ? one.carrier() : had.carrier());
     }
 
+    /**
+     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
+     * require none.
+     *
+     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
+     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
+     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
+     * and a size chained after the mapping that drops duplicates would count the wrong things — and
+     * that absence is a fact about the decoder rather than about what the rule says.
+     *
+     * <p>What is being counted follows from the type. A string's rule reaches this as readily as a
+     * list's, and comes back a floor on characters; a caller reading every floor above zero as a
+     * collection that cannot be empty would be answering a question this did not.
+     */
     public static int leastCountOf(Type type, Symbols symbols) {
         ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
         if (counts == null) {
@@ -214,6 +293,35 @@ public final class DeclaredBounds {
     public static int leastCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
         return Math.max(leastCountOf(type, symbols),
                 held == null ? 0 : CountDomain.leastFrom(held.bounds().min()));
+    }
+
+    /**
+     * How many of whatever counts a value of {@code type} the rules on it allow it to hold, or every
+     * number where they cap it in no way.
+     *
+     * <p>The dual of {@link #leastCountOf} and asked for the same reason: a rule capping a value at
+     * none is written on the type as readily as on the record holding one, and a reader finding only
+     * the second offered a value at a position the first leaves no room for.
+     */
+    public static int mostCountOf(Type type, Symbols symbols) {
+        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
+        if (counts == null) {
+            return Integer.MAX_VALUE;
+        }
+        Bounds sized = of(type, symbols, Carrier.WHOLE, counts);
+        return sized == null || sized.max() == null ? Integer.MAX_VALUE
+                : CountDomain.mostFrom(sized.max().at());
+    }
+
+    /**
+     * The same, where the record the position sits in has a rule about it too.
+     *
+     * <p>The lower of the two, because both are rules the construction has to satisfy -- which is
+     * {@link #leastCountOf}'s argument at the other end.
+     */
+    public static int mostCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
+        return Math.min(mostCountOf(type, symbols),
+                held == null ? Integer.MAX_VALUE : CountDomain.mostFrom(held.bounds().max()));
     }
 
     private DeclaredBounds() {}

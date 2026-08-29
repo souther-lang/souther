@@ -1,0 +1,148 @@
+package souther.compiler.examples;
+
+import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.execute.RowTrials;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.Probe;
+import souther.compiler.evaluate.EvaluationContext;
+import souther.compiler.generated.GeneratedImplementations;
+import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.jvm.ClassFileImage;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Running a row nobody has written yet, to see where it goes.
+ *
+ * <p>What a generator cannot do for itself and cannot be told. Which combination of a body's
+ * decisions a composed row sits in is settled by running it: everything up to that point is a
+ * reading of the body, and a reading is what may be wrong.
+ *
+ * <p>The same classes an evaluation runs against, reached the same way a written row reaches them —
+ * the values are built through this module's own decoders and handed to the answerer this compile
+ * emitted. What differs is that there is no row: no expectation to hold the answer to, no fakes, no
+ * stand-ins. So a behavior that depends on another cannot be applied this way, and neither can one
+ * whose implementation is out of reach. Both are said outright by the layer that would have applied
+ * it, and both come back as nothing having run — which is asked of that layer rather than worked out
+ * here from what a behavior declares, there being one question and no reason for two answers to it.
+ *
+ * <p>A run that aborts still went where it went. An invariant refusing the answer, a budget running
+ * out, an {@code unreachable} being reached — each of them happens after the row has passed whatever
+ * it passed, and what was recorded up to that point is what the row did. So the recording is read on
+ * every way out and the failure itself is dropped: nothing here is judging the row, and a generator
+ * has no expectation for it to have failed against.
+ */
+public final class RowTrial {
+
+
+    /**
+     * A way to run rows against one module's generated classes.
+     *
+     * <p>One loader for the module, defined once here. The values a row hands over have to be
+     * instances of the classes the answerer applies, so building them and applying them are two ends
+     * of one loader rather than two loaders that agree — and the classes are defined once however
+     * many behaviors are searched.
+     *
+     * <p>The classes have to be the measuring ones. A run of classes emitted without the calls that
+     * record where it went is a run nothing was recorded of, which reads exactly like a run that
+     * went nowhere — so a caller with unmeasured classes must not build one of these, and every
+     * combination would otherwise come back missed.
+     *
+     * @param steps how many counted points a row may pass, and how deep a recursive helper may go.
+     *              A composed row is not a row anyone wrote, so a model that loops on it is this
+     *              search's problem to stop rather than an author's to be told about
+     */
+    public static RowTrials over(souther.compiler.check.Prepared.Examples module,
+                              Symbols symbols, Map<String, ClassFileImage> classes,
+                              ClassLoader parent,
+                              Map<String, Hir.FnDef> values, GeneratedImplementations generated,
+                              EvaluationPolicy steps) {
+        MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
+        Answerer answerer = Answering.generatedHere().over(generated, loader);
+        return (behavior, sig) -> inputs -> {
+            if (!(answerer.of(behavior) instanceof Answerer.Answer.Something applies)) {
+                return Optional.empty();   // nothing applies this behavior, so nothing ran
+            }
+            // One reader per row, the way a written row has one: what a reading builds up while it
+            // expands a value is that row's, and a reader kept between them would be a session
+            // spanning every candidate of every combination.
+            return went(new FixtureReader(module, symbols, values, loader), applies, behavior, sig,
+                    inputs, steps);
+        };
+    }
+
+    /**
+     * One row, built and applied, and what the probe saw while it was.
+     *
+     * <p>The recording is begun and read on this thread because the run is on this thread. Both it
+     * and the budget are let go on every way out, a worker being something the next row would
+     * otherwise start inside of.
+     */
+    private static Optional<Observation> went(FixtureReader fixtures,
+                                              Answerer.Answer.Something applies, String behavior,
+                                              Sig sig, List<Hir.Expr> inputs,
+                                              EvaluationPolicy steps) {
+        List<BoundaryInput> ins = sig.ins();
+        if (inputs.size() != ins.size()) {
+            return Optional.empty();   // not a row of this behavior, so this is not the thing to run
+        }
+        Answerer.Applying applying;
+        List<Handed> over;
+        try {
+            // Built and gathered before anything is recorded. A value that could not be made is a
+            // row that never ran, and recording the building would put whatever a fixture's own
+            // helpers passed through into what the row is said to have done.
+            over = new ArrayList<>(ins.size());
+            for (int i = 0; i < ins.size(); i++) {
+                Object built = fixtures.built(inputs.get(i), ins.get(i));
+                BoundaryInput at = ins.get(i);
+                String what = "input " + (i + 1) + " of `" + behavior + "`";
+                over.add(new Handed(built, () -> fixtures.neutral(built, at, what)));
+            }
+            applying = applies.applying(List.of());
+        } catch (StandinNotBuilt | LinkageError e) {
+            // Nothing was applied, and these are the two ways that happens before an application:
+            // a stand-in that could not be made, and this compiler's own output not linking. Named
+            // rather than taken by category — anything else out of here is this compiler failing at
+            // something it does not have a word for, and turning that into a fact about where a row
+            // went is how a defect in the runner comes back as a defect in the model.
+            return Optional.empty();
+        }
+        Probe.begin();
+        try {
+            EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
+            try {
+                applying.to(over);
+            } catch (ImplementationNotReached e) {
+                // Not a run at all: the implementation could not be reached to apply. Saying the
+                // row did nothing would be saying it went nowhere, and those are different facts.
+                return Optional.empty();
+            } catch (InvocationFailure e) {
+                // It ran and stopped. Where it had got to is what is being asked for, and what
+                // stopped it is not: nothing here is judging the row.
+                //
+                // This one and no wider. What the applied code ends with arrives as this, so a
+                // throwable that is not one is this compiler failing to reach or drive its own
+                // output — and swallowed here it would come back as a candidate that ran and
+                // missed, which is a statement about the model. The seam says which failures it
+                // has ({@link Answerer.Applying#to}) and those are the ones read.
+            } finally {
+                EvaluationContext.end();
+            }
+            return Optional.of(Probe.snapshot());
+        } finally {
+            // On every way out, including one nothing here catches. A recording left installed is
+            // where the next reader on this thread would start.
+            Probe.end();
+        }
+    }
+
+    private RowTrial() {}
+}

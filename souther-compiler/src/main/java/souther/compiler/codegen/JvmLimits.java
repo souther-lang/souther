@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Requirements;
@@ -10,6 +10,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.HashSet;
 import java.util.List;
@@ -73,12 +74,12 @@ final class JvmLimits {
      * be emitted rather than by what it wrote. {@code requirements} likewise carries the dependencies
      * a composition is built with, which are the stages' and not its own.
      */
-    static void checkParameterSlots(Ast.Module module, CodegenContext ctx,
-                                    Map<String, Ast.FnDef> recursiveHelpers,
-                                    Map<String, Sig> sigs,
+    static void checkParameterSlots(Hir.Module module, CodegenContext ctx,
+                                    Map<String, Hir.FnDef> recursiveHelpers,
+                                    Map<ValueName.Behavior, Sig> sigs,
                                     Map<String, List<BehaviorRequirement>> requirements) {
-        for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.Data data) {
+        for (Hir.Def def : module.defs()) {
+            if (def instanceof Hir.Data data) {
                 int slots = 0;
                 for (Type field : ctx.fieldTypes(data).values()) {
                     slots += JvmTypes.width(field);
@@ -94,14 +95,14 @@ final class JvmLimits {
         // What a class is written for, which is both components: the limit is the JVM's and does not
         // ask who declared the fn.
         Set<String> implemented = new HashSet<>();
-        for (Ast.FnDef fn : module.fns()) {
+        for (Hir.FnDef fn : module.fns()) {
             implemented.add(fn.name());
         }
-        for (Ast.FnDef fn : module.takenOn()) {
+        for (Hir.FnDef fn : module.takenOn()) {
             implemented.add(fn.name());
         }
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            Sig sig = sigs.get(bd.name());
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            Sig sig = sigs.get(new ValueName.Behavior(module.name(), bd.name()));
             // a composition whose stage names nothing has no signature, and nothing is emitted for it
             if (sig != null && sig.inputTypes().size() > INSTANCE_SLOTS) {
                 throw tooWide(Wide.BEHAVIOR_PARAMETERS, bd.written(), sig.inputTypes().size(),
@@ -118,7 +119,7 @@ final class JvmLimits {
                                 + INSTANCE_SLOTS);
             }
         }
-        for (Ast.FnDef helper : recursiveHelpers.values()) {
+        for (Hir.FnDef helper : recursiveHelpers.values()) {
             // a recursive helper is a static method on $Fns, so nothing is spent on `this`
             if (helper.params().size() > SLOTS) {
                 throw tooWide(Wide.HELPER, helper.written(), helper.params().size(),
@@ -135,9 +136,9 @@ final class JvmLimits {
      * of its own. A behavior a {@code let} implements holds what it declared. A composition holds what
      * its stages need, worked out for it, so what it wrote is not the count.
      */
-    private static int dependencyCount(Ast.BehaviorDef bd, Set<String> implemented,
+    private static int dependencyCount(Hir.BehaviorDef bd, Set<String> implemented,
                                        Map<String, List<BehaviorRequirement>> requirements) {
-        if (bd instanceof Ast.SpecBehavior spec) {
+        if (bd instanceof Hir.SpecBehavior spec) {
             return implemented.contains(spec.name()) ? spec.dependsOn().size() : 0;
         }
         return Requirements.names(requirements.getOrDefault(bd.name(), List.of())).size();

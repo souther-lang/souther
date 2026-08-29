@@ -2,15 +2,18 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
-import souther.compiler.partition.Exclusions;
+import souther.compiler.partition.Budgets;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Partitions;
@@ -65,21 +68,37 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Compilation compilation = Compilation.ofSource(TRIP, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");
-        return new Generator.Subject(new souther.compiler.partition.BehaviorInputs(
-                spec.params().stream().map(Ast.Param::name).toList(), sig.inputTypes(), symbols),
-                Partitions.of(spec, sig, symbols, Exclusions.NONE).axes());
+        InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return new Generator.Subject(spec.name(), new souther.compiler.partition.BehaviorInputs(
+                spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
     }
 
-    private static String written(Generator.GenerationResult result) {
-        return GeneratedRows.of("example.trip",
-                Map.of("submit", new Adequacy.Filling(result, Generator.GenerationResult.NONE, List.of())),
-                false, SourceNameResolver.identity());
+    private static String written(souther.compiler.partition.FillResult result) {
+        // The composition and not what is offered: this filling is built here rather than searched
+        // for, so there is no store to ask what its rows would settle.
+        return GeneratedRows.of(souther.compiler.query.EveryRowOfIt.offered(
+                        souther.compiler.query.Composition.composed(
+                        souther.compiler.query.OfferingRequest.overTheModule("example.trip", false),
+                        Map.of("submit", new Adequacy.Filling(result,
+                                Generator.GenerationResult.NONE, List.of())), null)),
+                Map.of(), SourceNameResolver.identity()).text();
+    }
+
+    /** A run asked for nothing, which is what a reason about the run alone is written against. */
+    private static souther.compiler.partition.FillResult stoppedWith(GenerationReason why) {
+        souther.compiler.partition.GenerationPlan plan =
+                new souther.compiler.partition.GenerationPlan(subject(), List.of(), List.of());
+        return new souther.compiler.partition.FillResult(plan, new LinkedHashMap<>(), List.of(),
+                List.of(why),
+                souther.compiler.partition.Discharge.NOTHING);
     }
 
     /**
@@ -99,8 +118,9 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                 Incompleteness.Code.VALUE_TRUNCATED, first.id().behavior(), first.id().term())));
         row.put(second.id(), Classification.in(second.classes().get(0).id()));
 
-        Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(row), Generator.CandidateCheck.ANY);
+        souther.compiler.partition.FillResult filled =
+                Generator.fill(subject, List.of(Generator.ObservedRow.unseen(row)),
+                        Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertFalse(filled.rows().isEmpty(), "the positions it could read were filled");
         assertInstanceOf(GenerationReason.PositionWithheld.class, filled.reasons().get(0));
@@ -115,19 +135,17 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     /** And a run that did stop says so, in words a reader can act on. */
     @Test
     void aSearchThatRanOutSaysItStopped() {
-        String written = written(new Generator.GenerationResult(List.of(), List.of(),
-                List.of(new GenerationReason.SearchLimit("submit", 12))));
+        String written = written(stoppedWith(new GenerationReason.SearchLimit("submit", 12)));
 
-        assertEquals("// generation stopped for `submit`: 12 combinations past the row limit"
+        assertEquals("// generation stopped for `submit`: 12 classes and arms past the row limit"
                 + System.lineSeparator(), written);
     }
 
-    /** One left is one combination. */
+    /** One left is one thing on the plan, which is a class or an arm and never a combination. */
     @Test
     void theCountIsWrittenAsACount() {
-        String written = written(new Generator.GenerationResult(List.of(), List.of(),
-                List.of(new GenerationReason.SearchLimit("submit", 1))));
+        String written = written(stoppedWith(new GenerationReason.SearchLimit("submit", 1)));
 
-        assertTrue(written.contains("1 combination past"), written);
+        assertTrue(written.contains("1 class or arm past"), written);
     }
 }

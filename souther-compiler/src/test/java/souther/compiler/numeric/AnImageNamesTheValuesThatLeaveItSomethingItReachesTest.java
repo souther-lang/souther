@@ -1,0 +1,303 @@
+package souther.compiler.numeric;
+
+import org.junit.jupiter.api.Test;
+
+import java.math.BigInteger;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * What an image is asked for when a value has to be chosen rather than rejected.
+ *
+ * <p>{@link AdditiveImage#contains} answers about a residue that already exists. A search choosing
+ * where one position stands has no residue yet, and the values worth choosing are the ones leaving
+ * the rest something they reach — the same arithmetic, asked as a set.
+ *
+ * <p>Held here rather than through a search. What comes back is a coset, and a coset is either right
+ * or wrong about infinitely many values; a search reaching a row says one of them was right.
+ */
+class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
+
+    private static Rational at(long whole) {
+        return Rational.of(whole);
+    }
+
+    /** Every value the answer names does leave a residue the image reaches. */
+    private static void leavesSomethingReached(AdditiveImage image, Rational coefficient,
+                                               Rational target, AffinePreimage answer) {
+        for (long step = -3; step <= 3; step++) {
+            Rational x = switch (answer) {
+                case AffinePreimage.None ignored -> null;
+                case AffinePreimage.Stepping on -> on.from().plus(on.by().times(at(step)));
+                // A tenth of the generator is a finite decimal, so it is a member and it is not one
+                // a progression would have named.
+                case AffinePreimage.Filling on ->
+                        on.from().plus(on.by().times(new Rational(BigInteger.valueOf(step),
+                                BigInteger.TEN)));
+            };
+            if (x != null) {
+                assertTrue(image.contains(target.minus(coefficient.times(x))),
+                        "at " + x + " the residue is " + target.minus(coefficient.times(x)));
+            }
+        }
+    }
+
+    /**
+     * The case #916 is about. {@code 3a + 6b = 3} asks {@code 3 - 3a} to be a multiple of six, which
+     * is {@code a} odd — and the value a search takes off an unbounded range is zero.
+     */
+    @Test
+    void aPositionUnderACongruenceIsNamedByTheClassItSolves() {
+        AdditiveImage rest = new AdditiveImage.OverWholeNumbers(at(6));
+
+        AffinePreimage answer = rest.affinePreimage(at(3), at(3), Granularity.DISCRETE);
+
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE), answer);
+        leavesSomethingReached(rest, at(3), at(3), answer);
+    }
+
+    /** No value of it leaves one, and that is a proof rather than a search that found nothing. */
+    @Test
+    void aPositionWhoseCoefficientCannotReachTheResidueIsNamedByNothing() {
+        AdditiveImage rest = new AdditiveImage.OverWholeNumbers(at(4));
+
+        assertInstanceOf(AffinePreimage.None.class,
+                rest.affinePreimage(at(2), at(1), Granularity.DISCRETE));
+    }
+
+    /** A weight below zero is the same question, and the class it names is still written from it. */
+    @Test
+    void aWeightBelowZeroNamesTheSameValues() {
+        AdditiveImage rest = new AdditiveImage.OverWholeNumbers(at(6));
+
+        AffinePreimage answer = rest.affinePreimage(at(-3), at(3), Granularity.DISCRETE);
+
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE), answer);
+        leavesSomethingReached(rest, at(-3), at(3), answer);
+    }
+
+    /**
+     * Where the values fill, the answer is dense and is not every value.
+     *
+     * <p>{@code a + 3b = 1} over decimals: a search taking zero for {@code a} asks for a third of
+     * {@code b}, which is not a decimal a model writes. One is, and so is {@code 1.3} — and two is
+     * not.
+     */
+    @Test
+    void aPositionWhoseValuesFillIsNamedByACosetAndNotByEveryValue() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        AffinePreimage answer = rest.affinePreimage(at(1), at(1), Granularity.DENSE);
+
+        assertEquals(new AffinePreimage.Filling(at(1), at(3)), answer);
+        leavesSomethingReached(rest, at(1), at(1), answer);
+    }
+
+    /**
+     * Two and five drop out of what the position is held to, and three does not.
+     *
+     * <p>What decides it is the denominator of the weight against the generator, not the weight. A
+     * position weighed three halves against a generator of three contributes half of every decimal,
+     * and half of every decimal is every decimal — two is a unit among them — so it is held to
+     * nothing. Weighed one against the same generator it contributes thirds, and a third is not a
+     * decimal a model writes, so it is held to a coset of three.
+     *
+     * <p>The same reduction {@link AdditiveImage.OverFiniteDecimals} makes of its own generator, and
+     * made here because making it in one place and not the other is what would let the two disagree.
+     */
+    @Test
+    void theUnitsOfTheFiniteDecimalsAreNotAThingAPositionIsHeldTo() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        AffinePreimage byHalves =
+                rest.affinePreimage(new Rational(BigInteger.valueOf(3), BigInteger.TWO), at(3),
+                        Granularity.DENSE);
+        assertEquals(new AffinePreimage.Filling(Rational.ZERO, Rational.ONE), byHalves);
+        leavesSomethingReached(rest, new Rational(BigInteger.valueOf(3), BigInteger.TWO), at(3),
+                byHalves);
+
+        assertEquals(new AffinePreimage.Filling(at(1), at(3)),
+                rest.affinePreimage(at(1), at(1), Granularity.DENSE));
+    }
+
+    /**
+     * One coset is one value however the inverse that found it came out.
+     *
+     * <p>Two members are one where their difference is the generator times a decimal, and a tenth is
+     * a decimal — so a coset of three holds {@code 1} and {@code 1.3} as one member and not as two.
+     * Taking whole multiples of the generator away instead, the arithmetic answered a target of one
+     * and a target of thirteen tenths with different values of the same set, and a search that tries
+     * one member of a dense coset would try a different value depending on which it started from.
+     */
+    @Test
+    void aCosetComesBackAtTheSameMemberHoweverItWasFound() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        assertEquals(new AffinePreimage.Filling(Rational.ZERO, at(3)),
+                rest.affinePreimage(at(2), at(6), Granularity.DENSE));
+        assertEquals(rest.affinePreimage(Rational.ONE, at(1), Granularity.DENSE),
+                rest.affinePreimage(Rational.ONE,
+                        Rational.of(new java.math.BigDecimal("1.3")), Granularity.DENSE));
+        assertEquals(new AffinePreimage.Filling(Rational.ONE, at(3)),
+                new AffinePreimage.Filling(
+                        Rational.of(new java.math.BigDecimal("1.3")), at(3)));
+        assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE),
+                new AffinePreimage.Stepping(at(7), at(2), Granularity.DISCRETE));
+    }
+
+    /**
+     * Taking the units out of a value answers for every value, which it did not when it was a helper
+     * of one caller.
+     *
+     * <p>Nothing divides into zero, or everything does — either way what is left of it is itself,
+     * and a loop looking for the last factor of two in it does not end. The caller this was written
+     * for had refused zero before it asked, and moving it onto {@link Rational} took the body and
+     * left the refusal behind.
+     */
+    @Test
+    void takingTheUnitsOutOfAValueAnswersForEveryValue() {
+        assertEquals(Rational.ZERO, Rational.ZERO.unitsRemoved());
+        assertEquals(at(3), at(3).unitsRemoved());
+        assertEquals(Rational.ONE, at(20).unitsRemoved());
+        // One below zero is a unit as well, so three and minus three generate the same decimals.
+        assertEquals(at(3), at(-3).unitsRemoved());
+    }
+
+    /**
+     * A progression of a position whose values step is written in whole numbers, and says so.
+     *
+     * <p>What the arithmetic here makes is always one. What the type used to accept was any ratio,
+     * and a coset of halves handed to a position that counts is a value it does not hold offered as
+     * one it does. The same of a coset whose values fill, whose own two sentences — a generator with
+     * no factor of two or five in it, a member that is a decimal — were doc comments before they
+     * were anything.
+     */
+    @Test
+    void aProgressionIsWrittenInTheNumbersThePositionHolds() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
+                        at(2), Granularity.DISCRETE));
+        // And the same progression is what a position whose values fill is left with, so the
+        // refusal is about the position and not about the halves.
+        assertEquals(new Rational(BigInteger.ONE, BigInteger.TWO),
+                new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
+                        at(2), Granularity.DENSE).from());
+        // And a coset of the decimals: a generator that is no whole number once the units are out of
+        // it, and a member that is no decimal a model writes.
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Filling(Rational.ZERO,
+                        new Rational(BigInteger.valueOf(3), BigInteger.valueOf(7))));
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Filling(
+                        new Rational(BigInteger.ONE, BigInteger.valueOf(3)), at(2)));
+    }
+
+    /**
+     * A position that fills, weighed against a residue that steps, answers in values the position
+     * holds.
+     *
+     * <p>Which decimals {@code x} leave {@code 1 - 3x} a whole multiple of two: one, three, five and
+     * so on. Solved over the rationals that set is {@code 1/3 + (2/3)k}, whose members at every odd
+     * {@code k} are exactly those — and neither of the two numbers it is written with is a decimal
+     * a model writes.
+     *
+     * <p>Handed over that way, the reader that cut it to the run read those two numbers, found
+     * neither writable, and answered that no value of the position is on the coset — which is a
+     * proof of emptiness over a set with witnesses in it, and the one direction a preimage may
+     * never err in.
+     */
+    @Test
+    void aPositionThatFillsIsAnsweredInValuesItHolds() {
+        AdditiveImage rest = new AdditiveImage.OverWholeNumbers(at(2));
+
+        AffinePreimage answer = rest.affinePreimage(at(3), Rational.ONE, Granularity.DENSE);
+
+        assertEquals(new AffinePreimage.Stepping(Rational.ONE, at(2), Granularity.DENSE), answer);
+        leavesSomethingReached(rest, at(3), Rational.ONE, answer);
+    }
+
+    /** And a progression whose members its position does not hold is refused where it is built. */
+    @Test
+    void aProgressionNamesValuesItsPositionHolds() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.valueOf(3)),
+                        new Rational(BigInteger.TWO, BigInteger.valueOf(3)), Granularity.DENSE));
+    }
+
+    /**
+     * A position that steps, weighed against a residue that fills, and the congruence it is left
+     * with.
+     *
+     * <p>The pairing a form only reaches once its positions are read on their own orders, and the
+     * one the reading used to answer with every whole number the position has. Which whole
+     * {@code x} leave {@code 1 - 7x} a decimal multiple of three: seven is one modulo three, so
+     * {@code x} is one modulo three, and the answer names a congruence rather than everything.
+     *
+     * <p>What sets it is the denominator of the weight over the generator. Read off the numerator,
+     * this asked for the inverse of {@code 7 mod 7} — which is nothing's inverse, and no arithmetic
+     * has one.
+     */
+    @Test
+    void aPositionThatStepsAgainstAResidueThatFillsIsLeftACongruence() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        AffinePreimage answer = rest.affinePreimage(at(7), at(1), Granularity.DISCRETE);
+
+        assertEquals(new AffinePreimage.Stepping(at(1), at(3), Granularity.DISCRETE), answer);
+        leavesSomethingReached(rest, at(7), at(1), answer);
+    }
+
+    /** And a weight of one, which the reading answered with every whole number there is. */
+    @Test
+    void aWeightOfOneAgainstAResidueThatFillsIsStillACongruence() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        AffinePreimage answer = rest.affinePreimage(Rational.ONE, Rational.ONE,
+                Granularity.DISCRETE);
+
+        assertEquals(new AffinePreimage.Stepping(at(1), at(3), Granularity.DISCRETE), answer);
+        leavesSomethingReached(rest, Rational.ONE, Rational.ONE, answer);
+        // Two of the values it leaves out, which is what "every whole number" got wrong.
+        assertTrue(!rest.contains(Rational.ONE.minus(at(0))));
+        assertTrue(!rest.contains(Rational.ONE.minus(at(2))));
+    }
+
+    /**
+     * Where the weight over the generator is itself a decimal there is no congruence, and what is
+     * left is whether the target is a decimal multiple at all.
+     *
+     * <p>Answered for every whole number or for none. Two is a unit among the decimals, so
+     * {@code 2x} lands in a coset of three wherever anything does — and where the target does not,
+     * no {@code x} moves it in.
+     */
+    @Test
+    void aWeightTheDecimalsSwallowLeavesTheQuestionToTheTargetAlone() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        assertEquals(new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE, Granularity.DISCRETE),
+                rest.affinePreimage(at(6), at(3), Granularity.DISCRETE));
+        assertEquals(new AffinePreimage.None(),
+                rest.affinePreimage(at(6), Rational.ONE, Granularity.DISCRETE));
+    }
+
+    /** And a target no value of the position moves into the image leaves nothing. */
+    @Test
+    void aTargetNoWholeNumberReachesIsRefused() {
+        AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
+
+        assertEquals(new AffinePreimage.None(),
+                rest.affinePreimage(at(3), new Rational(BigInteger.ONE, BigInteger.valueOf(7)),
+                        Granularity.DISCRETE));
+    }
+
+    /** And a generator the decimals treat as nothing is nothing: two is a unit among them, so a
+     *  coset of two is every decimal there is. */
+    @Test
+    void aGeneratorMadeOfUnitsHoldsEveryDecimal() {
+        assertEquals(new AffinePreimage.Filling(Rational.ZERO, Rational.ONE),
+                new AffinePreimage.Filling(Rational.ZERO, at(2)));
+    }
+}

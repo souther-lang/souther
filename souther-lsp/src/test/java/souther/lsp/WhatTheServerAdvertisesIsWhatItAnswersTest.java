@@ -228,7 +228,20 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
             offered(LspMethod.REFERENCES, "textDocument/references", "referencesProvider"),
             new Protocol(LspMethod.COMPLETION, "textDocument/completion",
                     new Told.Capability("completionProvider", OPTIONS, "an options object")),
-            offered(LspMethod.CODE_ACTION, "textDocument/codeAction", "codeActionProvider"),
+            offered(LspMethod.INLAY_HINT, "textDocument/inlayHint", "inlayHintProvider"),
+            offered(LspMethod.DOCUMENT_HIGHLIGHT, "textDocument/documentHighlight",
+                    "documentHighlightProvider"),
+            offered(LspMethod.SELECTION_RANGE, "textDocument/selectionRange",
+                    "selectionRangeProvider"),
+            offered(LspMethod.WORKSPACE_SYMBOL, "workspace/symbol", "workspaceSymbolProvider"),
+            new Protocol(LspMethod.SIGNATURE_HELP, "textDocument/signatureHelp",
+                    new Told.Capability("signatureHelpProvider", OPTIONS, "an options object")),
+            new Protocol(LspMethod.CODE_ACTION, "textDocument/codeAction",
+                    new Told.Capability("codeActionProvider", OPTIONS, "an options object")),
+            // Announced by a flag inside the capability above rather than by one of its own: a
+            // client learns that an action can be resolved from the method it completes.
+            new Protocol(LspMethod.CODE_ACTION_RESOLVE, "codeAction/resolve",
+                    new Told.Nothing(Advertisement.Reason.UNDER_ANOTHER_METHODS_CAPABILITY)),
             new Protocol(LspMethod.CODE_LENS, "textDocument/codeLens",
                     new Told.Capability("codeLensProvider", OPTIONS, "an options object")),
             offered(LspMethod.RENAME, "textDocument/rename", "renameProvider"),
@@ -312,11 +325,20 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
         }
     }
 
+    /**
+     * A method of the protocol this server does not answer.
+     *
+     * <p>{@code foldingRange} rather than something invented: what is being checked is that a real
+     * request for something real is refused, and a spelling nobody would send is refused by a route
+     * a client never takes. It is one this server has decided against — an editor folds on
+     * indentation and Souther's blocks are indented the way that expects — so it stays unanswered,
+     * which is what a fixture has to be able to rely on.
+     */
     @Test
     void anUnknownRequestIsRefusedAsNotFound() {
         JsonNode error = errorFrom(exchange(
                 message(1, "initialize", Map.of()),
-                message(2, "textDocument/inlayHint", Map.of())), 2);
+                message(2, "textDocument/foldingRange", Map.of())), 2);
         assertNotNull(error, "a request naming no method is refused");
         assertEquals(METHOD_NOT_FOUND, error.get("code").asInt());
     }

@@ -28,8 +28,7 @@ class CompileStringCharsTest {
     private long runInt(String module, String behavior, Object input) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", input);
-        String cls = Character.toUpperCase(behavior.charAt(0)) + behavior.substring(1);
-        Object b = loader.loadClass("demo." + cls + "$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", behavior).getDeclaredConstructor().newInstance();
         return (long) Codecs.encode(loader, "demo.Out", Codecs.apply(b, in));
     }
 
@@ -138,7 +137,7 @@ class CompileStringCharsTest {
             data 符号 = String invariant String.matches("[0-9]+", value)
             data 妥当
             data 不正
-            behavior 検証 : (s: 符号) -> 妥当 | 不正 constructs 妥当, 不正
+            behavior 検証 : (s: 符号) -> 妥当 | 不正
             let 零 = List.get(0, String.codePoints("0")) |> Option.withDefault(0)
             let 桁和 (s: String) = fold((acc, c) -> acc + (c - 零), 0, String.codePoints(s))
             let 検証 (s) = {
@@ -150,7 +149,7 @@ class CompileStringCharsTest {
     @Test
     void checksumValidatesInABehaviorWithNoBoilerplate() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHECKSUM), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.検証$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "検証").getDeclaredConstructor().newInstance();
         // "12340" digit-sum 10 ≡ 0 mod 10 → 妥当; "12345" sum 15 → 不正.
         Object ok = Codecs.apply(behavior, Codecs.decoded(loader, "demo.符号", "12340"));
         Object bad = Codecs.apply(behavior, Codecs.decoded(loader, "demo.符号", "12345"));

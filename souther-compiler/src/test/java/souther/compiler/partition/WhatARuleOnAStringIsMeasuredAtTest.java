@@ -2,12 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -56,12 +58,12 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertEquals(new Measured(
                         List.of("x < b", "b <= x"),
                         List.of("[]", "[b]"),
-                        List.of("AT b")),
+                        List.of("OFF b")),
                 measured("guard x < QbQ else Newer"));
         assertEquals(new Measured(
                         List.of("x < a", "a <= x"),
                         List.of("[]", "[a]"),
-                        List.of("AT a")),
+                        List.of("ON a")),
                 measured("guard x >= QaQ else Newer"));
     }
 
@@ -77,12 +79,12 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertEquals(new Measured(
                         List.of("x <= b", "b < x"),
                         List.of("[b]", "none"),
-                        List.of("AT b")),
+                        List.of("ON b")),
                 measured("guard x <= QbQ else Newer"));
         assertEquals(new Measured(
                         List.of("x <= a", "a < x"),
                         List.of("[a]", "none"),
-                        List.of("AT a")),
+                        List.of("OFF a")),
                 measured("guard x > QaQ else Newer"));
     }
 
@@ -97,31 +99,39 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertEquals(new Measured(
                         List.of("x <= a", "a < x <= b", "b < x"),
                         List.of("[a]", "[b]", "none"),
-                        List.of("AT a", "AT b")),
+                        List.of("OFF a", "ON b")),
                 measured("guard x > QaQ && x <= QbQ else Newer"));
         assertEquals(new Measured(
                         List.of("x < a", "a <= x < b", "b <= x"),
                         List.of("[]", "[a]", "[b]"),
-                        List.of("AT a", "AT b")),
+                        List.of("ON a", "OFF b")),
                 measured("guard x >= QaQ && x < QbQ else Newer"));
     }
 
     /**
      * A value singled out leaves everything else, and the least string stands for it.
      *
-     * <p>Both spellings of the same distinction. What is left over is not a range and does not have
-     * to be: what a class needs is a way to say whether a value is in it and a value that stands for
-     * it, and the empty string is one wherever it is not the value singled out.
+     * <p>Both spellings divide the position the same way. What is left over is not a range and does
+     * not have to be: what a class needs is a way to say whether a value is in it and a value that
+     * stands for it, and the empty string is one wherever it is not the value singled out.
+     *
+     * <p>What the two spellings do not share is which point the row at the value is. {@code == "foo"}
+     * puts the value inside the partition it names, so a row there is its {@code ON} point;
+     * {@code /= "foo"} puts it outside, so the same row is that border's {@code OFF} point. One row
+     * and two readings of it, which is what naming the point is for.
      */
     @Test
     void aValueSingledOutLeavesTheLeastStringForEverythingElse() {
-        Measured both = new Measured(
-                List.of("= foo", "/= foo"),
-                List.of("[foo]", "[]"),
-                List.of("AT foo"));
-
-        assertEquals(both, measured("guard x == QfooQ else Newer"));
-        assertEquals(both, measured("guard x /= QfooQ else Newer"));
+        assertEquals(new Measured(
+                        List.of("= foo", "/= foo"),
+                        List.of("[foo]", "[]"),
+                        List.of("ON foo")),
+                measured("guard x == QfooQ else Newer"));
+        assertEquals(new Measured(
+                        List.of("= foo", "/= foo"),
+                        List.of("[foo]", "[]"),
+                        List.of("OFF foo")),
+                measured("guard x /= QfooQ else Newer"));
     }
 
     /** And where the least string is the one singled out, nothing else stands for the rest. */
@@ -130,7 +140,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertEquals(new Measured(
                         List.of("= ", "/= "),
                         List.of("[]", "none"),
-                        List.of("AT ")),
+                        List.of("ON ")),
                 measured("guard x == QQ else Newer"));
     }
 
@@ -143,7 +153,6 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                 data Era = Newer | Older
 
                 behavior f : (x: String) -> Era
-                    constructs Newer, Older
                 let f (x) = {
                     GUARD
                     Older
@@ -152,20 +161,25 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles: " + guard);
 
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().get(0);
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied());
         Core body = checked.behaviorBodies().get("f");
         GuardThresholds.Guards guards = GuardThresholds.of("f", body, plan,
-                spec.params().stream().map(Ast.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), symbols);
+        InputDomain read = InputDomain.of(spec, sigs.get("f"), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        souther.compiler.inputs.Quantities reading = read.quantities(symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec, sigs.get("f"), symbols, Exclusions.NONE),
-                guards.thresholds(), symbols, List.of(), guards.singled());
+                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                reading,
+                guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, List.of(), guards.singled());
 
         List<String> classes = new ArrayList<>();
         List<String> stands = new ArrayList<>();
@@ -174,13 +188,16 @@ class WhatARuleOnAStringIsMeasuredAtTest {
             for (PartitionClass each : axis.classes()) {
                 classes.add(each.label());
                 List<FixtureTemplate> made =
-                        Partitions.standingFor(each.representatives(), symbols, java.util.Set.of());
+                        Partitions.standingFor(each.representatives(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, java.util.Set.of());
                 stands.add(made.isEmpty() ? "none"
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
-            Partitions.obligationsOf(axis, symbols, p.domains().get(axis.term()))
-                    .forEach(o -> owed.add(o.side() + " " + o.target().right()));
+            Partitions.bordersOf(axis, symbols, reading.runsBetween(axis.term()), new LinesRead())
+                    .forEach(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
+                            .filter(role -> border.demand(role).criterion() != null)
+                            .forEach(role -> owed.add(role + " "
+                                    + border.demand(role).criterion().asked(border.cut().of()).substring(2))));
         }
         return new Measured(classes, stands, owed);
     }

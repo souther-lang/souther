@@ -1,10 +1,14 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
+import souther.compiler.source.SourceId;
+
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
 import org.junit.jupiter.api.Test;
@@ -63,9 +67,9 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
      * files has.
      */
     private static ModulePath leftOverClassFiles() {
-        Map<String, byte[]> built = new LinkedHashMap<>(Compiler.compile(EARLIER));
-        built.keySet().removeIf(name -> name.endsWith(".$Module"));
-        return built::get;
+        Map<String, ClassFileImage> built = new LinkedHashMap<>(Compiler.compile(EARLIER));
+        built.keySet().remove(Emitted.declarations("example.stale"));
+        return ModulePath.of(built);
     }
 
     @Test
@@ -73,12 +77,12 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
         Compilation compilation = Compilation.ofSources(List.of(NOW), leftOverClassFiles());
         compilation.answerEverything();
 
-        assertNull(compilation.failure(compilation.db().allReports()),
+        assertNull(compilation.failure(),
                 "the model is correct, so nothing is wrong with it");
 
-        String sourceId = compilation.exampleSourcesOf("example.stale").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.stale").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.stale", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("example.stale", sourceId, ArmObservation.OMIT))
                 .value().rows();
 
         assertEquals(1, rows.size(), rows.toString());
@@ -90,7 +94,7 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
      *  into is loaded once, by whoever already has it, not defined a second time here. */
     @Test
     void anameThisCompileDidNotGenerateStillComesFromTheParent() throws Exception {
-        Map<String, byte[]> mine = Compiler.compile(EARLIER);
+        Map<String, ClassFileImage> mine = Compiler.compile(EARLIER);
         MemoryClassLoader loader =
                 new MemoryClassLoader(mine, AnEvaluationRunsTheClassesThisCompileGeneratedTest.class
                         .getClassLoader());

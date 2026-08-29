@@ -2,7 +2,6 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -101,13 +100,13 @@ class AComparisonBelongsToWhoWroteItNotToTheForkTestingItTest {
     private static List<CoverageSites.Obligation> comparisonsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        TypeChecker.Checked checked = compilation.db()
+        Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
         Map<String, Core> bodies = checked.behaviorBodies();
-        CoverageSites.Plan plan = CoverageSites.of("model.sou", bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
         return plan.sites().stream()
-                .filter(site -> site.kind() == CoverageSites.Site.Kind.COMPARISON)
+                .filter(site -> site.outcome() instanceof SourceOutcome.Compared)
                 .map(CoverageSites.Site::obligation)
                 .toList();
     }

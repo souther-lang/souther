@@ -29,7 +29,7 @@ class AConditionStopsWhenItsAnswerIsSettledTest {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.N", input);
-        Object b = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         return Codecs.encode(loader, "demo.N", Codecs.apply(b, in));
     }
 

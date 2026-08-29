@@ -8,7 +8,6 @@ import souther.compiler.diag.msg.TypeMessage;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.nio.file.Path;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;

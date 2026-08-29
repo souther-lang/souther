@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.doc.SpecDocument;
 import souther.compiler.diag.msg.MessageCodes;
 import souther.compiler.diag.msg.Message;
@@ -9,7 +10,11 @@ import souther.compiler.diag.msg.MessageValues;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Prelude;
+import souther.test.RepositoryLayout;
+
+import souther.compiler.check.Ordering;
+import souther.compiler.Reserved;
+import souther.compiler.types.Type;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -35,6 +40,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Every catalog that ships is complete on its own and valid on its own.
@@ -62,6 +68,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 public class EveryShippedMessageCatalogIsCompleteAndValidTest {
 
+    /** Read once: what this asks of it does not change between its checks. */
+    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+
     /** Where the bundle {@link Messages} reads lives, as a path under a module's resources. */
     private static final String PACKAGE = "souther/compiler/diag";
     /** The bundle's own name, so the base catalog is {@code messages.properties}. */
@@ -74,6 +83,14 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      */
     private static final ResourceBundle.Control CONTROL =
             ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES);
+
+    /**
+     * The messages that write out which values are ordered: what {@code sort} takes, and what
+     * {@code <} takes. Named here rather than found by pattern, so that renaming one of them fails
+     * the check that holds it to the compiler's answer instead of silently removing it.
+     */
+    private static final List<String> ORDERED_VALUE_KEYS =
+            List.of("kind.ordered.list", "type.comparison-needs-ordered-values-of-one-type");
 
     /** An argument reference: {@code {0}}, and {@code {10}} too — a single digit is not the rule. */
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\d+)}");
@@ -392,6 +409,51 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         assertEquals(List.of(), duplicated);
     }
 
+    /**
+     * The two messages that spell out which values are ordered name exactly the primitives that are.
+     *
+     * <p>Both sentences write the set out by hand, in every language, which makes each of them a
+     * copy of the table in {@code Ordering}. A copy is wrong the day the original changes and says
+     * nothing about it: an eighth ordered primitive would leave two sentences quietly listing seven,
+     * and the only reader who finds out is the author who wrote a comparison the compiler accepts
+     * and the message says it should not.
+     *
+     * <p>Held as a set of tokens and not as a substring, because {@code DateTime} contains
+     * {@code Date} and {@code Time}: a sentence that had lost both of the shorter names would pass a
+     * {@code contains} against either. And over every catalog that ships, because a translation is a
+     * separate copy of the same table.
+     */
+    @Test
+    void everyCatalogListsTheOrderedPrimitivesAndOnlyThose() throws IOException {
+        Set<String> ordered = new TreeSet<>();
+        for (Type.Prim prim : Type.Prim.values()) {
+            if (Ordering.of(prim, null) != null) {
+                ordered.add(prim.shown());
+            }
+        }
+        Map<String, Set<String>> named = new TreeMap<>();
+        for (Catalog catalog : catalogs()) {
+            Properties messages = load(catalog.path());
+            for (String key : ORDERED_VALUE_KEYS) {
+                String sentence = messages.getProperty(key);
+                assertNotNull(sentence, catalog.name() + " defines no " + key
+                        + ", so the sentence this holds to the ordered set was renamed or removed");
+                Set<String> found = new TreeSet<>();
+                for (Type.Prim prim : Type.Prim.values()) {
+                    if (Pattern.compile("\\b" + prim.shown() + "\\b").matcher(sentence).find()) {
+                        found.add(prim.shown());
+                    }
+                }
+                named.put(catalog.name() + " " + key, found);
+            }
+        }
+        Map<String, Set<String>> expected = new TreeMap<>();
+        for (String where : named.keySet()) {
+            expected.put(where, ordered);
+        }
+        assertEquals(expected, named);
+    }
+
     @Test
     void everyCatalogNamesOnlyStandardLibraryFunctionsThatExist() throws IOException {
         Set<String> missing = new TreeSet<>();
@@ -504,7 +566,25 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      */
     private static final List<Class<?>> LEAVES = new ArrayList<>();
 
+    /**
+     * The walk's answer, taken once for the class.
+     *
+     * <p>The hierarchy is sealed and every leaf of it is loaded to be asked what it permits, so the
+     * walk is the class-loading of every message this compiler declares. It answers the same each
+     * time it is asked — and it was being asked from inside the loop over every key of every
+     * catalog, which is that loading once per key rather than once.
+     */
+    private static List<Class<? extends Message>> declared;
+
     private static List<Class<? extends Message>> messages() {
+        if (declared == null) {
+            declared = walk();
+        }
+        return declared;
+    }
+
+    /** Down the sealed hierarchy to the leaves, filling {@link #LEAVES} with all of them. */
+    private static List<Class<? extends Message>> walk() {
         List<Class<? extends Message>> found = new ArrayList<>();
         List<Class<?>> leaves = new ArrayList<>();
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(Message.class));
@@ -708,12 +788,18 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         assertEquals(List.of(), dangling, "a message sends a reader to a section that is not there");
     }
 
+    private static Set<String> owned;
+
+    /** The entries a message fills by name, taken once: two checks ask this of every key they read. */
     private static Set<String> ownedByAMessage() {
-        Set<String> keys = new TreeSet<>();
-        for (Class<? extends Message> message : messages()) {
-            keys.add(MessageKeys.of(message));
+        if (owned == null) {
+            Set<String> keys = new TreeSet<>();
+            for (Class<? extends Message> message : messages()) {
+                keys.add(MessageKeys.of(message));
+            }
+            owned = keys;
         }
-        return keys;
+        return owned;
     }
 
     /**
@@ -888,19 +974,7 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
     /** Every module's {@code src/main/<kind>}, for the modules that have one. The test runs in its
      *  own module directory, so the repository root is that directory's parent. */
     private static List<Path> moduleDirectories(String kind) throws IOException {
-        Path module = Path.of("").toAbsolutePath();
-        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
-                ? module.getParent() : module;
-        List<Path> directories = new ArrayList<>();
-        try (Stream<Path> modules = Files.list(repo)) {
-            for (Path candidate : modules.map(m -> m.resolve(Path.of("src", "main", kind))).toList()) {
-                if (Files.isDirectory(candidate)) {
-                    directories.add(candidate);
-                }
-            }
-        }
-        directories.sort(Path::compareTo);
-        return directories;
+        return REPOSITORY.mainTrees(kind);
     }
 
     private static Properties load(Path catalog) throws IOException {
@@ -949,11 +1023,11 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         for (String line : Files.readAllLines(catalog, StandardCharsets.UTF_8)) {
             Matcher m = quoted.matcher(line);
             while (m.find()) {
-                if (!Prelude.isQualifier(m.group(1))) {
+                if (!Reserved.isQualifier(m.group(1))) {
                     continue;
                 }
                 String qualified = m.group(1) + "." + m.group(2);
-                if (!Prelude.published().contains(qualified)) {
+                if (!DefaultStdlib.get().published().contains(qualified)) {
                     missing.add(qualified);
                 }
             }

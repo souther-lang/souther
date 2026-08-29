@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ProjectionEvidence;
+
 import java.util.List;
 
 /**
@@ -17,20 +19,33 @@ public sealed interface CutEvidence {
     record None() implements CutEvidence {}
 
     /**
-     * The lines, and whether a row at one of them may turn out to be unwritable.
+     * The lines, and how much of the rules the bounds they were drawn from are able to state.
      *
-     * @param cuts      never empty: no lines is {@link None}, which says so
-     * @param uncertain whether some rule reaching the value this position sits in was not read, so
-     *                  that a row written at one of these edges may be refused for a reason this
-     *                  cannot see. About the edges and about nothing else
+     * <p>The evidence and not a flag read off it. What a reader does with an uncertain edge is the
+     * same either way; what it can tell an author is not, and a boolean drops which rule and which
+     * position left the range wider than the model. Kept here so that it is not lost one call
+     * further on than where it is known.
+     *
+     * @param cuts       never empty: no lines is {@link None}, which says so
+     * @param projection what the bounds of the value this position sits in state of its rules. Where
+     *                   it is not exact, a row written at one of these edges may be refused for a
+     *                   reason the bounds do not hold. About the edges and about nothing else
      */
-    record Present(List<Cut> cuts, boolean uncertain) implements CutEvidence {
+    record Present(List<Cut> cuts, ProjectionEvidence projection) implements CutEvidence {
 
         public Present {
             cuts = List.copyOf(cuts);
             if (cuts.isEmpty()) {
                 throw new IllegalArgumentException("no cuts is `None`, which says so");
             }
+            if (projection == null) {
+                throw new IllegalArgumentException("lines drawn from bounds with no account of them");
+            }
+        }
+
+        /** Whether a row at one of these edges may turn out to be unwritable. */
+        public boolean uncertain() {
+            return !projection.isCertified();
         }
     }
 

@@ -9,18 +9,24 @@ import souther.compiler.query.Adequacy;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
+import souther.lsp.protocol.DocumentHighlight;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
+import souther.lsp.protocol.InlayHint;
+import souther.lsp.protocol.Insertion;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.LspDiagnostic;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.WorkspaceSymbol;
 import souther.lsp.rpc.InboundDecoders;
 import souther.lsp.rpc.Params;
 import souther.lsp.transport.MessageConnection;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +45,11 @@ public final class LspServer {
     private final MessageConnection conn;
     private final DocumentStore documents = new DocumentStore();
     private final Analyzer analyzer = new Analyzer();
+
+    /** Whether this client said it reads completion placeholders. False until it says so. */
+    private boolean readsSnippets;
+    /** Whether this client sent the {@code shutdown} request. What the exit code answers. */
+    private boolean askedToShutDown;
     private final Workspace workspace = new Workspace();
     private int nextRequestId = 1;
 
@@ -47,11 +58,31 @@ public final class LspServer {
     }
 
     public static void main(String[] args) {
-        new LspServer(new MessageConnection(System.in, System.out)).run();
+        System.exit(serve(System.in, System.out));
     }
 
-    /** Reads and dispatches messages until end of input or an {@code exit} notification. */
-    public void run() {
+    /**
+     * Serves one session over the given streams and returns what a command line exits with.
+     *
+     * <p>The entry point a caller that is not a {@code java -jar} line uses. {@code souther lsp}
+     * launches this server in the command line's own process, so what starts a session cannot be a
+     * {@code main} that owns the exit: a method returning the code leaves that decision where the
+     * process is, which is one level up from here either way.
+     *
+     * <p>What the code says is whether the client shut the server down before it went: the protocol
+     * has a session end on it, and a session that stopped without one stopped for a reason nobody
+     * here can name. {@code exit} after {@code shutdown} is zero, and so is a client that closed the
+     * stream once it had shut the server down; anything else is one.
+     */
+    public static int serve(InputStream in, OutputStream out) {
+        return new LspServer(new MessageConnection(in, out)).run();
+    }
+
+    /**
+     * Reads and dispatches messages until end of input or an {@code exit} notification, and answers
+     * with the code the protocol asks the process to end under.
+     */
+    public int run() {
         String message;
         while ((message = conn.read()) != null) {
             JsonNode m;
@@ -77,9 +108,10 @@ public final class LspServer {
                 continue;
             }
             if (stop) {
-                return;     // exit
+                break;      // exit
             }
         }
+        return askedToShutDown ? 0 : 1;
     }
 
     /** Replies to a request the server could not answer. A notification (no id) has no reply. */
@@ -147,11 +179,26 @@ public final class LspServer {
             case DEFINITION -> { respond(id, definition(params)); yield false; }
             case REFERENCES -> { respond(id, references(params)); yield false; }
             case COMPLETION -> { respond(id, completion(params)); yield false; }
+            case INLAY_HINT -> { respond(id, inlayHints(params)); yield false; }
+            case DOCUMENT_HIGHLIGHT -> { respond(id, documentHighlights(params)); yield false; }
+            case SELECTION_RANGE -> { respond(id, selectionRanges(params)); yield false; }
+            case WORKSPACE_SYMBOL -> { respond(id, workspaceSymbols(params)); yield false; }
+            case SIGNATURE_HELP -> { respond(id, signatureHelp(params)); yield false; }
             case CODE_ACTION -> { respond(id, codeActions(params)); yield false; }
+            case CODE_ACTION_RESOLVE -> { respond(id, codeActionResolve(params)); yield false; }
             case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
             case RENAME -> { respond(id, rename(params)); yield false; }
             case FORMATTING -> { respond(id, formatting(params)); yield false; }
-            case SHUTDOWN -> { respond(id, null); yield false; }
+            // Only as the request it is. A `shutdown` written as a notification asked nothing, so
+            // there is nothing to reply to and nothing the exit code can hold the client to; the
+            // session still stops, because a client that wrote it is leaving either way.
+            case SHUTDOWN -> {
+                if (id != null && !id.isNull()) {
+                    askedToShutDown = true;
+                    respond(id, null);
+                }
+                yield false;
+            }
             case EXIT -> true;
         };
     }
@@ -180,6 +227,69 @@ public final class LspServer {
         }
         workspace.setRoots(roots);
         analyzer.measure(adequacyAsked(params));
+        readsSnippets = snippetSupportAsked(params);
+        analyzer.resolvesActions(resolvesEditsAsked(params));
+    }
+
+    /**
+     * Whether the client said it will come back for an action's edit, from
+     * {@code capabilities.textDocument.codeAction.dataSupport} and {@code resolveSupport.properties}.
+     *
+     * <p>Both, because they are two halves of one thing. What identifies the work travels in the
+     * action's {@code data} and comes back on the resolve, and the property that is worked out then
+     * is the edit — a client that keeps the data and will not resolve the edit, or resolves the edit
+     * and drops the data, cannot be handed an action without one.
+     *
+     * <p>False unless it said so, which is the protocol's default and not a guess. A client that
+     * never resolves is handed the edit up front, which costs what it costs; handed an action with
+     * no edit, it would show an offer that does nothing.
+     */
+    private static boolean resolvesEditsAsked(JsonNode params) {
+        JsonNode at = params == null ? null : params.get("capabilities");
+        for (String field : List.of("textDocument", "codeAction")) {
+            if (at == null || at.isNull()) {
+                return false;
+            }
+            at = at.get(field);
+        }
+        if (at == null || at.isNull()) {
+            return false;
+        }
+        JsonNode data = at.get("dataSupport");
+        if (data == null || !data.isBoolean() || !data.asBoolean()) {
+            return false;
+        }
+        JsonNode properties = at.path("resolveSupport").get("properties");
+        if (properties == null || !properties.isArray()) {
+            return false;
+        }
+        for (JsonNode property : properties) {
+            if (property.isString() && "edit".equals(property.asString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether the client said it reads completion placeholders, from
+     * {@code capabilities.textDocument.completion.completionItem.snippetSupport}.
+     *
+     * <p>False unless it said so, which is the protocol's default and not a guess: a client sent a
+     * snippet it did not ask for gets the placeholders in its buffer as characters. Nothing else the
+     * client declares is read — what this server answers does not depend on it — so this is the one
+     * thing asked of the handshake beyond where the workspace is.
+     */
+    private static boolean snippetSupportAsked(JsonNode params) {
+        JsonNode at = params == null ? null : params.get("capabilities");
+        for (String field : List.of("textDocument", "completion", "completionItem",
+                "snippetSupport")) {
+            if (at == null || at.isNull()) {
+                return false;
+            }
+            at = at.get(field);
+        }
+        return at != null && at.isBoolean() && at.asBoolean();
     }
 
     /**
@@ -306,16 +416,40 @@ public final class LspServer {
 
     // --- completion ---
 
+    /**
+     * The names that may be written at the cursor.
+     *
+     * <p>Answered from the workspace snapshot, as every other question about a position is: what a
+     * bare name reaches here is settled by this document's imports and by the modules around it, and
+     * one document cannot say what its own import lines brought in without reading them a second
+     * time — which is the rule that decides it, written twice.
+     */
     private Object completion(JsonNode params) {
         Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
                 .orElse(null);
-        String text = p == null ? null : documents.get(p.uri());
-        if (text == null) {
+        if (p == null || documents.get(p.uri()) == null) {
             return List.of();
         }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
         List<Object> items = new ArrayList<>();
-        for (CompletionItem item : analyzer.completions(text, p.position())) {
-            items.add(Map.of("label", item.label(), "kind", item.kind()));
+        for (CompletionItem item : analyzer.completions(p.uri(), p.position(), graph)) {
+            Map<String, Object> sent = new LinkedHashMap<>();
+            sent.put("label", item.label());
+            sent.put("kind", item.kind());
+            // Omitted rather than sent as null for a name with no origin: a client renders an empty
+            // detail as an empty line beside the label.
+            if (item.detail() != null) {
+                sent.put("detail", item.detail());
+            }
+            if (item.writes() != null) {
+                sent.put("insertText", readsSnippets
+                        ? Insertion.snippet(item.writes())
+                        : Insertion.plain(item.writes()));
+                if (readsSnippets) {
+                    sent.put("insertTextFormat", Insertion.SNIPPET_FORMAT);
+                }
+            }
+            items.add(sent);
         }
         return items;
     }
@@ -345,10 +479,130 @@ public final class LspServer {
         return out;
     }
 
+    /** Null where the cursor is in no call the server can say anything about, which the protocol
+     *  reads as no help rather than as help with nothing in it. */
+    private Object signatureHelp(JsonNode params) {
+        Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return null;
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        return analyzer.signatureHelp(p.uri(), p.position(), graph).<Object>map(help -> {
+            List<Object> parameters = new ArrayList<>();
+            for (String each : help.parameters()) {
+                parameters.add(Map.of("label", each));
+            }
+            Map<String, Object> written = new LinkedHashMap<>();
+            written.put("signatures",
+                    List.of(Map.of("label", help.label(), "parameters", parameters)));
+            written.put("activeSignature", 0);
+            // Left out where the signature takes nothing. A mark is about one of the parameters, and
+            // where there are none the protocol asks for none — writing a number there would be
+            // writing about something that was not sent.
+            help.active().ifPresent(at -> written.put("activeParameter", at));
+            return written;
+        }).orElse(null);
+    }
+
+    private Object workspaceSymbols(JsonNode params) {
+        Params.Query p = InboundDecoders.decode(InboundDecoders.QUERY, params).orElse(null);
+        if (p == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (WorkspaceSymbol symbol : analyzer.workspaceSymbols(p.query(), graph)) {
+            out.add(Map.of("name", symbol.name(), "kind", symbol.kind(),
+                    "location", Map.of("uri", symbol.location().uri(),
+                            "range", rangeJson(symbol.location().range()))));
+        }
+        return out;
+    }
+
+    // --- what else here means this ---
+
+    private Object documentHighlights(JsonNode params) {
+        Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (DocumentHighlight highlight
+                : analyzer.documentHighlights(p.uri(), p.position(), graph)) {
+            out.add(Map.of("range", rangeJson(highlight.range()), "kind", highlight.kind()));
+        }
+        return out;
+    }
+
+    /**
+     * One answer per place asked about, in the order they were asked, each nested outwards.
+     *
+     * <p>The protocol pairs a result with a position by where it sits in the list, so a place with
+     * nothing written on it — a blank line, the space between two tokens — is answered rather than
+     * left out. Left out, every place after it would be given another place's widening, which is a
+     * wrong answer where dropping the one is merely no answer. What such a place is answered with is
+     * itself: a range covering nothing, at the position, which widens to nothing because nothing is
+     * there.
+     *
+     * <p>The widening is a chain rather than a list, so what the analyzer answers innermost first is
+     * built up from the outside in — the widest is what has no parent.
+     */
+    private Object selectionRanges(JsonNode params) {
+        Params.PositionsParams p = InboundDecoders.decode(InboundDecoders.POSITIONS_PARAMS, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (Position at : p.positions()) {
+            List<Range> widening = analyzer.selectionRanges(p.uri(), at, graph);
+            Map<String, Object> nested = null;
+            for (int i = widening.size() - 1; i >= 0; i--) {
+                Map<String, Object> here = new LinkedHashMap<>();
+                here.put("range", rangeJson(widening.get(i)));
+                if (nested != null) {
+                    here.put("parent", nested);
+                }
+                nested = here;
+            }
+            out.add(nested == null
+                    ? Map.of("range", rangeJson(new Range(at, at)))
+                    : nested);
+        }
+        return out;
+    }
+
+    // --- inlay hints ---
+
+    private Object inlayHints(JsonNode params) {
+        Params.RangeParams p = InboundDecoders.decode(InboundDecoders.DOC_RANGE, params)
+                .orElse(null);
+        if (p == null || documents.get(p.uri()) == null) {
+            return List.of();
+        }
+        List<Object> out = new ArrayList<>();
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        for (InlayHint hint : analyzer.inlayHints(p.uri(), p.range(), graph)) {
+            Map<String, Object> written = new LinkedHashMap<>();
+            written.put("position", positionJson(hint.position()));
+            written.put("label", hint.label());
+            written.put("paddingLeft", hint.paddingLeft());
+            if (hint.tooltip() != null) {
+                written.put("tooltip", hint.tooltip());
+            }
+            out.add(written);
+        }
+        return out;
+    }
+
     // --- code actions ---
 
     private Object codeActions(JsonNode params) {
-        Params.CodeActionParams p = InboundDecoders.decode(InboundDecoders.CODE_ACTION, params)
+        Params.RangeParams p = InboundDecoders.decode(InboundDecoders.DOC_RANGE, params)
                 .orElse(null);
         String text = p == null ? null : documents.get(p.uri());
         // Only the range's diagnostics can be fixed, so with none in context there is usually nothing
@@ -362,13 +616,80 @@ public final class LspServer {
         List<Object> out = new ArrayList<>();
         ModuleGraph graph = workspace.snapshot(documents.openDocuments());
         for (CodeAction a : analyzer.codeActions(p.uri(), text, p.range(), graph)) {
-            Map<String, Object> action = new LinkedHashMap<>();
-            action.put("title", a.title());
-            action.put("kind", "quickfix");
-            action.put("edit", Map.of("changes", Map.of(a.uri(), List.of(textEdit(a.range(), a.newText())))));
-            out.add(action);
+            out.add(written(a));
         }
         return out;
+    }
+
+    /**
+     * One action as the protocol writes it: with its edit, or with what it takes to work one out.
+     *
+     * <p>An action with neither is what a client sees while it is deciding whether to show the
+     * offer, and an action with both would be this server paying for an edit it was about to hand
+     * over unasked.
+     */
+    private static Map<String, Object> written(CodeAction a) {
+        Map<String, Object> action = new LinkedHashMap<>();
+        action.put("title", a.title());
+        action.put("kind", "quickfix");
+        switch (a) {
+            case CodeAction.Applied applied -> action.put("edit", changes(applied.edit()));
+            case CodeAction.Deferred deferred -> action.put("data",
+                    Map.of("uri", deferred.uri(), "module", deferred.module(),
+                            "behavior", deferred.behavior()));
+        }
+        return action;
+    }
+
+    /** One edit, as the property of an action that carries it. */
+    private static Map<String, Object> changes(CodeAction.Edit edit) {
+        return Map.of("changes",
+                Map.of(edit.uri(), List.of(textEdit(edit.range(), edit.newText()))));
+    }
+
+    /**
+     * The edit for an action somebody took.
+     *
+     * <p>The document is read again here rather than remembered from when the offer was made: an
+     * editor asks what is available on every cursor move and resolves one of them much later, and
+     * an edit composed against the older text would be written into source it was not composed for.
+     *
+     * <p>What comes back is what the client sent, with the one property it was sent without. A
+     * resolve fills in what an action was missing and alters nothing else it carries — the data that
+     * identifies the work among them — so the reply is built from the request rather than from a
+     * fresh action, which would drop whatever this server did not think to write again.
+     *
+     * <p>An action that resolves to nothing comes back as it went in, with no edit. There is nothing
+     * to write, and writing the notes instead would put a comment into somebody's source.
+     */
+    private Object codeActionResolve(JsonNode params) {
+        if (params == null || params.get("data") == null) {
+            return params;   // not one of ours to work out; hand it back untouched
+        }
+        JsonNode data = params.get("data");
+        String uri = text(data, "uri");
+        String module = text(data, "module");
+        String behavior = text(data, "behavior");
+        String title = text(params, "title");
+        if (uri == null || module == null || behavior == null || title == null) {
+            return params;
+        }
+        CodeAction.Edit edit = analyzer.resolve(
+                new CodeAction.Deferred(title, uri, module, behavior), documents.get(uri),
+                workspace.snapshot(documents.openDocuments()));
+        if (edit == null) {
+            return params;
+        }
+        Map<String, Object> resolved = new LinkedHashMap<>();
+        params.properties().forEach(property ->
+                resolved.put(property.getKey(), property.getValue()));
+        resolved.put("edit", changes(edit));
+        return resolved;
+    }
+
+    private static String text(JsonNode at, String field) {
+        JsonNode found = at.get(field);
+        return found == null || !found.isString() ? null : found.asString();
     }
 
     /** Whether the codeAction request carries any client-side diagnostics for its range. */

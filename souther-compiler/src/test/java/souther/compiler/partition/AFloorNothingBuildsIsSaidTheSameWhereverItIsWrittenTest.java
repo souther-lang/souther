@@ -2,9 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -35,25 +38,26 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
      * then reports the first parameter's reason — which is a fact about a `Bool` and would be the
      * same sentence whatever the second parameter's rules said.
      */
-    private static final Generator.CandidateCheck REFUSED =
-            (parameter, _) -> parameter == 1 ? Optional.of("refused") : Optional.empty();
+    private static final Generator.CandidateCheck REFUSED = Generator.CandidateCheck.refusing(
+            (parameter, _) -> parameter == 1 ? Optional.of("refused") : Optional.empty());
 
     private static Generator.UnresolvedCombination.Reason reasonFor(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(prepared, "the model did not compile");
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
-        Partitions.Partitioning partitioning = Partitions.of(spec, sig, symbols, Exclusions.NONE);
-        Generator.GenerationResult filled = Generator.fill(new Generator.Subject(
-                new BehaviorInputs(spec.params().stream().map(Ast.Param::name).toList(),
-                        sig.inputTypes(), symbols),
-                partitioning.axes()), List.of(), REFUSED);
+        InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FillResult filled = Generator.fill(new Generator.Subject(spec.name(),
+                new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
+                        sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                partitioning.axes(), HeldCounts.of(domain, symbols)), List.of(), REFUSED, Budgets.generation());
         assertFalse(filled.unresolved().isEmpty(), "nothing was written and nothing said why");
         return filled.unresolved().get(0).reason();
     }

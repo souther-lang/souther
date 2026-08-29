@@ -27,7 +27,7 @@ class EverySlotIsAChildTest {
     private static final SourcePos POS = new SourcePos(1, 1);
 
     private static Ast.Var name(String written) {
-        return new Ast.Var(written, POS);
+        return Ast.Var.written(written, POS);
     }
 
     /** {@code Person { ..base, age: n }} — one name slot, one expression slot. */

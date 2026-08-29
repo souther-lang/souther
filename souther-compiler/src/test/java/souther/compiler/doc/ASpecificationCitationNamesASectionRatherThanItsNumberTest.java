@@ -2,6 +2,9 @@ package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.GitIndex;
+import souther.test.RepositoryLayout;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.MalformedInputException;
@@ -16,7 +19,6 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -177,40 +179,46 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
         assertTrue(found > 400, "the walk found only " + found + " citations — it missed the tree");
     }
 
-    /** Every text file in the repository, keyed by its path from the root. */
+    /**
+     * Every file the repository holds, keyed by its path from the root, read once for the class.
+     *
+     * <p>What a citation could be written in is anything the repository keeps — a document, an ADR,
+     * a source, the specification itself — so this is not a sweep of source trees. What it is not
+     * is anything a build wrote, and that is a question git already answers: {@code target/} and
+     * surefire's {@code .surefire-*} record are in {@code .gitignore} because that is where this
+     * repository declares what a build writes.
+     *
+     * <p>Asked of the working tree instead, this had stated the attributes of 18,209 entries — the
+     * whole of {@code .git} and the whole of every {@code target/} among them — and read 2,446 of
+     * them as text to find out whether they were text. It also read whatever anyone had left lying
+     * beside the modules, so what the checks below covered depended on the machine they ran on.
+     *
+     * <p>Nobody writes a citation while the class runs, and each of the four checks below was
+     * reading all of it again to ask its own question of the same text.
+     */
+    private static Map<String, String> read;
+
     private static Map<String, String> sources() {
-        Path repo = repositoryRoot();
+        if (read == null) {
+            read = readTracked();
+        }
+        return read;
+    }
+
+    /** The reading itself, taken the once. */
+    private static Map<String, String> readTracked() {
+        GitIndex git = GitIndex.of(RepositoryLayout.ofWorkingDirectory());
         Map<String, String> files = new LinkedHashMap<>();
-        try (Stream<Path> walk = Files.walk(repo)) {
-            for (Path path : walk.filter(Files::isRegularFile).filter(p -> !isBuildOutput(repo, p)).toList()) {
-                try {
-                    files.put(repo.relativize(path).toString().replace('\\', '/'),
-                            Files.readString(path));
-                } catch (MalformedInputException notText) {
-                    // A jar or an image says nothing about the specification.
-                }
+        for (Path tracked : git.trackedFiles()) {
+            try {
+                files.put(tracked.toString().replace('\\', '/'),
+                        Files.readString(git.resolve(tracked)));
+            } catch (MalformedInputException notText) {
+                // A jar or an image says nothing about the specification.
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
         }
         return files;
-    }
-
-    /** Whether {@code path} is generated or git's own, neither of which anyone writes a citation in. */
-    private static boolean isBuildOutput(Path repo, Path path) {
-        for (Path part : repo.relativize(path)) {
-            String name = part.toString();
-            if (name.equals("target") || name.equals(".git")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** The repository root. A test runs in its own module's directory, whose parent that is. */
-    private static Path repositoryRoot() {
-        Path module = Path.of("").toAbsolutePath();
-        return Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
-                ? module.getParent() : module;
     }
 }

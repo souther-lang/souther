@@ -8,6 +8,8 @@ import souther.compiler.query.PartitionEvidence;
 
 import java.util.Map;
 
+import static souther.compiler.AxisClasses.names;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -48,6 +50,7 @@ class PairSpaceTest {
 
     private static PartitionEvidence evidence(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
@@ -64,7 +67,7 @@ class PairSpaceTest {
                 """, "submit").pairs();
 
         assertEquals(4, pairs.total(), "two kinds against two cost ranges");
-        assertEquals(1, pairs.covered());
+        assertEquals(1, pairs.counts().covered());
     }
 
     /** The row is the proof. Nothing else here proves anything. */
@@ -77,11 +80,11 @@ class PairSpaceTest {
                     | (Request { kind = Overseas, cost = Amount(500) }) -> Waiting
                 """, "submit").pairs();
 
-        assertEquals(2, pairs.covered());
-        assertEquals(2, pairs.witnessedFeasible());
-        assertEquals(0, pairs.provenInfeasible(),
+        assertEquals(2, pairs.counts().covered());
+        assertEquals(2, pairs.counts().witnessedFeasible());
+        assertEquals(0, pairs.counts().provenInfeasible(),
                 "nothing has tried to build the other two, so nothing is known to be impossible");
-        assertEquals(2, pairs.unknown());
+        assertEquals(2, pairs.counts().unknown());
         assertFalse(pairs.decided(), "with untried combinations a single ratio would say nothing");
     }
 
@@ -96,8 +99,8 @@ class PairSpaceTest {
                     | (Request { kind = Overseas, cost = Amount(500) }) -> Waiting
                 """, "submit").pairs();
 
-        assertEquals(4, pairs.covered());
-        assertEquals(0, pairs.unknown());
+        assertEquals(4, pairs.counts().covered());
+        assertEquals(0, pairs.counts().unknown());
         assertTrue(pairs.decided());
     }
 
@@ -125,7 +128,7 @@ class PairSpaceTest {
 
         assertEquals(0, evidence.pairs().total());
         assertEquals(1, evidence.axes().size());
-        assertEquals(java.util.List.of("No"), evidence.axes().get(0).uncovered(),
+        assertEquals(java.util.List.of("No"), names(evidence.axes().get(0).uncovered()),
                 "the untouched class is still reported");
     }
 
@@ -137,7 +140,7 @@ class PairSpaceTest {
                     | (Request { kind = Domestic, cost = Amount(50) }) -> Submitted
                 """, "submit").pairs();
 
-        assertEquals(1, pairs.covered(), "one row, one pair");
-        assertEquals(3, pairs.unknown());
+        assertEquals(1, pairs.counts().covered(), "one row, one pair");
+        assertEquals(3, pairs.counts().unknown());
     }
 }

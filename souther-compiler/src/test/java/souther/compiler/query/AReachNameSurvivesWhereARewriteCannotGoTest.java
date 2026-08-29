@@ -1,8 +1,9 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -19,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * What a body says when it leaves the module it was written in, in the one place no walk over an
  * expression reaches.
  *
- * <p>A function argument stands in {@code Ast.Expansion.given}, and that is not a slot
- * ({@code Ast.atSlots}): a callee that applies its argument holds the same lambda inside its body,
+ * <p>A function argument stands in {@code Hir.Expansion.given}, and that is not a slot
+ * ({@code Hir.atSlots}): a callee that applies its argument holds the same lambda inside its body,
  * so a walk taking both would read one lambda twice. A published body is closed by the module that
  * declares it and read against the reader's declarations, and the rewrite that does the closing goes
  * through that walk — so what stands in {@code given} was left behind, saying what it said where it
@@ -53,36 +54,38 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
             """;
 
     /** The imported recursive helper as {@code app} emits it: a method of its own. */
-    private static Ast.Expr taken() {
+    private static Hir.Expr taken() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("lib.sou", LIB);
         byId.put("app.sou", APP);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        Ast.FnDef def = c.db().ask(new Bodies.LoweredBody("app", "lib.flatten")).value();
-        return ((Ast.FnBody.Written) def.body()).expr();
+        Hir.FnDef def =
+                c.db().ask(new Bodies.LoweredBody("app",
+                        new souther.compiler.ast.DefinitionName("lib.flatten"))).value().value();
+        return ((Hir.FnBody.Written) def.body()).expr();
     }
 
     /** Every application a walk over the slots reaches. */
-    private static List<Ast.Apply> throughTheSlots(Ast.Expr e) {
-        List<Ast.Apply> out = new ArrayList<>();
-        if (e instanceof Ast.Apply call) {
+    private static List<Hir.Apply> throughTheSlots(Hir.Expr e) {
+        List<Hir.Apply> out = new ArrayList<>();
+        if (e instanceof Hir.Apply call) {
             out.add(call);
         }
-        Ast.forEachChild(e, c -> out.addAll(throughTheSlots(c)));
+        Hir.forEachChild(e, c -> out.addAll(throughTheSlots(c)));
         return out;
     }
 
     /** Every application standing in what a combinator was handed, which the walk above does not
      * reach — collected by hand, because that is the point. */
-    private static List<Ast.Apply> inWhatWasHandedOver(Ast.Expr e) {
-        List<Ast.Apply> out = new ArrayList<>();
-        if (e instanceof Ast.Expansion ex) {
-            for (Ast.Given g : ex.given()) {
+    private static List<Hir.Apply> inWhatWasHandedOver(Hir.Expr e) {
+        List<Hir.Apply> out = new ArrayList<>();
+        if (e instanceof Hir.Expansion ex) {
+            for (Hir.Given g : ex.given()) {
                 out.addAll(throughTheSlots(g.value()));
                 out.addAll(inWhatWasHandedOver(g.value()));
             }
         }
-        Ast.forEachChild(e, c -> out.addAll(inWhatWasHandedOver(c)));
+        Hir.forEachChild(e, c -> out.addAll(inWhatWasHandedOver(c)));
         return out;
     }
 
@@ -96,8 +99,8 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
      */
     @Test
     void theCallStandsWhereAWalkOverTheSlotsDoesNotReach() {
-        Ast.Expr body = taken();
-        List<Ast.Apply> handed = calls(inWhatWasHandedOver(body));
+        Hir.Expr body = taken();
+        List<Hir.Apply> handed = calls(inWhatWasHandedOver(body));
 
         assertEquals(1, handed.size(),
                 "the recursive helper is called inside the lambda handed to the combinator");
@@ -109,14 +112,16 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
      * settles that name goes through a walk which never arrives there. */
     @Test
     void andItIsReachedByTheNameTheReaderReachesItBy() {
-        assertEquals(List.of(new ReachName.OfModule("lib", "flatten")),
-                calls(inWhatWasHandedOver(taken())).stream().map(Ast.Apply::reachedAs).toList(),
+        assertEquals(List.of(new ReachName.OfModule(new ValueName.Helper("lib", "flatten"))),
+                calls(inWhatWasHandedOver(taken())).stream()
+                        .map(call -> call.answered().reachedAs()).toList(),
                 "reached under the module that declares it, which is how `app` keys the method");
     }
 
-    private static List<Ast.Apply> calls(List<Ast.Apply> found) {
+    private static List<Hir.Apply> calls(List<Hir.Apply> found) {
         return found.stream()
-                .filter(call -> call.denotes() != null && call.denotes().name().equals("flatten"))
+                .filter(call -> call.answered() != null
+                        && call.answered().denotes().name().equals("flatten"))
                 .toList();
     }
 }

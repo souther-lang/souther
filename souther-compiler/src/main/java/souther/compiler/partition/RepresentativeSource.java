@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,7 +76,8 @@ public sealed interface RepresentativeSource {
          * value under, outermost first — a fact about the position rather than about the
          * constructor.
          */
-        record Compose(TypeName through, List<TypeName> worn) implements Evaluation {
+        record Compose(TypeSymbol.AtModule through, List<TypeReachName.Written> worn)
+                implements Evaluation {
 
             public Compose {
                 worn = List.copyOf(worn);
@@ -136,7 +138,7 @@ public sealed interface RepresentativeSource {
 
     /** A class whose values are composed through {@code through}, field by field, by the walk that
      *  composes every other record. */
-    record Composed(TypeName through) implements RepresentativeSource {
+    record Composed(TypeSymbol.AtModule through) implements RepresentativeSource {
 
         @Override
         public Evaluation evaluate() {
@@ -154,7 +156,7 @@ public sealed interface RepresentativeSource {
      * and a class of {@code data DecisionN = Decision} composes an {@code Approved} and hands back
      * {@code DecisionN(Approved { id = 1 })}, by one rule.
      */
-    record Projected(RepresentativeSource inner, List<TypeName> wrappers)
+    record Projected(RepresentativeSource inner, List<TypeReachName.Written> wrappers)
             implements RepresentativeSource {
 
         public Projected {
@@ -169,7 +171,7 @@ public sealed interface RepresentativeSource {
                 // The names go on outside whatever the inner recipe already wears, which is the
                 // order they were read off the position in.
                 case Evaluation.Compose compose -> {
-                    List<TypeName> both = new ArrayList<>(wrappers);
+                    List<TypeReachName.Written> both = new ArrayList<>(wrappers);
                     both.addAll(compose.worn());
                     yield new Evaluation.Compose(compose.through(), both);
                 }
@@ -199,7 +201,7 @@ public sealed interface RepresentativeSource {
 
     /** {@code inner}, written under {@code wrappers} — or {@code inner} itself where the position
      *  wears no name, so that a recipe carries no projection over nothing. */
-    static RepresentativeSource under(List<TypeName> wrappers, RepresentativeSource inner) {
+    static RepresentativeSource under(List<TypeReachName.Written> wrappers, RepresentativeSource inner) {
         return wrappers.isEmpty() ? inner : new Projected(inner, wrappers);
     }
 
@@ -210,7 +212,7 @@ public sealed interface RepresentativeSource {
      * later is written as are the same operation, and two spellings of it are two chances to
      * disagree about which name goes outside.
      */
-    static FixtureTemplate under(List<TypeName> worn, FixtureTemplate value) {
+    static FixtureTemplate under(List<TypeReachName.Written> worn, FixtureTemplate value) {
         FixtureTemplate at = value;
         // Innermost last: the names were read off the position outermost first, so they go back on
         // in the order that leaves the outermost outside.

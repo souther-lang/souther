@@ -69,7 +69,18 @@ class TheSpacingRuleIsAskedOnlyWhereACanonicalLineHoldsBothTest {
      * definition's lambda is lifted — so a hole found here is a hole in the rule and not a
      * disagreement about which construct is being asked.
      */
+    private static Set<Adjacency> candidates;
+
+    /** The sweep's answer, taken once: both checks below read all of it, and the corpus does not
+     *  change while the class runs. */
     private static Set<Adjacency> admitted() {
+        if (candidates == null) {
+            candidates = sweep();
+        }
+        return candidates;
+    }
+
+    private static Set<Adjacency> sweep() {
         Set<Adjacency> out = new TreeSet<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
             out.addAll(onOneLine(source));
@@ -123,7 +134,17 @@ class TheSpacingRuleIsAskedOnlyWhereACanonicalLineHoldsBothTest {
 
     /** Where the canonical form writes each adjacency, as the policies of the boundaries it has
      *  there. An adjacency with no boundary of its own is one the canonical form does not write. */
+    private static Map<Adjacency, Set<TokenDoc.Break>> policies;
+
     private static Map<Adjacency, Set<TokenDoc.Break>> canonicalPolicies() {
+        if (policies == null) {
+            policies = readOffTheCanonicalForm();
+        }
+        return policies;
+    }
+
+    /** The corpus canonicalised the once, which is what the two checks are both asking of it. */
+    private static Map<Adjacency, Set<TokenDoc.Break>> readOffTheCanonicalForm() {
         Map<Adjacency, Set<TokenDoc.Break>> out = new LinkedHashMap<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
             for (Gaps.Boundary b : Gaps.boundaries(

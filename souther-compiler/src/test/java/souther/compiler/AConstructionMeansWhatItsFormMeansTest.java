@@ -126,7 +126,20 @@ class AConstructionMeansWhatItsFormMeansTest {
         return assertInstanceOf(ExampleMessage.TheExpectedValueCouldNotBeBuilt.class, d.said()).why();
     }
 
-    /** The row built a value, and it is not the one that came out. */
+    /**
+     * The construction is refused where a body's is: a row's operand is compiled as this module's
+     * code, so a field of another type, a missing field, a temporal where another temporal stands
+     * are the language's own refusals at the position that misstates.
+     */
+    private static void refusedStatically(String rows, String code, String... names) {
+        Diagnostic d = only(rows);
+        assertEquals(code, d.code(), d.said().toString());
+        for (String name : names) {
+            assertTrue(d.toString().contains(name) || d.said().toString().contains(name),
+                    "`" + name + "` is said: " + d.said());
+        }
+    }
+
     private static void doesNotHold(String rows) {
         Diagnostic d = only(rows);
         assertEquals("E1905", d.code(), d.said().toString());
@@ -225,14 +238,14 @@ class AConstructionMeansWhatItsFormMeansTest {
                 """);
         // Its invariant is its own, so it is read whether the value it wraps was spelled out or
         // answered by a helper. Reading one and not the other made the same row two outcomes.
-        assertEquals("must be positive", couldNotBuild("""
+        assertTrue(couldNotBuild("""
                 example positiveOf
                     | (1) -> Positive(-1)
-                """));
-        assertEquals("must be positive", couldNotBuild("""
+                """).contains("invariant violated on demo.Positive"));
+        assertTrue(couldNotBuild("""
                 example positiveOf
                     | (1) -> Positive(neg(1))
-                """));
+                """).contains("invariant violated on demo.Positive"));
     }
 
     @Test
@@ -244,10 +257,10 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example nonEmptyOf
                     | (1) -> NonEmpty([1])
                 """);
-        assertEquals("must not be empty", couldNotBuild("""
+        assertTrue(couldNotBuild("""
                 example nonEmptyOf
                     | (1) -> NonEmpty([])
-                """));
+                """).contains("invariant violated on demo.NonEmpty"));
     }
 
     @Test
@@ -255,11 +268,10 @@ class AConstructionMeansWhatItsFormMeansTest {
         // The order matters. `Amounts` holds `AmountN`s, so a row writing numbers has written no
         // `Amounts` — and asking that of the written value is what keeps its decoder from being handed
         // the list and reading each number as the `AmountN` the position wanted.
-        String why = couldNotBuild("""
+        refusedStatically("""
                 example heldAmounts
                     | (1) -> Amounts([1])
-                """);
-        assertTrue(why.contains("List<AmountN>"), why);
+                """, "E1317", "List<AmountN>", "List<Int>");
     }
 
     @Test
@@ -271,16 +283,15 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example wrappedOf
                     | (1) -> Wrapped(Receipt { total = AmountN(1) })
                 """);
-        String why = couldNotBuild("""
+        refusedStatically("""
                 example wrappedOf
                     | (1) -> Wrapped(Receipt { total = 1 })
-                """);
-        assertTrue(why.contains("Receipt"), why);
-        // And the same value on its own is the disagreement it is.
-        doesNotHold("""
+                """, "E1317", "AmountN", "Int");
+        // And the same value on its own is refused the same way.
+        refusedStatically("""
                 example receiptOf
                     | (1) -> Receipt { total = 1 }
-                """);
+                """, "E1317", "AmountN", "Int");
     }
 
     @Test
@@ -291,10 +302,10 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example boxedOf
                     | (1) -> Boxed { held = AmountN(1) }
                 """);
-        doesNotHold("""
+        refusedStatically("""
                 example boxedOf
                     | (1) -> Boxed { held = 1 }
-                """);
+                """, "E1317", "AmountN", "Int");
         doesNotHold("""
                 example boxedOf
                     | (1) -> Boxed { held = None }
@@ -326,15 +337,15 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example pricedOf
                     | (1) -> Priced { at = 1m }
                 """);
-        doesNotHold("""
+        refusedStatically("""
                 example pricedOf
                     | (1) -> Priced { at = -1 }
-                """);
+                """, "E1317", "Decimal", "Int");
         // And the same reading, where no invariant is involved at all.
-        doesNotHold("""
+        refusedStatically("""
                 example pricedOf
                     | (1) -> Priced { at = 1 }
-                """);
+                """, "E1317", "Decimal", "Int");
     }
 
     @Test
@@ -348,18 +359,11 @@ class AConstructionMeansWhatItsFormMeansTest {
                     | (1) -> Stamped { from = DateTime("2026-07-20T09:00"),
                         to = DateTime("2026-07-21T09:00") }
                 """);
-        Diagnostic d = only("""
+        refusedStatically("""
                 example stampedOf
                     | (1) -> Stamped { from = Date("2026-07-20"),
                         to = DateTime("2026-07-21T09:00") }
-                """);
-        assertEquals("E1905", d.code(), d.said().toString());
-        assertTrue(d.notes().stream().anyMatch(note ->
-                        note.said() instanceof ExampleMessage.TheTwoAreOfDifferentTypes(
-                                String at, String stated, String answered)
-                                && at.equals("$.from") && stated.equals("Date")
-                                && answered.equals("DateTime")),
-                "which two temporals it is between: " + d.notes());
+                """, "E1317", "DateTime", "Date");
     }
 
     @Test
@@ -368,11 +372,13 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example codedOf
                     | (1) -> Coded { by = Map.fromList([("a", 1)]) }
                 """);
-        // Two entries under one key state no map, which is not a disagreement with the behavior.
-        couldNotBuild("""
+        // Two entries under one key are `Map.fromList`'s to resolve, as they are in a body — a
+        // row is not refused for them (a deliberate widening), and the map it states is compared.
+        Diagnostic d = only("""
                 example codedOf
                     | (1) -> Coded { by = Map.fromList([("a", 1), ("a", 2)]) }
                 """);
+        assertEquals("E1905", d.code(), d.said().toString());
     }
 
     @Test
@@ -382,9 +388,9 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example heldOf
                     | (1) -> Held { total = AmountN(1) }
                 """);
-        couldNotBuild("""
+        refusedStatically("""
                 example receiptOf
                     | (1) -> Receipt { }
-                """);
+                """, "E1005", "total");
     }
 }

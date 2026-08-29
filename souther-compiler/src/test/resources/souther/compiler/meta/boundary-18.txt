@@ -1,0 +1,14 @@
+Lsouther/runtime/meta/SoutherBehavior;
+  implementation: string
+  signature: string
+Lsouther/runtime/meta/SoutherData;
+  value: string
+Lsouther/runtime/meta/SoutherModule;
+  behaviors: array of string
+  compat: int
+  compiler: string
+  header: string
+  imports: array of string
+  invariantHelpers: array of string
+  name: string
+  types: array of string

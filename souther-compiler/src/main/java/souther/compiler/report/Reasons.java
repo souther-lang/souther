@@ -71,6 +71,9 @@ final class Reasons {
                     "the classes for `%s` would not link, so its rows did not run", subject);
             case ROW_UNDECIDED -> String.format(
                     "a row of `%s` did not come back, so what it covers is unknown", subject);
+            case ANSWERER_NOT_ESTABLISHED -> String.format(
+                    "a row of `%s` was not run against what answers it, because nothing could"
+                            + " establish that it was built against this model", subject);
             case INSTRUMENTATION_ABSENT -> String.format(
                     "the classes `%s` needed for arm coverage could not be made, so none of its"
                             + " rows were read", subject);

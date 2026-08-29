@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.report.AdequacyReport;
+
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -98,7 +100,7 @@ class MainExamplesSubcommandTest {
         assertTrue(out.contains("findMember"), out);
         assertTrue(out.contains("injected"), out);
         assertTrue(out.contains("implemented"), out);
-        assertTrue(out.contains("2 behaviors: 1 implemented, 1 injected; 2 rows waiting for a `let`."),
+        assertTrue(out.contains("2 behaviors: 1 implemented, 0 unimplemented, 1 injected; 2 rows waiting for a `let`."),
                 out);
     }
 
@@ -108,7 +110,7 @@ class MainExamplesSubcommandTest {
 
         assertTrue(out.contains("submit"), out);
         assertFalse(out.contains("findMember"), out);
-        assertTrue(out.contains("1 behavior: 1 implemented, 0 injected; 0 rows waiting"), out);
+        assertTrue(out.contains("1 behavior: 1 implemented, 0 unimplemented, 0 injected; 0 rows waiting"), out);
     }
 
     /**
@@ -153,7 +155,7 @@ class MainExamplesSubcommandTest {
     void theJsonCarriesTheNumbersABuildReads() throws Exception {
         JsonNode root = JSON.readTree(run("--format", "json"));
 
-        assertEquals(1, root.get("schemaVersion").asInt());
+        assertEquals(AdequacyReport.SCHEMA_VERSION, root.get("schemaVersion").asInt());
         assertEquals("complete", root.get("status").asString());
         assertNotNull(root.get("compilerVersion"));
 
@@ -182,8 +184,8 @@ class MainExamplesSubcommandTest {
     @Test
     void theEmittedJsonHasTheShippedSchemaShape() throws Exception {
         JsonNode schema;
-        try (var in = Main.class.getResourceAsStream("/souther/adequacy-schema-1.json")) {
-            assertNotNull(in, "adequacy-schema-1.json ships beside the compiler");
+        try (var in = Main.class.getResourceAsStream(AdequacyReport.SCHEMA_RESOURCE)) {
+            assertNotNull(in, AdequacyReport.SCHEMA_RESOURCE + " ships beside the compiler");
             schema = JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }
         JsonNode root = JSON.readTree(run("--format", "json"));
@@ -202,6 +204,7 @@ class MainExamplesSubcommandTest {
 
         // Down to where the measures are. What each of them says about itself is the part that has
         // grown, and a check that stopped at the behavior would not have seen any of it arrive.
+        int borders = 0;
         for (JsonNode behavior : module.get("behaviors")) {
             for (String measure : List.of("signature", "partition", "branch")) {
                 if (behavior.has(measure)) {
@@ -220,8 +223,49 @@ class MainExamplesSubcommandTest {
                     agrees(item, itemDef.get("properties"), itemDef.get("required"));
                 }
             }
+            // And into a border's own points, which is where the shape this version was raised for
+            // lives. Stopped at the border, the check saw the array arrive and nothing about what
+            // was in it — and a schema is only what a document is held to where something holds one
+            // to it.
+            JsonNode pointDef = partitionDef.get("boundaries").get("items")
+                    .get("properties").get("items").get("items");
+            for (JsonNode border : partition.get("boundaries")) {
+                everyPointOfOneBorder(border.get("items"), pointDef);
+                borders++;
+            }
             JsonNode pairsDef = partitionDef.get("pairs");
             agrees(partition.get("pairs"), pairsDef.get("properties"), pairsDef.get("required"));
+        }
+        // The walk above says nothing where it walked nothing, and a border is the one thing here
+        // whose own shape this version changed.
+        assertTrue(borders > 0, "the model under test draws a line somewhere");
+    }
+
+    /**
+     * A border writes each of its four points once, and each as owed or as not owed and never both.
+     *
+     * <p>The invariant the Java side holds at its constructors, held against what is actually
+     * emitted. Two of these four used to be entries of `boundaries` and the other two were written
+     * nowhere, so a consumer working to a coverage criterion had no way to tell a border short of an
+     * item from one that owes fewer — which is the whole of what raising the version bought, and it
+     * is worth nothing if a document can be short of one and still read as this version's.
+     */
+    private static void everyPointOfOneBorder(JsonNode points, JsonNode pointDef) {
+        assertNotNull(points, "a border writes its points");
+        List<String> roles = new java.util.ArrayList<>();
+        points.forEach(point -> roles.add(point.get("point").asString()));
+        assertEquals(List.of("on", "off", "in", "out"), roles,
+                "each of the four roles once: " + points);
+        for (JsonNode point : points) {
+            agrees(point, pointDef.get("properties"), pointDef.get("required"));
+            // Owed or not, and the document says which by which keys it carries. A point the rules
+            // refuse that also said a row is at it is the state the Java side cannot build, and a
+            // document that carried both would be the one place it could be written down.
+            boolean owed = !point.has("notOwed");
+            for (String measured : List.of("relation", "against", "hit", "knownWritable", "status")) {
+                assertEquals(owed, point.has(measured),
+                        measured + " is written exactly where a row is owed: " + point);
+            }
         }
     }
 
@@ -262,7 +306,7 @@ class MainExamplesSubcommandTest {
     void aKeyAddedSinceIsNotDemandedOfADocumentWrittenBeforeIt() throws Exception {
         JsonNode schema;
         try (java.io.InputStream in =
-                     Main.class.getResourceAsStream("/souther/adequacy-schema-1.json")) {
+                     Main.class.getResourceAsStream(AdequacyReport.SCHEMA_RESOURCE)) {
             assertNotNull(in);
             schema = JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }

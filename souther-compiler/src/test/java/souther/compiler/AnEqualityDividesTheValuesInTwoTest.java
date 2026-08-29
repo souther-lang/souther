@@ -36,7 +36,6 @@ class AnEqualityDividesTheValuesInTwoTest {
             data Again
 
             behavior verdict : (retries: Int) -> GiveUp | Again
-                constructs GiveUp, Again
             let verdict (retries) = if retries == 3 then GiveUp else Again
 
             example verdict
@@ -52,7 +51,6 @@ class AnEqualityDividesTheValuesInTwoTest {
             data Never
 
             behavior verdict : (retries: Int) -> GiveUp | Again | Never
-                constructs GiveUp, Again, Never
             let verdict (retries) =
                 if retries == 3 then GiveUp
                 else if retries <= 0 then Never
@@ -73,7 +71,6 @@ class AnEqualityDividesTheValuesInTwoTest {
                 invariant hi = value <= 1m
 
             behavior pick : (x: Ratio) -> A | B
-                constructs A, B
 
             let pick (x) = if x.value == 0.5m then A else B
 
@@ -83,7 +80,7 @@ class AnEqualityDividesTheValuesInTwoTest {
 
     private static String reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
@@ -94,7 +91,7 @@ class AnEqualityDividesTheValuesInTwoTest {
         String human = reportOf(MODEL);
 
         assertTrue(human.contains("partition   axes 1"), human);
-        assertFalse(human.contains("not read: retries"), human);
+        assertFalse(notReadAbout(human, "retries"), human);
     }
 
     /** Two rows on either side of the equality cover it, with nothing left owed. */
@@ -102,7 +99,7 @@ class AnEqualityDividesTheValuesInTwoTest {
     void rowsOnEitherSideCoverIt() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("single-axis 2/2"), human);
+        assertTrue(human.contains("equivalence partitions 2/2"), human);
         assertFalse(human.contains("no row is in"), human);
     }
 
@@ -117,7 +114,7 @@ class AnEqualityDividesTheValuesInTwoTest {
     void theValueIsOwedAndItsNeighbourIsNot() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("boundary    1/1"), human);
+        assertTrue(human.contains("border      borders 1   coverage items 2/2   excluded 1"), human);
     }
 
     /**
@@ -137,12 +134,14 @@ class AnEqualityDividesTheValuesInTwoTest {
 
     private static String generatedFor(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, Adequacy.Filling> all = compilation.db()
-                .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
+        Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
-        return GeneratedRows.of("example.ratio", all, false, SourceNameResolver.identity());
+        return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                "example.ratio", false)),
+                Map.of(), SourceNameResolver.identity()).text();
     }
 
     /** An ordering comparison beside it is a distinction the model does draw, and is kept. */
@@ -155,5 +154,19 @@ class AnEqualityDividesTheValuesInTwoTest {
         // the equality's value is one more distinction on top of them rather than instead of them.
         assertTrue(human.contains("x <= 0"), human);
         assertTrue(human.contains("no row is in"), human);
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

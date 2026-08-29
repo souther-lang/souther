@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
@@ -45,37 +45,29 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             data Stage = Prospecting | Qualified | Won
 
             behavior alone : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let alone (r) = if r.cost <= 100000 then Auto else Manual
 
             behavior inAConjunction : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let inAConjunction (r) =
                 if r.cost >= 0 && r.cost <= 100000 then Auto else Manual
 
-            data Deep = { note: String }
-            data Middle = { deep: Deep }
-            data Outer = { middle: Middle }
+            data Deep = { note: String, more: Option<Deep> }
+            data Outer = { deep: Deep }
 
-            behavior tooDeep : (o: Outer) -> Auto | Manual
-                constructs Auto, Manual
-            let tooDeep (o) = if o.middle.deep.note == "x" then Auto else Manual
+            behavior returnsToItself : (o: Outer) -> Auto | Manual
+            let returnsToItself (o) = if o.deep.note == "x" then Auto else Manual
 
             behavior byEquality : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let byEquality (r) = if r.cost == 3 then Auto else Manual
 
             behavior byDateTime : (at: DateTime) -> Auto | Manual
-                constructs Auto, Manual
             let byDateTime (at) =
                 if at < DateTime("2026-01-01T00:00:00") then Auto else Manual
 
             behavior byCase : (s: Qualified) -> Auto | Manual
-                constructs Auto, Manual, Won
             let byCase (s) = if s < Won then Auto else Manual
 
             behavior nothingCompared : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let nothingCompared (r) =
                 match r.kind with
                     | Domestic -> Auto
@@ -89,21 +81,18 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
                 invariant value >= 100
 
             behavior boundedByADate : (c: Cutoff) -> Auto | Manual
-                constructs Auto
             let boundedByADate (c) = Auto
 
             behavior boundedByAnUnreadableEnd : (m: Stepped) -> Auto | Manual
-                constructs Auto
             let boundedByAnUnreadableEnd (m) = Auto
 
             behavior boundedByANumber : (a: Amount) -> Auto | Manual
-                constructs Auto
             let boundedByANumber (a) = Auto
             """;
 
     private static String blockOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
         StringBuilder block = new StringBuilder();
@@ -131,12 +120,12 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     }
 
     /** Every line one behavior's rules drew, which is what says the position was read at all. */
-    private static List<BoundaryAssessment> linesOf(String behavior) {
+    private static List<BorderAssessment> linesOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, List<BoundaryAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
+        Map<String, List<BorderAssessment>> boundaries =
+                Adequacy.boundariesOf(compilation.db(), "example.repro");
         assertNotNull(boundaries, "the model under test compiles");
         return boundaries.get(behavior);
     }
@@ -150,18 +139,20 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     }
 
     /**
-     * A position the walk stopped short of, which is not one it looked at and found undivided.
+     * A position the walk stopped at, which is not one it looked at and found undivided.
      *
-     * <p>{@code Partitions.MAX_DEPTH} is two and the generator composes to eight, so a field three
-     * records down is a value a row can carry and a position nothing measured. Reported as the limit
-     * it is, so that lifting the limit is work somebody can see is owed.
+     * <p>Where the input returns to a declaration already open on the path, what is under the
+     * position is what is under the one above and is not read again. A row still carries a value
+     * there, so this is a position nothing measured rather than a position the model divides no way
+     * — and the two sentences send a reader to different work.
      */
     @Test
-    void aPositionTheWalkStoppedShortOfSaysSo() {
-        String block = blockOf("tooDeep");
+    void aPositionTheWalkStoppedAtSaysSo() {
+        String block = blockOf("returnsToItself");
 
-        assertFalse(block.contains("not derivable: o.middle.deep"), block);
-        assertTrue(block.contains("the walk stopped before reaching what is under it"), block);
+        assertFalse(block.contains("not derivable: o.deep.more@Some"), block);
+        assertTrue(block.contains("the input returns here to a declaration already read above it"),
+                block);
     }
 
     /** An equality divides the position, so it is not one nothing was established about. */
@@ -169,7 +160,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void anEqualityIsRead() {
         String block = blockOf("byEquality");
 
-        assertFalse(block.contains("not read: r.cost"), block);
+        assertFalse(notReadAbout(block, "r.cost"), block);
         assertFalse(block.contains("not derivable: r.cost"), block);
     }
 
@@ -185,7 +176,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aCarrierNoLineIsDrawnOnSaysThat() {
         String block = blockOf("byCase");
 
-        assertTrue(block.contains("not read: s"), block);
+        assertTrue(notReadAbout(block, "s"), block);
         assertTrue(block.contains("no line can be drawn on"), block);
     }
 
@@ -194,7 +185,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aDateTimeIsReadAsADateIs() {
         String block = blockOf("byDateTime");
 
-        assertFalse(block.contains("not read: at"), block);
+        assertFalse(notReadAbout(block, "at"), block);
         assertFalse(block.contains("not derivable: at"), block);
     }
 
@@ -211,8 +202,8 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("boundedByAnUnreadableEnd");
 
         assertFalse(block.contains("not derivable: m"), block);
-        assertTrue(block.contains("not read: m"), block);
-        assertTrue(block.contains("does not read"), block);
+        assertTrue(notReadAbout(block, "m"), block);
+        assertTrue(block.contains("this compiler does not read"), block);
     }
 
     /**
@@ -227,8 +218,8 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("boundedByADate");
 
         assertFalse(block.contains("not derivable: c"), block);
-        assertFalse(block.contains("not read: c"), block);
-        assertTrue(block.contains("boundary    0/0   (1 not measured"), block);
+        assertFalse(notReadAbout(block, "c"), block);
+        assertTrue(block.contains("border      borders 1   coverage items 0/0   excluded 2   (2 not measured"), block);
     }
 
     /**
@@ -242,11 +233,11 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     @Test
     void theRowAtADatesBoundIsWrittenAsADate() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.repro", "boundedByADate", true, SourceNameResolver.identity());
+                compilation, "example.repro", "boundedByADate", true, SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("Cutoff(Date(\"2026-01-01\"))"), block);
     }
@@ -261,11 +252,11 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     @Test
     void theRowAtADateTimesLineIsWrittenAsADateTime() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.repro", "byDateTime", true, SourceNameResolver.identity());
+                compilation, "example.repro", "byDateTime", true, SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("DateTime(\"2026-01-01T00:00:00\")"), block);
         assertFalse(block.contains("refused at construction"), block);
@@ -278,7 +269,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("boundedByANumber");
 
         assertFalse(block.contains("not derivable: a"), block);
-        assertFalse(block.contains("not read: a"), block);
+        assertFalse(notReadAbout(block, "a"), block);
     }
 
     /** The one that is read is not named either way. */
@@ -287,6 +278,20 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("alone");
 
         assertFalse(block.contains("not derivable: r.cost"), block);
-        assertFalse(block.contains("not read: r.cost"), block);
+        assertFalse(notReadAbout(block, "r.cost"), block);
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

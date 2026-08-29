@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 import souther.runtime.Behavior;
 
 import org.junit.jupiter.api.Test;
@@ -59,7 +60,7 @@ class CompileInjectedMultiArgTest {
         // 2+ inputs → standalone abstract class, no Behavior supertype (so it cannot follow an
         // arrow), typed apply(A,B)
         String src = HEAD + "let use (a, b, send) = send(a, b)\n";
-        Map<String, byte[]> classes = Compiler.compile(src);
+        Map<String, ClassFileImage> classes = Compiler.compile(src);
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Class<?> send = loader.loadClass("demo.Send");
         assertTrue(Modifier.isAbstract(send.getModifiers()), "the injected base is abstract");
@@ -83,12 +84,12 @@ class CompileInjectedMultiArgTest {
                 data Rejected = { why: String }
                 behavior send : (a: A, b: B) -> Ok | Rejected
                 """;
-        Map<String, byte[]> classes = Compiler.compile(src);
-        assertTrue(classes.containsKey("demo.SendResult"),
+        Map<String, ClassFileImage> classes = Compiler.compile(src);
+        assertTrue(classes.containsKey(Emitted.result("demo", "send")),
                 "the union output's sealed interface is generated: " + classes.keySet());
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Class<?> send = loader.loadClass("demo.Send");
-        assertEquals(loader.loadClass("demo.SendResult"),
+        assertEquals(loader.loadClass(Emitted.result("demo", "send")),
                 send.getMethod("apply", loader.loadClass("demo.A"), loader.loadClass("demo.B"))
                         .getReturnType());
     }
@@ -101,7 +102,7 @@ class CompileInjectedMultiArgTest {
                 data Rejected = { why: String }
                 behavior now : () -> Ok | Rejected
                 """;
-        assertTrue(Compiler.compile(src).containsKey("demo.NowResult"),
+        assertTrue(Compiler.compile(src).containsKey(Emitted.result("demo", "now")),
                 "a zero-input injected behavior's union output needs the same interface");
     }
 
@@ -127,7 +128,7 @@ class CompileInjectedMultiArgTest {
 
                 behavior pipe = send >-> bump
                 """;
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(src));
         classes.put("demo.SendImpl", Subclasses.compile(classes, "demo.SendImpl", IMPL_SRC));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
@@ -152,7 +153,7 @@ class CompileInjectedMultiArgTest {
                 data R = { z: Int }
                 behavior now : () -> R
                 """;
-        Map<String, byte[]> classes = Compiler.compile(src);
+        Map<String, ClassFileImage> classes = Compiler.compile(src);
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Class<?> now = loader.loadClass("demo.Now");
         assertTrue(Modifier.isAbstract(now.getModifiers()), "the injected base is abstract");
@@ -182,7 +183,7 @@ class CompileInjectedMultiArgTest {
                     public R apply() { return R(41); }
                 }
                 """;
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(src));
         classes.put("demo.NowImpl", Subclasses.compile(classes, "demo.NowImpl", impl));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Object pipe = loader.loadClass("demo.Pipe").getMethod("bind", loader.loadClass("demo.Now"))
@@ -216,7 +217,7 @@ class CompileInjectedMultiArgTest {
                     public R apply() { return R(40); }
                 }
                 """;
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(src));
         classes.put("demo.NowImpl", Subclasses.compile(classes, "demo.NowImpl", impl));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
@@ -278,7 +279,7 @@ class CompileInjectedMultiArgTest {
                     public R apply(A a, B b) { return R(a.x() + b.y()); }
                 }
                 """;
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(src));
         classes.put("demo.SendImpl", Subclasses.compile(classes, "demo.SendImpl", impl));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
@@ -302,7 +303,7 @@ class CompileInjectedMultiArgTest {
     @Test
     void aTwoArgInjectedIsBoundAndCalledWithBothArguments() throws Exception {
         String src = HEAD + "let use (a, b, send) = send(a, b)\n";
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(src));
         classes.put("demo.SendImpl", Subclasses.compile(classes, "demo.SendImpl", IMPL_SRC));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
@@ -348,7 +349,7 @@ class CompileInjectedMultiArgTest {
                     }
                 }
                 """;
-        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(head));
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(head));
         classes.put("demo.ScaleImpl", Subclasses.compile(classes, "demo.ScaleImpl", impl));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 

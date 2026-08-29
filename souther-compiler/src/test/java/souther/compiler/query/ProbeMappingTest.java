@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.codegen.Backend;
@@ -61,9 +62,11 @@ class ProbeMappingTest {
         assertTrue(somewhereElse.sites().size() > 0, "the other compile has arms of its own");
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
-                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
+                () -> Backend.generate(in.lowered(), in.scope(),
+                        in.scope().library().kernelSignatures(), in.typePackages(), in.sigs(),
                         in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
-                        in.dischargeClauses(),
+                        in.compositions(), in.dischargeClauses(), in.shapes(), in.checks(),
+                        in.standingCalls(),
                         Instrumentation.NONE.measuring(somewhereElse)));
 
         assertTrue(stopped.getMessage().contains("no probe was planned"), stopped.getMessage());
@@ -89,15 +92,19 @@ class ProbeMappingTest {
         // The same plan with one more arm in it than any body will emit.
         CoverageSites.Site extra = real.sites().get(0);
         List<CoverageSites.Site> longer = new java.util.ArrayList<>(real.sites());
-        longer.add(new CoverageSites.Site(extra.behavior(), extra.kind(), "phantom", extra.at(),
+        longer.add(new CoverageSites.Site(extra.behavior(), extra.outcome(), extra.at(),
                 real.sites().size(), real.sites().size(), extra.obligation()));
         CoverageSites.Plan overcounted =
-                new CoverageSites.Plan(longer, real.guards(), real.byNode(), real.byComparison());
+                new CoverageSites.Plan(longer, real.guards(), real.byNode(), real.byComparison(),
+                        real.armsByNode(), real.controlByComparison(), real.mayRepeat(),
+                        real.forkByNode(), real.comparisons());
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
-                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
+                () -> Backend.generate(in.lowered(), in.scope(),
+                        in.scope().library().kernelSignatures(), in.typePackages(), in.sigs(),
                         in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
-                        in.dischargeClauses(),
+                        in.compositions(), in.dischargeClauses(), in.shapes(), in.checks(),
+                        in.standingCalls(),
                         Instrumentation.NONE.measuring(overcounted)));
 
         assertTrue(stopped.getMessage().contains("nothing emitted"), stopped.getMessage());
@@ -110,7 +117,7 @@ class ProbeMappingTest {
         Compilation emitting = compiled();
         String module = emitting.modules().get(0);
 
-        assertNotNull(emitting.db().ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value());
+        assertNotNull(emitting.db().ask(new Output.Evaluated(module, ArmObservation.RECORD)).value());
     }
 
     /** The query turns that into an answer with nothing in it. What reads it reports a measurement it
@@ -118,8 +125,8 @@ class ProbeMappingTest {
     @Test
     void theQueryAnswersWithNothingRatherThanWithAHole() {
         Compilation emitting = compiled();
-        Answer<java.util.Map<String, byte[]>> probed =
-                emitting.db().ask(new Output.Evaluated("no.such.module", Output.CoverageMode.ARMS));
+        Answer<souther.compiler.generated.EvaluationArtifact> probed =
+                emitting.db().ask(new Output.Evaluated("no.such.module", ArmObservation.RECORD));
 
         assertTrue(!probed.present() || probed.value() == null);
     }

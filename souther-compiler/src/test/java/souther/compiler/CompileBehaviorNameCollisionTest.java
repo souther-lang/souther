@@ -50,7 +50,7 @@ class CompileBehaviorNameCollisionTest {
                 data Ok = { v: Int }
                 data NotFound
                 data BillResult = { x: Int }
-                behavior bill : (r: Req) -> Ok | NotFound constructs Ok, NotFound
+                behavior bill : (r: Req) -> Ok | NotFound constructs Ok
                 let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
@@ -64,7 +64,7 @@ class CompileBehaviorNameCollisionTest {
                 data Req = { n: Int }
                 data Ok = { v: Int }
                 data NotFound
-                behavior bill : (r: Req) -> Ok | NotFound constructs Ok, NotFound
+                behavior bill : (r: Req) -> Ok | NotFound constructs Ok
                 let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
                 behavior billResult : (r: Req) -> Ok constructs Ok
                 let billResult (r) = Ok { v = r.n }

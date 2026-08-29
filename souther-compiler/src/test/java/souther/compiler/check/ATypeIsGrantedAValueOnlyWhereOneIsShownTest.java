@@ -2,9 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.numeric.Cardinality;
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,6 +12,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every declaration a module reaches, answered together.
@@ -35,8 +36,8 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        Map<TypeName, Cardinality> solution =
-                TypeCardinality.solve(compilation.module("demo"), compilation.symbols("demo")).all();
+        Map<TypeSymbol, Cardinality> solution =
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), Scopes.derived(compilation.db(), "demo").value(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES).all();
         Map<String, Cardinality> byName = new LinkedHashMap<>();
         solution.forEach((name, each) -> byName.put(name.name(), each));
         return byName;
@@ -45,7 +46,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
     private static void hasNoValue(String source, String... names) {
         Map<String, Cardinality> solved = solved(source);
         for (String each : names) {
-            assertEquals(Cardinality.NO_VALUE, solved.get(each), each + " has no value");
+            assertTrue(solved.get(each).none(), each + " has no value");
         }
     }
 

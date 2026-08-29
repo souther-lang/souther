@@ -1,9 +1,9 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +33,7 @@ public final class Lower {
      * the declarations, the lowered one for the bodies — so they must be the same settling, which is
      * why they are handed back together rather than settled again downstream.
      */
-    public record Lowered(Ast.Module settled, Ast.Module lowered) {}
+    public record Lowered(Hir.Module settled, Hir.Module lowered) {}
 
     /**
      * {@code module} with every helper parameter the author left unwritten carrying the type its body
@@ -42,9 +42,9 @@ public final class Lower {
      * <p>Settling comes before the expansion because inlining is what carries a parameter's type onto
      * the binding a call becomes (issue #178): a type settled afterwards would never reach it.
      */
-    public static Ast.Module settle(Ast.Module module, Symbols symbols,
-                                    Map<String, ReqSig> reqSigs) {
-        return HelperParams.settle(module, symbols, reqSigs);
+    public static Hir.Module settle(Prepared prepared, Symbols symbols,
+                                    Map<ValueName.Behavior, ReqSig> reqSigs) {
+        return HelperParams.settle(prepared.module(), symbols, reqSigs);
     }
 
     /**
@@ -56,7 +56,7 @@ public final class Lower {
      * parameter, not a same-named user helper), which is what {@code recursive} says. A helper that is
      * neither is fully inlined at its call sites and never emitted, so nothing asks for it here.
      */
-    public static Ast.FnDef body(Ast.FnDef fn, HelperInliner inliner, boolean recursive) {
+    public static Expansion<Hir.FnDef> body(Hir.FnDef fn, HelperInliner inliner, boolean recursive) {
         return body(fn, inliner, recursive, Set.of());
     }
 
@@ -65,20 +65,23 @@ public final class Lower {
      * on} — the names that arrive as the {@code let}'s trailing parameters (spec §depends-on). A
      * helper has none, and neither has a recursive helper's own body.
      */
-    public static Ast.FnDef body(Ast.FnDef fn, HelperInliner inliner, boolean recursive,
-                                 Set<String> dependencies) {
-        Ast.Expr expanded = recursive
+    public static Expansion<Hir.FnDef> body(Hir.FnDef fn, HelperInliner inliner, boolean recursive,
+                                            Set<String> dependencies) {
+        Hir.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
-        return fn.withBody(new Ast.FnBody.Written(desugar(expanded)));
+        // What this expansion could not remove travels with what it produced. The inliner was made
+        // for this body, so what it left standing is this body's and nothing else's.
+        return new Expansion<>(fn.withBody(new Hir.FnBody.Written(desugar(expanded))),
+                inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
     }
 
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A
      * name in the body is one of them only when it was answered with that binding — a binding in force
      * wins over the declaration it shadows (spec §fn-rules), so the spelling alone does not say. */
-    private static Set<BindingId> dependencies(Ast.FnDef fn, Set<String> dependencies) {
+    private static Set<BindingId> dependencies(Hir.FnDef fn, Set<String> dependencies) {
         Set<BindingId> bindings = new HashSet<>();
-        for (Ast.FnParam p : fn.params()) {
+        for (Hir.FnParam p : fn.params()) {
             if (dependencies.contains(p.name())) {
                 bindings.add(p.binder().id());
             }
@@ -86,37 +89,32 @@ public final class Lower {
         return bindings;
     }
 
-    /** {@code module} with {@code fns} as its declarations, {@code takenOn} as what it emits without
-     * having declared, and every data invariant desugared — the tree the backend emits from. The two
-     * stay apart down here: both become methods, and only the first is this module's to answer for. */
-    public static Ast.Module lowered(Ast.Module module, List<Ast.FnDef> fns,
-                                     List<Ast.FnDef> takenOn) {
-        List<Ast.Def> defs = new ArrayList<>();
-        for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                defs.add(new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
-                        Ast.mapClauses(d.invariants(), Lower::desugar),
-                        d.decoder(), d.encoder(), d.pos()));
-            } else {
-                defs.add(def);
-            }
-        }
-        return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                module.imports(), defs, module.behaviors(), fns, takenOn,
-                module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
+    /**
+     * {@code module} with {@code fns} as its declarations and {@code takenOn} as what it emits
+     * without having declared — the tree the backend emits from. The two stay apart down here: both
+     * become methods, and only the first is this module's to answer for.
+     *
+     * <p>The declarations are carried across untouched. This used to desugar every data's invariant
+     * as well, for a backend that elaborated the clause on its way to emitting it; the clause a
+     * construction runs is the checker's now (issue #1080), and a tree of clauses nothing runs is a
+     * second executable-looking form for the next reader to reach for.
+     */
+    public static Hir.Module lowered(Hir.Module module, List<Hir.FnDef> fns,
+                                     List<Hir.FnDef> takenOn) {
+        return module.withFns(fns).withTakenOn(takenOn);
     }
 
     /** Desugars one expression the way a body is desugared, for the paths that hold a single
      * expression rather than a module: the codec emitters, whose decoders and encoders are still
      * AST-level, run their expressions through this before they are typed and emitted. */
-    public static Ast.Expr desugarExpr(Ast.Expr e) {
+    public static Hir.Expr desugarExpr(Hir.Expr e) {
         return desugar(e);
     }
 
     /** Post-order rewrite: desugar the children first, then the node itself if it is a comprehension. */
-    private static Ast.Expr desugar(Ast.Expr e) {
-        Ast.Expr mapped = Ast.mapChildren(e, Lower::desugar, s -> s);
-        return mapped instanceof Ast.ListComp comp ? listCompToIf(comp) : mapped;
+    private static Hir.Expr desugar(Hir.Expr e) {
+        Hir.Expr mapped = Hir.mapChildren(e, Lower::desugar, s -> s);
+        return mapped instanceof Hir.ListComp comp ? listCompToIf(comp) : mapped;
     }
 
     /**
@@ -126,15 +124,15 @@ public final class Lower {
      * earlier one is false — {@code &&} evaluates both sides (spec §stdlib-bool), which would run (and could
      * abort in) a guard the original comprehension short-circuited past.
      */
-    private static Ast.Expr listCompToIf(Ast.ListComp comp) {
+    private static Hir.Expr listCompToIf(Hir.ListComp comp) {
         // The `if` stands where the comprehension was written; the two lists are this lowering's
         // own — no run of characters in the file spells either of them.
-        Ast.Expr result = new Ast.ListLit(List.of(comp.element()), comp.pos(), null);
-        List<Ast.Expr> guards = comp.guards();
+        Hir.Expr result = new Hir.ListLit(List.of(comp.element()), comp.pos(), null);
+        List<Hir.Expr> guards = comp.guards();
         for (int i = guards.size() - 1; i >= 0; i--) {
             // The fork is derived from the comprehension rather than minted here, so a
             // comprehension a helper holds answers the same in every body that expanded it.
-            result = new Ast.If(guards.get(i), result, new Ast.ListLit(List.of(), comp.pos(), null),
+            result = new Hir.If(guards.get(i), result, new Hir.ListLit(List.of(), comp.pos(), null),
                     comp.origin().lowered(i), comp.pos(), comp.region());
         }
         return result;

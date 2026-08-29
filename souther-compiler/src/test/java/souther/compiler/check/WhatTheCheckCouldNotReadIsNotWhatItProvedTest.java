@@ -131,7 +131,7 @@ class WhatTheCheckCouldNotReadIsNotWhatItProvedTest {
                 data Pos = Int
                     invariant positive = value >= 1
                 data TooSmall
-                behavior f : (n: Int) -> Pos | TooSmall constructs Pos, TooSmall
+                behavior f : (n: Int) -> Pos | TooSmall constructs Pos
                 let f (n) = {
                     guard Int.max(0, n) >= 1 else TooSmall
                     Pos(Int.max(0, n))

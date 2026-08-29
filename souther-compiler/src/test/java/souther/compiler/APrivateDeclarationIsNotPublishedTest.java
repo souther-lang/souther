@@ -1,7 +1,7 @@
 package souther.compiler;
 
-import souther.compiler.check.Prelude;
 import souther.compiler.diag.CompileException;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -102,11 +102,12 @@ class APrivateDeclarationIsNotPublishedTest {
 
     @Test
     void thePublishedSurfaceLeavesThePrivateDeclarationsOut() {
-        assertTrue(Prelude.entries().containsKey("List.foldFrom"));
-        assertTrue(Prelude.isPrivateMember("List.foldFrom"));
-        assertFalse(Prelude.published().contains("List.foldFrom"));
-        assertTrue(Prelude.published().contains("List.fold"));
-        assertEquals(Prelude.entries().size() - 1 + 1,   // one private out, the `List.fold` sugar in
-                Prelude.published().size());
+        ValueName.Stdlib.Operation foldFrom = ValueName.Stdlib.operation("List", "foldFrom");
+        assertTrue(DefaultStdlib.get().entries().containsKey(foldFrom));
+        assertTrue(DefaultStdlib.get().isPrivateMember(foldFrom));
+        assertFalse(DefaultStdlib.get().published().contains("List.foldFrom"));
+        assertTrue(DefaultStdlib.get().published().contains("List.fold"));
+        assertEquals(DefaultStdlib.get().entries().size() - 1 + 1,   // one private out, the `List.fold` sugar in
+                DefaultStdlib.get().published().size());
     }
 }

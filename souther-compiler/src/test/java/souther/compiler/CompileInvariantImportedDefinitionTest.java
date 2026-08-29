@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -187,8 +188,8 @@ class CompileInvariantImportedDefinitionTest {
      * its class path — and reading it there is what makes the name resolve. */
     @Test
     void anImportedValueInAnInvariantCrossesAProjectBoundary() throws Exception {
-        Map<String, byte[]> upstream = Compiler.compile(LIMITS);
-        ModulePath path = upstream::get;
+        Map<String, ClassFileImage> upstream = Compiler.compile(LIMITS);
+        ModulePath path = ModulePath.of(upstream);
 
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
                 module app.ids exposing ( V )

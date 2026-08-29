@@ -2,9 +2,11 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -26,9 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class UnsupportedInformationNeverShrinksTheModelSetTest {
 
-    private static Ast.Data data(Compilation compilation, String name) {
-        for (Ast.Def def : compilation.module("demo").defs()) {
-            if (def instanceof Ast.Data found && found.name().equals(name)) {
+    private static Hir.Data data(Compilation compilation, String name) {
+        for (Hir.Def def : compilation.module("demo").defs().stream().map(Derived.Def::read).toList()) {
+            if (def instanceof Hir.Data found && found.name().equals(name)) {
                 return found;
             }
         }
@@ -38,15 +40,15 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
     private static FieldDomains domainsOf(String source, String name) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        Symbols symbols = compilation.symbols("demo");
-        return FieldDomains.of(symbols.own(name), data(compilation, name), symbols);
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
+        return FieldDomains.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)), data(compilation, name), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static OccurrenceCounts countsOf(String source, String name) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        Symbols symbols = compilation.symbols("demo");
-        return OccurrenceCounts.of(symbols.own(name), data(compilation, name), symbols);
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
+        return OccurrenceCounts.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)), data(compilation, name), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     /** Two clauses that cannot both hold, both of them read. */

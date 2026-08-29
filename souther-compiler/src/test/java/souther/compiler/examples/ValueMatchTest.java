@@ -2,10 +2,13 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -29,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class ValueMatchTest {
 
     private static ValueMatch match() {
-        Symbols symbols = Symbols.none();
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
         NeutralForm neutral = new NeutralForm(symbols);
         return new ValueMatch(neutral, new ValueRendering(neutral));
     }
@@ -183,7 +186,7 @@ class ValueMatchTest {
     @Test
     void aValueUnderANameIsNotTheBaseItWraps() {
         // The whole of #653, at the level the comparison works at: one representation, two types.
-        TypeName amount = new TypeName("demo", "AmountN");
+        TypeSymbol.AtModule amount = TypeSymbols.declared(new TypeKey("demo", "AmountN"));
         ObservedValue wrapped = new ObservedValue.Constructed(amount,
                 java.util.Map.of("value", n(1)));
         ValueMatch.Mismatch m = differs(said(n(1)), wrapped, Type.ref(amount));
@@ -192,9 +195,9 @@ class ValueMatchTest {
 
     @Test
     void twoNamesOverOneBaseAreTwoTypes() {
-        Asserted one = new Asserted.Built(new TypeName("demo", "AmountN"),
+        Asserted one = new Asserted.Built(TypeSymbols.declared(new TypeKey("demo", "AmountN")),
                 java.util.Map.of("value", said(n(1))));
-        ObservedValue other = new ObservedValue.Constructed(new TypeName("demo", "OtherAmountN"),
+        ObservedValue other = new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("demo", "OtherAmountN")),
                 java.util.Map.of("value", n(1)));
         assertEquals(ValueMatch.Reason.TYPE, differs(one, other, null).reason());
     }
@@ -240,7 +243,7 @@ class ValueMatchTest {
         for (int i = 0; i < FixtureReader.WHOLE.maxDepth() + 2; i++) {
             deep = List.of(deep);
         }
-        Symbols symbols = Symbols.none();
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
         ObservedValue observed = ObservedValues.of(deep, symbols, new NeutralForm(symbols),
                 FixtureReader.WHOLE);
         ObservedValue at = observed;

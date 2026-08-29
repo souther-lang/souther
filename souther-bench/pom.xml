@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc4</version>
+        <version>0.1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-bench</artifactId>
@@ -37,9 +37,42 @@
             <groupId>net.unit8.raoh</groupId>
             <artifactId>raoh</artifactId>
         </dependency>
+        <!-- Called from here: the report measurement asks the formatter what a source has against
+             its canonical form, which is a cost this module times like any other. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-fmt</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Not called from here. This module is the last the reactor builds, and its tests read
+             every module's compiled classes: to check that a generated class's name is assembled in
+             one place only, and that nothing outside the reading makes or takes apart a reachability
+             answer. Both walk the modules the root pom names and refuse a module they cannot read,
+             so every one of them is named here — saying so as dependencies is what makes `-am`
+             build them, and what makes the checks cover what they claim to whichever way the tree
+             was built. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-build-driver</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-lsp</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-cli</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

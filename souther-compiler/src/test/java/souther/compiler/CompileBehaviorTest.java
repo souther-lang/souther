@@ -36,7 +36,7 @@ class CompileBehaviorTest {
 
         Object member = Codecs.decoded(loader, "demo.Member", Map.of("id", "m-1", "name", "bob"));
 
-        Object behavior = loader.loadClass("demo.ToResponse" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "toResponse").getConstructor().newInstance();
         Object response = Codecs.apply(behavior, member);
 
         Map<?, ?> encoded = (Map<?, ?>) Codecs.encode(loader, "demo.Response", response);
@@ -50,10 +50,11 @@ class CompileBehaviorTest {
         String src = """
                 module demo
                 data Response = { id: String }
-                data Empty
-                behavior make : (x: String) -> Response | Empty constructs Empty
+                data Note = { s: String }
+                behavior make : (x: String) -> Response | Note
+                    constructs Note
 
-                let make (x) = if x == "" then Empty else Response { id = x }
+                let make (x) = if x == "" then Note { s = x } else Response { id = x }
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E1002", e.code());

@@ -1,6 +1,9 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.semantics.Combinator;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -25,24 +28,18 @@ import java.util.Set;
  *
  * <p>Nothing here is written down. The library's own signature already says which argument takes a
  * function and which parameter of that function has the type of what a container holds, so the rules
- * are read off {@link Prelude}: an operation the library gains is answered for by being declared. A
+ * are read off {@link Stdlib}: an operation the library gains is answered for by being declared. A
  * signature this cannot read off — two function arguments, or two closure parameters that could each
  * be the element — raises rather than answering half, because a combinator nobody registered is a
  * check that quietly stops crediting an element.
  *
  * <p>Each reader asks under the name it holds. The totality check reads the tree an author wrote,
  * where {@code List.fold} still spells itself; the discharge check reads one where the rewrite to
- * {@code List.foldFrom} has happened. So a {@linkplain Prelude#rewrites() sugared} name is answered
+ * {@code List.foldFrom} has happened. So a {@linkplain Stdlib#rewrites() sugared} name is answered
  * with what it rewrites to, over the arguments the rewrite keeps in place — and the discharge side
  * never asks, because {@link Preserved} is built from declarations and a sugar has none.
  */
 final class Combinators {
-
-    /** A combinator's closure, the parameter its element arrives on, and the container it comes
-     * from — all as argument positions of the call. Read by the rules that resolve a call
-     * ({@link #handedTo}, {@link DischargeRules.Reads}) and by nothing else: a position is only
-     * meaningful beside the call it is a position in. */
-    record Combinator(int closureArg, int elementParam, int containerArg) {}
 
     /** What {@code operation} hands its closure, or null where it hands one nothing a container
      * holds — including where it applies no closure at all, and where the name applied is not a
@@ -53,10 +50,10 @@ final class Combinators {
 
     /** What a call hands its closure: the argument that takes the function, the block that argument
      * is, the parameter the element arrives on, and the container it comes from. */
-    record Handed(Core closure, Core.Block step, Ast.Binder element, Core container) {}
+    record Handed(Core closure, Core.Block step, Core.Binder element, Core container) {}
 
     /** The same, off the tree an author wrote, where a closure is the block as written. */
-    record Written(Ast.Block step, Ast.Binder element, Ast.Expr container) {}
+    record Written(Hir.Block step, Hir.Binder element, Hir.Expr container) {}
 
     /**
      * What {@code call} hands its closure, or null where it hands one nothing a container holds — or
@@ -95,11 +92,14 @@ final class Combinators {
      * built only where the signature it was applied to accepted the arguments and typed the block it
      * was handed, so one that exists has both.
      */
-    static Written handedTo(Ast.Apply call) {
-        Combinator rule = of(call.denotes());
+    static Written handedTo(Hir.Apply call) {
+        // A call applying a name nothing declares hands its closure to no operation this table
+        // has: there is no declaration to find a rule under, and what is wrong with it is reported
+        // where the name is written.
+        Combinator rule = call.answered() == null ? null : of(call.answered().denotes());
         if (rule == null || rule.closureArg() >= call.args().size()
                 || rule.containerArg() >= call.args().size()
-                || !(call.args().get(rule.closureArg()) instanceof Ast.Block step)) {
+                || !(call.args().get(rule.closureArg()) instanceof Hir.Block step)) {
             return null;
         }
         if (rule.elementParam() >= step.params().size()) {
@@ -126,28 +126,38 @@ final class Combinators {
         return Derived.RULES.keySet();
     }
 
-    /** The operations there is a rule for, for the tests that hold them to firing. */
-    static Set<String> names() {
-        Set<String> names = new LinkedHashSet<>();
-        Derived.RULES.keySet().forEach(operation -> names.add(operation.toString()));
-        return names;
+    /** The operations there is a rule for, for the tests that hold them to firing. Handed over as
+     *  the operations, so a reader holding one asks the library with it rather than with a spelling
+     *  this rendered on the way out. */
+    static Set<ValueName.Stdlib.Operation> named() {
+        Set<ValueName.Stdlib.Operation> named = new LinkedHashSet<>();
+        Derived.RULES.keySet().forEach(operation -> {
+            if (operation instanceof ValueName.Stdlib.Operation library) {
+                named.add(library);
+            }
+        });
+        return named;
     }
 
     /** Read off the library on the first ask. The library is the same library for every module
      * compiled, and reading it is answering the question for all of them at once. */
     private static final class Derived {
-        private static final Map<ValueName, Combinator> RULES = read();
+        private static final Map<ValueName, Combinator> RULES =
+                read(DefaultStdlib.get());
     }
 
-    private static Map<ValueName, Combinator> read() {
+    /* A pure function of the library, so the holder above is the only thing here that reaches for
+     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     * may not. */
+    private static Map<ValueName, Combinator> read(Stdlib stdlib) {
         Map<ValueName, Combinator> rules = new LinkedHashMap<>();
-        Prelude.entries().forEach((qualified, entry) -> {
-            Combinator rule = ruleFor(qualified, entry.signature().params());
+        stdlib.entries().forEach((operation, entry) -> {
+            Combinator rule = ruleFor(operation, entry.signature().params());
             if (rule != null) {
-                rules.put(Prelude.operation(qualified), rule);
+                rules.put(operation, rule);
             }
         });
-        Prelude.rewrites().forEach((sugar, rewrite) -> {
+        stdlib.rewrites().forEach((sugar, rewrite) -> {
             Combinator target = rules.get(rewrite.target());
             if (target == null) {
                 return;   // what it becomes hands its closure nothing, so neither does it
@@ -157,7 +167,7 @@ final class Combinators {
                         + ", whose closure or container is not among the arguments the rewrite keeps"
                         + " in place — what it hands its closure cannot be said of the sugar");
             }
-            rules.put(Prelude.operation(sugar), target);
+            rules.put(sugar, target);
         });
         return Collections.unmodifiableMap(rules);
     }
@@ -170,7 +180,7 @@ final class Combinators {
      * "hands its closure the contents of" means, said in types. An operation whose signature admits
      * more than one reading of either is one this cannot answer for.
      */
-    private static Combinator ruleFor(String qualified, List<Type> params) {
+    private static Combinator ruleFor(ValueName.Stdlib.Operation qualified, List<Type> params) {
         int closureArg = -1;
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf) {

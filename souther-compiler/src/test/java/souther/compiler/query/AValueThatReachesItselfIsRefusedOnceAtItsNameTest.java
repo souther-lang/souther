@@ -1,5 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Primary;
+
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.Diagnostic;
@@ -64,7 +68,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
     private static List<Diagnostic> diagnose(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
-        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get("a.sou");
+        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get(new SourceId("a.sou"));
     }
 
     private static Diagnostic cycleIn(List<Diagnostic> found) {
@@ -90,7 +94,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
 
         assertEquals(alone.said(), beside.said());
         assertEquals(List.copyOf(alone.values().values()), List.copyOf(beside.values().values()));
-        assertEquals(alone.region(), beside.region(),
+        assertEquals(((Primary.InSource) alone.primary()).place().region(), ((Primary.InSource) beside.primary()).place().region(),
                 "the refusal is about `step`, and where `step` is written did not move");
     }
 
@@ -121,7 +125,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
      */
     @Test
     void theRefusalUnderlinesTheNameAndNotTheKeywordInFrontOfIt() {
-        Region region = cycleIn(diagnose(CYCLE)).region();
+        Region region = ((Primary.InSource) cycleIn(diagnose(CYCLE)).primary()).place().region();
 
         assertEquals(region.start().line(), region.end().line(), "a name is one line's worth");
         assertEquals("let step = step".indexOf("step") + 1, region.start().column(),

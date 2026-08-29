@@ -1,14 +1,15 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.check.ReadingPolicy;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeReachName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -97,14 +98,15 @@ final class Witnesses {
      * proposal for a floor and are not the count asked for here, and offering them would put a row of
      * two under a line drawn at three.
      */
-    static Sized ofSize(Type carrier, int size, Symbols symbols, Set<TypeName> expanding) {
+    static Sized ofSize(Type carrier, int size, Symbols symbols, ReadingPolicy policy,
+                        Set<TypeSymbol> expanding) {
         if (size == 0) {
             return Sized.all(carrier == Type.STRING ? List.of(FixtureTemplate.string(""))
                     : carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
                             || carrier instanceof Type.MapOf
                                     ? List.of(FixtureTemplate.collection(List.of())) : List.of());
         }
-        Built built = sized(carrier, size, symbols, expanding);
+        Built built = sized(carrier, size, symbols, policy, expanding);
         return new Sized(built.exactly(size), built.heldBack());
     }
 
@@ -117,8 +119,9 @@ final class Witnesses {
      * silence would be deciding again what this is here to answer.
      */
     static Generator.UnresolvedCombination.Reason reasonForSize(Type carrier, int size,
+                                                                ReadingPolicy policy,
                                                                 Symbols symbols) {
-        Sized made = ofSize(carrier, size, symbols, Set.of());
+        Sized made = ofSize(carrier, size, symbols, policy, Set.of());
         if (!made.values().isEmpty()) {
             return null;
         }
@@ -147,8 +150,9 @@ final class Witnesses {
      * in terms of the other, so a cheaper value for a floor cannot move a line.
      */
     static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
-                                         Set<TypeName> expanding) {
-        return least <= 0 ? List.of() : sized(carrier, least, symbols, expanding).all();
+                                         ReadingPolicy policy,
+                                         Set<TypeSymbol> expanding) {
+        return least <= 0 ? List.of() : sized(carrier, least, symbols, policy, expanding).all();
     }
 
     /**
@@ -162,8 +166,10 @@ final class Witnesses {
      * floor nothing was built for is a position offering what it ordinarily offers, and naming a
      * reason there would put "nothing composes one" under every position that has no floor at all.
      */
-    static Generator.UnresolvedCombination.Reason heldBackFor(Type carrier, int least, Symbols symbols) {
-        return least <= 0 ? null : sized(carrier, least, symbols, Set.of()).heldBack();
+    static Generator.UnresolvedCombination.Reason heldBackFor(Type carrier, int least,
+                                                              Symbols symbols,
+                                                              ReadingPolicy policy) {
+        return least <= 0 ? null : sized(carrier, least, symbols, policy, Set.of()).heldBack();
     }
 
     /**
@@ -200,7 +206,8 @@ final class Witnesses {
         }
     }
 
-    private static Built sized(Type carrier, int least, Symbols symbols, Set<TypeName> expanding) {
+    private static Built sized(Type carrier, int least, Symbols symbols, ReadingPolicy policy,
+                               Set<TypeSymbol> expanding) {
         if (carrier == null || least <= 0) {
             return Built.NONE;
         }
@@ -223,7 +230,7 @@ final class Witnesses {
         // A list may hold the same element as many times as it needs to.
         if (carrier instanceof Type.ListOf list) {
             List<Made> out = new ArrayList<>();
-            for (FixtureTemplate each : proposalsFor(list.element(), symbols, expanding)) {
+            for (FixtureTemplate each : proposalsFor(list.element(), symbols, policy, expanding)) {
                 List<FixtureTemplate> elements = new ArrayList<>();
                 for (int i = 0; i < least; i++) {
                     elements.add(each);
@@ -236,16 +243,16 @@ final class Witnesses {
         // entries no two of which share a key. The values under a map's keys are free to repeat.
         if (carrier instanceof Type.SetOf set) {
             List<Made> out = new ArrayList<>();
-            for (FixtureTemplate seed : proposalsFor(set.element(), symbols, expanding)) {
+            for (FixtureTemplate seed : proposalsFor(set.element(), symbols, policy, expanding)) {
                 List<FixtureTemplate> elements =
-                        distinctFrom(seed, set.element(), least, symbols, expanding);
+                        distinctFrom(seed, set.element(), least, policy, symbols, expanding);
                 out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
             }
             return Built.of(out);
         }
         Type.MapOf map = (Type.MapOf) carrier;
-        List<FixtureTemplate> keys = proposalsFor(map.key(), symbols, expanding);
-        List<FixtureTemplate> values = proposalsFor(map.value(), symbols, expanding);
+        List<FixtureTemplate> keys = proposalsFor(map.key(), symbols, policy, expanding);
+        List<FixtureTemplate> values = proposalsFor(map.value(), symbols, policy, expanding);
         if (keys.isEmpty() || values.isEmpty()) {
             return Built.NONE;
         }
@@ -262,7 +269,7 @@ final class Witnesses {
                 FixtureTemplate value = values.get(apart - i);
                 List<FixtureTemplate> entries = new ArrayList<>();
                 for (FixtureTemplate key
-                        : distinctFrom(keys.get(i), map.key(), least, symbols, expanding)) {
+                        : distinctFrom(keys.get(i), map.key(), least, policy, symbols, expanding)) {
                     entries.add(FixtureTemplate.entry(key, value));
                 }
                 out.add(new Made(FixtureTemplate.collection(entries), entries.size()));
@@ -282,8 +289,35 @@ final class Witnesses {
      * is added last of those, which is exactly the one such a budget takes away.
      */
     private static List<FixtureTemplate> proposalsFor(Type type, Symbols symbols,
-                                                      Set<TypeName> expanding) {
-        return Partitions.representativesOf(type, symbols, null, expanding);
+                                                      ReadingPolicy policy,
+                                                      Set<TypeSymbol> expanding) {
+        return Partitions.representativesOf(type, symbols, policy, null, expanding);
+    }
+
+    /**
+     * A collection of {@code carrier} holding {@code chosen} and counting at least {@code least}, or
+     * null where none was built.
+     *
+     * <p>For a row being built around one element. What the rest are is not what was asked for, and
+     * what they may be is: a list may hold the same value again and a set may not, and a caller
+     * padding one by hand would have to know which — the thing this reader is for.
+     */
+    static FixtureTemplate holdingAlso(souther.compiler.check.Shape.Sequence carrier,
+                                       FixtureTemplate chosen, int least,
+                                       Symbols symbols, ReadingPolicy policy) {
+        int want = Math.max(1, least);
+        if (carrier.kind() == souther.compiler.check.Shape.Sequence.Kind.LIST) {
+            List<FixtureTemplate> elements = new ArrayList<>();
+            while (elements.size() < want) {
+                elements.add(chosen);
+            }
+            return FixtureTemplate.collection(elements);
+        }
+        List<FixtureTemplate> elements =
+                distinctFrom(chosen, carrier.element(), want, policy, symbols, Set.of());
+        // Fewer than asked for is a type with too few values, which is a set the rules want and
+        // nothing can build — said as nothing built rather than as a set of the wrong size.
+        return elements.size() < want ? null : FixtureTemplate.collection(elements);
     }
 
     /**
@@ -294,13 +328,14 @@ final class Witnesses {
      * answers the way it answers any other.
      */
     private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed, Type type, int least,
-                                                      Symbols symbols, Set<TypeName> expanding) {
+                                                      ReadingPolicy policy,
+                                                      Symbols symbols, Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         written.add(seed.text());
         out.add(seed);
         // One more than needed, since the seed is likely to be among them.
-        for (FixtureTemplate each : distinctValuesOf(type, least + 1, symbols, expanding)) {
+        for (FixtureTemplate each : distinctValuesOf(type, least + 1, symbols, policy, expanding)) {
             if (out.size() >= least) {
                 break;
             }
@@ -327,10 +362,11 @@ final class Witnesses {
      * and is all there is where the carrier neither divides nor steps.
      */
     private static List<FixtureTemplate> distinctValuesOf(Type type, int many, Symbols symbols,
-                                                          Set<TypeName> expanding) {
+                                                          ReadingPolicy policy,
+                                                          Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : dividesInto(type, symbols, expanding)) {
+        for (FixtureTemplate each : dividesInto(type, symbols, policy, expanding)) {
             if (out.size() >= many) {
                 return List.copyOf(out);
             }
@@ -347,7 +383,7 @@ final class Witnesses {
                 out.add(each);
             }
         }
-        for (FixtureTemplate each : Partitions.representativesOf(type, symbols, null, expanding)) {
+        for (FixtureTemplate each : Partitions.representativesOf(type, symbols, policy, null, expanding)) {
             if (out.size() >= many) {
                 break;
             }
@@ -369,10 +405,11 @@ final class Witnesses {
      * goes through the names now and hands the values back written under them.
      */
     private static List<FixtureTemplate> dividesInto(Type type, Symbols symbols,
-                                                     Set<TypeName> expanding) {
+                                                     ReadingPolicy policy,
+                                                     Set<TypeSymbol> expanding) {
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PartitionClass each : PartitionClasses.of(type, symbols)) {
-            out.addAll(Partitions.standingFor(each.representatives(), symbols, expanding));
+        for (PartitionClass each : PartitionClasses.of(type, symbols, policy)) {
+            out.addAll(Partitions.standingFor(each.representatives(), symbols, policy, expanding));
         }
         return out;
     }
@@ -397,19 +434,26 @@ final class Witnesses {
             return null;
         }
         return wrapped(type, FixtureTemplate.on(
-                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at), symbols);
+                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at, symbols.scope()::reach), symbols);
     }
 
-    /** The value under every name the position wears, which is how it is written where the position
-     * declares a newtype rather than what the newtype carries. */
+    /**
+     * The value under every name the position wears, which is how it is written where the position
+     * declares a newtype rather than what the newtype carries.
+     *
+     * <p>Null where {@code bare} is, and where a name the position wears is one this module cannot
+     * write: a value goes under the names as it is written, so a name there is nothing here reaches
+     * leaves no way of writing the value at all.
+     */
     static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
-                || !data.newtype()) {
+        if (bare == null || !(type instanceof Type.Ref ref)
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || !data.newtype()) {
             return bare;
         }
-        TypeName name = ref.name();
-        return FixtureTemplate.newtype(name,
-                wrapped(TypeOps.newtypeInner(name, symbols), bare, symbols));
+        TypeSymbol name = ref.name();
+        FixtureTemplate inner = wrapped(TypeOps.newtypeInner(name, symbols), bare, symbols);
+        return inner != null && symbols.scope().reach(name) instanceof TypeReachName.Written written
+                ? FixtureTemplate.newtype(written, inner) : null;
     }
 
     private Witnesses() {}

@@ -7,7 +7,14 @@ line is drawn on is a numeric *term*, not a position — the content of a locati
 one. Revised again for #622: which values a term's line can be drawn on is one table, and a rule
 written over values it does not hold is reported as unread rather than dropped. Revised again for
 #649: what decides whether a clause draws a line is which terms the clause reaches, not which
-declaration it is written on.
+declaration it is written on. Revised again for #868: a rule left unread is a rule about where the
+values stop, and is answered per rule rather than per position. Revised again for #870: a border is
+what owes the four coverage items of domain testing, and a point it owes none of says which of three
+things settled that. Revised again for #907: whether a range is the whole of what the rules leave a
+position is settled by a certificate, and having none of them is not the range being wider. Revised
+again for #1029: whether a comparison divides one position, relates several, or says nothing is read
+from one canonical comparison, and the operands as written do not establish its subject on their
+own.
 
 ## Context
 
@@ -35,7 +42,8 @@ Only what the model states. A position the model draws no line through has **no 
 report names it as *not derivable* rather than dividing it.
 
 A type states classes: `Bool` is two, an optional is two, a sum is its leaf cases. A record is not a
-class — it is taken apart field by field, two levels deep. A threshold states where one class ends:
+class — it is taken apart field by field, down every path that opens no declaration twice. A
+threshold states where one class ends:
 an invariant bounds what can exist, and a `guard`'s comparison against a constant divides what a row
 can write. Thresholds at one position merge into one partition and are intersected with what the
 position admits.
@@ -129,6 +137,37 @@ can refuse to be part of one. A pattern on a label narrows no minute and still l
 beside it with edges nothing has shown reachable — the two labels a record cannot both carry are as
 good a reason for that as a rule about the minutes themselves.
 
+Whether the rules were all read is one of three things an edge stands on, and it had been standing
+in for all three. A rule that never reached the reading is one of them; whether an end could be
+written down as a number is another; and the third is whether the range the reading did produce is
+the whole of what the rules leave that position. The third is the one this got wrong. It was decided
+by asking, of each rule, whether the range alone entailed it — which establishes it soundly, since
+ranges entailing every rule are the feasible set, and is not what being the whole of it means. A
+range can be exactly what the rules leave a position while stating no rule that relates it to
+another.
+
+So it is a certificate: something established it, and what did the establishing is carried. Having
+none is that nothing established it, which is the only thing a reader may act on. An edge nothing
+licenses is an edge nothing licenses, and it is never a claim that the range is wider than the model
+— the same distinction ADR-0091 draws about a combination nothing has settled, and the same reason.
+
+The certificate this compiler constructs is the ranges together with the relations its closure holds
+between them. Which is what the inference already used and did not say: a difference of two positions
+is held exactly by the closed relations, so `a - b <= 2` beside two positions running 0 to 7 comes
+back proven while the two ranges by themselves hold `a` at 7 beside `b` at 0. Naming it is what makes
+its hypotheses askable. Two of them are: every position the rules relate to each other has its values
+spaced the same way, since the step from a system to one of its ranges is a theorem about a system of
+one kind of value; and the box no relation can still narrow, which is a property of every closed
+state and is asserted where one is made rather than asked here. Positions no rule mentions together
+are two systems written down beside each other and are not held to the first — which a record with a
+whole number in one field and a decimal in another is.
+
+The three are asked of what owns each. Whether every rule reached the reading is the reading's, and
+is asked of the value rather than of the position for the reason above. Whether the ranges are the
+whole of what the rules leave is the algebra's, because the derivation is there and so is the theorem
+the answer rests on. Whether an end was written down as the number the rules stopped at is the
+handover's. An edge stands where all three hold.
+
 That question reaches as far as the construction it can refuse and no further. Down the fields a value
 must have, at any depth, since a rule four records down refuses the outermost construction exactly as
 one on the top does; and not into what a construction need not make, because a rule inside an optional
@@ -169,8 +208,12 @@ derivable and is reported as the position, because naming its length there would
 report that nobody wrote.
 
 One carrier says which values carry a line, and every reader asks it. A line is drawn on every
-ordered value: an `Int`, a `Decimal`, a `Date`, a `DateTime`, a `String`, an enumeration, and a
-single-value newtype over any of them. The carriers are
+ordered value: an `Int`, a `Decimal`, a `Date`, a `DateTime`, a `Time`, an `Instant`, a `String`, an
+enumeration, and a single-value newtype over any of them. A `Time` and an `Instant` were the two
+this said and did not do (#846): each was ordered and read, and each was missing the conversion
+that writes a count back, so a rule over one came back naming no line. What made that a gap in the
+list rather than a decision was that nothing about the values said it — writing the two
+conversions was all it took. The carriers are
 matched exhaustively wherever a count is read or written, so one added stops the build at every
 place that would otherwise answer for it by omission, and the primitives are matched exhaustively
 where a type is classified, so a primitive added stops it there. A newtype is reduced to its base
@@ -184,6 +227,17 @@ row at the line — and only the fourth, the row just below, needs a value the l
 A carrier with no step already gets that answer; a `Decimal` and a `DateTime` have had it all along.
 So the place a value sits on its carrier's order and the number it counts to are separate, and only
 the second is a number.
+
+A carrier's count is an internal coordinate and need not itself be a value the model calls a number.
+A reader that reasons over counted carriers may use that coordinate; doing so does not make the
+carried value numeric. A date counts days, and a rule counting two dates apart states a relation over
+those days as readily as a rule over two whole numbers states one over theirs — so the reading that
+proves a construction satisfies its declaration reasons over the day, and a `Date` is still no `Int`.
+Which readers may use it is therefore not a question any of them answers separately: asked per
+reader, one reader carried a statement written as a shift and refused the same statement written as
+the count, which is one arithmetic read two ways. What a carrier counts, how its counts are spaced,
+how far they run and what a written value counts as are the carrier's four answers, and every reader
+of a count asks it for all four.
 
 A position that is one case of an enumeration, or a union of some of them, is not a carrier. It is
 comparable on its sum's order — that is the wider question the type checker asks — and it ranges over
@@ -241,14 +295,86 @@ bounds — which at a position whose only rule was that bound made the report st
 the declaration. The two producers now say it in the same words, because they answer the same
 question: this position was written about and this could not draw the line.
 
+That question is what the sentence covers, and it is narrower than every rule about the position. An
+ordering compared against something no end came out of is one of these. An equality names a value
+rather than an end, a denial takes one away, and a format, a membership or a quantifier says which
+values exist: none of them is a line, so none of them is a line that went unread. A report has
+nowhere to put one, and naming it would send an author after a boundary nobody wrote. What such a
+rule leaves open is which values stand at the position, which is another reading's question and is
+answered where that reading gives up.
+
+Which limit stopped a comparison is one answer for both producers and not a classification each of
+them makes. A relation asks for a class about several positions, a carrier nothing orders asks for
+that order, and what is left is a form this does not take apart.
+
+**And whether a comparison is a relation is the canonical comparison's answer, not the operands'.**
+`x < y + 1` relates two positions as surely as `x < y` does, and it does so because the arithmetic
+reads it as `x - y < 1` — a quantity over both of them. Positions named on either side establish
+nothing on their own: `x < x + 1` names one position twice and cancels to `0 < 1`, which relates
+nothing and states that every row satisfies it; `x < y * y` names two and stops the reading before
+anything is known about what it divides. A comparison whose reading stops has no subject yet, so no
+boundary and no partition is inferred from how it was spelled — what is recorded is that the reading
+stopped, and which measures are thereby short of something is that reason's to say.
+
+Read the other way round, the subject came off the operands while the line came off the canonical
+form, and one rule was measured by one reading and reported by the other: a border was drawn at a
+position nothing was owed about, and a question was raised about a place its rule never stopped.
+
+And it is asked per rule. A position carries more than one statement, so a line read at it says
+nothing about the rule beside it. Held as what a position is left with when nothing divides it, a
+bound on a field's own type answered for the record's clause about that same field, and two
+declarations differing by one bound said opposite things about the clause above them.
+
 An invariant's bound gives a boundary and not a partition: everything outside it is refused at
 construction, so there is no class on the far side to cover. A `guard`'s line has values on both
 sides, so it gives a partition *and* boundaries — the value, and its neighbour where the type has
 one. That is a question about the rule and not about the term: a length bound is owed one row at its
 edge, and a guard on a length is owed the value and its neighbour, for the same reasons a number is.
 
-Only a comparison that is the whole of a `guard`'s condition is read. A condition built with `&&`,
-`||` or `!` contributes no threshold.
+What owes a row is the border, and it owes one at four points. Domain testing keys an `ON`, an
+`OFF`, an `IN` and an `OUT` point on each border, and the same value can be one role for one border
+and another for the next — so none of the four is a property of a value or of a class, and two of
+them were answered by the measure that counts how many of a position's classes some row is in, which
+is a different unit and has no word for a row on the far side of a line. The border answers for all
+four, including the roles it owes nothing in.
+
+A point nobody is owed a row at says which of three things settled it, because they ask different
+things of a reader. The rules leaving no value there is the model's own answer and the point is
+*excluded* — the word this specification already uses for a case the rules refuse, one arity up —
+so an invariant's `OFF` and `OUT` points are counted out rather than left blank, and so is the `IN`
+point of a side the rules leave one value wide. A carrier naming no neighbouring value is this
+language having no way to write the point down, which is an item that cannot exist rather than one
+nobody has got to. A rule that names a value rather than ordering the values around it has no side
+for a nearest-outside point to be nearest on: under `x == 5` the 4 and the 6 stand alike, and
+choosing one would invent the answer.
+
+A line between two positions owes the same four, and they are the four of a border on the
+difference the two terms fall apart by. A point of it is a pair standing exactly so many steps apart
+and a side of it is a pair standing further apart than that, so `a < b` is at its `OFF` point where
+the two are equal and at its `ON` point where `a` is `b` less one. Read as a place at one term the
+step looked like something nothing could name, and the pair one step inside the border fell into the
+side beside it — which is not a point going unreported but a row at the `ON` point being counted as
+the `IN` point, and an `ON` point nothing owes passing a build that asks about it. What the carrier
+answers for here is the same thing it answers for at a place: where it names no value one step from
+the line, the two points against the line are not named.
+
+Which of the four a build is told about is decided per measure, the way it is for every other
+finding. A row against the line is what simplified domain coverage asks for and is a gap a build can
+refuse over; a row away from the line is one of the two items reliable domain coverage adds, and it
+is reported and refuses nothing. Both come off one assessment of one border, so a build is held to a
+reading of one measurement rather than to a second one made to different rules.
+A comparison is read wherever in a condition it is written. `cost >= 0 && cost <= 100000` draws both
+lines and `cost <= 100000 || cost >= 500000` draws both, and which arm stands as evidence for each is
+asked per comparison rather than per arm — a condition stops as soon as it is settled, so an arm says
+nothing about an operand that never ran. That instrument is `OriginRef.GuardOrigin.Witness`, and it
+is what lifted the restriction this said at first: only a comparison that was the whole of a
+condition was read.
+
+One shape is still lost, and it is not a restriction anybody stated. An equality against a case of a
+sum takes the whole condition's lines with it: `kind == Domestic && cost <= 100000` reads no
+threshold at all, and the position comes back not derivable exactly as it does for `kind ==
+Domestic` written alone. The `cost` comparison is not merely uncounted — it is unread because of what
+stands beside it, which is a defect rather than a line this declines to draw.
 
 A cut keeps every rule that drew it. One value can be an obligation several times over — but a rule
 that took a line in is not a second line. A relational clause and the bound it narrowed settled one
@@ -323,13 +449,38 @@ never warned about
 attached, and an author working through them would be writing rows against a specification that does
 not exist.
 
-The restriction to a whole-condition comparison loses real thresholds. `kind == Domestic && cost <=
-100000` has a threshold in it and this does not see it. The alternative is worse: the arm is reached
-without `cost` having been compared, so reaching it is not evidence about `cost`, and treating it as
-evidence would report a boundary as exercised that nothing ran against. Reading inside a compound
-condition needs a probe on each comparison rather than on each arm, which is a different instrument.
+Reading inside a compound condition took the instrument this said it would take: a probe on each
+comparison rather than on each arm. Without it the arm is reached without `cost` having been
+compared, so reaching it is not evidence about `cost`, and treating it as evidence would report a
+boundary as exercised that nothing ran against. With it, each comparison carries the site its own
+value is recorded at, and what the shape of the condition decides is which arm a row that reached the
+comparison can be in.
+
+What remains lost is the sum equality above, which the whole-condition restriction used to hide: a
+threshold beside `kind == Domestic` was one of the many this did not read, and is now the only one.
 
 Keeping a rule per cut means the same value can be owed three times. That is the point: an invariant
 and two guards that name 100000 are three rules, and a row that meets one of them has met one.
+
+Naming the certificate changed no edge. Over the compiler's own suite, 10,994 readings and 4,156 edge
+assessments: every reading the closure could certify was one the older test already passed, so the
+theorem bought nothing it was not already quietly relying on. What it removes is a claim, not a
+limit — a range the certificate cannot reach used to be reported as wider than the model.
+
+Nothing was added to certify more. An edge could also be settled by a point checked against every
+rule, which is a proof about one value rather than about a range, and it was measured before it was
+written: of the 4,156 assessments, 68 were on a range no certificate reaches, and 60 of those already
+had a row — one built through the module's decoders, or one already sitting there. The remaining
+eight were held up by a rule that never reached the reading, which no point can lift. So the search
+that builds rows is where an edge this cannot certify gets settled, and it is settled there for 73
+per cent of every edge in the corpus. A second solver beside it would have had nothing to answer.
+
+This decision is reconsidered where a proof about one end appears — a point of that kind, an end
+rounded on a cut, or any reason to certify one end of a position and not the other. The certificate
+here holds of a whole value, so nothing needs an edge to carry its own evidence, and none does: the
+evidence exists on the cuts one reading draws and is collapsed to a boolean by its only reader, while
+the cuts a threshold adds afterwards never carry it at all. Making only the first kind finer would
+leave the two kinds of cut answering different questions. What comes first is one evidence model
+every cut has, and then the finer answer on top of it.
 
 Spec: `[#example-partition]`, `[#example-adequacy]`

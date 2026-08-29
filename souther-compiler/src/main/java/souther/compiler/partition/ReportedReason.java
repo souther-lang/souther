@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
+
 /**
  * The word an adequacy document writes for a reason a derivation stopped.
  *
@@ -26,16 +28,85 @@ public final class ReportedReason {
      */
     public static UndividedPosition.Reason of(BlockReason reason) {
         return switch (reason) {
+            case BlockReason.RuleAboutADerivedValue _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
-            case BlockReason.DepthLimit _ -> UndividedPosition.Reason.DEPTH_LIMIT;
+            case BlockReason.RecursiveExpansion _ ->
+                    UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ;
             case BlockReason.UnsupportedTraversal _ ->
                     UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL;
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            case BlockReason.UnreadValueRule _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            // Its own word, and not the one above. That one promises a rule is written in a form
+            // nothing here takes apart, and what a reader does about it is rewrite the rule. These
+            // two say the shape was taken apart and what came of it was more than this compiler
+            // builds, so there is no form to rewrite.
+            //
+            // One word for the two, and they are two reasons on purpose. Which of them it was
+            // decides whether a rule can be named — a pattern too large is one somebody wrote, and
+            // an answer too large is a product no rule of it is answerable for — and that is a
+            // question about what this compiler may say next rather than about what a document
+            // promises its reader. Out there both are the same kind of thing: the values are wider
+            // than the rules leave them, because working them out was too much.
+            case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _ ->
+                    UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
+            // And its own word again, because this one never reached the values at all. A reader
+            // told the values were too much would go looking for what makes them so, and what is
+            // the matter is how far in the rule goes.
+            case BlockReason.PatternTooDeeplyNested _ ->
+                    UndividedPosition.Reason.PATTERN_TOO_DEEPLY_NESTED;
+            // Its own word, and not the one above. That one promises a rule was read and could not
+            // be used, which is a reader having engaged with it and given up; here none did, and an
+            // author sent after the form their clause is written in would be looking for a
+            // complaint nobody made. Neither is it the rule never having been reached — it was.
+            // The published words had these two and the state between them is one a model reaches,
+            // so the partition is one finer rather than the state going out under a word whose
+            // promise it does not meet.
+            case BlockReason.NoReadingTookItIn _ ->
+                    UndividedPosition.Reason.RULE_NOT_INTERPRETED_HERE;
+            // Its own word, and not the one above. Both are rules this reading did not turn into a
+            // line, and a reader acting on them is doing different work: one wants a reader for a
+            // form that was seen, and one wants the gathering to reach the rules at all. Collapsed
+            // together, a position whose rules nothing had looked at was reported as an expression
+            // the terms do not name, which is a cause it was never observed to have.
+            case BlockReason.ValueRulesNotReached _ ->
+                    UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
             case BlockReason.UnreadComparisonDomain _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+            case BlockReason.CompetingCoordinates _ ->
+                    UndividedPosition.Reason.COMPETING_COORDINATES;
+            // Its own word, and not the shape one below. Both sides of this line are read and
+            // ordered and a line is drawn on them; what is missing is which positions the line runs
+            // between, which is a question about the model and not about the form it was written in.
+            case BlockReason.CasePairingNotDetermined _ ->
+                    UndividedPosition.Reason.UNRESOLVED_CASE_PAIRING;
             case BlockReason.ComparisonBetweenPositions _ ->
                     UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+            // Its own word, because what a reader does about it is different. A rule between two
+            // positions is waiting on a class about the pair; a rule about what a run comes to has
+            // nothing to wait for — the model divides no position by it, and its border is already
+            // drawn.
+            case BlockReason.ComparisonOverARun _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_A_RUN;
+            // The same word, from the other reading of the same rule. What a document promises its
+            // reader is which kind of thing stopped the derivation, and a relation between two
+            // positions is one kind of thing whether the reading that met it was drawing a line or
+            // gathering values — so the split this compiler needs between the two is a split it
+            // keeps to itself, and the two vocabularies still come to one word for one rule.
+            case BlockReason.ValueRuleRelatingTwoPositions _ ->
+                    UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+            // Its own word and not the one above. Both are rules this read to the end that divide
+            // nothing, and what a reader may go on to do about them differs: one is waiting on a
+            // class about two positions, and the other has nothing to wait for.
+            case BlockReason.ComparisonCuttingNothing _ ->
+                    UndividedPosition.Reason.RULE_CUTS_NOTHING;
+            // And its own word beside that one. A rule with no quantity to cut states nothing about
+            // the position; a rule whose line falls outside where its quantity runs states
+            // something no row satisfies, and an author reading the first would take the second for
+            // a clause they could delete.
+            case BlockReason.ComparisonCuttingOutsideDomain _ ->
+                    UndividedPosition.Reason.RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS;
         };
     }
 

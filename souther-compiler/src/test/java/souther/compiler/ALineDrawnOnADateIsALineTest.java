@@ -32,7 +32,6 @@ class ALineDrawnOnADateIsALineTest {
             data Fresh
 
             behavior freshness : (on: Date) -> Stale | Fresh
-                constructs Stale, Fresh
             let freshness (on) = if on < Date("2026-01-01") then Stale else Fresh
 
             example freshness
@@ -41,7 +40,7 @@ class ALineDrawnOnADateIsALineTest {
 
     private static String report() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
@@ -52,7 +51,7 @@ class ALineDrawnOnADateIsALineTest {
         String human = report();
 
         assertTrue(human.contains("partition   axes 1"), human);
-        assertFalse(human.contains("not read: on"), human);
+        assertFalse(notReadAbout(human, "on"), human);
     }
 
     /** Both sides of the line are owed, and the row already written covers the one it is on. */
@@ -60,7 +59,7 @@ class ALineDrawnOnADateIsALineTest {
     void bothSidesOfTheLineAreOwed() {
         String human = report();
 
-        assertTrue(human.contains("boundary    1/2"), human);
+        assertTrue(human.contains("border      borders 1   coverage items 1/4"), human);
         assertTrue(human.contains("2026-01-01"), human);
     }
 
@@ -71,5 +70,19 @@ class ALineDrawnOnADateIsALineTest {
 
         assertFalse(human.contains("20454"), human);
         assertFalse(human.contains("20453"), human);
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

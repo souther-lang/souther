@@ -6,7 +6,6 @@ import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * A name, and the occurrence of it in the source that this one came from.
@@ -79,7 +78,7 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
                             + " places");
         }
         for (Region segment : segments) {
-            if (!Objects.equals(segment.start().sourceId(), segments.get(0).start().sourceId())) {
+            if (!segment.start().isInTheSameTextAs(segments.get(0).start())) {
                 throw new IllegalArgumentException("`" + canonical + "` is written in one file");
             }
         }
@@ -238,14 +237,14 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
     private static boolean placed(Region region, SourcePos at) {
         SourcePos start = region.start();
         return start != null && region.end() != null && at != null
-                && Objects.equals(at.sourceId(), start.sourceId())
+                && at.isInTheSameTextAs(start)
                 && !before(at, start);
     }
 
     /** Whether {@code inner} lies within {@code outer}, ends allowed to meet. */
     private static boolean encloses(Region outer, Region inner) {
         if (outer == null || inner == null
-                || !Objects.equals(inner.start().sourceId(), outer.start().sourceId())) {
+                || !inner.start().isInTheSameTextAs(outer.start())) {
             return false;
         }
         return !before(inner.start(), outer.start()) && !before(outer.end(), inner.end());

@@ -33,7 +33,7 @@ class CompileTupleAnnotationTest {
                 let run (i) = Out { lines = List.map(entry, Map.toList(i.counts)) }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("counts", Map.of("a", 2L)));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(List.of("a=2"), out.get("lines"));
@@ -55,7 +55,7 @@ class CompileTupleAnnotationTest {
                 let run (i) = Out { n = countBy(x -> x > 1, i.ns) }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("ns", List.of(1L, 2L, 3L)));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(2L, out.get("n"));
@@ -80,7 +80,7 @@ class CompileTupleAnnotationTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("ns", List.of(1L, 5L, 3L)));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(0L, out.get("lo"));

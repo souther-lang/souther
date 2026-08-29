@@ -1,5 +1,7 @@
 package souther.compiler.frontend;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.cst.CstParser;
@@ -74,7 +76,7 @@ class ANameIsWhereItIsWrittenTest {
             """;
 
     private static Ast.Module parsed() {
-        return CstFrontend.parseWithSlices(EVERY_BINDING_FORM, "a", "a.sou").module();
+        return CstFrontend.parseWithSlices(EVERY_BINDING_FORM, "a", new SourceId("a.sou")).module();
     }
 
     private static SyntaxNode tree() {

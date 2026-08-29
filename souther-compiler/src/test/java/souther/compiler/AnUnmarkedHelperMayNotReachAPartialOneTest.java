@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -38,7 +40,7 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
 
     private static List<Diagnostic> diagnosed(String source) {
         return Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("demo", source)))
-                .getOrDefault("demo", List.of());
+                .getOrDefault(new SourceId("demo"), List.of());
     }
 
     /** The paths reported under {@code key}, in the order the build found them. The rendered path is
@@ -518,9 +520,8 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
         ValueName.Helper foreign = new ValueName.Helper("maths", "spin");
         ValueName.Helper own = new ValueName.Helper("order", "spin");
 
-        assertEquals(new ReachName.OfModule("maths", "spin"),
-                ReachName.of(foreign, "spin", "order"));
-        assertEquals(new ReachName.Bare("spin"), ReachName.of(own, "spin", "order"));
+        assertEquals(new ReachName.OfModule(foreign), ReachName.of(foreign, "spin", "order"));
+        assertEquals(new ReachName.Own(own), ReachName.of(own, "spin", "order"));
     }
 
     /** An imported `partial` helper may not be handed over either. */

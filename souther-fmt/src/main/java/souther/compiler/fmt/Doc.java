@@ -18,6 +18,16 @@ sealed interface Doc {
 
     Doc NIL = new Nil();
 
+    /**
+     * How many times a document is laid out before every column has settled.
+     *
+     * <p>A stop is settled by the pass after the one that settled the stop before it on its line,
+     * and one more pass sees that nothing moved. So it is one more than the stops there are — read
+     * from {@link Columns.Stop} because that is where they are listed, and held here because how
+     * many times this lays a document out is this file's and not the rule's.
+     */
+    int PASSES = Columns.Stop.values().length + 1;
+
     /** Writes nothing, and the group holding it is never laid out flat. A comment cannot share the
      * line after it, so a construct holding one breaks even where its own content would have fitted
      * — and where the break itself is the enclosing construct's to write, as the brackets of a list
@@ -112,6 +122,18 @@ sealed interface Doc {
 
     record MustBreak(Ref ref) implements Doc, Refuses {}
 
+    /**
+     * A column of a table, at the place one row is written to it. Writes the spaces that carry the
+     * connector after it out to the column, and nothing where the row is written down the page.
+     *
+     * <p>It stands after the boundary rather than in place of it: what separates two tokens is
+     * {@link Spacing}'s answer and this never touches it. So a row already at the column has this
+     * write nothing, and the text either way holds the separator the rule wrote.
+     *
+     * <p>What it writes is not measured. See {@link #layout}.
+     */
+    record ColumnStop(Columns.Unit unit) implements Doc {}
+
     static Doc text(String s) {
         return new Text(s);
     }
@@ -161,6 +183,11 @@ sealed interface Doc {
         return new Nest(new NestRef(), indent, doc);
     }
 
+    /** The place one row of a table is written out to one of its columns. */
+    static Doc columnStop(Columns.Unit unit) {
+        return new ColumnStop(unit);
+    }
+
     static Doc at(Place place, Doc doc) {
         return new At(place, doc);
     }
@@ -198,11 +225,58 @@ sealed interface Doc {
      * <p>A decision is taken once, where the outer walk reaches the group. {@link #fits} walks ahead
      * over groups it is only measuring and takes none, so what comes back is what was laid out
      * rather than what was considered.
+     *
+     * <p>A column cannot be decided that way. Where a row's connector goes depends on every other
+     * row of its table, and the walk that reaches the first row has not read the last one — so the
+     * document is laid out, the columns are read off what that wrote, and it is laid out again to
+     * write them. The alternative is to look ahead over the table at the row that opens it, which
+     * would be a second walk deciding what the real one has to decide again; the same machine run
+     * twice cannot disagree with itself.
+     *
+     * <p>It settles because a column depends only on the columns before it on its line: the first
+     * stop is settled by the first pass, the one after it by the second, and one more pass sees that
+     * nothing moved. {@link #PASSES} is that count and this refuses to run past it.
+     *
+     * <p>A document with no table is laid out once. The first pass writes no stop, so there is
+     * nothing to settle and the layout it produced is the answer — which is what keeps this off the
+     * files that have no columns in them.
      */
     default Layout layout(int width) {
+        java.util.Map<Columns.Unit, Integer> columns = java.util.Map.of();
+        for (int pass = 0; ; pass++) {
+            Layout laid = laidOut(width, columns);
+            java.util.Map<Columns.Unit, Integer> settled = settle(laid.stops());
+            if (settled.equals(columns)) {
+                return laid;
+            }
+            if (pass >= PASSES) {
+                throw new IllegalStateException(
+                        "the columns of a table did not settle in " + PASSES
+                                + " layouts; a column reads the ones before it on its line and"
+                                + " nothing else, so this is a cycle that should not exist");
+            }
+            columns = settled;
+        }
+    }
+
+    /**
+     * Where each column is, from what the rows reached without it. The greatest natural column, so
+     * that the row that needed the most room is the one the rule writes nothing for.
+     */
+    private static java.util.Map<Columns.Unit, Integer> settle(List<ColumnOccurrence> stops) {
+        java.util.Map<Columns.Unit, Integer> out = new java.util.LinkedHashMap<>();
+        for (ColumnOccurrence stop : stops) {
+            out.merge(stop.unit(), stop.naturalColumn(), Math::max);
+        }
+        return out;
+    }
+
+    /** One layout, writing the columns it is given. */
+    private Layout laidOut(int width, java.util.Map<Columns.Unit, Integer> columns) {
         List<GroupDecision> decisions = new ArrayList<>();
         List<Newline> breaks = new ArrayList<>();
         List<Opportunity> opportunities = new ArrayList<>();
+        List<ColumnOccurrence> stops = new ArrayList<>();
         java.util.Map<Place, Extent> extents = new java.util.LinkedHashMap<>();
         // A place that writes a region and also carries a comment has both an `At` and a
         // point; the region is where it is, so the points are kept apart and read only
@@ -212,12 +286,25 @@ sealed interface Doc {
         StringBuilder sb = new StringBuilder();
         Deque<Item> todo = new ArrayDeque<>();
         todo.push(new Item(0, Mode.BREAK, this));   // the outermost context breaks
-        // Two counts run side by side here and they are not interchangeable. `displayCol` is where
-        // the line has reached on the screen, which is what the width is about and what a
-        // full-width character advances by two. Everything taken from `sb.length()` — an extent, an
-        // opportunity, a newline's offset — is an index into the text, which is what the readers of
-        // a layout use to cut and search the same Java string, and stays in UTF-16 units.
-        int displayCol = 0;
+        // Three counts run side by side here and no two of them are interchangeable. Everything
+        // taken from `sb.length()` — an extent, an opportunity, a newline's offset — is an index
+        // into the text, which is what the readers of a layout use to cut and search the same Java
+        // string, and stays in UTF-16 units. The other two are columns on the screen, which is what
+        // a full-width character advances by two and what a tab advances to the next multiple of
+        // eight of.
+        //
+        // `measuredCol` is what the width reads, and a table's padding is not in it: a group whose
+        // flatness depended on padding would be decided by a column that is decided by which rows
+        // came out flat. `writtenCol` is where the line has actually reached, padding and all, and
+        // it is what a column is settled in — a row's second connector stands where its first one
+        // pushed it to.
+        //
+        // Two counts and not one with a correction added to it. How far a token advances a column
+        // depends on the column it starts at, which is the whole of what a tab is; a written column
+        // reconstructed as `measuredCol` plus the padding so far is right for every token but that
+        // one, and wrong for the rows of a table that holds it.
+        int measuredCol = 0;
+        int writtenCol = 0;
         while (!todo.isEmpty()) {
             Item it = todo.pop();
             if (it.closes != null) {
@@ -228,7 +315,8 @@ sealed interface Doc {
                 case Nil _ -> { }
                 case Text t -> {
                     sb.append(t.s());
-                    displayCol = DisplayColumns.advance(t.s(), displayCol);
+                    measuredCol = DisplayColumns.advance(t.s(), measuredCol);
+                    writtenCol = DisplayColumns.advance(t.s(), writtenCol);
                 }
                 case Concat c -> {
                     List<Doc> parts = c.parts();
@@ -249,9 +337,9 @@ sealed interface Doc {
                     todo.push(it.within(a.doc()));
                 }
                 case Group g -> {
-                    Outcome outcome = flatnessOf(displayCol, width,
+                    Outcome outcome = flatnessOf(measuredCol, width,
                             new Item(it.indent, Mode.FLAT, g.doc()), todo);
-                    decisions.add(new GroupDecision(g.ref(), displayCol, outcome));
+                    decisions.add(new GroupDecision(g.ref(), measuredCol, outcome));
                     todo.push(new Item(it.indent,
                             outcome instanceof Outcome.Flat ? Mode.FLAT : Mode.BREAK, g.doc(),
                             null, it.under, g.ref()));
@@ -267,28 +355,49 @@ sealed interface Doc {
                     }
                     if (it.mode == Mode.FLAT) {
                         sb.append(l.flat());
-                        displayCol = DisplayColumns.advance(l.flat(), displayCol);
+                        measuredCol = DisplayColumns.advance(l.flat(), measuredCol);
+                        writtenCol = DisplayColumns.advance(l.flat(), writtenCol);
                     } else {
                         breaks.add(newline(sb, it, it.indent,
                                 new Newline.Cause.Settled(l.ref()), true));
-                        displayCol = it.indent;
+                        measuredCol = it.indent;
+                        writtenCol = it.indent;
                     }
                 }
                 case Hard h -> {
                     int indent = h.indents() ? it.indent : 0;
                     breaks.add(newline(sb, it, indent,
                             new Newline.Cause.Forced(h.ref().obligation()), h.indents()));
-                    displayCol = indent;
+                    measuredCol = indent;
+                    writtenCol = indent;
                 }
                 case Trailing t -> {
                     sb.append(' ').append(t.s());
-                    displayCol = DisplayColumns.advance(t.s(), displayCol + 1);
+                    measuredCol = DisplayColumns.advance(t.s(), measuredCol + 1);
+                    writtenCol = DisplayColumns.advance(t.s(), writtenCol + 1);
                 }
                 case MustBreak _ -> { }
+                case ColumnStop cs -> {
+                    // A row written down the page has its connector opening a line, and there is no
+                    // column to be at there. It neither reaches for one nor says how wide it is.
+                    if (it.mode == Mode.FLAT) {
+                        Integer column = columns.get(cs.unit());
+                        // Nothing to write on the pass that is finding out where the column is, and
+                        // nothing on a pass whose column is one an earlier pass measured short. The
+                        // pass after it has the room this one asked for.
+                        int pad = column == null ? 0 : Math.max(0, column - writtenCol);
+                        stops.add(new ColumnOccurrence(cs.unit(), sb.length(), writtenCol));
+                        sb.append(" ".repeat(pad));
+                        // What the width reads is untouched, which is the whole of the rule.
+                        writtenCol += pad;
+                    }
+                }
             }
         }
         points.forEach(extents::putIfAbsent);
-        return new Layout(sb.toString(), decisions, extents, breaks, opportunities);
+        List<ColumnDecision> settled = new ArrayList<>();
+        columns.forEach((unit, column) -> settled.add(new ColumnDecision(unit, column)));
+        return new Layout(sb.toString(), decisions, extents, breaks, opportunities, settled, stops);
     }
 
     /** Writes a break and says what it wrote, and what wrote it. {@code indent} is the item's,
@@ -377,6 +486,10 @@ sealed interface Doc {
                     }
                     return over ? new Outcome.BrokenByWidth() : new Outcome.Flat();
                 }
+                // Padding is not content the width has to make room for, the same as a trailing
+                // comment is not. What it writes is read off a column, and a column that a group's
+                // flatness read would be decided by the rows that came out flat.
+                case ColumnStop _ -> { }
             }
         }
     }

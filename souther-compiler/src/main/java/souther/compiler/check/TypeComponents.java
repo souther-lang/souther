@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -24,22 +24,22 @@ import java.util.Set;
  */
 final class TypeComponents {
 
-    private final Map<TypeName, Set<TypeName>> edges;
-    private final Map<TypeName, Integer> reached = new HashMap<>();
-    private final Map<TypeName, Integer> lowest = new HashMap<>();
-    private final Deque<TypeName> standing = new ArrayDeque<>();
-    private final Set<TypeName> onStand = new HashSet<>();
-    private final List<List<TypeName>> found = new ArrayList<>();
+    private final Map<TypeSymbol, Set<TypeSymbol>> edges;
+    private final Map<TypeSymbol, Integer> reached = new HashMap<>();
+    private final Map<TypeSymbol, Integer> lowest = new HashMap<>();
+    private final Deque<TypeSymbol> standing = new ArrayDeque<>();
+    private final Set<TypeSymbol> onStand = new HashSet<>();
+    private final List<List<TypeSymbol>> found = new ArrayList<>();
     private int next;
 
-    private TypeComponents(Map<TypeName, Set<TypeName>> edges) {
+    private TypeComponents(Map<TypeSymbol, Set<TypeSymbol>> edges) {
         this.edges = edges;
     }
 
     /** The components of {@code edges}, each one before any component that reads it. */
-    static List<List<TypeName>> of(Map<TypeName, Set<TypeName>> edges) {
+    static List<List<TypeSymbol>> of(Map<TypeSymbol, Set<TypeSymbol>> edges) {
         TypeComponents walk = new TypeComponents(edges);
-        for (TypeName each : edges.keySet()) {
+        for (TypeSymbol each : edges.keySet()) {
             if (!walk.reached.containsKey(each)) {
                 walk.walk(each);
             }
@@ -48,18 +48,18 @@ final class TypeComponents {
     }
 
     /** Whether {@code component} is one that has to be risen through rather than read once. */
-    static boolean recurses(List<TypeName> component, Map<TypeName, Set<TypeName>> edges) {
+    static boolean recurses(List<TypeSymbol> component, Map<TypeSymbol, Set<TypeSymbol>> edges) {
         return component.size() > 1
                 || edges.getOrDefault(component.get(0), Set.of()).contains(component.get(0));
     }
 
-    private void walk(TypeName from) {
+    private void walk(TypeSymbol from) {
         reached.put(from, next);
         lowest.put(from, next);
         next++;
         standing.push(from);
         onStand.add(from);
-        for (TypeName each : edges.getOrDefault(from, Set.of())) {
+        for (TypeSymbol each : edges.getOrDefault(from, Set.of())) {
             if (!reached.containsKey(each)) {
                 walk(each);
                 lowest.put(from, Math.min(lowest.get(from), lowest.get(each)));
@@ -68,8 +68,8 @@ final class TypeComponents {
             }
         }
         if (lowest.get(from).equals(reached.get(from))) {
-            List<TypeName> component = new ArrayList<>();
-            TypeName each;
+            List<TypeSymbol> component = new ArrayList<>();
+            TypeSymbol each;
             do {
                 each = standing.pop();
                 onStand.remove(each);

@@ -1,0 +1,53 @@
+package souther.compiler.observe;
+
+import souther.compiler.coverage.Observation;
+
+/**
+ * What this compile's own counting read of one row's evaluation.
+ *
+ * <p>Both numbers are about code the emitter counted into, which is what this compile generated and
+ * nothing else. That is the whole of what they cover and it is not the same as the application: a
+ * fixture applies the helpers it names before the behavior is reached, so a row that never applied
+ * the behavior can still have spent counted points, and a row applied through something this compile
+ * did not generate spends none inside the application while its fixtures spend what they spend.
+ * {@link Applied} is what says which of those a row is.
+ *
+ * <p>A reading and no reading are different values here rather than one value a reader has to
+ * qualify. An evaluation that was given up on is still running when the outcome is written, and a
+ * count taken from it would be some of what it spent rather than what it spent — so nothing is
+ * taken, and {@link Unread} says that. Writing zero would have said the row passed no counted point,
+ * which is what a body with no loop in it does, and the two would be one number again.
+ */
+public sealed interface Counting {
+
+    /**
+     * The counting was read, and this is what it said.
+     *
+     * <p>{@link #steps} is what the row cost in the unit it is held to, so a build can see how much
+     * of the budget its rows use before one of them reaches it — the only way to set the budget from
+     * evidence rather than by guessing. Zero says no counted point was passed, and says only that.
+     *
+     * <p>{@link #observation} is what the row was seen to do — the sites it went through and the ways
+     * its comparisons came out. Empty until branches are measured, which is a property of the compile
+     * rather than of the row.
+     *
+     * <p>One value rather than a field per shape of thing recorded. What a run leaves behind is taken
+     * of one thread between one start and one stop, and a record with a field each would let the
+     * halves of one run be filled from different ones.
+     */
+    record Read(long steps, Observation observation) implements Counting {
+
+        public Read {
+            observation = observation == null ? Observation.NONE : observation;
+        }
+    }
+
+    /**
+     * The counting was not read.
+     *
+     * <p>What the row would have cost is not known here and is not zero. A reader that needs a number
+     * has none; a reader counting what rows covered has nothing this row can add, and that the row
+     * was left undecided is said where the row is reported ({@link Incompleteness}).
+     */
+    record Unread() implements Counting {}
+}

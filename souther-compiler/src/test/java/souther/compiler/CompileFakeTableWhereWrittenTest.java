@@ -1,6 +1,10 @@
 package souther.compiler;
 
-import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.diag.Primary;
+
+import souther.compiler.source.SourceId;
+
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 
@@ -78,11 +82,8 @@ class CompileFakeTableWhereWrittenTest {
                     | (N("x")) -> Found { n = N(1) }
                 """);
 
-        assertEquals("E1908", one.code());
-        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, one.said());
-        assertEquals("find", one.values().get("dependency"),
-                "the behavior the table stands in for");
-        assertEquals(15, one.pos().line(), "at the fake, which is where the table is written");
+        assertEquals("E1317", one.code());
+        assertEquals(16, ((Primary.InSource) one.primary()).place().region().start().line(), "at the row that states no value");
     }
 
     @Test
@@ -104,8 +105,7 @@ class CompileFakeTableWhereWrittenTest {
                     | (N("x")) -> Found { n = N(1) }
                 """);
 
-        assertEquals("E1908", one.code());
-        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, one.said());
+        assertEquals("E1317", one.code());
     }
 
     @Test
@@ -118,19 +118,18 @@ class CompileFakeTableWhereWrittenTest {
 
         assertEquals("E1908", one.code());
         assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, one.said());
-        assertEquals(16, one.pos().line(), "at the row whose input count is wrong");
+        assertEquals(16, ((Primary.InSource) one.primary()).place().region().start().line(), "at the row whose input count is wrong");
     }
 
     /**
-     * A second table written for one dependency is not built here either.
-     *
-     * <p>The first is the one that answers — it is what stands in ({@code resolveFake}) and what the
-     * rows are read against — so a second states nothing anywhere. Building it here would hold a
-     * table to something no reader of it would ever ask.
+     * A second table written for one dependency answers for nothing, but what it writes is still
+     * this module's code: every operand a row writes is compiled with the module's definitions, so a
+     * row that states no value is refused wherever it is written — reachability decides what a table
+     * answers, not what its rows are held to.
      */
     @Test
-    void aSecondTableForOneDependencyIsNotBuilt() {
-        assertDoesNotThrow(() -> Compiler.compile(UNREAD + """
+    void aSecondTablesRowIsStillHeldToItsTypes() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(UNREAD + """
 
                 fake find
                     | (N(1)) -> Found { n = N(1) }
@@ -138,6 +137,7 @@ class CompileFakeTableWhereWrittenTest {
                 fake find
                     | (N("x")) -> Found { n = N(1) }
                 """));
+        assertEquals(List.of("E1317"), codesOf(e), e.getMessage());
     }
 
     /** And a table that builds is said nowhere: the check is not one every fake fails. */
@@ -169,8 +169,7 @@ class CompileFakeTableWhereWrittenTest {
                     | (N("x")) -> Found { n = N(1) }
                 """));
 
-        assertEquals(List.of("E1908"), codesOf(e), e.getMessage());
-        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, e.diagnostics().get(0).said());
+        assertEquals(List.of("E1317"), codesOf(e), e.getMessage());
     }
 
     /** A fake written in an attached file is built for that file, and said in it. */
@@ -188,8 +187,8 @@ class CompileFakeTableWhereWrittenTest {
                             | (N("x")) -> Found { n = N(1) }
                         """)));
 
-        assertEquals(List.of("E1908"), codesOf(e), e.getMessage());
-        assertEquals("1", e.sourceIdOf(0), "the file that wrote the fake is the file it is said in");
+        assertEquals(List.of("E1317"), codesOf(e), e.getMessage());
+        assertEquals(new SourceId("1"), e.sourceIdOf(0), "the file that wrote the fake is the file it is said in");
     }
 
     /**
@@ -255,19 +254,20 @@ class CompileFakeTableWhereWrittenTest {
                 fake find
                     | (N(spin(1))) -> Found { n = N(1) }
                 """, "Main", warnings, souther.compiler.query.Adequacy.Asked.NOTHING,
-                null, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyTableOf("find"))));
+                DoesNotComeBack.WAIT,
+                DoesNotComeBack.overrunningOn(DoesNotComeBack.everyTableOf("find"))));
 
         List<Located> said = only("E1921", warnings);
         assertEquals(1, said.size(), warnings.toString());
         assertEquals(List.of(), only("E1920", warnings),
                 "nothing records what `find` owes, so no comparison was missed");
         Diagnostic one = said.get(0).diagnostic();
-        assertEquals(14, one.pos().line(), "at the fake");
-        assertEquals(6, one.pos().column(), "on the behavior it names");
+        assertEquals(14, ((Primary.InSource) one.primary()).place().region().start().line(), "at the fake");
+        assertEquals(6, ((Primary.InSource) one.primary()).place().region().start().column(), "on the behavior it names");
         // The number is read off the wait this compile was given rather than written in, so the
         // line still holds if that wait changes. Ungrouped, which is how it is set.
         assertTrue(rendered(one).contains("Building the `fake find` table did not answer within "
-                        + DoesNotComeBack.BUDGET.toMillis() + "ms"),
+                        + DoesNotComeBack.WAIT.toMillis() + "ms"),
                 rendered(one));
         assertTrue(rendered(one).contains("not code this compile generated"),
                 "the hint says whose fault it is not: " + rendered(one));

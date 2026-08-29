@@ -1,13 +1,13 @@
 package souther.compiler;
 
-import souther.compiler.examples.Deadline;
+import souther.compiler.query.Measurement;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -40,11 +40,12 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
     /**
      * A model, with the work the compile that reads it does not get back from.
      *
-     * <p>Carried beside the source because the two here differ in it. One holds a row that never
-     * comes back, which is said here rather than timed; the other walks four thousand nodes to spend
-     * the observation budget and comes back from everything, so nothing about it overruns.
+     * <p>Carried beside the source because the models here differ in it. One holds a row that never
+     * comes back, which is said here rather than timed; the others come back from everything — one
+     * spends the observation budget, one is past what the backend can emit — so nothing about them
+     * overruns.
      */
-    private record Unreadable(String source, Deadline overrun) {}
+    private record Unreadable(String source, JvmExampleDeadlines overrun) {}
 
     /** Models where something a measure would want to read was not read, each in a different way. */
     private static List<Unreadable> unreadableInSomeWay() {
@@ -78,20 +79,56 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     | (Draft { flag = Yes, cost = Amount(500) }) -> Big { n = 0 }
                 """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("take"))),
                 // a value past the observation's limits: the position is there and unreadable
-                new Unreadable(budgetSpent(), null));
+                new Unreadable(budgetSpent(), null),
+                // a module whose classes could not be made: nothing was read, and nothing says
+                // which row would have covered what
+                new Unreadable(classesNotMade(), null));
+    }
+
+    /**
+     * A module the backend cannot emit: the row's operand is compiled as a method of its own, and
+     * this one is past what a JVM method holds.
+     *
+     * <p>The third way, and the one that was missed. A source nothing observed and an example block
+     * whose classes would not load were listed where a reader asked whether anything was read;
+     * a module whose classes were not made reads the same to every measure and was not among them,
+     * so the generator offered work for a behavior whose rows nothing had read.
+     */
+    private static String classesNotMade() {
+        StringBuilder items = new StringBuilder();
+        for (int i = 0; i < 4096; i++) {
+            items.append(i == 0 ? "" : ", ").append("Item { a = \"").append(i)
+                    .append("\", b = \"").append(i).append("\", c = \"").append(i).append("\" }");
+        }
+        return """
+                module example.c
+
+                data Amount = Int
+                    invariant value >= 0 && value <= 1000
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Item = { a: String, b: String, c: String }
+
+                data Draft = { items: List<Item>, cost: Amount, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (request: Draft) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = request.cost.value }
+
+                example take
+                    | (Draft { items = [ %s ], cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
+                """.formatted(items);
     }
 
     private static String budgetSpent() {
-        StringBuilder inner = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            inner.append(i == 0 ? "" : ", ").append("Item { a = \"").append(i)
-                    .append("\", b = \"").append(i).append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ")
-                    .append("Group { items = [ ").append(inner).append(" ] }");
-        }
+        // Computed rather than spelled: a literal this size is a method past the JVM's code-size
+        // limit (E2102), and what this model exists to hit is the observation's limit.
+        String groups = "someGroups(64)";
         return """
                 module example.b
 
@@ -113,13 +150,20 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
                 let take (request) = Ok { n = request.cost.value }
 
+
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
                 """.formatted(groups);
     }
 
     /** Compiles are shared between the cases that read the same model: each of the three walks the
-     * same two, and a compilation answers the same questions however many times it is asked. */
+     * same models, and a compilation answers the same questions however many times it is asked. */
     private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
 
     private static Compilation measured(Unreadable model) {
@@ -131,12 +175,12 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         return measured(source, null);
     }
 
-    private static Compilation measured(String source, Deadline overrun) {
+    private static Compilation measured(String source, JvmExampleDeadlines overrun) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         if (overrun != null) {
-            compilation.withDeadline(overrun);
+            compilation.withJvmExampleDeadlines(overrun);
         }
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }
@@ -157,35 +201,36 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
             Adequacy.SignatureEvidence signature = compilation.db()
                     .ask(new Adequacy.Witnesses(module)).value().get("take");
-            if (signature.status() == MeasurementStatus.COMPLETE) {
+            if (signature.counted() instanceof Measurement.Complete<?>) {
                 if (!signature.output().unspecified().isEmpty()) {
                     wrong.add("signature output: " + signature.output().unspecified());
                 }
-                signature.inputs().stream().filter(in -> !in.unspecified().isEmpty())
+                signature.positions().stream().filter(in -> !in.unspecified().isEmpty())
                         .forEach(in -> wrong.add("signature input: " + in.unspecified()));
             }
 
             PartitionEvidence partition = compilation.db()
                     .ask(new Adequacy.Coverage(module)).value().get("take");
             for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-                if (axis.status() == MeasurementStatus.COMPLETE && !axis.uncovered().isEmpty()) {
+                if (axis.reached() instanceof Measurement.Complete<?> && !axis.uncovered().isEmpty()) {
                     wrong.add("axis " + axis.path() + ": " + axis.uncovered());
                 }
             }
-            for (BoundaryAssessment boundary : partition.boundaries()) {
-                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.coverage().hit()) {
-                    wrong.add("boundary " + boundary.axis() + " = " + boundary.value());
+            for (souther.compiler.query.OwedBoundaryPoint point : partition.owedPoints()) {
+                if (point.item().weakeningSource() instanceof Measurement.Complete<?>
+                        && !point.item().hasRowWitness()) {
+                    wrong.add("boundary " + point.axis() + " " + point.asked());
                 }
             }
-            if (partition.pairs().status() == MeasurementStatus.COMPLETE
-                    && partition.pairs().unknown() > 0) {
-                wrong.add("pairs: " + partition.pairs().unknown() + " untried");
+            if (partition.pairs().counted() instanceof Measurement.Complete<?>
+                    && partition.pairs().counts().unknown() > 0) {
+                wrong.add("pairs: " + partition.pairs().counts().unknown() + " untried");
             }
 
             Adequacy.BranchEvidence branch = compilation.db()
                     .ask(new Adequacy.BranchCoverage(module)).value().get("take");
-            if (branch.status() == MeasurementStatus.COMPLETE && !branch.unreached().isEmpty()) {
-                wrong.add("branch: " + branch.unreached().size() + " unreached");
+            if (branch.measured() instanceof Measurement.Complete<?> && !branch.unreached().orElseThrow().isEmpty()) {
+                wrong.add("branch: " + branch.unreached().orElseThrow().size() + " unreached");
             }
 
             assertEquals(List.of(), wrong, module + " asserted a gap over rows it did not read");
@@ -216,10 +261,12 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
             Compilation compilation = measured(model);
             String module = compilation.modules().get(0);
             Map<String, Adequacy.Filling> generated =
-                    compilation.db().ask(new Adequacy.Generated(module)).value();
+                    Adequacy.generatedOf(compilation.db(), module);
             assertNotNull(generated);
 
-            String written = GeneratedRows.of(module, generated, true, SourceNameResolver.identity());
+            String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                            souther.compiler.query.OfferingRequest.overTheModule(module, true)),
+                    Map.of(), SourceNameResolver.identity()).text();
             assertFalse(written.contains("example "),
                     module + " offers a row that may already be written: " + written);
             // Either word, because the two models get here differently: one has rows nothing read
@@ -267,14 +314,15 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.of(compilation).status());
         assertTrue(partition.axes().stream().anyMatch(a -> !a.uncovered().isEmpty()),
                 "a class nothing is in");
-        assertTrue(partition.boundaries().stream().anyMatch(b -> !b.coverage().hit()),
+        assertTrue(partition.owedPoints().stream()
+                        .anyMatch(p -> !p.item().hasRowWitness()),
                 "a boundary nothing is at");
-        assertTrue(partition.pairs().unknown() > 0, "a combination nothing reaches");
+        assertTrue(partition.pairs().counts().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
-                .get("take").unreached().isEmpty(), "an arm nothing goes through");
-        assertFalse(GeneratedRows.of(module,
-                compilation.db().ask(new Adequacy.Generated(module)).value(), true,
-                SourceNameResolver.identity()).isEmpty(),
+                .get("take").unreached().orElseThrow().isEmpty(), "an arm nothing goes through");
+        assertFalse(GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(module, true)),
+                Map.of(), SourceNameResolver.identity()).text().isEmpty(),
                 "and rows offered for them");
     }
 }

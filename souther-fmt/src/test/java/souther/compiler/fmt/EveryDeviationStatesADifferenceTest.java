@@ -66,7 +66,7 @@ class EveryDeviationStatesADifferenceTest {
             + "EveryDepartureFromTheCanonicalFormIsSomeRulesTest#departures")
     void aDeviationQuotesTwoDifferentAnswers(
             EveryDepartureFromTheCanonicalFormIsSomeRulesTest.Departure departure) {
-        Deviations.Report report = Deviations.of(departure.text());
+        Deviations.Report report = departure.report();
 
         for (Deviations.Deviation d : report.deviations()) {
             assertNotEquals(d.canonical(), d.source(),
@@ -85,7 +85,7 @@ class EveryDeviationStatesADifferenceTest {
         int places = 0;
         for (EveryDepartureFromTheCanonicalFormIsSomeRulesTest.Departure departure
                 : EveryDepartureFromTheCanonicalFormIsSomeRulesTest.departures().toList()) {
-            for (Deviations.Deviation d : Deviations.of(departure.text()).deviations()) {
+            for (Deviations.Deviation d : departure.report().deviations()) {
                 if (d.rule().contains("exceed the width")) {
                     width++;
                 } else if (d.rule().contains("breaks at every place it settles")) {

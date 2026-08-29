@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -165,9 +167,9 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
         SourceNameResolver names = Main.namesOf(List.of(Path.of("a", "zeroname.sou")));
 
         assertEquals("zeroname.sou", names.nameOf(Compilation.idOfSourceIndex(0)));
-        assertEquals("elsewhere.sou", names.nameOf("elsewhere.sou"),
+        assertEquals("elsewhere.sou", names.nameOf(new SourceId("elsewhere.sou")),
                 "an id from another caller stands for itself");
-        assertEquals("1", names.nameOf("1"), "and so does a position this run has no file at");
+        assertEquals("1", names.nameOf(new SourceId("1")), "and so does a position this run has no file at");
     }
 
     /** The lines of the module's own section, which is where a reason about its sources is printed. */

@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.Region;
 import souther.compiler.frontend.CstFrontend;
@@ -85,9 +87,10 @@ class AnExpansionKeepsTheSpellingItCopiedTest {
     /** Every name in {@code helper}'s expanded body that points at characters not spelling it. */
     private static List<String> misspelled(String source, String helper) {
         Ast.Module parsed = CstFrontend.parse(source);
-        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, Symbols.of(parsed)));
-        Ast.Expr expanded =
-                inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
+        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
+        Hir.Expr expanded =
+                inliner.inline(inliner.held().get(new souther.compiler.ast.DefinitionName(helper))
+                        .definition().writtenBody(), inliner.bodyOf(helper));
 
         List<String> wrong = new ArrayList<>();
         names(expanded, name -> {
@@ -115,17 +118,17 @@ class AnExpansionKeepsTheSpellingItCopiedTest {
     }
 
     /** Every name held by an expression and the expressions under it. */
-    private static void names(Ast.Expr e, java.util.function.Consumer<WrittenName> f) {
-        if (e instanceof Ast.Var v) {
+    private static void names(Hir.Expr e, java.util.function.Consumer<WrittenName> f) {
+        if (e instanceof Hir.Var v) {
             f.accept(v.written());
         }
-        if (e instanceof Ast.FieldAccess fa) {
+        if (e instanceof Hir.FieldAccess fa) {
             f.accept(fa.name());
         }
-        if (e instanceof Ast.NewData nd) {
+        if (e instanceof Hir.NewData nd) {
             nd.inits().forEach(i -> f.accept(i.written()));
         }
-        Ast.forEachChild(e, c -> names(c, f));
+        Hir.forEachChild(e, c -> names(c, f));
     }
 
     /** The characters {@code at} covers, cut out of the source it was read from. */

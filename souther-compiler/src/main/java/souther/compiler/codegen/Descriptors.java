@@ -121,6 +121,10 @@ final class Descriptors {
     /** {@code Probe.hit(int)}: records one arm and leaves the stack as it was. */
     static final MethodTypeDesc MTD_Probe_hit =
             MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int);
+    /** {@code Probe.compared(boolean, int)}: records one comparison and the value it answered,
+     * taking a copy of that value off the stack and leaving the original where it was. */
+    static final MethodTypeDesc MTD_Probe_compared = MethodTypeDesc.of(ConstantDescs.CD_void,
+            ConstantDescs.CD_boolean, ConstantDescs.CD_int);
     /**
      * What an evaluation is allowed, called by classes generated for evaluating and by nothing that
      * ships. Reached the way {@link #CD_Probe} is, and for the same reason.
@@ -143,6 +147,22 @@ final class Descriptors {
     static final MethodTypeDesc MTD_failureClause = MethodTypeDesc.of(CD_String);
     /** {@code meta()}: the rejecting type, and the clause where it has a name. */
     static final MethodTypeDesc MTD_failureMeta = MethodTypeDesc.of(CD_Map);
+    /** The failure side of a behavior's declared relation: which clause of which behavior did not
+     *  hold, and which case of the answer it was about. */
+    static final ClassDesc CD_EnsuresFailure = ClassDesc.of("souther.runtime.EnsuresFailure");
+    /** The case a failure names, as the module that declares it and the name written there. */
+    static final ClassDesc CD_DeclaredCase = ClassDesc.of("souther.runtime.DeclaredCase");
+    /** Its constructor. */
+    static final MethodTypeDesc MTD_declaredCase =
+            MethodTypeDesc.of(ConstantDescs.CD_void, CD_String, CD_String);
+    /** Its constructor. Written rather than a factory per shape of the two nullable parts, which
+     *  would be four names for one value; a null is pushed for the part that is not there. */
+    static final MethodTypeDesc MTD_ensuresFailure = MethodTypeDesc.of(ConstantDescs.CD_void,
+            CD_String, CD_String, CD_String, CD_DeclaredCase, CD_DeclaredCase);
+    /** The one abort either kind of broken constraint leaves by. */
+    static final ClassDesc CD_ConstraintFailure = ClassDesc.of("souther.runtime.ConstraintFailure");
+    static final MethodTypeDesc MTD_notHeld =
+            MethodTypeDesc.of(CD_ConstraintViolation, CD_ConstraintFailure);
     static final ClassDesc CD_IntMath = ClassDesc.of("souther.runtime.IntMath");
     /** {@code (long, long) -> long}: overflow-checked Int arithmetic (spec §stdlib-int). */
     static final MethodTypeDesc MTD_intExact =
@@ -152,20 +172,13 @@ final class Descriptors {
     static final ClassDesc CD_Boolean = ClassDesc.of("java.lang.Boolean");
     static final ClassDesc CD_BigDecimal = ClassDesc.of("java.math.BigDecimal");
     static final ClassDesc CD_DecimalMath = ClassDesc.of("souther.runtime.DecimalMath");
-    /** {@code BigDecimal add/subtract/multiply(BigDecimal) -> BigDecimal}: the Decimal `+ - *` ops. */
-    static final MethodTypeDesc MTD_bdArith = MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal);
-    /** {@code DecimalMath.divide(BigDecimal, BigDecimal) -> BigDecimal}: the Decimal `/` operator. */
-    static final MethodTypeDesc MTD_bdDivideOp =
+    /** {@code DecimalMath add/subtract/multiply/divide(BigDecimal, BigDecimal) -> BigDecimal}: the
+     *  four Decimal operators. One descriptor because the four kernels take and answer the same
+     *  thing — the operator picks the name, not the shape. */
+    static final MethodTypeDesc MTD_bdArith =
             MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, CD_BigDecimal);
     /** The Souther value ([#stdlib-decimal]); the runtime maps it to {@code java.math.RoundingMode}. */
     static final ClassDesc CD_RoundingMode = ClassDesc.of("souther.runtime.RoundingMode");
-    static final ClassDesc CD_JavaRoundingMode = ClassDesc.of("java.math.RoundingMode");
-    /** {@code DecimalMath.toJava(RoundingMode)}: the Java constant a mode value denotes. */
-    static final MethodTypeDesc MTD_toJavaRoundingMode =
-            MethodTypeDesc.of(CD_JavaRoundingMode, CD_RoundingMode);
-    /** {@code BigDecimal.divide(BigDecimal, int, RoundingMode)} (spec §stdlib-decimal). */
-    static final MethodTypeDesc MTD_bdDivide =
-            MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, ConstantDescs.CD_int, CD_JavaRoundingMode);
     static final ClassDesc CD_LocalDate = ClassDesc.of("java.time.LocalDate");
     static final ClassDesc CD_LocalTime = ClassDesc.of("java.time.LocalTime");
     static final ClassDesc CD_LocalDateTime = ClassDesc.of("java.time.LocalDateTime");
@@ -211,6 +224,12 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Strings_fromInt = MethodTypeDesc.of(CD_String, ConstantDescs.CD_long);
     static final ClassDesc CD_Comparable = ClassDesc.of("java.lang.Comparable");
     static final MethodTypeDesc MTD_compareTo_Object = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
+
+    /** {@code Integer.compare(int, int)}: the sign of two places in an enumeration's declaration,
+     *  which is what a {@code compareTo} over a newtype wrapping one answers with. */
+    static final ClassDesc CD_Integer = ClassDesc.of("java.lang.Integer");
+    static final MethodTypeDesc MTD_Integer_compare =
+            MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_int, ConstantDescs.CD_int);
     static final MethodTypeDesc MTD_Map_put = MethodTypeDesc.of(CD_Object, CD_Object, CD_Object);
     static final MethodTypeDesc MTD_Map_containsKey =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
@@ -319,10 +338,6 @@ final class Descriptors {
     static final String ORDER_METHOD = "__order";
     static final String ORDERING_METHOD = "__ordering";
 
-    /** The library functions that compare by natural order. An enumeration's order lives on its sum
-     *  rather than on its values, so for one of these the emitter passes a comparator (issue #161). */
-    static final java.util.Set<String> ORDERED_BY_COMPARATOR =
-            java.util.Set.of("List.sort", "List.max", "List.min");
     static final MethodTypeDesc MTD_order = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
     static final ClassDesc CD_Comparator = ClassDesc.of("java.util.Comparator");
     static final ClassDesc CD_ToIntFunction = ClassDesc.of("java.util.function.ToIntFunction");

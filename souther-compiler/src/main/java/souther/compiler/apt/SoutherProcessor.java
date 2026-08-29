@@ -1,5 +1,7 @@
 package souther.compiler.apt;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
@@ -8,6 +10,7 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.diag.SourceNames;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.Compiler;
 import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
@@ -98,12 +101,12 @@ public final class SoutherProcessor extends AbstractProcessor {
             for (String reported : render(compiled.locatedWarnings(), sources)) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, reported);
             }
-            Map<String, byte[]> classes = compiled.classes();
+            Map<String, ClassFileImage> classes = compiled.classes();
             Filer filer = processingEnv.getFiler();
-            for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
+            for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
                 JavaFileObject file = filer.createClassFile(entry.getKey());
                 try (OutputStream out = file.openOutputStream()) {
-                    out.write(entry.getValue());
+                    out.write(entry.getValue().bytes());
                 }
             }
         } catch (CompileException e) {
@@ -159,9 +162,10 @@ public final class SoutherProcessor extends AbstractProcessor {
         });
     }
 
-    /** Which of the sources handed over an id names, or -1 when it names none of them. A compile of
-     *  one source names none, and the one file it was given is the answer however it is tagged. */
-    private static int indexOf(List<Source> sources, String sourceId) {
+    /** Which of the sources handed over an id names, or -1 when it names none of them. One file
+     *  handed over is the answer however a diagnostic is tagged, including one this compile could
+     *  pin on no source. */
+    private static int indexOf(List<Source> sources, SourceId sourceId) {
         if (sources.size() == 1) {
             return 0;
         }

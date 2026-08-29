@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.diag.CompileException;
 
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -42,7 +43,7 @@ class ModuleOmissionTest {
 
     @Test
     void compileNamesTheGeneratedClassesAfterTheDefault() {
-        Map<String, byte[]> classes = Compiler.compile(HEADERLESS, "hello");
+        Map<String, ClassFileImage> classes = Compiler.compile(HEADERLESS, "hello");
         assertTrue(classes.containsKey("hello.Greet"), classes.keySet().toString());
     }
 

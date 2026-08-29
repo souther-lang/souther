@@ -1,8 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
 
+import souther.compiler.jvm.ClassFileImage;
 import souther.runtime.ConstraintViolation;
 
 import org.junit.jupiter.api.Test;
@@ -32,15 +35,15 @@ class CrossProjectImportTest {
 
     /** The library project's build: its own compile, and nothing of the consumer's. */
     private static ModulePath published(String... sources) {
-        Map<String, byte[]> classes = sources.length == 1
+        Map<String, ClassFileImage> classes = sources.length == 1
                 ? Compiler.compile(sources[0])
                 : Compiler.compileModules(List.of(sources));
-        return classes::get;
+        return ModulePath.of(classes);
     }
 
     @Test
     void aModuleOnThePathCanBeImported() {
-        Map<String, byte[]> app = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> app = Compiler.compileModules(List.of("""
                 module app.order
                 import shared.money ( Amount )
                 data Order = { total: Amount }
@@ -64,7 +67,7 @@ class CrossProjectImportTest {
                 data Stock = Map<String, Int>
                 """);
 
-        Map<String, byte[]> app = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> app = Compiler.compileModules(List.of("""
                 module app.catalog exposing ( Item )
                 import List ( length )
                 import shared.tagging ( Tags )
@@ -87,7 +90,7 @@ class CrossProjectImportTest {
     @Test
     void constructingAnImportedTypeRunsTheInvariantTheLibraryCompiled() throws Exception {
         ModulePath path = published(LIBRARY);
-        Map<String, byte[]> app = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> app = Compiler.compileModules(List.of("""
                 module app.order exposing ( Req, place )
                 import shared.money ( Amount )
                 data Req = { n: Int }
@@ -95,11 +98,13 @@ class CrossProjectImportTest {
                 let place (r) = Amount(r.n)
                 """), path);
 
-        Map<String, byte[]> both = new LinkedHashMap<>(app);
-        both.put("shared.money.Amount", path.bytes("shared.money.Amount"));
-        both.put("shared.money.Amount$Ctfe", path.bytes("shared.money.Amount$Ctfe"));
+        Map<String, ClassFileImage> both = new LinkedHashMap<>(app);
+        both.put("shared.money.Amount",
+                ClassFileImage.of(path.bytes("shared.money.Amount")));
+        both.put(Emitted.ctfe("shared.money", "Amount"),
+                ClassFileImage.of(path.bytes(Emitted.ctfe("shared.money", "Amount"))));
         BytesClassLoader loader = new BytesClassLoader(both, getClass().getClassLoader());
-        Object impl = loader.loadClass("app.order.Place$Impl").getDeclaredConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "app.order", "place").getDeclaredConstructor().newInstance();
 
         Object ok = Codecs.apply(impl, Codecs.decoded(loader, "app.order.Req", Map.of("n", 5L)));
         assertEquals(5L, ok.getClass().getMethod("value").invoke(ok));
@@ -166,12 +171,13 @@ class CrossProjectImportTest {
      * project does not have, so what is reported is the path, naming both modules. */
     @Test
     void aDependencyOfADependencyThatIsAbsentNamesBothModules() {
-        Map<String, byte[]> both = Compiler.compileModules(List.of(LIBRARY, """
+        Map<String, ClassFileImage> both = Compiler.compileModules(List.of(LIBRARY, """
                 module shared.billing exposing ( Invoice )
                 import shared.money ( Amount )
                 data Invoice = { total: Amount }
                 """));
-        ModulePath halfThere = name -> name.startsWith("shared.billing") ? both.get(name) : null;
+        ModulePath halfThere = name -> name.startsWith("shared.billing") && both.containsKey(name)
+                ? both.get(name).bytes() : null;
 
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of("""
@@ -189,7 +195,7 @@ class CrossProjectImportTest {
      * nothing it can see mentions. */
     @Test
     void anImportOnlyAnUnpublishedLetNeededIsNotRequiredOnThePath() {
-        Map<String, byte[]> both = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> both = Compiler.compileModules(List.of("""
                 module shared.audit exposing ( Trail )
                 data Trail = String
                 """, """
@@ -198,7 +204,8 @@ class CrossProjectImportTest {
                 data Invoice = { total: Int }
                 let describe (t: Trail) = t
                 """));
-        ModulePath billingOnly = name -> name.startsWith("shared.billing") ? both.get(name) : null;
+        ModulePath billingOnly = name -> name.startsWith("shared.billing") && both.containsKey(name)
+                ? both.get(name).bytes() : null;
 
         Compiler.compileModules(List.of("""
                 module app.ledger
@@ -213,7 +220,7 @@ class CrossProjectImportTest {
      * declaration needs is not always one a field mentions. It is still needed on the path. */
     @Test
     void anImportOnlySpreadIntoAPublishedDataIsStillRequired() {
-        Map<String, byte[]> both = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> both = Compiler.compileModules(List.of("""
                 module shared.base exposing ( Common )
                 data Common = { id: String }
                 """, """
@@ -221,7 +228,8 @@ class CrossProjectImportTest {
                 import shared.base ( Common )
                 data Invoice = { ...Common, total: Int }
                 """));
-        ModulePath billingOnly = name -> name.startsWith("shared.billing") ? both.get(name) : null;
+        ModulePath billingOnly = name -> name.startsWith("shared.billing") && both.containsKey(name)
+                ? both.get(name).bytes() : null;
 
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of("""
@@ -238,7 +246,7 @@ class CrossProjectImportTest {
      * declarations write, so that is what says the import is needed. */
     @Test
     void anImportUsedOnlyThroughItsAliasIsStillRequired() {
-        Map<String, byte[]> both = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> both = Compiler.compileModules(List.of("""
                 module shared.audit exposing ( Trail )
                 data Trail = String
                 """, """
@@ -246,7 +254,8 @@ class CrossProjectImportTest {
                 import shared.audit as A
                 data Invoice = { trail: A.Trail }
                 """));
-        ModulePath billingOnly = name -> name.startsWith("shared.billing") ? both.get(name) : null;
+        ModulePath billingOnly = name -> name.startsWith("shared.billing") && both.containsKey(name)
+                ? both.get(name).bytes() : null;
 
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of("""
@@ -319,19 +328,19 @@ class CrossProjectImportTest {
                 data Terms = Net15 | Net30
                 """);
 
-        Map<String, byte[]> app = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> app = Compiler.compileModules(List.of("""
                 module app.billing
                 import shared.terms ( Terms, Net30 )
                 data Req = { n: Int }
-                behavior pick : (r: Req) -> Terms constructs Net30
+                behavior pick : (r: Req) -> Terms
                 let pick (r) = Net30
                 """), path);
 
-        Map<String, byte[]> both = new LinkedHashMap<>(app);
-        both.put("shared.terms.Terms", path.bytes("shared.terms.Terms"));
-        both.put("shared.terms.Net30", path.bytes("shared.terms.Net30"));
+        Map<String, ClassFileImage> both = new LinkedHashMap<>(app);
+        both.put("shared.terms.Terms", ClassFileImage.of(path.bytes("shared.terms.Terms")));
+        both.put("shared.terms.Net30", ClassFileImage.of(path.bytes("shared.terms.Net30")));
         BytesClassLoader loader = new BytesClassLoader(both, getClass().getClassLoader());
-        Object impl = loader.loadClass("app.billing.Pick$Impl").getDeclaredConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "app.billing", "pick").getDeclaredConstructor().newInstance();
 
         Object out = Codecs.apply(impl, Codecs.decoded(loader, "app.billing.Req", Map.of("n", 1L)));
         assertEquals("shared.terms.Net30", out.getClass().getName());
@@ -344,16 +353,16 @@ class CrossProjectImportTest {
      */
     @Test
     void anImportedTypeIsAUnionMemberWithoutTouchingTheLibrary() throws Exception {
-        Map<String, byte[]> app = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> app = Compiler.compileModules(List.of("""
                 module app.billing exposing ( NothingOwed, owed )
                 import shared.money ( Amount )
                 data NothingOwed
                 behavior owed : (a: Amount, b: Amount) -> Amount | NothingOwed
-                    constructs Amount, NothingOwed
+                    constructs Amount
                 let owed (a, b) = if a.value >= b.value then Amount(a.value - b.value) else NothingOwed
                 """), published(LIBRARY));
 
-        assertTrue(app.containsKey("app.billing.AmountCase"),
+        assertTrue(app.containsKey(Emitted.bridgeCase("app.billing", TypeSymbols.declared(new TypeKey("shared.money", "Amount")))),
                 "the bridge case is this project's own class");
         assertFalse(app.containsKey("shared.money.Amount"),
                 "and the library is not emitted again to carry the interface");

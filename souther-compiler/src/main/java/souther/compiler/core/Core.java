@@ -1,38 +1,42 @@
 package souther.compiler.core;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.ast.Ast;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * The Core IR (ADR-0021): the lowered form of a behavior body the backend emits from.
+ * The Core IR (ADR-0021): a checked executable expression, which is what every backend emits from.
  *
- * <p>Core is the surface expression AST after the {@link souther.compiler.check.Lower}
- * stage has inlined helpers and desugared surface-only forms. It differs from the AST in what it
- * makes explicit: a construct the backend used to re-detect and shape during emission becomes its
- * own node here, so the backend only emits.
+ * <p>Three things the language states reach a backend as this — a behavior's or a {@code let}'s
+ * body, a data's {@code invariant} condition, and the rule an {@code ensures} states — and each is
+ * the written expression with the helpers it names inlined and the surface-only forms desugared. It
+ * differs from the AST in what it makes explicit: a construct the backend used to re-detect and
+ * shape during emission becomes its own node here, so the backend only emits.
  *
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
- * checker is the only producer of Core — it builds the tree as it types a body
- * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of inferring the
- * same types a second time.
+ * checker is the only producer of Core — it builds the tree as it types what was written
+ * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of deciding them a
+ * second time. A condition was the exception until #1080, and being the exception meant the last
+ * step of deciding what a clause meant sat inside a backend.
  *
  * <p>A name in a body is one of two nodes, not one: a read of something the body binds, and a unit
  * data written as its own value. They were one, and the emitter told them apart by looking the
  * spelling up in its slots and falling back when it found nothing — which is an answer about a
  * name, decided by its text.
  *
- * <p>A surface-only node (a list comprehension) never appears — the Lower stage has already
- * rewritten it.
+ * <p>A surface-only node (a list comprehension) never appears — it is desugared before the
+ * elaboration that produces this, whether what is being read is a body or a clause.
  */
 public sealed interface Core {
 
@@ -49,6 +53,63 @@ public sealed interface Core {
 
     record Bool(boolean value, Type type, SourcePos pos) implements Core {}
 
+    /**
+     * A temporal written out: {@code Date("2026-07-01")}, {@code Time("09:00")},
+     * {@code DateTime("2026-07-01T09:00")}, {@code Instant("2026-07-01T09:00:00Z")}.
+     *
+     * <p>A literal, and here beside the other four for the reason the language calls it one
+     * (spec §a-temporal-value-is-written-as-a-literal): the text is written where the value goes,
+     * and the checker has already read it. It was carried this far as a {@link Call} instead, which
+     * is the shape an application has — so every reader that needed to know a written temporal from
+     * a call had to work it out, and each took a different thing to work it out from: the spelling
+     * in front of the argument, the type the call answered, the shape of the argument. A model
+     * declaring a behavior of its own named {@code Date} was compiled as this construction, its
+     * injected implementation never called. None of them is a question this node can be asked.
+     *
+     * <p>{@code kind} is the temporal, and the node's type is it: one value, so the two cannot
+     * disagree. {@code text} is the ISO text as it was written, which is what a reader of this wants
+     * — the backend parses it, a boundary reads its place — and the parse the checker already did is
+     * what says the text is good.
+     */
+    record Temporal(Type.Prim kind, String text, SourcePos pos) implements Core {
+
+        public Temporal {
+            if (kind == null || !kind.temporal()) {
+                throw new IllegalArgumentException("`" + kind + "` is no temporal");
+            }
+            if (text == null) {
+                throw new IllegalArgumentException("a written temporal is written out");
+            }
+        }
+
+        @Override
+        public Type type() {
+            return kind;
+        }
+    }
+
+    /**
+     * A binding this tree makes: a {@code let}, a lambda's parameter, a {@code match} arm's name.
+     *
+     * <p>Core's own, and not the resolved tree's binder. What a backend has of a binding is which
+     * one it is and what to call the local — the two here. The rest of a resolved binder is about
+     * the characters an author typed: the spelling before a desugaring canonicalised it, and where
+     * the name was written, which is what a cursor is compared against. A backend has no cursor and
+     * emits no spelling, and Core naming that form put {@code souther.compiler.ast} on what a
+     * backend outside this compiler reads.
+     *
+     * <p>One spelling for the binding. The resolved binder answers it as both {@code binding()} and
+     * {@code id()}, and a reader that has to pick between two names for one thing is a reader that
+     * can be read two ways.
+     */
+    record Binder(String name, BindingId binding) {
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
     /** A read of something the body binds: a parameter, a {@code let}, a lambda's parameter, a
      * {@code match} arm's binding. {@code binding} is which one; {@code name} is what to call the
      * local it is emitted as, and what a diagnostic quotes. */
@@ -56,14 +117,14 @@ public sealed interface Core {
 
     /** A unit data written where a value goes: the type has one value, and naming it is that value
      * (spec §unit-data). Which unit is on the node, so nothing resolves a spelling again. */
-    record UnitValue(TypeName data, Type type, SourcePos pos) implements Core {}
+    record UnitValue(TypeSymbol data, Type type, SourcePos pos) implements Core {}
 
     record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
-    /** {@code origin} is where the comparison was written; see {@link Ast.Binary}. */
-    record Binary(Ast.BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
+    /** {@code origin} is where the comparison was written; see {@link souther.compiler.ast.Hir.Binary}. */
+    record Binary(BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
                   SourcePos pos) implements Core {}
 
     /**
@@ -86,17 +147,178 @@ public sealed interface Core {
         String rendered();
     }
 
-    /** A callee some module named, under the name that module reaches it by. */
-    record Reached(ReachName name) implements CallTarget {
+    /**
+     * A callee some module named: the reference resolution settled for it.
+     *
+     * <p>One value, because a reference is one. The backend emits the method the reach name spells;
+     * a reader asking what kind of thing was called — a module's own helper, one of the language's
+     * operations, a behavior whose implementation comes from outside — asks what that reference
+     * denotes, and {@link ReachName} carries both. Held as a route and a denotation side by side,
+     * the two could be paired from different references and nothing would say so.
+     *
+     * <p>A kernel call is one of these and not something beside them. {@code List.sort} is reached
+     * by a name and resolves to a library operation, and its declaration being a kernel is what that
+     * operation turned out to be — so a reader asking what a call reaches asks this, whichever arm
+     * it is, and only a reader that has to emit the operation goes on to ask which kernel. Put
+     * beside {@code Reached}, the arms would divide by provenance for two of them and by what the
+     * declaration holds for the third, and a reader that wanted only the name would stop seeing
+     * kernels without being told.
+     */
+    sealed interface Reached extends CallTarget {
 
-        @Override
-        public String rendered() {
-            return name.rendered();
+        /** The reference the module being emitted reaches the callee by, which reaches a
+         *  declaration — a call is emitted for nothing else, and both arms below say so. */
+        ReachName.Declaration name();
+
+        /** What that reference reaches. Read off the reference rather than held beside it: a
+         *  declaration kept next to the route it was reached by is the same fact twice, and the two
+         *  agree only until a pass replaces one of them. */
+        default ValueName denotes() {
+            return name().denotes();
         }
 
         @Override
-        public String toString() {
-            return rendered();
+        default String rendered() {
+            return name().rendered();
+        }
+
+        /**
+         * A callee whose declaration this compilation carries: a helper the emitting module holds
+         * as a method of its own, or a behavior. What is emitted for it is a call.
+         *
+         * <p>Those two and nothing else, said here rather than found out downstream. A binding is
+         * applied where it stands and a type used as a value is a construction, so neither is a
+         * call to a declaration; a library operation the language implements is a kernel and is
+         * {@link OfKernel}. An emitter reading one of these divides it into a helper and a behavior
+         * and has no third arm to write, and that is true because this refuses to build a fourth
+         * rather than because the emitters have all been counted.
+         */
+        record OfDeclaration(ReachName.Declaration name) implements Reached {
+
+            /**
+             * What running this call means: a method of the emitting module, or a behavior.
+             *
+             * <p>Derived and not held. What a call reaches is on the reference already, and the two
+             * kinds of thing a residual call can reach are the arms this refuses to be built with —
+             * so an emitter reading this is reading the reference rather than a second answer that
+             * could come to disagree with it.
+             *
+             * <p>Not a property of a {@link ValueName}. Whether the library implements an operation
+             * as a helper, an intrinsic or a builtin is the library's own business and is
+             * deliberately not on the name; what holds here is narrower — that a call this
+             * compilation kept standing over a library operation is a call to a method, because a
+             * kernel would be {@link OfKernel} and anything else would have been expanded. That is
+             * true of this phase and is said at this phase.
+             */
+            public Reaches reaches() {
+                return switch (name) {
+                    // A helper of this module and one of another are the same thing to emit: a call
+                    // to a method the module holds. So is an operation the library wrote in
+                    // Souther — what differs between the three is where the declaration came from,
+                    // which is a different question and is asked of the declaration.
+                    case ReachName.Own(ValueName.OfAModule declared) -> ofAModule(declared);
+                    case ReachName.OfModule(ValueName.OfAModule declared) -> ofAModule(declared);
+                    case ReachName.OfLibrary(ValueName.Stdlib.Operation operation) ->
+                            new Reaches.AHelper(operation);
+                };
+            }
+
+            private static Reaches ofAModule(ValueName.OfAModule declared) {
+                return switch (declared) {
+                    case ValueName.Helper helper -> new Reaches.AHelper(helper);
+                    case ValueName.Behavior behavior -> new Reaches.ABehavior(behavior);
+                };
+            }
+
+            public OfDeclaration {
+                if (name == null) {
+                    throw new IllegalArgumentException(
+                            "a call applies something this compilation resolved");
+                }
+            }
+
+            @Override
+            public String toString() {
+                return rendered();
+            }
+        }
+
+        /**
+         * A callee whose declaration is a kernel of the standard library, and which kernel it is.
+         *
+         * <p>Which kernel is the answer to a question this compiler settled: the checker typed the
+         * call against the library's signature, and the declaration behind that signature named the
+         * operation. An output reads the operation here rather than going back to a table this
+         * compiler keeps for itself — and a spelling it guessed from would be resolving, by the
+         * alias and the name, what was resolved already.
+         *
+         * <p>The kernel is beside the reference and is not part of it. The reference says how this
+         * module got here and which declaration it chose; the kernel says what that declaration
+         * turned out to be, which the library answered and this holds rather than asks again. Two
+         * declarations naming one kernel is a thing the library is refused for while it is built,
+         * not a thing this collapses.
+         */
+        record OfKernel(ReachName.OfLibrary name, Kernel kernel) implements Reached {
+
+            public OfKernel {
+                // Only the library declares a kernel, and only an operation of it is one. Both are
+                // the type of the reference, so there is nothing here to turn away.
+                if (name == null) {
+                    throw new IllegalArgumentException("a kernel call reaches the operation it is");
+                }
+            }
+
+            @Override
+            public String toString() {
+                return rendered();
+            }
+        }
+    }
+
+    /**
+     * What a call to a declaration runs, for whoever has to emit it.
+     *
+     * <p>The two kinds of thing a call that survived to here can reach, and the division an emitter
+     * writes its arms over. Not provenance: a module's own helper, another module's and a library
+     * operation written in Souther are one answer, because one thing is emitted for all three — a
+     * call to a method the emitting module holds. What differs between them is where the
+     * declaration came from, which is a different question and is asked of the declaration.
+     *
+     * <p>Read off a call rather than stored on one ({@link Reached.OfDeclaration#reaches}), so this
+     * cannot come to say something the reference does not.
+     *
+     * <p>Sealed, and the switches over it carry no {@code default}: a third kind of callee is a
+     * compile error at every emitter rather than a call one of them quietly does nothing for.
+     */
+    sealed interface Reaches {
+
+        /** The declaration reached. */
+        ValueName declaration();
+
+        /**
+         * A method the emitting module holds, which is where this program's recursions live.
+         *
+         * <p>{@code declaration} is what the module holds a copy of, and which module wrote it is
+         * that identity's to say — {@code souther.list} for an operation reached as
+         * {@code List.foldFrom}. Where the module holds the method is not here: that follows from
+         * how the call reaches it, and a reader emitting one works it out from the reference.
+         */
+        record AHelper(ValueName declaration) implements Reaches { }
+
+        /**
+         * A behavior, whose implementation is somewhere else — another module's, or supplied from
+         * outside this program altogether.
+         *
+         * <p>Where the value of it stands when this call runs is the emitter's own question: a
+         * field of the class being emitted, a parameter, a slot. That is a fact about how one
+         * output lays a frame out and is no part of what the call reaches.
+         */
+        record ABehavior(ValueName.Behavior behavior) implements Reaches {
+
+            @Override
+            public ValueName declaration() {
+                return behavior;
+            }
         }
     }
 
@@ -141,17 +363,12 @@ public sealed interface Core {
      *
      * <p>{@code fn} says what is applied ({@link CallTarget}). Where that is a name, it is the one
      * the module being emitted reaches the callee by, carried from where resolution settled it, and
-     * held as what it is rather than as the spelling of it: the backend needs both the whole name, to
-     * emit the method it calls, and the operation inside it, to reach the runtime method a library
-     * call becomes — and taking the second out of the first meant splitting a name this compiler had
-     * joined a moment earlier.
+     * held as what it is rather than as the spelling of it: the backend needs the whole name to emit
+     * the method it calls, and what the name denotes to know what kind of thing was called. Where
+     * the callee turned out to be a kernel of the standard library, the call says which one
+     * ({@link Reached.OfKernel}), so an output emitting it asks the call rather than this compiler.
      */
     record Call(CallTarget fn, List<Core> args, Type type, SourcePos pos) implements Core {
-
-        /** A call to a name, as the name it reaches. */
-        public Call(ReachName fn, List<Core> args, Type type, SourcePos pos) {
-            this(new Reached(fn), args, type, pos);
-        }
 
         /** The callee as it renders — the reach name for a call to one, the operation's own
          * spelling for one this compiler emits. What a method name is built from and what a report
@@ -205,10 +422,18 @@ public sealed interface Core {
      */
     record Apply(Read fn, List<Core> args, Type type, SourcePos pos) implements Core {}
 
-    /** {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
-     * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}). */
-    record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos)
-            implements Core {}
+    /**
+     * {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
+     * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}).
+     *
+     * <p>{@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * was is a fact about this copy — so it travels with the fork rather than being recovered from
+     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
+     */
+    record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos,
+              List<souther.compiler.types.BindingOwner> expansion) implements Core {
+    }
 
     /**
      * An attempted construction: {@code construct}'s invariant decides the branch. It is built and
@@ -220,9 +445,16 @@ public sealed interface Core {
      * <p>With one departure naming no clause, any failure takes it. With several, the failing clause
      * the {@code Result} carries selects one; the checker has already established that every named
      * clause is answered, so one always matches.
+     *
+     * <p>{@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * was is a fact about this copy — so it travels with the fork rather than being recovered from
+     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
      */
-    record IfConstructed(NewData construct, Ast.Binder binder, Core then, List<ElseArm> els,
-                         CoverageOrigin origin, Type type, SourcePos pos) implements Core {}
+    record IfConstructed(Construct construct, Binder binder, Core then, List<ElseArm> els,
+                         CoverageOrigin origin, Type type, SourcePos pos,
+                         List<souther.compiler.types.BindingOwner> expansion) implements Core {
+    }
 
     /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
      * for any failure) and the value taken. */
@@ -231,7 +463,7 @@ public sealed interface Core {
     /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
      * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an
      * empty collection bound here materialises at the written type rather than a bottom (issue #71). */
-    record LetIn(Ast.Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
+    record LetIn(Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
 
         public String name() {
             return binder.name();
@@ -243,11 +475,11 @@ public sealed interface Core {
      * inline, and only a block that escapes into a first-class position becomes a class. Its {@code
      * type} is the {@link Type.FnOf} the checker gave it — the parameter types the context fixed, and
      * the body's result type. */
-    record Block(List<Ast.Binder> params, Core body, Type type, SourcePos pos) implements Core {
+    record Block(List<Binder> params, Core body, Type type, SourcePos pos) implements Core {
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
-            return params.stream().map(Ast.Binder::name).toList();
+            return params.stream().map(Binder::name).toList();
         }
     }
 
@@ -268,32 +500,145 @@ public sealed interface Core {
      * pattern's name count, checked against the tuple's size (ADR-0036). */
     record TupleGet(Core tuple, int index, int arity, Type type, SourcePos pos) implements Core {}
 
-    record FieldInit(String name, Core value, SourcePos pos) {}
+    /** What one field of a construction is given. {@code pos} is where the value was written, which
+     * for a field a spread supplies is the spread. */
+    record FieldValue(String field, Core value, SourcePos pos) {}
 
-    /** {@code spreads} are the bindings the construction copies fields from — reads, not binders:
-     * a spread names a value in force, it does not introduce one. */
-    record NewData(TypeName typeName, List<FieldInit> inits, List<Read> spreads, Type type,
-                   SourcePos pos) implements Core {
+    /**
+     * Making a value of a declared type — the one node a body creates a representation with. Every
+     * way a source writes one is this: a record literal, a literal spreading another value's fields,
+     * a newtype's constructor, and the arithmetic that re-wraps a newtype (spec §newtype-arithmetic).
+     * What a construction builds is therefore settled once, where this is built, rather than worked
+     * out again by each reader from the shape it was written in.
+     *
+     * <p>{@code values} is every declared field, in declaration order, and holds no spread: the
+     * value a spread supplies is the read of that field off the spread source, resolved here. A
+     * reader asking what this builds asks {@code values}, and the order it asks in is the order the
+     * fields are evaluated.
+     */
+    record Construct(TypeSymbol.AtModule typeName, List<FieldValue> values, Type type,
+                     SourcePos pos) implements Core {}
 
-        /** How each spread source was written, in order. */
-        public List<String> spreadNames() {
-            return spreads.stream().map(Read::name).toList();
+    /**
+     * What an arm selects and what it binds, both decided by the checker.
+     *
+     * <p>{@code selectors} are the cases the arm answers for, in the order they are written; more
+     * than one is an or-pattern. {@code binding} is what the value is read as once the arm is taken,
+     * and it is the arm's own rather than any one selector's: an or-pattern binds the subject,
+     * because no single case type fits all of its alternatives.
+     *
+     * <p>Nothing here is worked out again downstream. A reader emitting this tests each selector's
+     * {@link Refinement} and reads the binding through {@code binding}, and never asks whether the
+     * subject was an optional, whether the arm named one case or several, or whether a case is a
+     * primitive. Those are the questions {@code Core} exists to have answered already.
+     */
+    sealed interface ResolvedPattern {
+
+        /** The cases the arm answers for, in the order they are written. */
+        List<CaseSelector> selectors();
+
+        /**
+         * What the value is read as once the arm is taken.
+         *
+         * <p>Derived rather than carried. What an arm binds follows from what it selects — one case
+         * binds what that case's carrier holds, several bind the subject — so holding the two apart
+         * would be holding one fact in two places, and a pattern selecting an optional's absent
+         * carrier while binding its present one would be a Core the emitter has no meaning for: it
+         * would test one carrier and read the value out of the other.
+         */
+        Refinement binding();
+
+        /** The cases this answers for. */
+        default List<TypeSymbol> caseTypes() {
+            List<TypeSymbol> out = new java.util.ArrayList<>();
+            for (CaseSelector selector : selectors()) {
+                out.add(selector.name());
+            }
+            return out;
+        }
+
+        /** The type the binding takes inside the arm, or null where the arm binds nothing readable. */
+        default Type bindType() {
+            return binding().bound();
+        }
+
+        /** An arm answering for one case, which binds what that case's carrier holds. */
+        record Single(CaseSelector selector) implements ResolvedPattern {
+
+            public Single {
+                if (selector == null) {
+                    throw new IllegalArgumentException("an arm selects a case");
+                }
+            }
+
+            @Override
+            public List<CaseSelector> selectors() {
+                return List.of(selector);
+            }
+
+            @Override
+            public Refinement binding() {
+                return selector.refinement();
+            }
+        }
+
+        /**
+         * An arm answering for several, which binds the subject: no one case type fits all of its
+         * alternatives, and every alternative is already the subject.
+         */
+        record AnyOf(List<CaseSelector> selectors, Type subject) implements ResolvedPattern {
+
+            public AnyOf {
+                if (selectors == null || selectors.size() < 2) {
+                    throw new IllegalArgumentException("an arm answering for several names several");
+                }
+                if (subject == null) {
+                    throw new IllegalArgumentException("what such an arm binds is the subject");
+                }
+                selectors = List.copyOf(selectors);
+            }
+
+            @Override
+            public Refinement binding() {
+                return new Refinement.Direct(subject);
+            }
         }
     }
 
-    /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
-     * narrows to, or the element a {@code Some x} opens. */
-    record Case(List<TypeName> caseTypes, Ast.Binder binding, Core body, Type bindType,
-                SourcePos pos) {
+    /** One arm of a {@code match}: what it selects, what it calls the value, and what it answers. */
+    record Case(ResolvedPattern pattern, Binder binder, Core body, SourcePos pos) {
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
-            return binding == null ? null : binding.name();
+            return binder == null ? null : binder.name();
+        }
+
+        /** The cases this arm answers for. */
+        public List<TypeSymbol> caseTypes() {
+            return pattern.caseTypes();
+        }
+
+        /** The type the binding takes inside this arm. */
+        public Type bindType() {
+            return pattern.bindType();
+        }
+
+        /** The same arm answering a rewritten body — what a pass rewriting expressions produces, so
+         * a rewrite carries what the arm selects and binds rather than restating it. */
+        public Case answering(Core rewritten) {
+            return rewritten == body ? this : new Case(pattern, binder, rewritten, pos);
         }
     }
 
-    record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos)
-            implements Core {}
+    /**
+     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * was is a fact about this copy — so it travels with the fork rather than being recovered from
+     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
+     */
+    record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos,
+                 List<souther.compiler.types.BindingOwner> expansion) implements Core {
+    }
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
      * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
@@ -308,11 +653,12 @@ public sealed interface Core {
      *
      * <ul>
      *   <li>An expression slot takes any Core expression.</li>
-     *   <li>A name slot takes only a {@link Read}: a construction's spread copies the fields of a
-     *       binding and an applied function is a binding holding one, and the backend loads that
-     *       binding's slot, so an expression there would have nothing to be loaded from.</li>
-     *   <li>A construction slot takes only a {@link NewData}: an attempt tests whether a construction
-     *       holds, and there is no other kind of expression whose invariant could fail.</li>
+     *   <li>A name slot takes only a {@link Read}: an applied function is a binding holding one, and
+     *       the backend loads that binding's slot, so an expression there would have nothing to be
+     *       loaded from.</li>
+     *   <li>A construction slot takes only a {@link Construct}: an attempt tests whether a
+     *       construction holds, and there is no other kind of expression whose invariant could
+     *       fail.</li>
      * </ul>
      *
      * <p>This is the one place that says which slots a node has, and both {@link #mapChildren} and
@@ -321,12 +667,13 @@ public sealed interface Core {
      */
     private static Core atSlots(Core e, java.util.function.UnaryOperator<Core> atExpr,
                                 java.util.function.UnaryOperator<Read> atName,
-                                java.util.function.UnaryOperator<NewData> atConstruction) {
+                                java.util.function.UnaryOperator<Construct> atConstruction) {
         return switch (e) {
             case Int x -> x;
             case Decimal x -> x;
             case Str x -> x;
             case Bool x -> x;
+            case Temporal x -> x;
             case Read x -> x;
             case UnitValue x -> x;
             case OptionNone x -> x;
@@ -357,7 +704,7 @@ public sealed interface Core {
                 yield args == p.args() ? p
                         : new PreservedCall(p.operation(), args, p.type(), p.pos());
             }
-            // what is applied is a binding holding a function: a name slot, the same kind a spread is
+            // what is applied is a binding holding a function, which the backend loads: a name slot
             case Apply a -> {
                 Read fn = atName.apply(a.fn());
                 List<Core> args = each(a.args(), atExpr);
@@ -369,18 +716,19 @@ public sealed interface Core {
                 Core then = atExpr.apply(iff.then());
                 Core els = atExpr.apply(iff.els());
                 yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
-                        : new If(cond, then, els, iff.origin(), iff.type(), iff.pos());
+                        : new If(cond, then, els, iff.origin(), iff.type(), iff.pos(),
+                                iff.expansion());
             }
             case IfConstructed ic -> {
-                NewData construct = atConstruction.apply(ic.construct());
+                Construct construct = atConstruction.apply(ic.construct());
                 Core then = atExpr.apply(ic.then());
                 List<ElseArm> els = each(ic.els(), arm -> {
                     Core body = atExpr.apply(arm.body());
                     return body == arm.body() ? arm : new ElseArm(arm.clause(), body);
                 });
                 yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
-                        : new IfConstructed(construct, ic.binder(), then, els, ic.origin(), ic.type(),
-                                ic.pos());
+                        : new IfConstructed(construct, ic.binder(), then, els, ic.origin(),
+                                ic.type(), ic.pos(), ic.expansion());
             }
             case LetIn li -> {
                 Core value = atExpr.apply(li.value());
@@ -410,38 +758,119 @@ public sealed interface Core {
                 yield tuple == tg.tuple() ? tg
                         : new TupleGet(tuple, tg.index(), tg.arity(), tg.type(), tg.pos());
             }
-            case NewData nd -> atSlots(nd, atExpr, atName);
+            case Construct nd -> atSlots(nd, atExpr);
             case Match m -> {
                 Core scrutinee = atExpr.apply(m.scrutinee());
-                List<Case> cases = each(m.cases(), c -> {
-                    Core body = atExpr.apply(c.body());
-                    return body == c.body() ? c
-                            : new Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos());
-                });
+                List<Case> cases = each(m.cases(), c -> c.answering(atExpr.apply(c.body())));
                 yield scrutinee == m.scrutinee() && cases == m.cases() ? m
-                        : new Match(scrutinee, cases, m.origin(), m.type(), m.pos());
+                        : new Match(scrutinee, cases, m.origin(), m.type(), m.pos(),
+                                m.expansion());
             }
         };
     }
 
     /**
-     * The same for a construction, whose type is kept: it has an expression slot per field and a name
-     * slot per spread, and no others.
+     * {@code e} with every place taken out of it: the position each node was written at, the
+     * coverage ordinal the module numbered it with, and the same of the binders and names inside.
+     *
+     * <p>For comparing two readings of one term, and for nothing else. A term says what it says
+     * wherever in a file it stands, but the tree carries where, and a module numbers its constructs
+     * from one end — so a blank line above a declaration, or a clause somewhere above gaining a
+     * term, makes every term below it a different value. A reader that depends on what a term says
+     * would be recomputed by both. Comparing this instead is what tells the two apart.
+     *
+     * <p>Every place comes out null rather than blank, so a tree that escapes here and is asked
+     * where it is says so at once. Which copy of a body a fork stands in is one of them: it is where
+     * the fork is and not what it says, and two readings of one term are the same term whichever
+     * copy each was read out of. Nothing emits one of these, reports on one, or measures one.
+     *
+     * <p>Written out a case at a time, like {@link #atSlots}: a node's place is on the node, so
+     * there is no slot to hand a rewrite. The switch is over a sealed type, so a node kind added
+     * later arrives here as a compile error rather than as a term that quietly kept its place.
+     */
+    public static Core withoutItsPlace(Core e) {
+        if (e == null) {
+            return null;
+        }
+        return switch (e) {
+            case Int x -> new Int(x.value(), x.type(), null);
+            case Decimal x -> new Decimal(x.value(), x.type(), null);
+            case Str x -> new Str(x.value(), x.type(), null);
+            case Bool x -> new Bool(x.value(), x.type(), null);
+            case Temporal x -> new Temporal(x.kind(), x.text(), null);
+            case Read x -> readWithoutItsPlace(x);
+            case UnitValue x -> new UnitValue(x.data(), x.type(), null);
+            case OptionNone x -> new OptionNone(x.type(), null);
+            case Unreachable x -> new Unreachable(x.reason(), x.type(), null);
+            case Neg n -> new Neg(withoutItsPlace(n.operand()), n.type(), null);
+            case FieldAccess fa ->
+                    new FieldAccess(withoutItsPlace(fa.target()), fa.field(), fa.type(), null);
+            case Binary b -> new Binary(b.op(), withoutItsPlace(b.left()),
+                    withoutItsPlace(b.right()), null, b.type(), null);
+            case Call c -> new Call(c.fn(), allWithoutTheirPlace(c.args()), c.type(), null);
+            case PreservedCall p ->
+                    new PreservedCall(p.operation(), allWithoutTheirPlace(p.args()), p.type(), null);
+            case Apply a -> new Apply(readWithoutItsPlace(a.fn()), allWithoutTheirPlace(a.args()), a.type(), null);
+            case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),
+                    withoutItsPlace(iff.els()), null, iff.type(), null, List.of());
+            case IfConstructed ic -> new IfConstructed(constructWithoutItsPlace(ic.construct()),
+                    ic.binder(), withoutItsPlace(ic.then()),
+                    ic.els().stream()
+                            .map(arm -> new ElseArm(arm.clause(), withoutItsPlace(arm.body())))
+                            .toList(),
+                    null, ic.type(), null, List.of());
+            case LetIn li -> new LetIn(li.binder(), withoutItsPlace(li.value()),
+                    withoutItsPlace(li.body()), li.type(), null);
+            case Block b -> new Block(b.params(),
+                    withoutItsPlace(b.body()), b.type(), null);
+            case ListLit lit -> new ListLit(allWithoutTheirPlace(lit.elements()), lit.type(), null);
+            case OptionSome so -> new OptionSome(withoutItsPlace(so.value()), so.type(), null);
+            case Tuple t -> new Tuple(allWithoutTheirPlace(t.elements()), t.type(), null);
+            case TupleGet tg -> new TupleGet(withoutItsPlace(tg.tuple()), tg.index(), tg.arity(),
+                    tg.type(), null);
+            case Construct nd -> constructWithoutItsPlace(nd);
+            case Match m -> new Match(withoutItsPlace(m.scrutinee()),
+                    m.cases().stream()
+                            .map(c -> new Case(c.pattern(), c.binder(),
+                                    withoutItsPlace(c.body()), null))
+                            .toList(),
+                    null, m.type(), null, List.of());
+        };
+    }
+
+    private static List<Core> allWithoutTheirPlace(List<Core> es) {
+        return es.stream().map(Core::withoutItsPlace).toList();
+    }
+
+    private static Read readWithoutItsPlace(Read r) {
+        return new Read(r.name(), r.binding(), r.type(), null);
+    }
+
+    private static Construct constructWithoutItsPlace(Construct nd) {
+        return new Construct(nd.typeName(),
+                nd.values().stream()
+                        .map(v -> new FieldValue(v.field(), withoutItsPlace(v.value()), null))
+                        .toList(),
+                nd.type(), null);
+    }
+
+    /**
+     * The same for a construction, whose type is kept: it has an expression slot per declared field
+     * and no others. What a spread supplied is one of those slots, resolved before this is built, so
+     * a pass rewrites it as it rewrites any other value a field is given.
      *
      * <p>Said once and read twice — by the walk above, where a construction is an expression like any
-     * other, and by {@link #mapChildren(NewData, java.util.function.UnaryOperator,
+     * other, and by {@link #mapChildren(Construct, java.util.function.UnaryOperator,
      * java.util.function.UnaryOperator)}, which is how a pass recurses through the one an attempt
      * holds.
      */
-    private static NewData atSlots(NewData nd, java.util.function.UnaryOperator<Core> atExpr,
-                                   java.util.function.UnaryOperator<Read> atName) {
-        List<Read> spreads = each(nd.spreads(), atName);
-        List<FieldInit> inits = each(nd.inits(), i -> {
-            Core value = atExpr.apply(i.value());
-            return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
+    private static Construct atSlots(Construct nd, java.util.function.UnaryOperator<Core> atExpr) {
+        List<FieldValue> values = each(nd.values(), v -> {
+            Core value = atExpr.apply(v.value());
+            return value == v.value() ? v : new FieldValue(v.field(), value, v.pos());
         });
-        return spreads == nd.spreads() && inits == nd.inits() ? nd
-                : new NewData(nd.typeName(), inits, spreads, nd.type(), nd.pos());
+        return values == nd.values() ? nd
+                : new Construct(nd.typeName(), values, nd.type(), nd.pos());
     }
 
     /** {@code xs} with {@code f} applied to each, or {@code xs} itself where none of them changed. */
@@ -470,7 +899,7 @@ public sealed interface Core {
      */
     static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
                             java.util.function.UnaryOperator<Read> onNameSlot,
-                            java.util.function.UnaryOperator<NewData> onConstructionSlot) {
+                            java.util.function.UnaryOperator<Construct> onConstructionSlot) {
         return atSlots(e, onExprSlot, onNameSlot, onConstructionSlot);
     }
 
@@ -481,8 +910,7 @@ public sealed interface Core {
      */
     static Core mapAll(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
                        java.util.function.UnaryOperator<Read> onNameSlot) {
-        return atSlots(e, onExprSlot, onNameSlot,
-                nd -> atSlots(nd, onExprSlot, onNameSlot));
+        return atSlots(e, onExprSlot, onNameSlot, nd -> atSlots(nd, onExprSlot));
     }
 
     /**
@@ -491,18 +919,18 @@ public sealed interface Core {
      *
      * <p>A construction slot is not a leaf the way a name slot is, so a pass that recurses has to say
      * how it recurses into one. Handing it back unchanged stops the pass at an attempt, which no pass
-     * means: what an attempt tries to build is as much part of the body as anything else.
+     * means: what an attempt tries to build is as much part of the body as anything else. It takes
+     * only the expression operator, a construction having none of the other slot kinds.
      */
-    static NewData mapChildren(NewData nd, java.util.function.UnaryOperator<Core> onExprSlot,
-                               java.util.function.UnaryOperator<Read> onNameSlot) {
-        return atSlots(nd, onExprSlot, onNameSlot);
+    static Construct mapChildren(Construct nd, java.util.function.UnaryOperator<Core> onExprSlot) {
+        return atSlots(nd, onExprSlot);
     }
 
     /**
      * Applies {@code f} to each direct child of {@code e} — the read-only counterpart of
      * {@link #mapChildren}. Every slot is a child whatever kind it is, so a pass that asks what a
-     * body reads reaches the binding a spread copies and the binding an application invokes without
-     * knowing that either position exists.
+     * body reads reaches the binding an application invokes, and the construction an attempt tests,
+     * without knowing that either position exists.
      */
     static void forEachChild(Core e, java.util.function.Consumer<Core> f) {
         atSlots(e, child -> {

@@ -1,9 +1,10 @@
 package souther.compiler.check;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 import org.junit.jupiter.api.Test;
 
@@ -46,18 +47,18 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
         Compilation compilation = Compilation.ofSource(TYPES, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         Type t = switch (type) {
             case "Int" -> Type.INT;
             case "Decimal" -> Type.DECIMAL;
-            default -> Type.ref(new TypeName(module, type));
+            default -> Type.ref(TypeSymbols.declared(new TypeKey(module, type)));
         };
         Type base = TypeOps.base(t, symbols);
         return new Answers(
                 TypeOps.directNumericNewtypeBase(t, symbols),
                 base == Type.INT || base == Type.DECIMAL ? base : null,
-                new Terms(symbols).affineScalarBase(t));
+                new Terms(symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).affineScalarBase(t));
     }
 
     /** A primitive is no newtype, so the first column has nothing to say about it; it is a number to

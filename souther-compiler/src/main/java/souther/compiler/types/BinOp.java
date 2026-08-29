@@ -1,0 +1,63 @@
+package souther.compiler.types;
+
+/**
+ * A binary operator of the language.
+ *
+ * <p>Here rather than in a tree, because two of them write it: the resolved tree a check reads, and
+ * the Core that check produces for a backend. Neither decides what the operator is — {@code <}
+ * places a value on an order whichever tree is being read — so an operator owned by one of them
+ * would make the other's reading of it a translation. Core reaching into the resolved tree for the
+ * operator is what put {@code souther.compiler.ast} on the boundary a backend outside this compiler
+ * reads.
+ *
+ * <p>The parsed tree keeps its own, which is what the parser produced before anything was resolved.
+ */
+public enum BinOp {
+    EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT;
+
+    /**
+     * Whether this settles a comparison, which is the one place that says so.
+     *
+     * <p>Read by everything that has to tell a comparison from what is written the same way.
+     * {@code &&} and {@code ||} put comparisons together rather than being ones; the arithmetic
+     * operators answer a number. Each reader used to spell the membership out for itself — one
+     * as "not {@code &&} or {@code ||}", one as "places something on an order" — and two
+     * spellings of one set are two sets an operator added later can land in differently.
+     */
+    public boolean compares() {
+        return switch (this) {
+            case EQ, NE, LT, LE, GT, GE -> true;
+            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
+    }
+
+    /**
+     * Which way the left operand has to come out for the right one to run, or null where both
+     * always run (spec §a-condition-stops-when-its-answer-is-settled).
+     *
+     * <p>Here for the reason {@link #compares} is here. Which operands run is part of what the
+     * operator means, and every reader that has to know it was spelling it out again — a reading of
+     * what arrives, a reading of what an expression evaluates, a reading of what a row interacts
+     * with. Three spellings of one rule are three rules an operator added later can land in
+     * differently.
+     *
+     * <p>The polarity and not the membership, because the membership follows from it and the
+     * polarity does not follow from anything. Read as "which operators stop early", every reader
+     * still had to work out which way, and every one of them wrote {@code == AND} — which is right
+     * while {@code ||} is the only other one and reads {@code ||}'s answer for a third.
+     */
+    public Boolean rightRunsWhenLeftIs() {
+        return switch (this) {
+            case AND -> Boolean.TRUE;
+            case OR -> Boolean.FALSE;
+            case EQ, NE, LT, LE, GT, GE, ADD, SUB, MUL, DIV, CONCAT -> null;
+        };
+    }
+
+    /** Whether this stops as soon as its answer is settled, so that its right operand runs on some
+     * runs and not others. What decides it is {@link #rightRunsWhenLeftIs}: an operator that names
+     * a way for its right to run is one that has runs where it does not. */
+    public boolean stopsWhenItsAnswerIsSettled() {
+        return rightRunsWhenLeftIs() != null;
+    }
+}

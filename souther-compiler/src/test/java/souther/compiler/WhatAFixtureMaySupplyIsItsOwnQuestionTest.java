@@ -5,6 +5,8 @@ import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Compilation;
 import souther.compiler.check.BoundaryInput;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -93,13 +95,16 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
      * a reflective lookup that came back empty, which is a fact about how the reader went looking.
      */
     @Test
-    void aTypeTheLanguageDeclaresIsRefusedForHavingNoDerivedCodec() {
-        CompileException e = err(HEAD + """
+    void aTypeTheLanguageDeclaresIsSuppliedLikeAnyOther() {
+        // A row's operand runs in the module's own program, so nothing decodes it and no codec is
+        // asked for: a value of a language-declared type is supplied the way a body supplies one.
+        // The refusal this test held was the old reading's — a fact about how a reader went looking,
+        // not about the type — and it went with that reading.
+        assertDoesNotThrow(() -> Compiler.compile(HEAD + """
                 let scaled (m: RoundingMode) : Int = 1
                 example f
                   | "r" : (scaled(HALF_UP)) -> Out { n = 1 }
-                """);
-        assertTrue(e.getMessage().contains("declared by the language"), e.getMessage());
+                """));
     }
 
     /**
@@ -114,18 +119,21 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
                 example f
                   | "r" : (asRaw(1)) -> Out { n = 1 }
                 """);
-        assertTrue(e.getMessage().contains("reserved type"), e.getMessage());
+        // Nothing constructs a `Raw`, so what a row writes at one is a value of another type,
+        // refused as the argument mismatch it is.
+        assertTrue(e.getMessage().contains("E1317"), e.getMessage());
+        assertTrue(e.getMessage().contains("Raw"), e.getMessage());
     }
 
-    /** A tuple and a function have no external representation, so no decoder reads one. */
+    /** A tuple has no external representation, and needs none: the operand runs in the module's
+     *  own program, so a value that never crosses a boundary is supplied like any other. */
     @Test
-    void aValueWithNoExternalRepresentationIsRefusedForHavingNone() {
-        CompileException e = err(HEAD + """
+    void aValueWithNoExternalRepresentationIsSuppliedAllTheSame() {
+        assertDoesNotThrow(() -> Compiler.compile(HEAD + """
                 let firstOf (p: (Int, Int)) : Int = 1
                 example f
                   | "r" : (firstOf((1, 2))) -> Out { n = 1 }
-                """);
-        assertTrue(e.getMessage().contains("no external representation"), e.getMessage());
+                """));
     }
 
     /**
@@ -136,7 +144,7 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
      */
     @Test
     void aTypeAnImportedModuleDeclaresBuilds() {
-        java.util.Map<String, byte[]> library = Compiler.compile("""
+        java.util.Map<String, ClassFileImage> library = Compiler.compile("""
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """);
@@ -149,7 +157,7 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
                 let place (a) = Out { n = a.value }
                 example place
                   | "an imported type in a fixture" : (Amount(5)) -> Out { n = 5 }
-                """), library::get));
+                """), ModulePath.of(library)));
     }
 
     /**
@@ -242,7 +250,8 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
                 example f
                   | "r" : (orZero(None)) -> Out { n = 0 }
                 """);
-        assertTrue(e.getMessage().contains("absence belongs to the data that holds it"), e.getMessage());
+        assertTrue(e.getMessage().contains("E1303"), e.getMessage());
+        assertTrue(e.getMessage().contains("nothing here is asking for one"), e.getMessage());
 
         assertDoesNotThrow(() -> Compiler.compile("""
                 module demo

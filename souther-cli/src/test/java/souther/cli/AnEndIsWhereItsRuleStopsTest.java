@@ -39,27 +39,55 @@ class AnEndIsWhereItsRuleStopsTest {
             data Ok
 
             behavior take : (h: Holder) -> Ok
-                constructs Ok
 
             let take (h) = Ok
             """;
 
-    /** A boundary is at a value some rule wrote. Nothing here writes a one. */
+    /**
+     * A boundary is at the value the rule wrote, and both of these rules get one.
+     *
+     * <p>Said as where the lines are rather than as a value the report must not print. Written the
+     * second way — and it was — the expectation held over a report that named no line at all, which
+     * is exactly what this model got for as long as a cut on a carrier with no step went no further
+     * than being built (issue #1079).
+     */
     @Test
-    void anEdgeIsNotAtAValueNoRuleNamed() throws Exception {
+    void eachRuleDrawsItsLineWhereItStops() throws Exception {
         String report = reportOn(MODEL);
 
-        assertFalse(report.contains("take/h.p = 1"),
+        assertTrue(report.contains("h.p = 0"),
+                () -> "`value > 0m` stops the position at zero:\n" + report);
+        assertTrue(report.contains("h.a = 5"),
+                () -> "`value > 5.0m` stops it at five:\n" + report);
+        assertTrue(report.contains("border      borders 2"),
+                () -> "two rules, two lines:\n" + report);
+        // And not at the whole number a positive integer starts at, which is the reading these
+        // lines were once taken from and a value no decimal rule here mentions.
+        assertFalse(report.contains("point value = 1"),
                 () -> "`value > 0m` says nothing about one:\n" + report);
     }
 
-    /** And a line five is drawn at is a line, though the runtime has no word for it. */
+    /**
+     * And the point against each line is one the order cannot name, said rather than left out.
+     *
+     * <p>What a strict bound on a carrier with no step costs is the value beside its line and
+     * nothing else — there is no least decimal above zero — and that is a limit of the language
+     * rather than a row anybody is short of. The line, the class it bounds and the row inside it are
+     * not costs, and all four were being lost with it.
+     */
     @Test
-    void aStrictBoundAwayFromZeroIsALineTheModelDraws() throws Exception {
+    void thePointAgainstSuchALineSaysWhyItCannotBeWritten() throws Exception {
         String report = reportOn(MODEL);
 
-        assertFalse(report.contains("not derivable: h.a"),
-                () -> "`value > 5.0m` divides the position at five:\n" + report);
+        assertTrue(report.contains(
+                        "no ON point is owed at h.p = 0 (invariant Positive (positive)):"
+                                + " this order names no value there, so the point cannot be written"),
+                () -> report);
+        // Two of the eight items these lines owe are asked for and nobody measured them, which
+        // are the two rows inside the bounds. Read off `adequacy` instead, the sentence would be
+        // true of this model for having no rows at all and would say nothing about the lines.
+        assertTrue(report.contains("(2 not measured: no row names this behavior)"),
+                () -> "and the row inside each line is one somebody is owed:\n" + report);
     }
 
     /**
@@ -86,7 +114,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (h: Holder) -> Ok
-                    constructs Ok
 
                 let take (h) = Ok
 
@@ -94,8 +121,8 @@ class AnEndIsWhereItsRuleStopsTest {
                     | "a" : (Holder { a = AboveFive(6m), b = AtMostTen(1m) }) -> Ok
                 """);
 
-        assertFalse(report.contains("not known to be writable: take/h.b = 10"), () -> report);
-        assertTrue(report.contains("no row is at take/h.b = 10"),
+        assertFalse(report.contains("not known to be writable: the ON point take/h.b = 10"), () -> report);
+        assertTrue(report.contains("no row is at the ON point value = 10"),
                 () -> "and the edge is one a row is owed at:\n" + report);
     }
 
@@ -127,7 +154,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (h: Holder) -> Ok
-                    constructs Ok
 
                 let take (h) = Ok
                 """, "--generate");
@@ -161,7 +187,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data No
 
                 behavior pick : (r: Ratio) -> Ok | No
-                    constructs Ok, No
 
                 let pick (r) = {
                     guard r.value > 5.0m else No
@@ -200,7 +225,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (p: Pair, flag: Bool) -> Ok
-                    constructs Ok
 
                 let take (p, flag) = Ok
                 """, "--generate");
@@ -228,7 +252,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data No
 
                 behavior pick : (r: AboveFive) -> Ok | No
-                    constructs Ok, No
 
                 let pick (r) = {
                     guard r.value < 10m else No

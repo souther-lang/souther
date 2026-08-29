@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
@@ -26,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final ValueName.Stdlib MAP = new ValueName.Stdlib("List", "map");
+    private static final ValueName.Stdlib.Operation MAP =
+            ValueName.Stdlib.operation("List", "map");
 
     /** `(Int) -> Int`, standing for whatever the operation was declared as. */
     private static final Type.FnOf SIGNATURE = (Type.FnOf) Type.fn(List.of(Type.INT), Type.INT);
@@ -52,13 +54,13 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         Preserved keepsMapOnly = keeping(MAP, SIGNATURE);
 
         assertThrows(RuntimeException.class,
-                () -> elaborate(callTo(new ValueName.Stdlib("List", "filter")), keepsMapOnly));
+                () -> elaborate(callTo(ValueName.Stdlib.operation("List", "filter")), keepsMapOnly));
     }
 
     @Test
     void aKeptCallAppliedToTheWrongNumberOfArgumentsIsSaidAsThat() {
-        Ast.Expr twoArgs = new Ast.Apply("List.map", MAP, new ReachName.OfLibrary(MAP),
-                List.of(new Ast.IntLit(1, POS, null), new Ast.IntLit(2, POS, null)),
+        Hir.Expr twoArgs = new Hir.Apply("List.map", new ReachName.OfLibrary(MAP),
+                List.of(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)),
                 ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> elaborate(twoArgs, keeping(MAP, SIGNATURE)));
@@ -66,28 +68,33 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     @Test
     void aTreeThatBelongsToAnotherRepresentationDoesNotInheritThePermission() {
-        // a body reaching a declaration's invariant reaches another tree, built by another question.
-        // What it keeps is its own to say at its own entry; being reached from here is not a
+        // A body reaching a declaration's invariant reaches another tree, built by another question.
+        // What it keeps is its own to say at its own entry, and being reached from here is not a
         // representation having said anything.
-        CheckContext keeping = CheckContext.of(Symbols.none()).preserving(keeping(MAP, SIGNATURE));
-
-        assertEquals(Preserved.NONE, keeping.inAnotherRepresentation().preserved());
-        assertEquals(Preserved.NONE, keeping.inAnotherRepresentation().forData(null).preserved(),
-                "and it stays left behind as that tree is walked");
+        //
+        // Held by there being nowhere to inherit it from: the contexts a clause is elaborated in are
+        // built rather than derived from whatever context reached them (issue #1080). This used to
+        // be a context you could carry across the boundary and a method that emptied it on the way.
+        assertEquals(Preserved.NONE,
+                CheckContext.executableInvariant(Symbols.none(DefaultStdlib.get()), null)
+                        .preserved());
+        assertEquals(Preserved.NONE,
+                CheckContext.executableEnsures(Symbols.none(DefaultStdlib.get())).preserved(),
+                "and a rule is read at an entry of its own, as a clause is");
     }
 
     @Test
     void whichDataIsBeingCheckedIsNotWhereARepresentationEnds() {
         // `forData` moves within one representation as well, so it must not quietly mean the
         // permission is gone
-        CheckContext keeping = CheckContext.of(Symbols.none()).preserving(keeping(MAP, SIGNATURE));
+        CheckContext keeping = CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(keeping(MAP, SIGNATURE));
 
         assertEquals(keeping.preserved(), keeping.forData(null).preserved());
     }
 
-    private static Ast.Expr callTo(ValueName.Stdlib operation) {
-        return new Ast.Apply(operation.qualified(), operation, new ReachName.OfLibrary(operation),
-                List.of(new Ast.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
+    private static Hir.Expr callTo(ValueName.Stdlib.Operation operation) {
+        return new Hir.Apply(operation.qualified(), new ReachName.OfLibrary(operation),
+                List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
     }
 
     private static Preserved keeping(ValueName operation, Type.FnOf signature) {
@@ -95,8 +102,8 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
                 new CompleteSignature(signature.params(), signature.result())));
     }
 
-    private static Core elaborate(Ast.Expr e, Preserved kept) {
+    private static Core elaborate(Hir.Expr e, Preserved kept) {
         return Elaborator.elaborate(e, Scope.NONE,
-                CheckContext.of(Symbols.none()).preserving(kept));
+                CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(kept));
     }
 }

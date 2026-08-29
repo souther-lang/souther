@@ -1,5 +1,6 @@
 package souther.compiler.doc;
 
+import souther.compiler.jvm.JvmClassName;
 import souther.compiler.check.Suggest;
 
 import java.io.IOException;
@@ -228,7 +229,7 @@ public final class JapiCommand {
     private record Found(byte[] bytes, Path entry) {}
 
     private static Found findClass(String binaryName, List<Entry> entries, Skipped skipped) {
-        String resource = binaryName.replace('.', '/') + ".class";
+        String resource = JvmClassName.classFile(binaryName);
         for (Entry entry : entries) {
             Path path = entry.path();
             try {

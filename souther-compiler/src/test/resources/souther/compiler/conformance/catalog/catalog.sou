@@ -1,0 +1,95 @@
+// The catalog module: what a value is, and what may be said about one.
+//
+// Written for this compiler rather than taken from a model that had its own reasons, so what it
+// reaches is chosen. This file holds the shapes and the arithmetic over them; conformance.shipping
+// holds the behaviors that are composed and faked, and names everything in Japanese.
+module conformance.catalog exposing
+    ( Sku, Price, Weight, Rate, Item, Discounted, TooCheap, 現価を引く )
+
+// Imported for the bare spelling below. What another module declares is reachable qualified whether
+// or not it is imported, so an entry here has to be written bare somewhere to earn its place.
+import Decimal ( subtract )
+import Option ( withDefault )
+
+data Sku = String
+    invariant String.length(value) >= 1
+
+data Price = Decimal
+    invariant value >= 0.00m
+
+data Weight = Int
+    invariant value > 0
+
+// A stocked item. The optional field is here rather than a second data, so that a reading of the
+// absent case has somewhere to happen.
+data Item =
+    { sku: Sku
+    , price: Price
+    , weight: Weight
+    , note: String?
+    }
+
+data Discounted = { sku: Sku, was: Price, now: Price }
+
+// The rate a price is cut by, and the floor it may not fall through.
+data Rate = Decimal
+    invariant value > 0.00m && value < 1.00m
+
+behavior discount : (item: Item, rate: Rate) -> Discounted | TooCheap
+    constructs Discounted, Price
+    ensures Discounted -> value.sku == item.sku
+
+// この catalog が自分では答えられないもの。ここにあるのは品目が何であるかで、いま市場でいくらな
+// のかはここにない——それを見ているのは外側で、この module には書きようがない。だから宣言だけを
+// 置いて実装は注入される。台帳が shipping の外にあるのと同じ形が、こちら側にもひとつある。
+behavior 現価を引く : (品目: List<Sku>) -> Price
+    constructs Price
+
+// A helper the behavior reaches. `private` is not written on it: that modifier is a core privilege
+// the reserved namespace holds, and a model outside it has no way to write one.
+let cut (price: Price, rate: Rate): Decimal =
+    subtract(price.value, Decimal.multiply(price.value, rate.value))
+
+// What an item says about itself when it says nothing. The absent case is read here rather than
+// left to a caller, so the optional has somewhere it is opened. Both spellings of a library call
+// are written: `withDefault` bare because it was imported, `Option.map` qualified because it was
+// not, and a corpus that reached only one of the two would leave the other unexercised.
+let noteOf (item: Item): String = withDefault("no note", item.note)
+
+let noteLength (item: Item): Int =
+    withDefault(0, Option.map(n -> String.length(n), item.note))
+
+// Declared partial: it is written for the prices this catalog holds and says so rather than
+// inventing an answer for the rest.
+partial let asPrice (d: Decimal): Price = Price(d)
+
+let discount (item, rate) = {
+    let now = cut(item.price, rate)
+    guard now >= 0.01m else TooCheap
+    Discounted { sku = item.sku, was = item.price, now = asPrice(now) }
+}
+
+example discount
+    | "a tenth off a whole price leaves nine tenths of it" :
+        (Item { sku = Sku("a-1"), price = Price(10.00m), weight = Weight(500), note = None },
+            Rate(0.10m))
+        -> Discounted { sku = Sku("a-1"), was = Price(10.00m), now = Price(9.00m) }
+    | "a price that would be cut past a penny is refused" :
+        (Item { sku = Sku("a-2"), price = Price(0.01m), weight = Weight(1), note = "fragile" },
+            Rate(0.50m))
+        -> TooCheap
+    | "the shortest sku the catalog admits is still a sku" :
+        (Item { sku = Sku("a"), price = Price(10.00m), weight = Weight(500), note = None },
+            Rate(0.10m))
+        -> Discounted { sku = Sku("a"), was = Price(10.00m), now = Price(9.00m) }
+    | "a price at the floor cannot be cut any further" :
+        (Item { sku = Sku("a-4"), price = Price(0.00m), weight = Weight(1), note = None },
+            Rate(0.10m))
+        -> TooCheap
+
+// 注入 behavior の行。実装は外から来るが、何を答えるべきかはここで述べられる。これらは記録され
+// るだけで走らない。conformance.shipping が書く `fake` は別の module の別の statement であって、
+// これらと比べられはしない。
+example 現価を引く
+    | "a basket of one is worth what that one is worth" : ([ Sku("a-1") ]) -> Price(1000.00m)
+    | "an empty basket is worth nothing" : ([]) -> Price(0.00m)

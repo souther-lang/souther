@@ -1,115 +1,147 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.NarrowedBounds;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 
-import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 /**
  * One input position that a model distinguishes values at, and the classes it distinguishes them into.
  *
- * <p>The model's own distinctions, not invented ones. A type with two cases has two classes; a newtype
- * whose invariant bounds it has a class on each side of the bound. A position the model says nothing
- * about — a plain {@code String}, an {@code Int} with no invariant — has no classes, and that is
- * reported as not derivable rather than filled in with values nobody asked for. The choice matters:
- * a made-up partition measures a rule the model does not have, and reports coverage of it.
+ * <p>The model's own distinctions, not invented ones. A type with two cases has two classes; a
+ * {@code guard}'s comparison divides what a position holds into the two sides it treats differently.
+ * A position the model says nothing about — a plain {@code String}, an {@code Int} with no invariant
+ * — has no classes, and that is reported as not derivable rather than filled in with values nobody
+ * asked for. The choice matters: a made-up partition measures a rule the model does not have, and
+ * reports coverage of it.
  *
- * @param term     the number this axis is of: a location's own content, or something taken of it
- * @param classes  exclusive and exhaustive over the term's values, or empty where the model does
- *                 not divide them
- * @param cuts     the values the classes meet at, each carrying every rule that drew it there
- * @param excluded the ids of the classes the body says it does not answer for. Still classes — the
- *                 position's values are still divided this way, and a report says so — and not ones a
- *                 row can be written at, since reaching one is E1911
- * @param pending  where nothing has answered for this position yet, what the structural reading
- *                 found — and so what this position is left with if nothing else answers. Null on
- *                 an axis that already has evidence, which needs no fallback.
+ * <p>A bound is not one of them. An invariant's bound gives a boundary and no partition: everything
+ * outside it is refused at construction, so there is no class on the far side to cover (ADR-0090),
+ * and what such a position gets is {@link #cuts} and no classes — which is what {@link #measurable}
+ * is for. What a bound does contribute to a partition is the range the classes are clipped to: the
+ * two either side of a {@code guard} at 50 run from the bound and not from the type's own ends.
  *
- *                 <p>Carried here rather than beside: the reason and the position it is about are
- *                 one fact, and holding them in two lists joined afterwards by the spelling of a
- *                 path is how a reason came to be recovered by string match. A reason travels with
- *                 the position or it is a reason about whatever the strings happened to pair it
- *                 with.
+ * <p>{@link #classes} is the one denominator. What a report counts, what a pair space is the
+ * product of, and what the generator offers rows for all come from there — three derivations of the
+ * same universe are three chances to disagree about it, which is how a class nothing can reach came
+ * to be asked for by three measures at once. Nothing a body writes narrows it: a case an arm
+ * declares cannot arrive is a claim about the same position, and what became of the claim is said
+ * beside the report rather than taken out of the count — a claim the rules bear out has already
+ * left, because the reading these classes come from is what took it out.
+ *
+ * @param term    the number this axis is of: a location's own content, or something taken of it.
+ *                Answered by one input position and held as such, because that is what an axis is:
+ *                a run of classes over the values of a number a row can be asked for somewhere. A
+ *                number read from a run of a sequence has no such place, so it draws a line without
+ *                dividing anything and never arrives here
+ * @param at      the position the number is read from, and what this phase is left answering for
+ *                there. Pointed at rather than copied out, because a position carries as many of
+ *                these axes as the rules name numbers of it and what is in there is true of the
+ *                position once ({@link PositionAccount})
+ * @param classes exclusive and exhaustive over the term's values, or empty where the model does
+ *                not divide them
+ * @param cuts    the values the classes meet at, each carrying every rule that drew it there
+ * @param parted  where the rules part this position's values, which is not the same list. A cut is
+ *                a value a row can be written against and a bound has one without parting
+ *                anything; a rule that wrote a multiple of the position parts its values where the
+ *                position may hold none, and has no cut. What every border on this position owes
+ *                away from its line is a run of what these leave together, and the cuts alone are
+ *                short of the lines that have no value
  */
-public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, Set<String> excluded, StructuralInspection.Pending pending) {
+public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount at,
+                   List<PartitionClass> classes,
+                   List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
 
     public Axis {
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
-        excluded = Set.copyOf(excluded);
+        parted = List.copyOf(parted);
+        if (at == null) {
+            throw new IllegalArgumentException("an axis of no position");
+        }
     }
 
-    public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                List<Cut> cuts, Set<String> excluded) {
-        this(id, term, type, classes, cuts, excluded, null);
-    }
-
-    public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                List<Cut> cuts) {
-        this(id, term, type, classes, cuts, Set.of(), null);
+    public Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
+                List<PartitionClass> classes, List<Cut> cuts) {
+        this(id, term, PositionAccount.at(id.behavior(), term.position(), type), classes, cuts,
+                List.of(), NarrowedBounds.NOTHING);
     }
 
     /**
-     * A position nothing has answered for yet, and what the structural reading found.
+     * The position's type, which is what a value read here is of. Not the term's: a string is
+     * measured at how long it is, and what stands at the location is still a string.
+     *
+     * <p>One of two things read off {@link #at} here, with {@link #path}. Both are about the
+     * measure — where it reads from and what stands there — and everything else the position's
+     * account holds is asked of the account, in the open. What its reading came to, where the walk
+     * stopped and what it is left with are true of the location once however many numbers measure
+     * it, and a measure that answered them would let any reader ask a location's question through
+     * whichever measure it happened to hold.
+     */
+    public Type type() {
+        return at.type();
+    }
+
+
+    /**
+     * A position nothing has answered for yet, and what the readings of it found.
      *
      * <p>Not a position the model does not divide. A rule a body writes may still draw a line on it,
-     * and only where none does is {@code found} what a report says — an absence where the structure
-     * ran out, and what stopped the reading where it did not.
+     * and only where none does is what was found here what a report says — an absence where every
+     * reading ran to the end and found nothing, and what stopped one where it did not.
      */
-    public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
-                                 StructuralInspection.Pending found) {
-        return new Axis(id, term, type, List.of(), List.of(), Set.of(), found);
+    public static Axis pendingAt(AxisId id, NumericTerm.FromOnePosition term, PositionAccount at) {
+        return new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
     }
 
     /**
      * The same position, measured at another number.
      *
      * <p>A transition rather than a constructor at the call site. What a body's rules add is a term,
-     * classes and cuts; everything else about the position was settled by the reading that made
-     * this one, and a caller rebuilding an axis from its parts drops whatever it did not think to
-     * name. What went that way was {@link #pending}: a position whose elements could not be reached
-     * came back out of the second phase with nothing to say it had ever stopped, and was reported
-     * as one the model divides no way.
+     * classes and cuts; what the position came to was settled by the reading that made this one,
+     * and a caller rebuilding an axis from its parts drops whatever it does not think to name. What
+     * the position came to is one field, so a rebuild names it or does not compile.
      */
-    public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, excluded, pending);
+    public Axis measuredAt(AxisId id, NumericTerm.FromOnePosition term) {
+        return new Axis(id, term, at, classes, cuts, parted, narrowed);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
-    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts) {
-        return new Axis(id, term, type, classes, cuts, excluded, pending);
+    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted) {
+        return new Axis(id, term, at, classes, cuts, parted, narrowed);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
      * read off it. Not what the axis is: two terms can be taken of one location, and {@link #id()}
      * is the one that tells them apart. */
     public TermPath path() {
-        return term.path();
-    }
-
-    /** The same position, with what the body rules out marked.
-     *
-     * <p>An id this axis has no class for is dropped rather than kept: what a behavior's body says
-     * about one position cannot make a class appear at another, and an exclusion is matched within
-     * the axis it belongs to because a class id is unique there and nowhere wider. */
-    public Axis excluding(Collection<String> ids) {
-        Set<String> here = ids.stream().filter(id -> classOf(id) != null)
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        return here.isEmpty() ? this : new Axis(id, term, type, classes, cuts, here, pending);
+        return term.position();
     }
 
     /**
-     * The classes a row can be written at.
+     * What a row has to be for this position to exist in it at all.
      *
-     * <p>The one denominator. What a report counts, what a pair space is the product of, and what the
-     * generator offers rows for all come from here — three derivations of the same universe are three
-     * chances to disagree about it, which is how a class nothing can reach came to be asked for by
-     * three measures at once.
+     * <p>Read off the path and kept nowhere else. A position under a narrowing requires it by being
+     * there — {@code query@GlobalQuery.tag} says that {@code query} is a {@code GlobalQuery} and
+     * says it completely — so an account of it beside the path would be two readings of one fact.
      */
-    public List<PartitionClass> eligible() {
-        return classes.stream().filter(each -> !excluded.contains(each.id())).toList();
+    public Requirements requirements() {
+        return path().requirements();
+    }
+
+    /**
+     * The same, for a row sitting in {@code cls} here.
+     *
+     * <p>Both halves and neither standing for the other. A class of a sum states a narrowing by
+     * being the class it is, and the position it is a class of may itself be under one — so what a
+     * row at this class has to be is what the position requires and what the class selects,
+     * together.
+     */
+    public Requirements requiring(PartitionClass cls) {
+        return requirements().and(path(), cls == null ? null : cls.selects());
     }
 
     /** Whether the model divides this position into classes to cover. */

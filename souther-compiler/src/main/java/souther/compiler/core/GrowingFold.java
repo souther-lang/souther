@@ -1,8 +1,9 @@
 package souther.compiler.core;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -45,8 +46,32 @@ import java.util.Set;
  */
 public final class GrowingFold {
 
-    /** The fold the rewrite recognises: the self-hosted walk in {@code souther.list}. */
-    private static final String FOLD = "List.foldFrom";
+    /**
+     * Whether {@code call} applies the walk this rewrite recognises.
+     *
+     * <p>Asked with the operation, which the library names ({@code Stdlib#theWalk}) and the caller
+     * hands over. A spelling written out here would be this pass deciding what the library
+     * publishes its own walk as, and it would go on being right for exactly as long as the two
+     * agreed.
+     */
+    private static boolean isTheWalk(Core.Call call, ValueName.Stdlib.Operation walk) {
+        return call.fn() instanceof Core.Reached reached && walk.equals(reached.denotes());
+    }
+
+    /**
+     * Whether {@code e} applies {@code kernel}.
+     *
+     * <p>The call says which kernel it reaches ({@link Core.Reached.OfKernel}), settled where it was
+     * typed against the library's signature. Matched against a rendering instead — which is what
+     * this did — the arms turn on the alias the library publishes the operation under, and a
+     * library that published its map under another name would leave every one of them matching
+     * nothing.
+     */
+    private static boolean applies(Core e, Kernel kernel) {
+        return e instanceof Core.Call call
+                && call.fn() instanceof Core.Reached.OfKernel(_, Kernel reached)
+                && reached == kernel;
+    }
 
     /** The rewritten fold: {@code $build(step, xs, from)} walks {@code xs} with a builder as the
      *  accumulator and seals it into a list. Emitted by the backend, written by nobody — so it is
@@ -63,28 +88,31 @@ public final class GrowingFold {
 
     private static final Core.CallTarget PUT = Core.Emitted.PUT_MAP;
 
-    /** The empty map a fold accumulating one starts from, and the insert that grows it. */
-    private static final String EMPTY = "Map.empty";
-
-    private static final String INSERT = "Map.insert";
-
     /** What a step may do with the map it is growing besides writing to it: read it. A builder answers
      *  these from what it holds so far, which is what the fold's own step read from the version it was
      *  given, and each of them answers with a value of its own rather than with the map. Every one
      *  takes the map last, which is how the accumulator is recognised in the call. */
-    private static final Set<String> READS = Set.of(
-            "Map.get", "Map.containsKey", "Map.size", "Map.isEmpty",
-            "Map.keys", "Map.values", "Map.toList");
+    private static final Set<Kernel> READS = Set.of(
+            Kernel.MAP_GET, Kernel.MAP_CONTAINS_KEY, Kernel.MAP_SIZE, Kernel.MAP_IS_EMPTY,
+            Kernel.MAP_KEYS, Kernel.MAP_VALUES, Kernel.MAP_TO_LIST);
 
     private GrowingFold() {}
 
-    /** {@code body} with every growing fold in it rewritten, innermost first — so a {@code map} over
-     *  a {@code filter} builds both, and the two builds are then joined into one. */
-    public static Core rewrite(Core body) {
-        Core mapped = Core.mapChildren(body, GrowingFold::rewrite, s -> s,
-                nd -> Core.mapChildren(nd, GrowingFold::rewrite, s -> s));
+    /**
+     * {@code body} with every growing fold in it rewritten, innermost first — so a {@code map} over
+     * a {@code filter} builds both, and the two builds are then joined into one.
+     *
+     * <p>{@code walk} is the operation a fold is, which the library publishes and names
+     * ({@code Stdlib#theWalk}). Handed over rather than written down here: the alias is the
+     * library's, and a pass that spelled it out would be deciding what the library calls its own
+     * walk. What the step does with the map it grows is asked of the kernels the calls carry, so
+     * nothing else here has a name in it.
+     */
+    public static Core rewrite(Core body, ValueName.Stdlib.Operation walk) {
+        Core mapped = Core.mapChildren(body, each -> rewrite(each, walk), s -> s,
+                nd -> Core.mapChildren(nd, each -> rewrite(each, walk)));
         if (mapped instanceof Core.Call call) {
-            Core built = built(call);
+            Core built = built(call, walk);
             if (built != null) {
                 mapped = built;
             }
@@ -118,8 +146,8 @@ public final class GrowingFold {
     private static Core joinedThroughBinding(Core.LetIn binding) {
         if (!(binding.body() instanceof Core.Call outer) || outer.fn() != BUILD
                 || !(outer.args().get(1) instanceof Core.Read walked)
-                || !walked.binding().equals(binding.binder().id())
-                || uses(binding.body(), binding.binder().id()) != 1) {
+                || !walked.binding().equals(binding.binder().binding())
+                || uses(binding.body(), binding.binder().binding()) != 1) {
             return null;
         }
         List<Core.LetIn> kept = new ArrayList<>();
@@ -132,7 +160,7 @@ public final class GrowingFold {
             return null;
         }
         for (Core.LetIn k : kept) {
-            if (uses(outer.args().get(0), k.binder().id()) > 0) {
+            if (uses(outer.args().get(0), k.binder().binding()) > 0) {
                 return null;
             }
         }
@@ -150,8 +178,8 @@ public final class GrowingFold {
     }
 
     /** {@code call} as a build, or null when it is not a fold that only grows a list or a map. */
-    private static Core built(Core.Call call) {
-        if (!call.name().equals(FOLD) || call.args().size() != 4) {
+    private static Core built(Core.Call call, ValueName.Stdlib.Operation walk) {
+        if (!isTheWalk(call, walk) || call.args().size() != 4) {
             return null;
         }
         Core seed = call.args().get(1);
@@ -162,7 +190,7 @@ public final class GrowingFold {
             build = BUILD;
             step = grownStep(call.args().get(0));
         } else if (call.type() instanceof Type.MapOf
-                && seed instanceof Core.Call empty && empty.name().equals(EMPTY)) {
+                && applies(seed, Kernel.MAP_EMPTY)) {
             build = MAP_BUILD;
             step = puttingStep(call.args().get(0));
         } else {
@@ -216,16 +244,16 @@ public final class GrowingFold {
      * see through. A binding of a binding is followed the same way, so the set is closed rather than
      * one level deep.
      */
-    private static Set<BindingId> aliases(Core body, Ast.Binder acc) {
+    private static Set<BindingId> aliases(Core body, Core.Binder acc) {
         Set<BindingId> names = new LinkedHashSet<>();
-        names.add(acc.id());
+        names.add(acc.binding());
         int before;
         do {
             before = names.size();
             count(body, e -> {
                 if (e instanceof Core.LetIn li && li.value() instanceof Core.Read v
                         && names.contains(v.binding())) {
-                    names.add(li.binder().id());
+                    names.add(li.binder().binding());
                 }
                 return false;
             }, new int[1]);
@@ -247,7 +275,9 @@ public final class GrowingFold {
      *  mentions {@link #puttingStep} counts, and a mention that is none of the three refuses the walk. */
     private static int reads(Core e, Set<BindingId> acc) {
         int[] n = {0};
-        count(e, c -> c instanceof Core.Call call && READS.contains(call.name())
+        count(e, c -> c instanceof Core.Call call
+                && call.fn() instanceof Core.Reached.OfKernel(_, Kernel reached)
+                && READS.contains(reached)
                 && !call.args().isEmpty()
                 && call.args().getLast() instanceof Core.Read v && acc.contains(v.binding()), n);
         return n[0];
@@ -332,7 +362,41 @@ public final class GrowingFold {
                     body.type(), c.pos());
         }
         return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s,
-                nd -> Core.mapChildren(nd, child -> piped(child, outer, refused), s -> s));
+                nd -> Core.mapChildren(nd, child -> piped(child, outer, refused)));
+    }
+
+    /**
+     * The binding an element arrives under in a walk this pass emitted, or null where {@code e} is
+     * not one.
+     *
+     * <p><b>A binding and nothing else.</b> What is read here is the emitted walk's own contract —
+     * it takes a step over what it has so far and one element, and the element arrives as the
+     * second of the step's parameters — and what comes back is the identity that binding has. The
+     * step's body is not read, and neither is what it appends: a rewritten form is no evidence of
+     * where elements came from, and reading one as though it were is how the set of walks a reader
+     * can follow becomes a consequence of an optimisation.
+     *
+     * <p>So this answers where to look and never what was found. What the elements of such a walk
+     * are is a fact proved where the operation that made it still stood and carried by that
+     * binding; recovering the binding is a lookup into it, and recovering it proves nothing on its
+     * own. A walk an author wrote by hand reaches here as readily as one a {@code map} became, and
+     * for it the lookup finds nothing — which is the true answer.
+     */
+    public static souther.compiler.types.BindingId elementBindingOf(Core e) {
+        // Through a `let`, which is what a value is: what an expression comes to is what its body
+        // comes to, and the bindings on the way are read where they are read. That is the ordinary
+        // meaning of a binding and not a shape this pass left — the walk is what it wraps.
+        if (e instanceof Core.LetIn let) {
+            return elementBindingOf(let.body());
+        }
+        if (!(e instanceof Core.Call call)
+                || (call.fn() != BUILD && call.fn() != MAP_BUILD)
+                || call.args().isEmpty()
+                || !(call.args().get(0) instanceof Core.Block step)
+                || step.params().size() != 2) {
+            return null;
+        }
+        return step.params().get(1).binding();
     }
 
     /** The step with its appends turned into adds, or null when the step does something else with the
@@ -367,7 +431,7 @@ public final class GrowingFold {
 
     /** {@code acc ++ rhs} as an add to the builder. */
     private static Core appended(Core e, Set<BindingId> acc) {
-        if (!(e instanceof Core.Binary b) || b.op() != Ast.BinOp.CONCAT
+        if (!(e instanceof Core.Binary b) || b.op() != BinOp.CONCAT
                 || !(b.left() instanceof Core.Read v) || !acc.contains(v.binding())) {
             return null;
         }
@@ -376,7 +440,7 @@ public final class GrowingFold {
 
     /** {@code Map.insert(key, value, acc)} as a write into the builder. */
     private static Core inserted(Core e, Set<BindingId> acc) {
-        if (!(e instanceof Core.Call c) || !c.name().equals(INSERT) || c.args().size() != 3
+        if (!applies(e, Kernel.MAP_INSERT) || !(e instanceof Core.Call c) || c.args().size() != 3
                 || !(c.args().get(2) instanceof Core.Read v) || !acc.contains(v.binding())) {
             return null;
         }
@@ -406,10 +470,11 @@ public final class GrowingFold {
                 Core then = answers(iff.then(), acc, found, growth);
                 Core els = then == null ? null : answers(iff.els(), acc, found, growth);
                 return els == null ? null
-                        : new Core.If(iff.cond(), then, els, iff.origin(), iff.type(), iff.pos());
+                        : new Core.If(iff.cond(), then, els, iff.origin(), iff.type(), iff.pos(),
+                                iff.expansion());
             }
             case Core.LetIn li -> {
-                if (acc.contains(li.binder().id()) && !(li.value() instanceof Core.Read v
+                if (acc.contains(li.binder().binding()) && !(li.value() instanceof Core.Read v
                         && acc.contains(v.binding()))) {
                     return null;   // one of the accumulator's names now stands for something else
                 }
@@ -420,16 +485,17 @@ public final class GrowingFold {
             case Core.Match m -> {
                 List<Core.Case> cases = new ArrayList<>();
                 for (Core.Case c : m.cases()) {
-                    if (c.binding() != null && acc.contains(c.binding().id())) {
+                    if (c.binder() != null && acc.contains(c.binder().binding())) {
                         return null;
                     }
                     Core body = answers(c.body(), acc, found, growth);
                     if (body == null) {
                         return null;
                     }
-                    cases.add(new Core.Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos()));
+                    cases.add(c.answering(body));
                 }
-                return new Core.Match(m.scrutinee(), cases, m.origin(), m.type(), m.pos());
+                return new Core.Match(m.scrutinee(), cases, m.origin(), m.type(), m.pos(),
+                        m.expansion());
             }
             // A call a representation kept standing is not part of the tree a fold grows in: this
             // reads what the backend emits, and that keeps none.

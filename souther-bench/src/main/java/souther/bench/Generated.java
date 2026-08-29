@@ -2,6 +2,9 @@ package souther.bench;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.query.Compilation;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.GeneratedClasses;
 import souther.runtime.Behavior;
 import souther.runtime.PersistentVector;
 
@@ -40,7 +43,7 @@ final class Generated {
         Corpus corpus = Corpus.load("runtime");
         Compilation compilation = corpus.compile();
         corpus.check(compilation);
-        Map<String, byte[]> classes = compilation.classes();
+        Map<String, ClassFileImage> classes = compilation.classes();
         ClassLoader loader = new MemoryClassLoader(classes, Generated.class.getClassLoader());
 
         Behavior<Object, Object> sumAll = behavior(loader, "SumAll");
@@ -105,7 +108,8 @@ final class Generated {
     @SuppressWarnings("unchecked")
     private static Behavior<Object, Object> behavior(ClassLoader loader, String name) {
         try {
-            Class<?> emitted = loader.loadClass("bench.runtime." + name + "$Impl");
+            Class<?> emitted = GeneratedClasses.load(loader,
+                    new GeneratedClass.BehaviorImpl("bench.runtime", name));
             Constructor<?> ctor = emitted.getDeclaredConstructor();
             ctor.setAccessible(true);
             return (Behavior<Object, Object>) ctor.newInstance();

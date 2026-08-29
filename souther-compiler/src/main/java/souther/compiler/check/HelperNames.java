@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -25,7 +25,7 @@ import java.util.function.Predicate;
  * coincide for a helper another module published and part ways for the standard library, which is
  * reached under an alias: {@code List.foldFrom} is declared in {@code souther.list}, and no reader of
  * the name can get there from it. Which module declared a definition is carried on the declaration
- * ({@link Ast.FnDef#declaredIn}), and every rule about the declaring module reads it there.
+ * ({@link Hir.FnDef#declaredIn}), and every rule about the declaring module reads it there.
  *
  * <p>The marks a construction carries belong here for the same reason. What a published body builds
  * is built where that body was written; expanding it puts the construction in the reader's body,
@@ -45,78 +45,104 @@ public final class HelperNames {
     }
 
     /**
-     * {@code m} with every name that denotes another module's definition written qualified.
+     * {@code fn} with every name in its body that denotes another module's definition written
+     * qualified.
      *
-     * <p>Done once, here, because the spelling travels as far as the emitted method name; deciding it
-     * at each reader is how one of them comes to disagree.
+     * <p>Done once, at the rung that says so, because the spelling travels as far as the emitted
+     * method name; deciding it at each reader is how one of them comes to disagree.
+     *
+     * <p>A part at a time and not a module. What comes back is a definition, and the rung that
+     * asked for it has to say again what it holds of one. A whole-module rewrite would hand back a
+     * tree with nobody saying anything about the parts in it, which is how the claims the rungs
+     * below had established came to be dropped here (#714).
      */
-    public static Ast.Module qualifyImports(Ast.Module m) {
-        List<Ast.FnDef> fns = new ArrayList<>();
-        for (Ast.FnDef fn : m.fns()) {
-            fns.add(fn.body() instanceof Ast.FnBody.Written w
-                    ? fn.withBody(new Ast.FnBody.Written(qualifyForeign(w.expr(), m.name())))
-                    : fn);
-        }
-        List<Ast.Def> defs = qualifiedInvariants(m);
-        List<Ast.Example> examples = new ArrayList<>();
-        for (Ast.Example ex : m.examples()) {
-            List<Ast.ExampleRow> rows = new ArrayList<>();
-            for (Ast.ExampleRow row : ex.rows()) {
-                List<Ast.Expr> inputs = new ArrayList<>();
-                for (Ast.Expr in : row.inputs()) {
-                    inputs.add(qualifyForeign(in, m.name()));
-                }
-                List<Ast.With> withs = new ArrayList<>();
-                for (Ast.With w : row.withs()) {
-                    withs.add(new Ast.With(w.dep(), qualifyForeign(w.value(), m.name()), w.pos()));
-                }
-                rows.add(new Ast.ExampleRow(row.description(), inputs, withs,
-                        qualifyForeign(row.expected(), m.name()), row.pos()));
-            }
-            examples.add(new Ast.Example(ex.target(), rows, ex.pos()));
-        }
-        List<Ast.Fake> fakes = new ArrayList<>();
-        for (Ast.Fake fake : m.fakes()) {
-            List<Ast.FakeRow> rows = new ArrayList<>();
-            for (Ast.FakeRow row : fake.rows()) {
-                List<Ast.Expr> inputs = null;
-                if (row.inputs() != null) {   // a default row matches anything and writes none
-                    inputs = new ArrayList<>();
-                    for (Ast.Expr in : row.inputs()) {
-                        inputs.add(qualifyForeign(in, m.name()));
-                    }
-                }
-                rows.add(new Ast.FakeRow(inputs, qualifyForeign(row.output(), m.name()),
-                        row.isDefault(), row.pos()));
-            }
-            fakes.add(new Ast.Fake(fake.target(), rows, fake.pos()));
-        }
-        // Nothing is taken on until the pass below this one works out what the module reaches, so
-        // there is none here to qualify — and what arrives there is already named by the name this
-        // module reaches it by, which is what it will be emitted under.
-        return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
-                m.behaviors(), fns, m.takenOn(), examples, fakes, m.exampleFileTarget(), m.pos());
+    static Hir.FnDef qualifyImportsIn(Hir.FnDef fn, String self) {
+        return fn.body() instanceof Hir.FnBody.Written w
+                ? fn.withBody(new Hir.FnBody.Written(qualifyForeign(w.expr(), self)))
+                : fn;
     }
 
-    /** {@code m} with the foreign names in its invariants written qualified, and nothing else
-     * changed. An invariant is read before the bodies are — settled here, classified for discharge
-     * there — so this is the part of {@link #qualifyImports} that has to be available on its own. */
-    public static Ast.Module withQualifiedInvariants(Ast.Module m) {
-        List<Ast.Def> defs = qualifiedInvariants(m);
-        return defs.equals(m.defs()) ? m
-                : new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
-                        m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
-                        m.exampleFileTarget(), m.pos());
+    /** The same of one example block: its inputs, its stand-ins and what it expects. */
+    static Hir.Example qualifyImportsIn(Hir.Example ex, String self) {
+        List<Hir.ExampleRow> rows = new ArrayList<>();
+        for (Hir.ExampleRow row : ex.rows()) {
+            List<Hir.Expr> inputs = new ArrayList<>();
+            for (Hir.Expr in : row.inputs()) {
+                inputs.add(qualifyForeign(in, self));
+            }
+            List<Hir.With> withs = new ArrayList<>();
+            for (Hir.With w : row.withs()) {
+                withs.add(new Hir.With(w.dep(), qualifyForeign(w.value(), self), w.pos()));
+            }
+            rows.add(new Hir.ExampleRow(row.identity(), inputs, withs,
+                    qualifyForeign(row.expected(), self), row.pos()));
+        }
+        return new Hir.Example(ex.target(), rows, ex.pos());
+    }
+
+    /** The same of one fake table: what each row matches on and what it answers with. */
+    static Hir.Fake qualifyImportsIn(Hir.Fake fake, String self) {
+        List<Hir.FakeRow> rows = new ArrayList<>();
+        for (Hir.FakeRow row : fake.rows()) {
+            List<Hir.Expr> inputs = null;
+            if (row.inputs() != null) {   // a default row matches anything and writes none
+                inputs = new ArrayList<>();
+                for (Hir.Expr in : row.inputs()) {
+                    inputs.add(qualifyForeign(in, self));
+                }
+            }
+            rows.add(new Hir.FakeRow(inputs, qualifyForeign(row.output(), self),
+                    row.isDefault(), row.pos()));
+        }
+        return new Hir.Fake(fake.target(), rows, fake.pos());
+    }
+
+    /**
+     * {@code m} with the foreign names in its invariants written qualified, and nothing else
+     * changed.
+     *
+     * <p>This is where a declaration's clauses get their spelling, and there is no second place: the
+     * rungs above rewrite the definitions and the rows and leave the declarations alone, which is
+     * measured rather than arranged, and held by
+     * {@code AStateIsReachedOnlyThroughWhatEstablishesItTest}.
+     */
+    static Hir.Module withQualifiedInvariants(Hir.Module m) {
+        List<Hir.Def> defs = qualifiedInvariants(m);
+        List<Hir.BehaviorDef> behaviors = qualifiedEnsures(m);
+        Hir.Module out = defs.equals(m.defs()) ? m : m.withDefs(defs);
+        return behaviors.equals(m.behaviors()) ? out : out.withBehaviors(behaviors);
+    }
+
+    private static List<Hir.BehaviorDef> qualifiedEnsures(Hir.Module m) {
+        List<Hir.BehaviorDef> out = new ArrayList<>();
+        for (Hir.BehaviorDef behavior : m.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
+                List<Hir.EnsuresClause> clauses = new ArrayList<>();
+                for (Hir.EnsuresClause clause : spec.ensures()) {
+                    List<Hir.EnsuresArm> arms = new ArrayList<>();
+                    for (Hir.EnsuresArm arm : clause.arms()) {
+                        arms.add(arm.with(qualifyForeign(arm.expr(), m.name())));
+                    }
+                    clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
+                            clause.pos(), clause.region()));
+                }
+                out.add(new Hir.SpecBehavior(spec.written(), spec.params(), spec.ret(),
+                        spec.constructs(), spec.dependsOn(), List.copyOf(clauses), spec.pos()));
+            } else {
+                out.add(behavior);
+            }
+        }
+        return out;
     }
 
     /** {@code m}'s declarations with every name in an invariant that denotes another module's
      * definition written qualified. */
-    private static List<Ast.Def> qualifiedInvariants(Ast.Module m) {
-        List<Ast.Def> defs = new ArrayList<>();
-        for (Ast.Def def : m.defs()) {
-            defs.add(def instanceof Ast.Data d && !d.invariants().isEmpty()
-                    ? new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
-                            Ast.mapClauses(d.invariants(), inv -> qualifyForeign(inv, m.name())),
+    private static List<Hir.Def> qualifiedInvariants(Hir.Module m) {
+        List<Hir.Def> defs = new ArrayList<>();
+        for (Hir.Def def : m.defs()) {
+            defs.add(def instanceof Hir.Data d && !d.invariants().isEmpty()
+                    ? new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
+                            Hir.mapClauses(d.invariants(), inv -> qualifyForeign(inv, m.name())),
                             d.decoder(), d.encoder(), d.pos())
                     : def);
         }
@@ -125,13 +151,13 @@ public final class HelperNames {
 
     /** {@code e} with every name denoting a helper of a module other than {@code self} written
      * qualified. */
-    private static Ast.Expr qualifyForeign(Ast.Expr e, String self) {
+    private static Hir.Expr qualifyForeign(Hir.Expr e, String self) {
         return qualifyHelpers(e, helper -> !helper.module().equals(self));
     }
 
     /** {@code e} with every name still denoting a helper of {@code module} written qualified. Only a
      * recursive helper survives closing, so this is what those calls become. */
-    static Ast.Expr qualifyHelpersOf(Ast.Expr e, String module) {
+    static Hir.Expr qualifyHelpersOf(Hir.Expr e, String module) {
         return qualifyHelpers(e, helper -> helper.module().equals(module));
     }
 
@@ -143,38 +169,57 @@ public final class HelperNames {
      * has. The new spelling is read off the same answer, so running this twice says what running it
      * once said.
      */
-    private static Ast.Expr qualifyHelpers(Ast.Expr e, Predicate<ValueName.Helper> which) {
+    private static Hir.Expr qualifyHelpers(Hir.Expr e, Predicate<ValueName.Helper> which) {
         // a name slot takes the same rewrite as a name standing on its own: a spread names a value
         // the way any other position does
-        Ast.Expr rebuilt = alsoInGiven(Ast.mapChildren(e, c -> qualifyHelpers(c, which),
+        Hir.Expr rebuilt = alsoInGiven(Hir.mapChildren(e, c -> qualifyHelpers(c, which),
                 s -> qualified(s, which)), c -> qualifyHelpers(c, which));
         return switch (rebuilt) {
             // The name is this pass's and the place is the callee's: only the spelling changes, so
             // what is underlined for it is the stretch the name it replaced was read over — not the
             // application's, which takes in arguments this pass did not touch.
-            case Ast.Apply call when foreign(call.denotes(), which) ->
-                    new Ast.Apply(
-                            Ast.Var.respelled(qualifiedName(call.denotes()), call.denotes(),
-                                    ofModule(call.denotes()), call.function().pos(),
+            case Hir.Apply call when call.answered() != null
+                    && foreign(call.answered().denotes(), which) ->
+                    new Hir.Apply(
+                            Hir.Var.respelled(qualifiedName(call.answered().denotes()),
+                                    ofModule(call.answered().denotes()), call.function().pos(),
                                     call.function().region()),
                             call.args(), call.origin(), call.pos(), call.region());
-            case Ast.Var v -> qualified(v, which);
+            case Hir.Var v -> qualified(v, which);
             default -> rebuilt;
         };
     }
 
+    /**
+     * The reference that reaches {@code marked}, for a pass that restated where a construction came
+     * from.
+     *
+     * <p>A whole reference and not the old one with a new denotation in it: what a name means is
+     * changed by replacing the reference it was answered with, so that a route and a declaration
+     * from two different references can never be paired.
+     *
+     * <p>Bare, because a type used as a value is reached by what this module calls it however the
+     * construction is marked — {@link ReachName#of} answers the same for every {@code OfType}, and
+     * the mark is not part of how the name is reached. So this is that answer and not a route
+     * carried over from what stood here.
+     */
+    private static ReachName.InScope reachingTheSameTypeAs(ValueName.OfType marked) {
+        return new ReachName.InScope(marked);
+    }
+
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
-    private static Ast.Var qualified(Ast.Var name, Predicate<ValueName.Helper> which) {
-        return foreign(name.denotes(), which)
-                ? Ast.Var.respelled(qualifiedName(name.denotes()), name.denotes(),
-                        ofModule(name.denotes()), name.pos(), name.region())
+    private static Hir.Var qualified(Hir.Var name, Predicate<ValueName.Helper> which) {
+        return name.answered() instanceof Hir.Var.Denoting named
+                && foreign(named.denotes(), which)
+                ? Hir.Var.respelled(qualifiedName(named.denotes()), ofModule(named.denotes()),
+                        name.pos(), name.region())
                 : name;
     }
 
     /**
      * {@code e} with {@code rewrite} also applied to what a combinator was handed.
      *
-     * <p>A function argument stands in {@link Ast.Expansion#given} and that is not a slot, so no
+     * <p>A function argument stands in {@link Hir.Expansion#given} and that is not a slot, so no
      * generic walk reaches it: a callee that applies its argument holds the same lambda inside its
      * body, and a walk taking both would read one lambda twice. What is written here is not a
      * general walk. It is the rewrite a body takes when it leaves the module it was written in, and
@@ -183,19 +228,19 @@ public final class HelperNames {
      * it goes on naming the declaring module's helpers by the names that module reached them by,
      * inside a body being read against a reader's.
      */
-    private static Ast.Expr alsoInGiven(Ast.Expr e, java.util.function.UnaryOperator<Ast.Expr> rewrite) {
-        if (!(e instanceof Ast.Expansion ex)) {
+    private static Hir.Expr alsoInGiven(Hir.Expr e, java.util.function.UnaryOperator<Hir.Expr> rewrite) {
+        if (!(e instanceof Hir.Expansion ex)) {
             return e;
         }
-        List<Ast.Given> given = new ArrayList<>();
+        List<Hir.Given> given = new ArrayList<>();
         boolean any = false;
-        for (Ast.Given g : ex.given()) {
-            Ast.Expr value = rewrite.apply(g.value());
+        for (Hir.Given g : ex.given()) {
+            Hir.Expr value = rewrite.apply(g.value());
             any |= value != g.value();
             given.add(value == g.value() ? g
-                    : new Ast.Given(g.declaredType(), value, g.applied(), g.arrivesAs()));
+                    : new Hir.Given(g.declaredType(), value, g.applied(), g.arrivesAs()));
         }
-        return any ? new Ast.Expansion(ex.callee(), ex.application(), ex.bound(), given,
+        return any ? new Hir.Expansion(ex.callee(), ex.application(), ex.bound(), given,
                 ex.declaredReturn(), ex.body(), ex.pos(), ex.region()) : e;
     }
 
@@ -214,17 +259,18 @@ public final class HelperNames {
      * module rather than saying only that the construction came from somewhere: a body may build a
      * type of a third module, and that one is nobody's to hand over (ADR-0059).
      */
-    static Ast.Expr publishedBy(Ast.Expr e, String module) {
+    static Hir.Expr publishedBy(Hir.Expr e, String module) {
         // a spread names a value, and a value is not a construction: what it built was built where it
         // was defined, so the mark is already on it
-        Ast.Expr rebuilt = alsoInGiven(Ast.mapChildren(e, c -> publishedBy(c, module), s -> s),
+        Hir.Expr rebuilt = alsoInGiven(Hir.mapChildren(e, c -> publishedBy(c, module), s -> s),
                 c -> publishedBy(c, module));
         return switch (rebuilt) {
-            case Ast.NewData nd -> nd.publishedBy(module);
+            case Hir.NewData nd -> nd.publishedBy(module);
             // a unit data is constructed by being named, so the name is where it says where it came
-            // from — there is no construction node to say it on
-            case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
-                    v.denoting(named.publishedBy(module));
+            // from — there is no construction node to say it on. A name resolution answered with
+            // nothing was reported where it is written; there is no construction to mark on it.
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named ->
+                    v.withReachedAs(reachingTheSameTypeAs(named.publishedBy(module)));
             default -> rebuilt;
         };
     }
@@ -252,14 +298,14 @@ public final class HelperNames {
      * the value would turn on whether a helper on the way could be expanded — the substitution
      * showing through the rule again, in the one place expansion cannot reach.
      */
-    static Ast.Expr carriedByValue(Ast.Expr e) {
-        Ast.Expr rebuilt = alsoInGiven(Ast.mapChildren(e, HelperNames::carriedByValue, s -> s),
+    static Hir.Expr carriedByValue(Hir.Expr e) {
+        Hir.Expr rebuilt = alsoInGiven(Hir.mapChildren(e, HelperNames::carriedByValue, s -> s),
                 HelperNames::carriedByValue);
         return switch (rebuilt) {
-            case Ast.NewData nd -> nd.carriedByValue();
-            case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
-                    v.denoting(named.carriedByValue());
-            case Ast.Apply call -> call.carriedByValue();
+            case Hir.NewData nd -> nd.carriedByValue();
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named ->
+                    v.withReachedAs(reachingTheSameTypeAs(named.carriedByValue()));
+            case Hir.Apply call -> call.carriedByValue();
             default -> rebuilt;
         };
     }
@@ -272,32 +318,33 @@ public final class HelperNames {
      * caller then has differ: which module declares it decides how it is keyed, and a binding that
      * shares a helper's spelling is not one of these at all.
      */
-    public static Set<ValueName.Helper> helpersReached(Ast.Expr e) {
+    public static Set<ValueName.Helper> helpersReached(Hir.Expr e) {
         Set<ValueName.Helper> out = new LinkedHashSet<>();
         collectHelpersOf(e, out);
         return out;
     }
 
-    private static void collectHelpersOf(Ast.Expr e, Set<ValueName.Helper> out) {
+    private static void collectHelpersOf(Hir.Expr e, Set<ValueName.Helper> out) {
         if (e == null) {
             return;
         }
+        // A name nothing declares reaches no helper: it was reported where it is written, and a
+        // walk that asks what a name stands for has no edge to add for it.
         ValueName denotes = switch (e) {
-            case Ast.Apply call -> call.denotes();
-            case Ast.Var v -> v.denotes();
+            case Hir.Apply call when call.answered() != null -> call.answered().denotes();
+            case Hir.Var.Denoting v -> v.denotes();
             default -> null;
         };
         if (denotes instanceof ValueName.Helper helper) {
             out.add(helper);
         }
-        Ast.forEachChild(e, c -> collectHelpersOf(c, out));
+        Hir.forEachChild(e, c -> collectHelpersOf(c, out));
     }
 
     /** How a helper written qualified is reached: under the module that declares it, which is what
      * writing it qualified says. Read off what the name denotes, like the spelling beside it. */
-    private static ReachName ofModule(ValueName denotes) {
-        ValueName.Helper helper = (ValueName.Helper) denotes;
-        return new ReachName.OfModule(helper.module(), helper.name());
+    private static ReachName.Declaration ofModule(ValueName denotes) {
+        return new ReachName.OfModule((ValueName.Helper) denotes);
     }
 
     /** The name a helper is reached by outside the module that declares it. Read off what the name

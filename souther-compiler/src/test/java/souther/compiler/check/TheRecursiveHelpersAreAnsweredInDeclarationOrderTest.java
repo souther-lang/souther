@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 
 import org.junit.jupiter.api.Test;
@@ -42,19 +44,22 @@ class TheRecursiveHelpersAreAnsweredInDeclarationOrderTest {
 
     private static HelperTable tableOf(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        Ast.Module resolved = Resolve.module(parsed, Symbols.of(parsed));
+        Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
         return HelperTable.of(resolved.name(), HelperInliner.helpersOf(resolved),
-                Map.of(), Map.of(), InliningPolicy.FULL);
+                Map.of(), Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     /** The module's own declarations, in the order the answer holds them. The shipped prelude has
      * recursive helpers of its own and the graph walks those too; which of them there are is not what
      * this is about, and a name the module declares carries no qualifier. */
-    private static List<String> declaredHere(Iterable<String> answered) {
+    private static List<String> declaredHere(
+            Iterable<souther.compiler.types.ReachName.Declaration> answered) {
         List<String> own = new ArrayList<>();
-        for (String name : answered) {
-            if (name.indexOf('.') < 0) {
-                own.add(name);
+        for (souther.compiler.types.ReachName.Declaration reference : answered) {
+            // The module's own are reached as they stand; everything else is reached under a
+            // module or an alias. Which arm it is says so, rather than whether it holds a dot.
+            if (reference instanceof souther.compiler.types.ReachName.Own) {
+                own.add(reference.rendered());
             }
         }
         return own;

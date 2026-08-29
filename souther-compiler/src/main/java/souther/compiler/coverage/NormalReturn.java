@@ -1,8 +1,9 @@
 package souther.compiler.coverage;
 
 import souther.compiler.core.Core;
-
-import java.util.List;
+import souther.compiler.flow.Anonymous;
+import souther.compiler.flow.AnonymousPath;
+import souther.compiler.flow.ValueArrivals;
 
 /**
  * Whether evaluating an expression can answer a value.
@@ -11,6 +12,12 @@ import java.util.List;
  * one on its way answers none either. This is what tells an arm the rows can be in from an arm that
  * only states a combination the model rules out — the first is a fork a row takes, the second is not
  * an arm at all.
+ *
+ * <p>A projection of {@link ValueArrivals} and not a reading of its own. Whether a value arrives and
+ * what it comes to are one question wherever an operator stops as soon as its answer is settled:
+ * {@code a > 1 && unreachable} arrives for every small {@code a} and never for a large one, and
+ * nothing reading only the shape of the node can say which. So there is one reading, and this is that
+ * reading asked whether there is any way at all.
  *
  * <p>Read off the tree and not off the types. An {@code unreachable} is written as {@code Never}, but
  * the position it stands in usually states a shape, and that shape is what the elaborator records on
@@ -25,52 +32,54 @@ import java.util.List;
  */
 public final class NormalReturn {
 
+    private final ValueArrivals<AnonymousPath> reading;
+
+    private NormalReturn(ValueArrivals<AnonymousPath> reading) {
+        this.reading = reading;
+    }
+
     /**
-     * Whether {@code e} can be evaluated to a value.
+     * The reading of one body, which every question about a node in it is asked of.
      *
-     * <p>Everything strict is required — an expression whose operand answers nothing answers nothing
-     * — and a fork also needs one of the paths that leave it to answer something. Written as an
-     * exhaustive switch: a node kind added to the IR should stop here and be decided about rather
-     * than fall into a default and be assumed to answer.
+     * <p>Rooted, because what a name reads is not a fact about the node that reads it. A
+     * {@code Core.Read} standing under a {@code let} that bound it to a number written out is settled
+     * by that number; the same node standing in a body that binds nothing is a position of the input.
+     * Asking about a subtree on its own would answer the second of those about the first.
+     */
+    public static NormalReturn ofBody(Core body) {
+        return new NormalReturn(ValueArrivals.ofBody(body, Anonymous.NAMING));
+    }
+
+    /** Whether {@code e}, standing where it stands in this body, can be evaluated to a value. */
+    public boolean at(Core e) {
+        return reading.arrivesAt(e);
+    }
+
+    /**
+     * Whether a run can go down arm {@code part} of {@code fork}.
+     *
+     * <p>A second question about an arm and not the same one. An arm whose body answers a value is
+     * still an arm no run enters where the condition never comes out its way — {@code true} sends
+     * every run to the first, and a comparison against the largest whole number sends every run to
+     * the second. Asked of the reading rather than worked out again here, because which arms a
+     * condition can reach is what that reading already answers and two accounts of it would be two
+     * answers to keep in step.
+     *
+     * <p>Anything but a fork on a value answers yes. Which arm of a {@code match} a run takes is
+     * which case the value is, and which arm of an attempted construction it takes is whether the
+     * thing was made — neither is a truth this reading has anything to say about.
+     */
+    public boolean mayEnter(Core fork, int part) {
+        return !(fork instanceof Core.If iff) || reading.comesAt(iff.cond()).mayCome(part == 0);
+    }
+
+    /**
+     * Whether {@code e} can be evaluated to a value, read as a body of its own.
+     *
+     * <p>For a caller that has an expression and nothing above it. Every name in it is free, which is
+     * what it means for nothing to have bound them.
      */
     public static boolean of(Core e) {
-        return switch (e) {
-            case Core.Unreachable _ -> false;
-            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Read _,
-                 Core.UnitValue _, Core.OptionNone _ -> true;
-            case Core.Neg n -> of(n.operand());
-            case Core.FieldAccess fa -> of(fa.target());
-            case Core.Binary b -> of(b.left()) && of(b.right());
-            case Core.OptionSome s -> of(s.value());
-            case Core.TupleGet tg -> of(tg.tuple());
-            case Core.Tuple t -> all(t.elements());
-            case Core.ListLit lit -> all(lit.elements());
-            case Core.NewData nd -> nd.inits().stream().allMatch(init -> of(init.value()));
-            // The callee's own body is not read; its arguments are evaluated before it is reached.
-            case Core.Call c -> all(c.args());
-            case Core.Apply a -> all(a.args());
-            case Core.PreservedCall p -> throw p.unexpectedIn("normal-return analysis");
-            // The value is evaluated before the body it binds is.
-            case Core.LetIn li -> of(li.value()) && of(li.body());
-            // A function value, not a body being run here: a block is a step handed to a combinator
-            // or a lambda a `let` binds, and evaluating this position makes the function rather than
-            // calling it. What happens when it is called is the call's business, and a call is not
-            // read through. Reading the body here says a step that aborts on an element it is never
-            // handed makes the expression around it answer nothing — which would take a class a row
-            // does sit in out of the denominator.
-            case Core.Block _ -> true;
-            case Core.If iff -> of(iff.cond()) && (of(iff.then()) || of(iff.els()));
-            case Core.Match m -> of(m.scrutinee())
-                    && m.cases().stream().anyMatch(arm -> of(arm.body()));
-            case Core.IfConstructed ic ->
-                    ic.construct().inits().stream().allMatch(init -> of(init.value()))
-                            && (of(ic.then()) || ic.els().stream().anyMatch(arm -> of(arm.body())));
-        };
+        return ofBody(e).at(e);
     }
-
-    private static boolean all(List<Core> each) {
-        return each.stream().allMatch(NormalReturn::of);
-    }
-
-    private NormalReturn() {}
 }

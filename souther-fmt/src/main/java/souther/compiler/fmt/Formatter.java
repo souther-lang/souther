@@ -8,7 +8,6 @@ import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -446,7 +445,7 @@ public final class Formatter {
      * it was reached wherever the stack happened to end, which is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).build());
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).nowhere().build());
     }
 
     // --- layout ---
@@ -826,7 +825,8 @@ public final class Formatter {
                 Place bind = binds.isEmpty()
                         ? places.under(ofTheWith, b.kind(), Opening.NONE, Written.of(b))
                         : memberPlace(ofTheWith, b);
-                binds.add(member(bind, b, TokenDoc.node(b.kind(), concat(ident(firstIdent(b)), GAP,
+                // The dependency, which is a name and may be written through its module.
+                binds.add(member(bind, b, TokenDoc.node(b.kind(), concat(dottedName(idents(b)), GAP,
                         ASSIGN, GAP,
                         childAt(bind, firstExprChildOpt(b).orElseThrow(), Opening.NONE)))));
             }
@@ -856,8 +856,11 @@ public final class Formatter {
     }
 
     private TokenDoc fakeDef(SyntaxNode n, Place at) {
-        List<SyntaxToken> ids = idents(n);   // ["fake", target]
-        String target = ids.size() >= 2 ? ids.get(1).text() : "";
+        // ["fake", target…]. The target is a name and may be written through the module that
+        // declares the behavior, so every identifier after the first belongs to it.
+        List<SyntaxToken> ids = idents(n);
+        TokenDoc target = ids.size() >= 2
+                ? dottedName(ids.subList(1, ids.size())) : TokenDoc.NIL;
         List<TokenDoc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
             Place r = places.under(at, row.kind(),
@@ -866,7 +869,7 @@ public final class Formatter {
             rows.add(TokenDoc.at(r, concat(fakeRow(row, r), TokenDoc.endsTheLineOf(r))));
         }
         rows.add(TokenDoc.carries(at, Carrier.AT_END));
-        return TokenDoc.node(n.kind(), concat(ident("fake"), GAP, ident(target),
+        return TokenDoc.node(n.kind(), concat(ident("fake"), GAP, target,
                 ids.size() >= 2 ? headerLine(at, ids.get(ids.size() - 1)) : TokenDoc.NIL, nest(INDENT, concat(rows))));
     }
 
@@ -1116,19 +1119,25 @@ public final class Formatter {
             List<TokenDoc> clauses = new ArrayList<>();
             for (SyntaxNode c : s.childNodes()) {
                 if (c.kind() != SyntaxKind.CONSTRUCTS_CLAUSE
-                        && c.kind() != SyntaxKind.DEPENDS_CLAUSE) {
+                        && c.kind() != SyntaxKind.DEPENDS_CLAUSE
+                        && c.kind() != SyntaxKind.ENSURES_CLAUSE) {
                     continue;
                 }
                 Place clause = places.under(ofTheSig, c.kind(),
                         Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                         Written.of(c));
-                TokenDoc listed = c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE
-                        ? TokenDoc.node(c.kind(),
-                                concat(TokenDoc.token(SyntaxKind.CONSTRUCTS_KW, "constructs"), GAP,
-                                        nameList(c, 0, clause)))
-                        : TokenDoc.node(c.kind(),
-                                concat(TokenDoc.token(SyntaxKind.DEPENDS_KW, "depends"), GAP,
-                                        ident("on"), GAP, nameList(c, 1, clause)));
+                TokenDoc listed;
+                if (c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
+                    listed = TokenDoc.node(c.kind(),
+                            concat(TokenDoc.token(SyntaxKind.CONSTRUCTS_KW, "constructs"), GAP,
+                                    nameList(c, 0, clause)));
+                } else if (c.kind() == SyntaxKind.DEPENDS_CLAUSE) {
+                    listed = TokenDoc.node(c.kind(),
+                            concat(TokenDoc.token(SyntaxKind.DEPENDS_KW, "depends"), GAP,
+                                    ident("on"), GAP, nameList(c, 1, clause)));
+                } else {
+                    listed = ensuresClause(c, clause);
+                }
                 clauses.add(TokenDoc.at(clause, concat(listed, TokenDoc.endsTheLineOf(clause))));
             }
             return TokenDoc.node(n.kind(),
@@ -1164,6 +1173,36 @@ public final class Formatter {
         return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.BEHAVIOR_KW, "behavior"), GAP, ident(name), GAP, ASSIGN,
                 TokenDoc.at(ofThePipe,
                         TokenDoc.node(pipe.kind(), group(nest(INDENT, concat(parts)))))));
+    }
+
+    private TokenDoc ensuresClause(SyntaxNode clause, Place at) {
+        TokenDoc label = clause.token(SyntaxKind.ASSIGN).isPresent()
+                ? concat(ident(firstIdent(clause)), GAP, ASSIGN, GAP) : TokenDoc.NIL;
+        List<SyntaxNode> arms = childNodes(clause, SyntaxKind.ENSURES_ARM);
+        if (arms.isEmpty()) {
+            return TokenDoc.node(clause.kind(), concat(
+                    TokenDoc.token(SyntaxKind.ENSURES_KW, "ensures"), GAP, label,
+                    childAt(at, onlyExpr(clause), Opening.NONE)));
+        }
+        List<TokenDoc> written = new ArrayList<>();
+        for (int i = 0; i < arms.size(); i++) {
+            SyntaxNode arm = arms.get(i);
+            Place armPlace = places.under(at, arm.kind(), Opening.NONE, Written.of(arm));
+            List<TokenDoc> cases = new ArrayList<>();
+            for (SyntaxNode name : childNodes(arm, SyntaxKind.QUALIFIED_NAME)) {
+                if (!cases.isEmpty()) {
+                    cases.add(concat(GAP, PIPE, GAP));
+                }
+                cases.add(qualifiedName(name, armPlace));
+            }
+            TokenDoc prefix = i == 0
+                    ? concat(TokenDoc.token(SyntaxKind.ENSURES_KW, "ensures"), GAP, label)
+                    : concat(GAP, PIPE, GAP);
+            written.add(concat(prefix, TokenDoc.at(armPlace, TokenDoc.node(arm.kind(),
+                    concat(concat(cases), GAP, ARROW, GAP,
+                            childAt(armPlace, onlyExpr(arm), Opening.NONE))))));
+        }
+        return TokenDoc.node(clause.kind(), concat(written));
     }
 
     /**
@@ -2047,17 +2086,17 @@ public final class Formatter {
 
     /** Where the comments of a file go, decided before any of it is written. */
     private record Attachments(
-            /** Above the line the node opens. */
+            // Above the line the node opens.
             Map<SyntaxNode, List<SyntaxToken>> above,
-            /** At the end of the line the node ends. */
+            // At the end of the line the node ends.
             Map<SyntaxNode, List<SyntaxToken>> after,
-            /** On lines of its own below the line the node ends, with a member still to come. */
+            // On lines of its own below the line the node ends, with a member still to come.
             Map<SyntaxNode, List<SyntaxToken>> below,
-            /** Inside the node, under its last member and before it closes. */
+            // Inside the node, under its last member and before it closes.
             Map<SyntaxNode, List<SyntaxToken>> atEnd,
-            /** Against a name rather than a node — the identifiers a sum's case or a clause's
-             * member is written as, and a token in the middle of a construct, which is a line of
-             * the canonical form without being a construct of the source. */
+            // Against a name rather than a node — the identifiers a sum's case or a clause's
+            // member is written as, and a token in the middle of a construct, which is a line of
+            // the canonical form without being a construct of the source.
             Map<Written, OnAName> aboveToken,
             Map<Written, OnAName> afterToken) {
 
@@ -2666,11 +2705,6 @@ public final class Formatter {
 
     // --- CST navigation ---
 
-    private TokenDoc qualifiedName(SyntaxNode n, Place at) {
-        places.within(n, at);
-        return TokenDoc.node(n.kind(), dottedName(idents(n)));
-    }
-
     /**
      * A name written through the module or the alias that declares it: its identifiers, and the
      * dots the canonical form writes between them. What goes at each of those boundaries is the
@@ -2678,6 +2712,11 @@ public final class Formatter {
      * one — assembling it is deciding, and a name is one of the places the same decision used to be
      * written out again.
      */
+    private TokenDoc qualifiedName(SyntaxNode n, Place at) {
+        places.within(n, at);
+        return TokenDoc.node(n.kind(), dottedName(idents(n)));
+    }
+
     /** A token of the source, written back as itself. */
     private static TokenDoc token(SyntaxToken t) {
         return TokenDoc.token(t.kind(), t.text());

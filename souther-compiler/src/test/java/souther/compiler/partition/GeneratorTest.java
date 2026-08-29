@@ -2,9 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -17,7 +22,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -95,22 +99,24 @@ class GeneratorTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(prepared);
         assertNotNull(sigs);
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
-        List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
-        Partitions.Partitioning partitioning = Partitions.of(spec, sig, symbols, Exclusions.NONE);
-        return new Model(new Generator.Subject(
-                new BehaviorInputs(parameters, sig.inputTypes(), symbols), partitioning.axes()),
+        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
+        InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return new Model(new Generator.Subject(spec.name(),
+                new BehaviorInputs(parameters, sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), partitioning.axes(),
+                HeldCounts.of(domain, symbols)),
                 symbols);
     }
 
-    private static List<String> texts(Generator.GenerationResult result) {
+    private static List<String> texts(FillResult result) {
         List<String> out = new ArrayList<>();
         for (Generator.GeneratedRow row : result.rows()) {
             out.add(String.join(", ", row.inputs().stream().map(FixtureTemplate::text).toList()));
@@ -118,36 +124,43 @@ class GeneratorTest {
         return out;
     }
 
-    /** Two positions of two classes is four combinations, and nothing having been written means all
-     * four are still to write. */
+    /**
+     * One row per class no row is in, and each of them about that class alone.
+     *
+     * <p>Two positions of two classes each is four classes, and nothing having been written means
+     * all four are still to write. Not four <em>combinations</em>: the four are what the report
+     * names, and a row named for two of them at once says nothing about which of the two the answer
+     * turned on (issue #967). What the position the row is not about holds is a value it has to
+     * hold and is no part of what the row is for.
+     */
     @Test
-    void everyUncoveredCombinationGetsARow() {
-        Generator.GenerationResult filled = Generator.fill(modelOf(TRIP, "submit").subject(),
-                List.of(), Generator.CandidateCheck.ANY);
+    void everyClassNoRowIsInGetsARowAboutThatClassAlone() {
+        FillResult filled = Generator.fill(modelOf(TRIP, "submit").subject(),
+                List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved());
         assertEquals(4, filled.rows().size(), texts(filled).toString());
         assertEquals(List.of(
-                        List.of("request.kind=Domestic", "request.urgent=true"),
-                        List.of("request.kind=Domestic", "request.urgent=false"),
-                        List.of("request.kind=Overseas", "request.urgent=true"),
-                        List.of("request.kind=Overseas", "request.urgent=false")),
-                filled.rows().stream().map(Generator.GeneratedRow::classes).toList());
+                        List.of("request.kind=Domestic"),
+                        List.of("request.kind=Overseas"),
+                        List.of("request.urgent=true"),
+                        List.of("request.urgent=false")),
+                filled.rows().stream().map(row -> row.labels()).toList());
     }
 
     /** Several positions of one parameter are one value. {@code request.kind} and {@code request.urgent}
      * are two positions of one {@code Request}, and a row writes one of those. */
     @Test
     void positionsOfOneParameterCompoundIntoOneValue() {
-        Generator.GenerationResult filled = Generator.fill(modelOf(TRIP, "submit").subject(),
-                List.of(), Generator.CandidateCheck.ANY);
+        FillResult filled = Generator.fill(modelOf(TRIP, "submit").subject(),
+                List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(1, filled.rows().get(0).inputs().size());
         assertEquals("Request { kind = Domestic, urgent = true }",
                 filled.rows().get(0).inputs().get(0).text());
     }
 
-    /** A row already written is a combination already covered, and nothing writes it twice. */
+    /** A class a row already sits in is not asked for again — and one row sits in one of each. */
     @Test
     void whatTheRowsAlreadyReachIsNotGeneratedAgain() {
         Generator.Subject subject = modelOf(TRIP, "submit").subject();
@@ -155,27 +168,26 @@ class GeneratorTest {
                 new AxisId("submit", "request.kind"), Classification.in("Domestic"),
                 new AxisId("submit", "request.urgent"), Classification.in("true"));
 
-        Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(written), Generator.CandidateCheck.ANY);
+        FillResult filled =
+                Generator.fill(subject, List.of(Generator.ObservedRow.unseen(written)),
+                        Generator.CandidateCheck.ANY, Budgets.generation());
 
-        assertEquals(3, filled.rows().size());
-        assertTrue(filled.rows().stream()
-                        .noneMatch(r -> r.classes().equals(
-                                List.of("request.kind=Domestic", "request.urgent=true"))),
-                "the combination a row already sits in");
+        assertEquals(List.of(List.of("request.kind=Overseas"), List.of("request.urgent=false")),
+                filled.rows().stream().map(row -> row.labels()).toList(),
+                "the two classes that row is in are not asked for again");
     }
 
     /** A block that changed between two runs of one model could not be compared with the last one. */
     @Test
     void theSameModelGeneratesTheSameRowsTwice() {
-        Generator.GenerationResult once = Generator.fill(modelOf(TRIP, "submit").subject(),
-                List.of(), Generator.CandidateCheck.ANY);
-        Generator.GenerationResult again = Generator.fill(modelOf(TRIP, "submit").subject(),
-                List.of(), Generator.CandidateCheck.ANY);
+        FillResult once = Generator.fill(modelOf(TRIP, "submit").subject(),
+                List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
+        FillResult again = Generator.fill(modelOf(TRIP, "submit").subject(),
+                List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(texts(once), texts(again));
-        assertEquals(once.rows().stream().map(Generator.GeneratedRow::classes).toList(),
-                again.rows().stream().map(Generator.GeneratedRow::classes).toList());
+        assertEquals(once.rows().stream().map(row -> row.labels()).toList(),
+                again.rows().stream().map(row -> row.labels()).toList());
     }
 
     // --- what a candidate says and what it does not ----------------------------------------------
@@ -187,9 +199,11 @@ class GeneratorTest {
                 List.of());
         Axis b = new Axis(new AxisId("f", "b"), new NumericTerm.ValueOf(TermPath.of("b")), Type.INT, right,
                 List.of());
-        return new Generator.Subject(
-                new BehaviorInputs(List.of("a", "b"), List.of(Type.INT, Type.INT), symbols),
-                List.of(a, b));
+        // Axes written here rather than read off a model, so there is no reading of the input's
+        // counts to hand over and none is invented.
+        return new Generator.Subject("f",
+                new BehaviorInputs(List.of("a", "b"), List.of(Type.INT, Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                List.of(a, b), HeldCounts.NONE);
     }
 
     private static PartitionClass number(String id, long... candidates) {
@@ -197,7 +211,7 @@ class GeneratorTest {
         for (long each : candidates) {
             values.add(FixtureTemplate.integer(each));
         }
-        return PartitionClass.of(id, id, _ -> Membership.NO_MATCH,
+        return PartitionClass.of(id, id, new Recognition.Nothing(),
                 RepresentativeSource.of(values));
     }
 
@@ -213,15 +227,17 @@ class GeneratorTest {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Generator.Subject subject = twoNumbers(symbols, List.of(number("low", 1, 2)),
                 List.of(number("high", 10, 20)));
-        Generator.CandidateCheck refusesTheFirst = (at, candidate) ->
-                candidate.text().equals("1") || candidate.text().equals("10")
-                        ? Optional.of("the first pair is not allowed together") : Optional.empty();
+        Generator.CandidateCheck refusesTheFirst = Generator.CandidateCheck.refusing(
+                (at, candidate) -> candidate.text().equals("1") || candidate.text().equals("10")
+                        ? Optional.of("the first pair is not allowed together") : Optional.empty());
 
-        Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(), refusesTheFirst);
+        FillResult filled =
+                Generator.fill(subject, List.of(), refusesTheFirst, Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved());
-        assertEquals(List.of("2, 20"), texts(filled));
+        // One row per class owed, which here is one class at each of two positions. What this is
+        // about is which values they were written at, and both took the second of each.
+        assertEquals(List.of("2, 20", "2, 20"), texts(filled));
     }
 
     /**
@@ -236,17 +252,19 @@ class GeneratorTest {
         Generator.Subject subject = twoNumbers(symbols, List.of(number("low", 1)),
                 List.of(number("high", 10)));
 
-        Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(), (_, _) -> Optional.of("no"));
+        FillResult filled =
+                Generator.fill(subject, List.of(),
+                        Generator.CandidateCheck.refusing((_, _) -> Optional.of("no")), Budgets.generation());
 
         assertEquals(List.of(), filled.rows());
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason
                                 .ALL_CANDIDATES_REJECTED),
                 filled.unresolved().toString());
-        assertTrue(filled.unresolved().stream()
-                        .anyMatch(left -> left.classes().equals(List.of("a=low", "b=high"))),
-                filled.unresolved().toString());
+        assertEquals(List.of(List.of("a=low"), List.of("b=high")),
+                filled.unresolved().stream()
+                        .map(Generator.UnresolvedCombination::classes).toList(),
+                "the class each row was owed for, and not the pair they would have made");
     }
 
     /** A class nothing can write a value for is still a class, and the row it wants is still owed. */
@@ -254,11 +272,11 @@ class GeneratorTest {
     void aClassWithNoValueIsNamedRatherThanDropped() {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Generator.Subject subject = twoNumbers(symbols,
-                List.of(PartitionClass.ungeneratable("opaque", "opaque", _ -> Membership.NO_MATCH, "no value")),
+                List.of(PartitionClass.ungeneratable("opaque", "opaque", new Recognition.Nothing(), "no value")),
                 List.of(number("high", 10)));
 
-        Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);
+        FillResult filled =
+                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.rows());
         assertTrue(filled.unresolved().stream()
@@ -277,18 +295,19 @@ class GeneratorTest {
     void whatHadNoValueIsNamedRatherThanTheCombinationsThatWantedIt() {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Generator.Subject subject = twoNumbers(symbols,
-                List.of(PartitionClass.ungeneratable("opaque", "opaque", _ -> Membership.NO_MATCH, "no value"),
+                List.of(PartitionClass.ungeneratable("opaque", "opaque", new Recognition.Nothing(), "no value"),
                         number("low", 1)),
                 List.of(number("high", 10), number("higher", 20)));
 
-        Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);
+        FillResult filled =
+                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         List<String> subjects = filled.unresolved().stream()
                 .map(Generator.UnresolvedCombination::subject).distinct().toList();
         assertEquals(List.of("a=opaque"), subjects,
                 "the class with nothing, once — not the three combinations it is in");
-        assertEquals(2, filled.rows().size(), "the rest is still filled");
+        assertEquals(3, filled.rows().size(),
+                "the other three classes are still asked for, each standing where `a` can be built");
     }
 
     /**
@@ -301,8 +320,8 @@ class GeneratorTest {
      */
     @Test
     void aRecordCaseOfASumIsComposedFromItsFields() {
-        Generator.GenerationResult filled = Generator.fill(modelOf(PAYMENT, "feeFor").subject(),
-                List.of(), Generator.CandidateCheck.ANY);
+        FillResult filled = Generator.fill(modelOf(PAYMENT, "feeFor").subject(),
+                List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
         assertEquals(List.of("Card { number = Amount(0m) }", "Cash { amount = Amount(0m) }"),
@@ -319,41 +338,13 @@ class GeneratorTest {
      */
     @Test
     void anOptionalWhoseElementIsARecordIsOfferedARow() {
-        Generator.GenerationResult filled = Generator.fill(
+        FillResult filled = Generator.fill(
                 modelOf(OPTIONAL_RECORD, "feeOf").subject(), List.of(),
-                Generator.CandidateCheck.ANY);
+                Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
         assertTrue(texts(filled).contains("Request { card = Card { number = Amount(0m) } }"),
                 () -> "the element composed, under the optional: " + texts(filled));
-    }
-
-    /**
-     * A position whose classes the body all rules out leaves no row to write anywhere else.
-     *
-     * <p>What that says is about the classes a row may be written at, and not about whether values
-     * of the position exist: every class here has a value, and the body is what refuses them. A
-     * reason that said no value can be written there would send an author looking for a type with
-     * no values.
-     */
-    @Test
-    void aPositionWithNoClassLeftOpenSaysThatAndNotThatNoValueExists() {
-        Symbols symbols = modelOf(TRIP, "submit").symbols();
-        Generator.Subject subject = twoNumbers(symbols,
-                List.of(number("shut", 1)), List.of(number("open", 10), number("wider", 20)));
-        Axis closed = subject.axes().get(0).excluding(List.of("shut"));
-        Generator.Subject shut = new Generator.Subject(subject.inputs(),
-                List.of(closed, subject.axes().get(1)));
-
-        Generator.GenerationResult filled =
-                Generator.fill(shut, List.of(), Generator.CandidateCheck.ANY);
-
-        assertEquals(List.of(), filled.rows(), "no row reaches a position with nothing open at it");
-        assertEquals(
-                List.of(Generator.UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION,
-                        Generator.UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION),
-                filled.unresolved().stream().map(Generator.UnresolvedCombination::reason).toList(),
-                () -> "one per combination the closed position takes part in: " + filled.unresolved());
     }
 
     /**
@@ -369,12 +360,12 @@ class GeneratorTest {
     void aClassThatSaidWhyNothingWasComposedIsNotReportedAsHavingNoValue() {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Generator.Subject subject = twoNumbers(symbols,
-                List.of(PartitionClass.ungeneratable("empty", "empty", _ -> Membership.NO_MATCH,
+                List.of(PartitionClass.ungeneratable("empty", "empty", new Recognition.Nothing(),
                         "no value this position can hold lies inside this range")),
                 List.of(number("high", 10)));
 
-        Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);
+        FillResult filled =
+                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.rows(), "nothing was composed at the first position");
         Generator.UnresolvedCombination only = filled.unresolved().getFirst();
@@ -396,14 +387,15 @@ class GeneratorTest {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Axis only = new Axis(new AxisId("f", "a"), new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
                 List.of(number("low", 1), number("high", 9)), List.of());
-        Generator.Subject subject = new Generator.Subject(
-                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols), List.of(only));
+        Generator.Subject subject = new Generator.Subject("f",
+                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), List.of(only),
+                HeldCounts.NONE);
 
-        Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);
+        FillResult filled =
+                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of("1", "9"), texts(filled));
         assertEquals(List.of(List.of("a=low"), List.of("a=high")),
-                filled.rows().stream().map(Generator.GeneratedRow::classes).toList());
+                filled.rows().stream().map(row -> row.labels()).toList());
     }
 }

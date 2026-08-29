@@ -42,7 +42,7 @@ class CompilePipeTest {
     @Test
     void composesDependencyFreeBehaviors() throws Exception {
         BytesClassLoader loader = loader();
-        Object ab = loader.loadClass("demo.Ab" + "$Impl").getConstructor().newInstance();
+        Object ab = Emitted.behavior(loader, "demo", "ab").getConstructor().newInstance();
         // apply returns the output case value directly
         Object out = Codecs.apply(ab, decode(loader, "Wrap", "hi"));
 
@@ -58,7 +58,7 @@ class CompilePipeTest {
         Object mid = Codecs.decoded(loader, "demo.Mid", "hello");
         Behavior<Object, Object> fetch = w -> mid;
 
-        Object handle = loader.loadClass("demo.Handle" + "$Impl")
+        Object handle = Emitted.behavior(loader, "demo", "handle")
                 .getConstructor(Behavior.class).newInstance(fetch);
         Object out = Codecs.apply(handle, decode(loader, "Wrap", "ignored"));
 
@@ -117,7 +117,7 @@ class CompilePipeTest {
                 data NoRight
 
                 behavior reject : (p: Pending, by: Id) -> Rejected | NoRight
-                    constructs Rejected, NoRight
+                    constructs Rejected
 
                 let reject (p, by) = {
                     guard by == p.boss else NoRight
@@ -129,7 +129,7 @@ class CompilePipeTest {
                 behavior rejectAndSendBack = reject >-> sendBack
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Class<?> flow = loader.loadClass("demo.RejectAndSendBack$Impl");
+        Class<?> flow = Emitted.behavior(loader, "demo", "rejectAndSendBack");
         // the pipeline takes what its first stage takes, so it is not a one-input Behavior
         var apply = flow.getMethod("apply", Object.class, Object.class);
 

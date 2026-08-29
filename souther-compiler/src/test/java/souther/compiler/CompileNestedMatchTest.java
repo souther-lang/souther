@@ -54,7 +54,7 @@ class CompileNestedMatchTest {
 
     private long runWith(BytesClassLoader loader, Object raw) throws Exception {
         Object in = Codecs.decoded(loader, "demo.外", raw);
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return (Long) ((Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, in))).get("n");
     }

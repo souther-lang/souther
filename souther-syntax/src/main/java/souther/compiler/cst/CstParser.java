@@ -64,6 +64,7 @@ public final class CstParser {
      * filled in: nothing reads it, and the depth this unwinds is the reason to not pay for one.
      */
     private static final class TooDeep extends RuntimeException {
+        private static final long serialVersionUID = 1L;
         TooDeep() {
             super(null, null, false, false);
         }
@@ -155,25 +156,32 @@ public final class CstParser {
         }
     }
 
+    /**
+     * A file: its header, then its imports, then everything else.
+     *
+     * <p>Which words open which form is {@link TopLevelForm}'s, so the conditions here are asked of
+     * it rather than spelled again. What each form is read by is this parser's, and it is the one
+     * thing said here.
+     */
     private void topLevelItems() {
-        if (atContextual("examples")) {
+        if (starts(TopLevelForm.EXAMPLES_FILE_HEADER)) {
             examplesFileHeader();
-        } else if (at(SyntaxKind.MODULE_KW)) {
+        } else if (starts(TopLevelForm.MODULE_HEADER)) {
             moduleHeader();
         }
-        while (at(SyntaxKind.IMPORT_KW)) {
+        while (starts(TopLevelForm.IMPORT)) {
             importDecl();
         }
         while (!at(SyntaxKind.EOF)) {
-            if (at(SyntaxKind.DATA_KW)) {
+            if (starts(TopLevelForm.DATA)) {
                 dataDef();
-            } else if (at(SyntaxKind.BEHAVIOR_KW)) {
+            } else if (starts(TopLevelForm.BEHAVIOR)) {
                 behaviorDef();
-            } else if (at(SyntaxKind.LET_KW) || atModifiedLet()) {
+            } else if (starts(TopLevelForm.FN)) {
                 fnDef();
-            } else if (atContextual("example")) {
+            } else if (starts(TopLevelForm.EXAMPLE)) {
                 exampleDef();
-            } else if (atContextual("fake")) {
+            } else if (starts(TopLevelForm.FAKE)) {
                 fakeDef();
             } else {
                 recoverTopLevel();
@@ -182,18 +190,47 @@ public final class CstParser {
         bumpEof();
     }
 
-    /** Wraps stray tokens (until the next top-level starter) in an ERROR node so the tree stays
-     * whole even when the source is malformed. */
+    /**
+     * Wraps stray tokens in an ERROR node so the tree stays whole even when the source is malformed,
+     * up to the point the parse can pick itself up again.
+     *
+     * <p>Where that is, is this parser's answer about a mistake rather than a fact about the
+     * language, so it is written here as a rule over the catalog: at anything that may open
+     * something after the header. A header form does not stop it — a file has one header and it is
+     * at the top, so a {@code module} line further down is not a beginning to resume at.
+     */
     private void recoverTopLevel() {
         error(new ParseMessage.ATopLevelDefinitionStartsWithAKeyword());
         start(SyntaxKind.ERROR_TOKEN);
         do {
             bump();
-        } while (!at(SyntaxKind.EOF) && !at(SyntaxKind.DATA_KW) && !at(SyntaxKind.BEHAVIOR_KW)
-                && !at(SyntaxKind.LET_KW) && !atModifiedLet() && !at(SyntaxKind.IMPORT_KW)
-                && !atContextual("example") && !atContextual("fake"));
+        } while (!at(SyntaxKind.EOF) && !atResumePoint());
         finish();
     }
+
+    /** Whether something that may follow a file's header opens here. */
+    private boolean atResumePoint() {
+        return TopLevelForm.at(ahead)
+                .filter(form -> form.region() != TopLevelForm.Region.FILE_HEADER)
+                .isPresent();
+    }
+
+    private boolean starts(TopLevelForm form) {
+        return form.startsAt(ahead);
+    }
+
+    /** The meaningful tokens ahead of the cursor, as the catalog reads them. */
+    private final TopLevelForm.Lookahead ahead = new TopLevelForm.Lookahead() {
+        @Override
+        public SyntaxKind kindAt(int i) {
+            return nth(i);
+        }
+
+        @Override
+        public String textAt(int i) {
+            return tokenText(mi(i));
+        }
+    };
 
     private void moduleHeader() {
         start(SyntaxKind.MODULE_HEADER);
@@ -390,6 +427,9 @@ public final class CstParser {
             behaviorSig();
         } else if (eat(SyntaxKind.ASSIGN)) {
             pipeBehavior();
+            while (at(SyntaxKind.ENSURES_KW)) {
+                ensuresClause();
+            }
         } else {
             error(new ParseMessage.ABehaviorIsWrittenWithAColonOrAnEquals());
         }
@@ -407,11 +447,76 @@ public final class CstParser {
                 nameClause(SyntaxKind.CONSTRUCTS_CLAUSE);
             } else if (at(SyntaxKind.DEPENDS_KW)) {
                 dependsClause();
+            } else if (at(SyntaxKind.ENSURES_KW)) {
+                ensuresClause();
             } else {
                 more = false;
             }
         }
         finish();
+    }
+
+    /** A behavior postcondition, either one expression over a single output type or one or more
+     * output-case arms. The latter is recognized only when the leading qualified-name sequence is
+     * followed by {@code ->}; equality is {@code ==}, so an ordinary expression beginning with a
+     * name cannot be mistaken for a named arm. */
+    private void ensuresClause() {
+        start(SyntaxKind.ENSURES_CLAUSE);
+        bump();   // ensures
+        if ((at(SyntaxKind.IDENT) || at(SyntaxKind.UNDERSCORE)) && nth(1) == SyntaxKind.ASSIGN) {
+            bump();
+            bump();
+        }
+        if (atEnsuresArm()) {
+            ensuresArm();
+            while (at(SyntaxKind.PIPE) && atEnsuresArmFrom(1)) {
+                bump();
+                ensuresArm();
+            }
+        } else {
+            expr();
+        }
+        finish();
+    }
+
+    private void ensuresArm() {
+        start(SyntaxKind.ENSURES_ARM);
+        qualifiedName();
+        // A pipe joins another case to this arm only where a case still stands before the arrow;
+        // where it does not, the pipe begins the next arm and `ensuresClause` takes it. Which of the
+        // two it is is one question, so it is one reading of the tokens ahead.
+        while (at(SyntaxKind.PIPE) && atEnsuresArmFrom(1)) {
+            bump();
+            qualifiedName();
+        }
+        expect(SyntaxKind.ARROW, Reading.A_DECLARATION);
+        expr();
+        finish();
+    }
+
+    private boolean atEnsuresArm() {
+        return atEnsuresArmFrom(0);
+    }
+
+    /** Whether a qualified-name list beginning {@code offset} tokens ahead ends at an arrow. */
+    private boolean atEnsuresArmFrom(int offset) {
+        int i = offset;
+        if (nth(i) != SyntaxKind.IDENT) {
+            return false;
+        }
+        while (true) {
+            i++;
+            while (nth(i) == SyntaxKind.DOT && nth(i + 1) == SyntaxKind.IDENT) {
+                i += 2;
+            }
+            if (nth(i) == SyntaxKind.ARROW) {
+                return true;
+            }
+            if (nth(i) != SyntaxKind.PIPE || nth(i + 1) != SyntaxKind.IDENT) {
+                return false;
+            }
+            i++;
+        }
     }
 
     private void paramList() {
@@ -501,14 +606,6 @@ public final class CstParser {
      * {@code private partial let}. Both are contextual soft-keywords, so a parameter or field may
      * still be named {@code private} or {@code partial} — only the word directly before a
      * {@code let} (or before the other modifier and then a {@code let}) is read as one. */
-    private boolean atModifiedLet() {
-        if (atContextual("private")) {
-            return nth(1) == SyntaxKind.LET_KW
-                    || (contextualAt(1, "partial") && nth(2) == SyntaxKind.LET_KW);
-        }
-        return atContextual("partial") && nth(1) == SyntaxKind.LET_KW;
-    }
-
     private void fnDef() {
         start(SyntaxKind.FN_DEF);
         if (atContextual("private")) {
@@ -646,7 +743,14 @@ public final class CstParser {
     private void exampleRow() {
         start(SyntaxKind.EXAMPLE_ROW);
         if (at(SyntaxKind.STRING_LIT) && nth(1) == SyntaxKind.COLON) {
-            bump();   // "description"
+            // A row's name is what says which row it is from outside the file, so a name written
+            // here is held to naming something. Said where the name is written, on the text of the
+            // literal rather than on its spelling: `"\t"` is written with two characters and names
+            // as little as `""` does.
+            if (CstLexer.textOf(tokenText(mi(0))).isBlank()) {
+                error(new ParseMessage.ARowNameSaysNothing());
+            }
+            bump();   // "name"
             bump();   // :
         }
         argList();   // the input tuple, reusing ARG_LIST
@@ -674,7 +778,10 @@ public final class CstParser {
 
     private void withBinding() {
         start(SyntaxKind.WITH_BINDING);
-        expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);   // the injected dependency name
+        // The dependency, named as a behavior is named anywhere else: bare where the scope settles
+        // it, qualified through its module where the author says which one is meant.
+        expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);
+        dottedTail();
         expect(SyntaxKind.ASSIGN, Reading.AN_EXAMPLE);
         boolean saved = noLambda;
         noLambda = true;
@@ -684,11 +791,13 @@ public final class CstParser {
     }
 
     /** {@code fake <injected> | rows} — a function fake: a table of input→output rows for an injected
-     * dependency. {@code fake} is contextual; the target is the second identifier. */
+     * dependency. {@code fake} is contextual; the target is the name after it, written as a behavior
+     * is written anywhere else — bare, or qualified through the module that declares it. */
     private void fakeDef() {
         start(SyntaxKind.FAKE_DEF);
         bump();   // fake
         expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);   // target injected behavior
+        dottedTail();
         if (!at(SyntaxKind.PIPE)) {
             error(new ParseMessage.AFakeNeedsAtLeastOneRow());
         }

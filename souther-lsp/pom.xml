@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc4</version>
+        <version>0.1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-lsp</artifactId>
@@ -63,8 +63,12 @@
     </dependencies>
 
     <build>
-        <!-- The uber jar is `souther-lsp.jar`; an editor launches it with `java -jar souther-lsp.jar`,
-             which speaks LSP over stdio. -->
+        <!-- The uber jar is `souther-lsp-all.jar`; an editor launches it with
+             `java -jar souther-lsp-all.jar`, which speaks LSP over stdio. It is written beside the
+             module's own artifact under a final name of its own, rather than put in its place,
+             because `souther-cli` depends on this module to serve the same server from
+             `souther lsp` and would then be shading an uber jar into an uber jar. What that module
+             resolves is `souther-lsp.jar`, which this build leaves as javac wrote it. -->
         <finalName>souther-lsp</finalName>
         <plugins>
             <plugin>
@@ -79,6 +83,10 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <!-- A final name of this plugin's own, which is what keeps the module's
+                                 artifact where it is: shade replaces it only when it is writing to
+                                 the build's own final name. -->
+                            <finalName>souther-lsp-all</finalName>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
@@ -108,8 +116,9 @@
     </build>
 
     <profiles>
-        <!-- The shaded LSP server is a runnable binary, not a library; keep it out of the
-             Central bundle (distribute via GitHub Releases instead). -->
+        <!-- What this module ships is the shaded LSP server, a runnable binary rather than a
+             library; keep it out of the Central bundle (distribute via GitHub Releases instead).
+             The plain jar is a dependency inside this reactor and is not published either. -->
         <profile>
             <id>release</id>
             <build>

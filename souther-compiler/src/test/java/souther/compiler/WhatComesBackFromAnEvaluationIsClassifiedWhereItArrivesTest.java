@@ -1,8 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Located;
-import souther.compiler.examples.Deadline;
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Adequacy;
@@ -65,13 +68,13 @@ class WhatComesBackFromAnEvaluationIsClassifiedWhereItArrivesTest {
                 | (N(1)) -> Missing { why = "none" }
             """;
 
-    private static RowOutcome onlyRowOf(Deadline deadline) {
+    private static RowOutcome onlyRowOf(JvmExampleDeadlines arrangement) {
         Compilation compilation = Compilation.ofSource(COMES_BACK, "Main");
-        compilation.withDeadline(deadline);
+        compilation.withJvmExampleDeadlines(arrangement);
         compilation.answerEverything();
-        String sourceId = compilation.exampleSourcesOf("example.arrives").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.arrives").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.arrives", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("example.arrives", sourceId, ArmObservation.OMIT))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);

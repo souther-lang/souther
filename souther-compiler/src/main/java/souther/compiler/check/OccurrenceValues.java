@@ -1,11 +1,10 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
-import souther.compiler.numeric.Cardinality;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 
@@ -41,8 +40,9 @@ public final class OccurrenceValues {
     }
 
     /** What {@code data}, declared as {@code named}, leaves the values at each of its positions. */
-    public static OccurrenceValues of(TypeName named, Ast.Data data, Symbols symbols) {
-        return of(named, data, symbols, _ -> false);
+    public static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+                                       ReadingPolicy policy) {
+        return of(named, data, symbols, policy, _ -> false);
     }
 
     /**
@@ -52,10 +52,11 @@ public final class OccurrenceValues {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceValues of(TypeName named, Ast.Data data, Symbols symbols,
-                                 java.util.function.Predicate<TypeName> granted) {
+    static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+                                 ReadingPolicy policy,
+                                 java.util.function.Predicate<TypeSymbol> granted) {
         return new OccurrenceValues(
-                InvariantChecker.seedFields(named, data, symbols, java.util.Map.of(),
+                InvariantChecker.seedFields(named, data, symbols, policy, java.util.Map.of(),
                         InvariantChecker.Reach.stoppingAt(granted)));
     }
 
@@ -71,7 +72,7 @@ public final class OccurrenceValues {
         if (seeded == null) {
             return Cardinality.UNKNOWN;
         }
-        String atom = seeded.atoms().get(path);
+        FactSubject atom = seeded.atoms().get(path);
         if (atom == null) {
             return Cardinality.UNKNOWN;
         }
@@ -89,7 +90,7 @@ public final class OccurrenceValues {
         }
         BigDecimal span = most.subtract(least).add(BigDecimal.ONE);
         if (span.signum() <= 0) {
-            return Cardinality.NO_VALUE;
+            return Cardinality.none(new Emptiness.EmptyNumericInterval());
         }
         try {
             return Cardinality.atMost(span.longValueExact());

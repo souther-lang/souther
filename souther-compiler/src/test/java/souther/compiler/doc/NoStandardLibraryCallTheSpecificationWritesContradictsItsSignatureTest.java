@@ -1,8 +1,10 @@
 package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.check.Prelude;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.Reserved;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -294,7 +296,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
     private static List<Finding> findings(String adoc) {
         NavigableMap<Integer, Declared> declared = declarationsByRegion(adoc);
         NavigableMap<Integer, String> anchors = anchorsByOffset(adoc);
-        Map<String, ApiCommand.Signature> surface = ApiCommand.surface();
+        Map<String, ApiCommand.Signature> surface = ApiCommand.surface(DefaultStdlib.get());
         List<Finding> found = new ArrayList<>();
         for (Call call : callsIn(adoc)) {
             String anchor = anchors.floorEntry(call.at()) == null ? ""
@@ -304,7 +306,10 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
                 found.add(call.saying(anchor, "names nothing the standard library publishes"));
                 continue;
             }
-            if (Prelude.isEmptyCollectionValue(call.name())) {
+            // The specification writes a spelling, so the library is asked which operation that
+            // reaches before it is asked anything about the operation.
+            ValueName.Stdlib.Operation named = DefaultStdlib.get().operation(call.name());
+            if (named != null && DefaultStdlib.get().isEmptyCollectionValue(named)) {
                 found.add(call.saying(anchor, "is a value and takes no argument list"));
                 continue;
             }
@@ -380,7 +385,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
         List<Call> calls = new ArrayList<>();
         Matcher m = CALL.matcher(adoc);
         while (m.find()) {
-            if (!Prelude.isQualifier(m.group(1))) {
+            if (!Reserved.isQualifier(m.group(1))) {
                 continue;
             }
             int open = m.end() - 1;

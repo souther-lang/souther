@@ -1,6 +1,6 @@
 package souther.compiler.observe;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -16,7 +16,7 @@ import java.util.Map;
  * generated class of that revision. In a language server, where a revision arrives on every save, the
  * classes of every previous revision would stay reachable through the answers that named them.
  *
- * <p>So the decoded value is read once, here, into records that name types by {@link TypeName} and
+ * <p>So the decoded value is read once, here, into records that name types by {@link TypeSymbol} and
  * hold nothing that came from the generated classes. It is bounded as well as owned ({@link Limits}):
  * taking the value out of its loader does not make it small, and an answer that keeps a ten-thousand
  * element list keeps it for as long as it is memoised.
@@ -44,14 +44,14 @@ public sealed interface ObservedValue {
     record Temporal(String iso) implements ObservedValue {}
 
     /** A unit data — a case that carries nothing. Its identity is its name. */
-    record Unit(TypeName type) implements ObservedValue {}
+    record Unit(TypeSymbol type) implements ObservedValue {}
 
     /**
      * A data with fields, and a newtype, whose single field is {@code value} (spec §data). A field
      * whose value is an empty optional is present here with {@link Absent}, rather than left out, so
      * that reading a field chain answers "empty" instead of "not there".
      */
-    record Constructed(TypeName type, Map<String, ObservedValue> fields) implements ObservedValue {
+    record Constructed(TypeSymbol type, Map<String, ObservedValue> fields) implements ObservedValue {
         public Constructed {
             fields = Map.copyOf(fields);
         }

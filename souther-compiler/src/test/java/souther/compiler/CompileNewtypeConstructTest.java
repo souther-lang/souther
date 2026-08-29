@@ -57,7 +57,7 @@ class CompileNewtypeConstructTest {
     }
 
     private Object apply(BytesClassLoader loader, String cls, Object in) throws Exception {
-        Object b = loader.loadClass("demo." + cls + "$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", cls).getConstructor().newInstance();
         return Codecs.apply(b, in);
     }
 

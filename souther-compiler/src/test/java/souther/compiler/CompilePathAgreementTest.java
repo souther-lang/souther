@@ -1,6 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -116,8 +119,8 @@ class CompilePathAgreementTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("sources")
     void bothPathsProduceTheSameClasses(String name, String source) {
-        Map<String, byte[]> alone = Compiler.compile(source);
-        Map<String, byte[]> linked = Compiler.compileModules(List.of(source));
+        Map<String, ClassFileImage> alone = Compiler.compile(source);
+        Map<String, ClassFileImage> linked = Compiler.compileModules(List.of(source));
         assertEquals(alone.keySet(), linked.keySet(),
                 "the two paths emit different classes for " + name);
     }
@@ -169,7 +172,7 @@ class CompilePathAgreementTest {
         CompileException linked = compileError(() -> Compiler.compileModules(List.of(source)));
         assertEquals(alone.diagnostic().said(), linked.diagnostic().said(),
                 "the two paths disagree on what is wrong with " + name);
-        assertEquals(alone.diagnostic().pos(), linked.diagnostic().pos(),
+        assertEquals(((Primary.InSource) alone.diagnostic().primary()).place().region().start(), ((Primary.InSource) linked.diagnostic().primary()).place().region().start(),
                 "the two paths disagree on where " + name + " is wrong");
     }
 

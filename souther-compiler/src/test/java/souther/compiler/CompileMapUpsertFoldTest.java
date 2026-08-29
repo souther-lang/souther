@@ -29,7 +29,7 @@ class CompileMapUpsertFoldTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("keys", List.of("a", "b", "a", "a", "b", "c")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals(Map.of("a", 3L, "b", 2L, "c", 1L), m.get("m"));
@@ -57,7 +57,7 @@ class CompileMapUpsertFoldTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("ns", List.of(1L, 2L, 1L, 3L, 1L)));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals(3L, m.get("distinct"));
@@ -83,7 +83,7 @@ class CompileMapUpsertFoldTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("keys", List.of("x", "y", "x")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals(Map.of("x", 2L, "y", 1L), m.get("m"));
@@ -108,7 +108,7 @@ class CompileMapUpsertFoldTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("keys", List.of("a", "a", "b"), "on", true));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals(Map.of("a", 2L, "b", 1L), m.get("m"));
@@ -134,7 +134,7 @@ class CompileMapUpsertFoldTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("keys", List.of("a", "a", "a", "b"), "n", 0L));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals(Map.of("a", 3L, "b", 1L), m.get("m"));

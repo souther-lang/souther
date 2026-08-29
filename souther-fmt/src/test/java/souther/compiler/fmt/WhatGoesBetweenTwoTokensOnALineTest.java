@@ -65,6 +65,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             behavior pay : (a: Amount, b: Int) -> Paid | Refused
                 depends on clock, audit
                 constructs Paid, Refused
+                ensures same = Paid | Refused -> value.id == a
             """,
             """
             module m
@@ -337,8 +338,9 @@ class WhatGoesBetweenTwoTokensOnALineTest {
         throw new AssertionError("two tokens of one file with no node holding both");
     }
 
-    /** One adjacency in a canonical form: what joins the two tokens, their kinds, and what is
-     * written between them. */
+    /** One adjacency in a canonical form: what joins the two tokens, their kinds, and the
+     * separator written between them — which is what the spacing rule answers and not the whole run,
+     * where a table's column has padded it out. */
     record Adjacency(SyntaxKind joins, SyntaxKind left, SyntaxKind right, String separator) {
         String pair() {
             return left + " " + right;
@@ -348,20 +350,31 @@ class WhatGoesBetweenTwoTokensOnALineTest {
     /** Every adjacency in the canonical form of every source, excluding the pairs a break separated,
      * which are the other rules' business. Read by
      * {@link TheSpacingRuleAgreesWithTheCanonicalFormTest} as well: what is measured — the rendered
-     * text — is the same, and what each of the two holds it against is not. */
+     * text — is the same, and what each of the two holds it against is not.
+     *
+     * <p>Where a table's column stands at an adjacency, the run before the connector is the
+     * separator and then the padding that carries the row out to the column. The two are different
+     * rules' and the split between them is the layout's own answer, read from where it wrote the
+     * stop rather than guessed at from the spaces. */
     static List<Adjacency> adjacencies() {
         List<Adjacency> out = new ArrayList<>();
         for (String source : corpus()) {
-            String canonical = Formatter.format(source);
+            Formatter.CanonicalForm form = Formatter.canonicalize(CstParser.parse(source).root());
+            String canonical = form.text();
             CstParser.Result parsed = CstParser.parse(canonical);
             assertTrue(parsed.errors().isEmpty(), "a canonical form did not reparse:\n" + canonical);
             List<SyntaxToken> code = tokens(parsed.root()).stream().filter(t -> !t.isTrivia()).toList();
+            Map<Integer, Integer> padsFrom = new LinkedHashMap<>();
+            for (Witnesses.CanonicalStop stop : Witnesses.stops(form, code)) {
+                padsFrom.put(stop.adjacency(), stop.occurrence().at());
+            }
             for (int i = 0; i + 1 < code.size(); i++) {
                 SyntaxToken a = code.get(i);
                 SyntaxToken b = code.get(i + 1);
                 String gap = canonical.substring(a.end(), b.start());
                 if (!gap.contains("\n")) {
-                    out.add(new Adjacency(joining(a, b).kind(), a.kind(), b.kind(), gap));
+                    out.add(new Adjacency(joining(a, b).kind(), a.kind(), b.kind(),
+                            canonical.substring(a.end(), padsFrom.getOrDefault(i, b.start()))));
                 }
             }
         }
@@ -370,8 +383,9 @@ class WhatGoesBetweenTwoTokensOnALineTest {
 
     // --- the range ---
 
-    /** Nothing, or one space. Alignment is what this rules out: a column of `=` signs lined up under
-     * each other needs a run of spaces between two tokens, and no such run survives. */
+    /** Nothing, or one space. What this rules out is a construct spacing its own tokens by however
+     * many columns it likes: the one place a run of spaces is written is a table's column, and there
+     * it is written after this answer rather than instead of it. */
     @Test
     void whatIsWrittenBetweenThemIsNothingOrOneSpace() {
         Set<String> seen = new LinkedHashSet<>();
@@ -564,6 +578,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             ELSE_KW INT_LIT
             ELSE_KW LPAREN
             ELSE_KW TRUE_KW
+            ENSURES_KW IDENT
             EQ IDENT
             EQ INT_LIT
             EXPOSING_KW LPAREN

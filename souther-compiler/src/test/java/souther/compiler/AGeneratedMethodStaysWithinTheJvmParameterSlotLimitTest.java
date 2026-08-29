@@ -1,9 +1,12 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceContext;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +15,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -124,7 +128,7 @@ class AGeneratedMethodStaysWithinTheJvmParameterSlotLimitTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compile(dataOf(128, "Int")));
 
-        Region region = e.diagnostic().region();
+        Region region = ((Primary.InSource) e.diagnostic().primary()).place().region();
         assertEquals(3, region.start().line(), "the `data Wide` line");
         assertEquals("module demo\n\ndata ".length()
                 - "module demo\n\n".length() + 1, region.start().column(),
@@ -179,10 +183,12 @@ class AGeneratedMethodStaysWithinTheJvmParameterSlotLimitTest {
         return sb.toString();
     }
 
-    private void loadAll(Map<String, byte[]> classes) throws Exception {
+    private void loadAll(Map<String, ClassFileImage> classes) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         for (String name : classes.keySet()) {
-            Class.forName(name, false, loader).getDeclaredMethods();
+            // getDeclaredMethods is what forces the descriptors to be parsed; the methods
+            // themselves are not the question, whether the JVM accepts them is.
+            assertDoesNotThrow(() -> Class.forName(name, false, loader).getDeclaredMethods(), name);
         }
     }
 }

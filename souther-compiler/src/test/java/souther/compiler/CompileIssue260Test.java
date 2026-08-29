@@ -92,7 +92,7 @@ class CompileIssue260Test {
                 new BytesClassLoader(Compiler.compile(DECIMALS), getClass().getClassLoader());
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("rows", List.of(row("1.0"), row("1")));
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, Codecs.decoded(loader, "demo.Req", raw)));
 

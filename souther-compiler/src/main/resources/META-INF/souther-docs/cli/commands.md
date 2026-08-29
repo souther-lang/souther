@@ -8,22 +8,91 @@ souther <command> [options] [args]
 every option it takes. That listing is generated from the same table the compiler resolves an option
 against, so it says what this build does rather than what a text was last edited to say.
 
+<!-- souther-section: init -->
+## init
+
+```
+souther init [<groupId>:<artifactId>] [-d|--dir <path>] [--build maven|gradle]
+                                      [--model none|minimal|full] [--module <name>]
+```
+
+Writes a project, or adds Souther to one that is already there. Never interactive, and nothing
+already written is overwritten — a second run finishes what a first one left, and says which files it
+left alone.
+
+Where there is no build file, a project is created and the coordinate is required: a group and an
+artifact are a person's decision, and neither a directory name nor a git remote makes it. `--dir`
+says where it goes, and defaults to the artifact.
+
+```
+$ souther init com.example:hello
+    created  hello/pom.xml
+    created  hello/.gitignore
+    created  hello/src/main/souther/hello.sou
+             module com.example.hello
+    created  hello/src/main/souther/hello.examples.sou
+    created  hello/src/test/java/com/example/hello/ReturnBookTest.java
+
+    cd hello && mvn test
+```
+
+`--build gradle` writes `settings.gradle.kts` and `build.gradle.kts` instead, and no wrapper: a
+wrapper pins a Gradle version, and a version pinned when this compiler was released is one it can
+never revisit. It says to run `gradle wrapper` first.
+
+The generated Gradle build names no Souther version, where the Maven one names the version of the
+compiler that wrote it. On Gradle the plugin adds the runtime at the version it compiles with, so
+there is no second number in the build script to keep in step — and the version it compiles with is
+the one that plugin release was verified against, which need not be the one that ran `souther init`.
+Write it to say which:
+
+```kotlin
+souther {
+    southerVersion = "0.1.0-rc5"
+}
+```
+
+Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
+than written on the line, `--build` is not read — the build that is there is the build — and what is
+added is a source directory and the plugin declaration. The previous contents of the build file are
+left in a `.orig` beside it, unless git is already holding them.
+
+The module header follows from the coordinate: the group and the artifact, with a hyphen written as
+an underscore, so `com.acme:billing-service` writes `module com.acme.billing_service`. That name is
+also the Java package the model generates into, and the source is named after its last segment —
+`src/main/souther/billing_service.sou`. `--module` writes another.
+
+`--model` says how much of a model to start with, and defaults to `full` where a project is created
+and `none` where one is added to. `none` is the module header; `minimal` adds one `data` with an
+`invariant`; `full` is a model that uses `data`, `invariant`, `behavior`, `constructs` and `guard`,
+with an `.examples.sou` covering it and a Java test that reaches the generated types — so that both
+`mvn test` and `souther examples` answer on the first run.
+
 <!-- souther-section: compile -->
 ## compile
 
 ```
-souther compile <file.sou>... -d <outdir> [-cp|--class-path <path>]
-                              [--adequacy off|witness|all] [--warnings report|error]
+souther compile <file.sou>... -d|--dir <outdir> [-cp|--class-path <path>]
+                              [--adequacy off|witness|all|reliable-domain|classes]
+                              [--warnings report|error]
 ```
 
 Type-checks the given files together, resolving imports across them, and writes `.class` files
 under `-d`. `-cp` (`--class-path`) points at modules another project compiled. `--adequacy`
 additionally warns about what the `example` rows do not cover; it defaults to `off`, and `souther
-examples` asks the same question as a report.
+examples` asks the same question as a report. Its words name two things at once: how much to measure
+and what the build is held to. `witness` reads what the rows already ran; `all` adds what the arms
+and the borders take a second run to find out and holds the build to simplified domain coverage;
+`reliable-domain` measures what `all` does and holds it to reliable domain coverage, which asks for a
+row well inside each line and one well outside it as well as the two against it; `classes` is that
+bar and a class of a position no row's value falls in, which is what a model whose rows are meant to
+be finished is held to.
 
 `--warnings error` refuses the build that warned: nothing is written and the exit code is non-zero.
 It gates every warning and not only the adequacy ones, so a build that wants to fail on coverage
-alone wants `souther examples --strict`, which refuses the same coverage findings and nothing else.
+alone wants `souther examples --strict`, which refuses coverage findings and nothing else. Both
+take `--adequacy`, and the same word names the same bar on either, so the build that answers
+`examples --adequacy classes --strict` alike is `compile --adequacy classes --warnings error`.
 The default is `report`, which prints them and writes the classes.
 
 <!-- souther-section: run -->
@@ -184,6 +253,24 @@ departure to break off: the `else` ends the guard's own line and the clauses go 
         | unique -> DuplicateProduct
 ```
 
+An `example` and a `fake` are decision tables, and their rows are read against each other: which
+input differs between two rows is what writing them one under the other is for. So the connectors of
+a table's rows are written at one column — the `:` and the `->` of an `example`, the `->` of a
+`fake` — with the shorter rows padded out to the widest. Adding a row rewrites the table where the
+new one is the widest, which is the diff a table asks for. Whatever the author lined up by hand is
+derived again like everything else, and a row too long for one line is written down the page and
+takes no part in the columns. The padding is measured in columns on the screen, so a table whose
+descriptions are Japanese lines up on a screen rather than on a character count, and it is written
+as spaces — a tab reaches a column too, and what a source wrote there is the rule about what goes
+between two tokens' to say rather than the column's.
+
+```
+example priceOfTheFirstGlass
+    | "off peak, no coupon" : (OffPeak, NoCoupon)     -> Price(490)
+    | "happy hour"          : (HappyHour, NoCoupon)   -> Price(290)
+    | "with a coupon"       : (OffPeak, WithCoupon)   -> Price(100)
+```
+
 A comment keeps what it was written about. On the line of the code it follows it stays there; on a
 line of its own it goes above what follows it, unless a blank line separates it from that and none
 separates it from the code above, in which case it stays under that code. A comment with nothing
@@ -209,7 +296,10 @@ rest of the rules are about:
 What stands between two tokens the same line holds:
 
 - what goes between two tokens on a line — one space, or none. The two answers quote the characters,
-  so a source that wrote a line break where neither text ends a line reads it back as `\n`.
+  so a source that wrote a line break where neither text ends a line reads it back as `\n`. At a
+  table's column this answers about the separator and the column rule about the padding after it,
+  so what is written there is this rule's until the separator is what the canonical form has —
+  a tab, or no space at all, is quoted here rather than reported as a column the row missed.
 
 Whether a construct is written down the page at all. The two answers are `on one line` and `down the
 page`, and which rule is named is which one decided the form:
@@ -242,6 +332,19 @@ How far in a line begins. The two answers are columns:
 - a line the file holds begins at column zero — the outermost level, which has no level outside it
   to be measured from.
 
+Where a table's rows line up. An `example` and a `fake` write the connectors of every row at one
+column, and the two answers are columns:
+
+- the rows of a table of examples write their : at one column — the description was padded out to
+  the widest one in the table, or was not.
+- the rows of a table of examples write their -> at one column — the same, for the input.
+- the rows of a table of fakes write their -> at one column — a `fake` has the one column, since its
+  rows have no description.
+
+The column a row is said to be at is where the padding it wrote carries it, with the rest of the
+line as the canonical form has it. So a table lined up correctly and indented one column too deep is
+told about its indentation and nothing else, rather than about every row.
+
 What separates one thing from another, and what ends:
 
 - a blank line stands where the author wrote one, and under a header — how many, as lines.
@@ -264,12 +367,29 @@ diff.
 
 ```
 souther examples <file.sou>... [-cp|--class-path <path>] [--module <name>]
-                               [--behavior <name>] [--generate [--boundaries]] [--strict]
+                               [--behavior <name>] [--adequacy reliable-domain|classes]
+                               [--generate [--boundaries]] [--strict]
 ```
 
 Reports how well the `example` rows cover the model — which partitions, boundaries and branch arms
 no row reaches. `--generate` prints commented rows for what nothing covers, `--boundaries` adds
 rows at the untried boundaries, and `--strict` exits non-zero on a gap the report names.
+
+`--adequacy` names the bar the report is read against, and names the same bar `compile` does. Not
+the measurement words that spelling also takes on a compile: this command's whole output is the
+report, so everything is measured either way and there is nothing for `off`, `witness` or `all` to
+choose. Left unwritten the bar is `reliable-domain`.
+
+The bar is here and not on `--strict` because the two decide different things. `--strict` decides an
+exit status and nothing else — the report a reader is given is the same whether or not it was
+written — and a flag that also chose a bar would change which findings the report marks, so two runs
+differing only in the word would be reports of two different questions.
+
+A generated row leaves the answer as `<?>`, and where the behavior carries an `ensures`, part of that
+answer is already written down. So the clauses are quoted over the rows of the behavior they are
+written on, in the author's own words, cut out of the source. They are quoted whether or not this
+compiler could make a rule of them, which is all the heading claims: these are the words in the
+declaration.
 
 This is the command worth running on a model you believe is finished. It names gaps that reading
 the rows does not reveal.
@@ -281,8 +401,19 @@ found a gap; `not satisfied` (`not_satisfied` in the JSON) where one found a gap
 where nothing that could find a gap was asked about, or one of those measures could not be made. A
 measure that does not apply — the arms of a `>->` composition, which has none of its own — is neither
 asked nor missing, and does not hold the answer open. `--strict`
-refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy all
---warnings error` refuses. How many rows are waiting for a `let` is reported and never gated on:
+refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy
+reliable-domain --warnings error` refuses. It decides the exit status and no more: the report is the
+same whether or not it was written.
+
+The report prints more findings than a build refuses over, and says which is which. A line under `!`
+is one of them; a line under `·` is something measured and named and not gated on — a class no row is
+in, a position the model divides no way. The two read alike and are a sentence apart: `no row uses
+`C`` is refused over and `no row is in `C`` is not, and writing a row for `C` closes both. The count
+under `adequacy` is how many are marked. In the JSON each behavior carries `findings`, where every
+one of them says its `kind` and what a build does about it under `disposition` — `refused`,
+`reported`, or `undecided` where the measure behind it came to no answer.
+
+How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the
 record of what that behavior owes.
 
@@ -383,6 +514,31 @@ The cursor is this server's to read, so it goes out as it came in: where it poin
 against the answer it is carried back to, and one measured against a different answer is refused
 rather than resumed at.
 
+<!-- souther-section: lsp -->
+## lsp
+
+```
+souther lsp
+```
+
+Serves the language server over the Language Server Protocol on stdio: diagnostics, the document
+outline, hover, go-to-definition, find-references, name completion, quick-fix code actions, rename,
+formatting, code lenses and semantic tokens. Names are resolved over the workspace the client
+announces, so a definition, a reference and a rename reach the module that imported the name and
+the module that exposed it alike.
+
+The same server the shaded `souther-lsp.jar` runs, in this command line's own process. An editor
+that already has this compiler on the path has the server too, and cannot end up running one built
+from a different release than the compiler its build uses.
+
+An agent harness that speaks both protocols takes this alongside `souther mcp`, and what each
+answers is a different question. `mcp` says what Souther is — the specification, the stdlib surface,
+a dependency's API — and answers it without a source file. `lsp` says what one source means, and
+answers nothing without one.
+
+Nothing but the protocol goes to stdout, since the protocol has all of it; a refusal to start goes
+to stderr.
+
 <!-- souther-section: help -->
 ## help
 
@@ -421,8 +577,10 @@ value it is, not as a request.
 | `--color auto\|always\|never` | color the human output (default `auto`) |
 | `--help`, `-h` | what this command takes, and what its options mean |
 
-`--help` and `-h` are taken by every command, including `help` itself. The other three apply to
-`compile`, `run` and `examples`, and passing one of them to another command is an error.
+`--help` and `-h` are taken by every command, including `help` itself. `--format` and `--color`
+apply to `compile`, `run` and `examples`; `--lang` to those and to `init`, which writes what it did
+in the language the line asks for. Passing one of them to a command that does not take it is an
+error.
 
 Because every command takes `-h`, no command reads that token as a file name. A single dash is
 otherwise read as a path by any command that has no such option — a file may be named `-d` — and

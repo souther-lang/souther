@@ -2,11 +2,17 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -14,6 +20,7 @@ import souther.compiler.query.Shapes;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -47,7 +54,6 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                 data High
 
                 behavior pick : (PARAMETER) -> Low | High
-                    constructs Low, High
 
                 let pick (NAME) =
                     if CONDITION
@@ -59,17 +65,18 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("pick")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied());
         return GuardThresholds.of("pick", body, plan,
-                spec.params().stream().map(Ast.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
     }
 
     /** A comparison this reads is not also reported as one it did not. */
@@ -78,7 +85,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         GuardThresholds.Guards guards = read("n.value <= 5");
 
         assertEquals(1, guards.thresholds().size());
-        assertEquals(List.of(), guards.unread());
+        assertEquals(List.of(), guards.rulesWithoutALine());
     }
 
     /** A comparison inside a conjunction is read, so it is not one this did not read. */
@@ -87,7 +94,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         GuardThresholds.Guards guards = read("n.value >= 1 && n.value <= 5");
 
         assertEquals(2, guards.thresholds().size(), guards.thresholds().toString());
-        assertEquals(List.of(), guards.unread());
+        assertEquals(List.of(), guards.rulesWithoutALine());
     }
 
     /**
@@ -100,7 +107,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void anEqualityIsReadRatherThanNamed() {
         GuardThresholds.Guards guards = read("n.value == 3");
 
-        assertEquals(List.of(), guards.unread());
+        assertEquals(List.of(), guards.rulesWithoutALine());
         assertEquals(1, guards.singled().size(), guards.singled().toString());
     }
 
@@ -116,7 +123,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void aLineDrawnOnAStringIsRead() {
         GuardThresholds.Guards guards = read("at: String", "at < \"2026-01\"");
 
-        assertEquals(List.of(), guards.unread());
+        assertEquals(List.of(), guards.rulesWithoutALine());
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
@@ -131,31 +138,98 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         GuardThresholds.Guards guards =
                 read("at: DateTime", "at < DateTime(\"2026-01-01T00:00:00\")");
 
-        assertEquals(List.of(), guards.unread());
+        assertEquals(List.of(), guards.rulesWithoutALine());
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
-    /** One position said once, however many comparisons in the body name it. */
+    /**
+     * A time of day is read, which it was not.
+     *
+     * <p>Ordered and held to the second, so the line and the value beside it are both there. What
+     * was missing was the way back from a count, which is a conversion and not a fact about the
+     * values.
+     */
     @Test
-    void aPositionIsNamedOnceRatherThanPerComparison() {
-        assertEquals(1, read("at: Int",
-                "at < 1 + 1 || at > 2 + 2").unread().size());
+    void aLineDrawnOnATimeIsRead() {
+        GuardThresholds.Guards guards = read("at: Time", "at < Time(\"16:00:00\")");
+
+        assertEquals(List.of(), guards.rulesWithoutALine());
+        assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
+    }
+
+    /** A moment is read, at its own unit. */
+    @Test
+    void aLineDrawnOnAnInstantIsRead() {
+        GuardThresholds.Guards guards =
+                read("at: Instant", "at < Instant(\"2026-01-01T00:00:00Z\")");
+
+        assertEquals(List.of(), guards.rulesWithoutALine());
+        assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
+    }
+
+    /**
+     * Two comparisons about one position are two findings, however alike they read.
+     *
+     * <p>Asked of the position, the second was dropped as a repeat of the first — and what an
+     * author is owed is one line per rule they would have to rewrite. The two here are stopped by
+     * the same limit at the same position and are two things to do, which is the whole of issue
+     * the same defect seen from inside one condition.
+     */
+    @Test
+    void twoComparisonsAboutOnePositionAreTwoFindings() {
+        List<RuleWithoutALine> unread = read("at: Int",
+                "Int.multiply(at, at) < 4 || Int.multiply(at, at) > 9").rulesWithoutALine();
+
+        assertEquals(List.of(new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm()),
+                        new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm())),
+                said(unread));
+        assertEquals(2, unread.stream().map(RuleWithoutALine::rule).distinct().count(),
+                () -> "two comparisons are two rules: " + unread);
+    }
+
+    /**
+     * And the rule is named, by what tells one from another and by what a reader looks for.
+     *
+     * <p>The position was all this used to carry, so a report could say a rule about `+p.x+` went
+     * unread and name no rule. What identifies a comparison is the behavior it is written in and
+     * the construct the author wrote; what finds it is where it is written. Neither is the
+     * plan\u0027s: a condition nothing can be measured about is numbered nowhere, and the model
+     * states the rule regardless.
+     */
+    @Test
+    void aFindingNamesTheComparisonThatWentUnread() {
+        RuleWithoutALine said = read("p: Pair", "Int.multiply(p.x, p.x) < 10").rulesWithoutALine().getFirst();
+
+        assertInstanceOf(RuleRef.Comparison.class, said.rule());
+        RuleCitation.WrittenAt cited = assertInstanceOf(RuleCitation.WrittenAt.class, said.cited());
+        souther.compiler.diag.Citation.Written where = assertInstanceOf(
+                souther.compiler.diag.Citation.Written.class, cited.at(),
+                "a rule with no name is found where it is written");
+        // Line 14 column 31 is the `<`, and column 8 is the `if` that tests it. The two are
+        // on one line, so a citation taken from the fork would be a plausible place on the right
+        // line — which is what this used to say and what a reader would go to the wrong token for.
+        assertEquals(31, where.at().column(),
+                () -> "the comparison and not the fork that tests it: " + where.at());
     }
 
     /**
      * A position named inside an expression the reader does not model is still named.
      *
      * <p>Discovery and derivation are different questions and must not share a reader. What decides
-     * whether a line can be drawn is whether the number compared is one the terms name; what decides
-     * whether the model says anything here is whether a comparison mentions the position at all.
-     * Asked of the first, `+p.x + 1 < 10+` reports a position the model divides no way, two tokens
-     * from a comparison about it.
+     * whether a line can be drawn is whether the number compared is one the arithmetic reads; what
+     * decides whether the model says anything here is whether a comparison mentions the position at
+     * all. Asked of the first, a position inside an expression this cannot read reports a position
+     * the model divides no way, two tokens from a comparison about it.
+     *
+     * <p>A variable product, because that is what is left outside the fragment: {@code p.x + 1 < 10}
+     * is {@code p.x <= 9} and is read, and a factor that moves with the row is not a form this has a
+     * rule for.
      */
     @Test
     void aPositionNamedInsideAnExpressionIsStillNoticed() {
-        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
+        assertEquals(List.of(new Said(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                read("p: Pair", "p.x + 1 < 10").unread());
+                said(read("p: Pair", "Int.multiply(p.x, p.x) < 10").rulesWithoutALine()));
     }
 
     /**
@@ -167,12 +241,13 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void twoPositionsComparedWithEachOtherSayWhichLimitThatIs() {
+        // Both sides name a position by itself, so the reading named a term for each.
         assertEquals(List.of(
-                        new UnreadRule(TermPath.of("p").then("x"),
+                        Said.named(TermPath.of("p").then("x"),
                                 new BlockReason.ComparisonBetweenPositions()),
-                        new UnreadRule(TermPath.of("p").then("y"),
+                        Said.named(TermPath.of("p").then("y"),
                                 new BlockReason.ComparisonBetweenPositions())),
-                read("p: Pair", "p.x < p.y").unread());
+                said(read("p: Pair", "p.x < p.y").rulesWithoutALine()));
     }
 
     /**
@@ -185,43 +260,83 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aLineReadAtAPositionDoesNotSwallowWhatWasNotReadThere() {
-        GuardThresholds.Guards guards = read("p: Pair", "p.x <= 5 && p.x + 1 < 10");
+        GuardThresholds.Guards guards =
+                read("p: Pair", "p.x <= 5 && Int.multiply(p.x, p.x) < 10");
 
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
-        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
+        assertEquals(List.of(new Said(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                guards.unread());
+                said(guards.rulesWithoutALine()));
     }
 
     /**
-     * A relation stays a relation when one side is written with something added to it.
+     * A relation the arithmetic stopped on is a rule this compiler did not read, and it is named
+     * for the form rather than for the carrier.
      *
-     * <p>What `+p.x < p.y + 1+` needs is a class about two positions, exactly as `+p.x < p.y+` does.
-     * Read off how far the derivation got, the second side stops being a position at all and the
-     * answer becomes the carrier — which is a different piece of work and not the one that is owed.
+     * <p>Both positions are named, which is what `+p.x < p.y * p.y+` has in common with
+     * `+p.x < p.y+`. What it does not have in common is that anything was read: whether the rule
+     * divides `+p.x+` or relates the pair is the part the product stopped, and a reason saying it
+     * relates two positions would say the model is short of nothing while nobody knows what the
+     * rule states.
+     *
+     * <p>The form and not the carrier. Both sides are ordered and a line on either against a number
+     * would be read; what is missing is a reader for the product, which is what an author would
+     * change.
+     *
+     * <p>`+p.x < p.y + 1+` is not this case at all. It is `+p.x - p.y < 1+`, a line where the two
+     * stand one apart, and it is drawn.
      */
     @Test
-    void aRelationWithArithmeticOnOneSideIsStillARelation() {
+    void aRelationTheArithmeticStoppedOnIsNamedForTheForm() {
+        // The left side names a position by itself, so the reading named a term for it; the right
+        // is where the reading stopped, and `p.y` there is a position the walk met inside the
+        // product rather than a number the rule was read for.
         assertEquals(List.of(
-                        new UnreadRule(TermPath.of("p").then("x"),
-                                new BlockReason.ComparisonBetweenPositions()),
-                        new UnreadRule(TermPath.of("p").then("y"),
-                                new BlockReason.ComparisonBetweenPositions())),
-                read("p: Pair", "p.x < p.y + 1").unread());
+                        Said.named(TermPath.of("p").then("x"),
+                                new BlockReason.UnreadComparisonForm()),
+                        new Said(TermPath.of("p").then("y"),
+                                new BlockReason.UnreadComparisonForm())),
+                said(read("p: Pair", "p.x < Int.multiply(p.y, p.y)").rulesWithoutALine()));
     }
 
     /**
      * A position whose carrier is fine, against a right-hand side this does not read.
      *
-     * <p>`+1 + 2+` is not a form a threshold is read out of, and that is the whole of what stopped
-     * the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are drawn on all
-     * through this file. Read off the side that did name a position, the answer becomes the carrier
-     * and sends a reader after a domain that is already there.
+     * <p>`+Int.min(1, 2)+` is not a form a threshold is read out of, and that is the whole of what
+     * stopped the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are drawn
+     * on all through this file. Read off the side that did name a position, the answer becomes the
+     * carrier and sends a reader after a domain that is already there.
      */
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
-        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
+        assertEquals(List.of(Said.named(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                read("p: Pair", "p.x < 1 + 2").unread());
+                said(read("p: Pair", "p.x < Int.min(1, 2)").rulesWithoutALine()));
+    }
+
+    /**
+     * What a finding says about a position, apart from which rule said it.
+     *
+     * <p>Spelled out where every entry is about one rule and what is being read is the position and
+     * the limit. Which rule it was has its own test, because it is its own question.
+     */
+    private record Said(souther.compiler.inputs.FilingCoordinate at, BlockReason why) {
+
+        /** The same, where the reading named no number of the position — a position the walk met
+         *  inside something it could not take apart. */
+        Said(TermPath at, BlockReason why) {
+            this(souther.compiler.inputs.FilingCoordinate.at(at), why);
+        }
+
+        /** And where it did name one: the position's own values, which is what a side naming the
+         *  position by itself comes to. */
+        static Said named(TermPath at, BlockReason why) {
+            return new Said(souther.compiler.inputs.FilingCoordinate.of(
+                    new souther.compiler.inputs.NumericTerm.ValueOf(at)), why);
+        }
+    }
+
+    private static List<Said> said(List<RuleWithoutALine> unread) {
+        return unread.stream().map(each -> new Said(each.at(), each.why())).toList();
     }
 }

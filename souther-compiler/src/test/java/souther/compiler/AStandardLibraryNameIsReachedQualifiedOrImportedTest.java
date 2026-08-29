@@ -1,7 +1,9 @@
 package souther.compiler;
 
-import souther.compiler.check.Prelude;
+import souther.compiler.check.StdlibLoader;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -174,14 +176,14 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
         // Resolution answers what a bare name means, with the imports consulted last; every pass
         // after it reads the answer. So the two spellings of one call generate the same code —
         // except `$Module`, which records the imports as they were written for a reader of the jar.
-        Map<String, byte[]> qualified = Compiler.compile(QUALIFIED);
-        Map<String, byte[]> imported = Compiler.compile(IMPORTED);
+        Map<String, ClassFileImage> qualified = Compiler.compile(QUALIFIED);
+        Map<String, ClassFileImage> imported = Compiler.compile(IMPORTED);
 
         assertEquals(qualified.keySet(), imported.keySet());
         List<String> differing = qualified.keySet().stream()
-                .filter(name -> !java.util.Arrays.equals(qualified.get(name), imported.get(name)))
+                .filter(name -> !qualified.get(name).equals(imported.get(name)))
                 .toList();
-        assertEquals(List.of("demo.$Module"), differing,
+        assertEquals(List.of(Emitted.declarations("demo")), differing,
                 "only the class that records what was written differs");
     }
 
@@ -189,11 +191,11 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
     void theReportForABareNameOffersEveryModuleThatPublishesIt() {
         // The four a hand-written table had gone stale on: each is published by two modules, and a
         // report that named one of them was telling the reader the other did not exist.
-        assertEquals(List.of("Map.insert", "Set.insert"), Prelude.qualifiedCandidates("insert"));
-        assertEquals(List.of("Map.remove", "Set.remove"), Prelude.qualifiedCandidates("remove"));
-        assertEquals(List.of("String.append", "List.append"), Prelude.qualifiedCandidates("append"));
+        assertEquals(List.of("Map.insert", "Set.insert"), DefaultStdlib.get().qualifiedCandidates("insert"));
+        assertEquals(List.of("Map.remove", "Set.remove"), DefaultStdlib.get().qualifiedCandidates("remove"));
+        assertEquals(List.of("String.append", "List.append"), DefaultStdlib.get().qualifiedCandidates("append"));
         assertEquals(List.of("Date.addDays", "DateTime.addDays"),
-                Prelude.qualifiedCandidates("addDays"));
+                DefaultStdlib.get().qualifiedCandidates("addDays"));
 
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
@@ -211,7 +213,7 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
 
     @Test
     void aPrivateHelperIsNotOfferedAsACandidate() {
-        assertEquals(List.of(), Prelude.qualifiedCandidates("foldFrom"));
+        assertEquals(List.of(), DefaultStdlib.get().qualifiedCandidates("foldFrom"));
     }
 
     @Test
@@ -221,12 +223,12 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
         Map<String, List<String>> fromSource = declaredInTheBundledSources();
 
         for (Map.Entry<String, List<String>> e : fromSource.entrySet()) {
-            assertEquals(e.getValue(), Prelude.qualifiedCandidates(e.getKey()),
+            assertEquals(e.getValue(), DefaultStdlib.get().qualifiedCandidates(e.getKey()),
                     "the candidates for a bare `" + e.getKey() + "`");
         }
         // And nothing is offered that no module publishes: a name absent from the sources has no
         // candidates at all.
-        assertEquals(List.of(), Prelude.qualifiedCandidates("thereIsNoSuchFunction"));
+        assertEquals(List.of(), DefaultStdlib.get().qualifiedCandidates("thereIsNoSuchFunction"));
         assertFalse(fromSource.isEmpty(), "the sources were read");
     }
 
@@ -268,7 +270,8 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
         // The sugar is declared in the compiler rather than in a source, so it is named here. A
         // sugar added without a line here fails this test, which is the point: it is part of the
         // surface a caller writes against.
-        assertEquals(Set.of("List.fold"), Prelude.rewrites().keySet(),
+        assertEquals(Set.of(ValueName.Stdlib.operation("List", "fold")),
+                DefaultStdlib.get().rewrites().keySet(),
                 "the sugared names this test knows about");
         byBareName.computeIfAbsent("fold", bare -> new ArrayList<>()).add("List.fold");
         byBareName.get("fold").sort((a, b) -> moduleOrder(a) - moduleOrder(b));
@@ -288,7 +291,7 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
     private static Set<String> bundledSourceFileNames() {
         // Anchored to a source the compiler itself loads, so the directory listed is the one it
         // reads from — `/souther/` alone would find the test tree's package of that name first.
-        URL anchor = Prelude.class.getResource("/souther/bool.sou");
+        URL anchor = StdlibLoader.class.getResource("/souther/bool.sou");
         if (anchor == null || !"file".equals(anchor.getProtocol())) {
             throw new IllegalStateException("the bundled sources are not readable as files");
         }
@@ -302,7 +305,7 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
     }
 
     private static String read(String resource) {
-        try (InputStream in = Prelude.class.getResourceAsStream(resource)) {
+        try (InputStream in = StdlibLoader.class.getResourceAsStream(resource)) {
             if (in == null) {
                 throw new IllegalStateException("missing bundled prelude resource " + resource);
             }

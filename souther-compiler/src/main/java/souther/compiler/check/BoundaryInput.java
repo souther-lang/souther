@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.Objects;
 
@@ -21,7 +21,7 @@ import java.util.Objects;
  * <p>It lives beside {@link SignatureBoundary} because {@link Nominal} is closed to it: a name is a
  * thing the boundary either admits or refuses, and a case that could be assembled with a refused one
  * would be a witness of nothing. The cases that carry no name stay records, and hold: a scalar is a
- * closed set with no {@code Raw} in it, a key is a {@link BoundaryMapKey} whose own naming cases are
+ * closed set with no {@code Raw} in it, a key is a {@link CrossingMapKey} whose own naming cases are
  * closed the same way, and a list, a set or a map is built out of those.
  *
  * <p>There is no case for an anonymous union. A parameter names a single type, so an input cannot be
@@ -45,40 +45,42 @@ public sealed interface BoundaryInput {
     /**
      * A type a model declared, decoded by the codec derived for it.
      *
-     * <p>Not a record: a record's canonical constructor is as accessible as the record, and a public
-     * one would let a name the boundary refuses be assembled into a witness that every reader takes
-     * for one the compiler stands behind. It is made where a name is admitted and nowhere else.
+     * <p>Holds the {@link CrossingNominal} rather than the name, so what it stands on is the rule
+     * every position that crosses shares. Still not a record, and for the other half of the reason:
+     * the witness says the name may cross, and being made here says this position asked. A record's
+     * canonical constructor is as accessible as the record, and one place raising a signature is what
+     * makes two walks over one tree impossible (ADR-0100).
      */
     final class Nominal implements BoundaryInput {
 
-        private final TypeName name;
+        private final CrossingNominal admitted;
 
-        Nominal(TypeName name) {
-            this.name = name;
+        Nominal(CrossingNominal admitted) {
+            this.admitted = admitted;
         }
 
-        public TypeName name() {
-            return name;
+        public TypeSymbol name() {
+            return admitted.name();
         }
 
         @Override
         public Type type() {
-            return Type.ref(name);
+            return Type.ref(name());
         }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Nominal n && name.equals(n.name);
+            return other instanceof Nominal n && admitted.equals(n.admitted);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hashCode(name);
+            return Objects.hashCode(admitted);
         }
 
         @Override
         public String toString() {
-            return "Nominal[name=" + name + "]";
+            return "Nominal[name=" + name() + "]";
         }
     }
 
@@ -100,7 +102,7 @@ public sealed interface BoundaryInput {
 
     /** A map of them, under a key the boundary can write as text. The key is the witness the map-key
      *  rule already answers with, so a key position cannot hold a list or an option. */
-    record MapOf(BoundaryMapKey key, BoundaryInput value) implements BoundaryInput {
+    record MapOf(CrossingMapKey key, BoundaryInput value) implements BoundaryInput {
         @Override
         public Type type() {
             return Type.map(key.type(), value.type());

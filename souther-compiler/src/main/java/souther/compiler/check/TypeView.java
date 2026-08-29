@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -30,7 +30,7 @@ import java.util.List;
  *       position back to an author.
  * </ul>
  *
- * <p><b>A reader does not re-decide any of this.</b> Asking {@code symbols.get(ref.name())} again
+ * <p><b>A reader does not re-decide any of this.</b> Asking {@code symbols.declarations().declaration(ref.name())} again
  * to find out whether a name is a newtype is the defect this exists to remove, not a shortcut around
  * it.
  *
@@ -66,7 +66,7 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
     /**
      * What {@code terminal} is. Exhaustive over {@link Type}, and over the declarations a
      * {@link Type.Ref} can denote — no {@code default} in either, so a constructor added to
-     * {@code Type} or a declaration form added to {@code Ast} stops compiling here until it has
+     * {@code Type} or a declaration form added to {@code Hir} stops compiling here until it has
      * been said what kind of position it is.
      *
      * <p>{@code terminal} has already had its newtype names taken off. A {@code Ref} that is still a
@@ -92,18 +92,18 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
     }
 
     /**
-     * What a name stands for. {@code Ast.Def} permits three declarations and all three are answered
+     * What a name stands for. {@code Hir.Def} permits three declarations and all three are answered
      * here, so a fourth stops compiling rather than arriving as a name that denotes nothing.
      *
      * <p>A newtype arriving here is one the spine stopped on — its {@code value} was not declared,
      * so there is no base to read a shape from.
      */
-    private static Shape denoted(TypeName name, Symbols symbols) {
-        return switch (symbols.get(name)) {
-            case Ast.SumData _ -> new Shape.Sum(name);
-            case Ast.UnitData _ -> new Shape.Unit(name);
-            case Ast.Data data when data.newtype() -> new Shape.Unresolved(name);
-            case Ast.Data data -> new Shape.Product(name, TypeOps.fieldTypes(data, symbols));
+    private static Shape denoted(TypeSymbol name, Symbols symbols) {
+        return switch (symbols.declarations().declaration(name)) {
+            case Hir.SumData sum -> new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols));
+            case Hir.UnitData _ -> new Shape.Unit(name);
+            case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);
+            case Hir.Data data -> new Shape.Product(name, TypeOps.fieldTypes(data, symbols));
             case null -> new Shape.Unresolved(name);
         };
     }

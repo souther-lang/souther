@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -19,10 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@code List.distinctBy} came to be in neither of the two combinator tables it belonged in.
  *
  * <p>Here every question is held to its range, both ways round. An operation the library declares is
- * in range of a question by what it is declared to be, and one in range has an answer — a rule, or
- * its name among the ones there is nothing to say of. Adding an operation to the library therefore
- * fails this until someone decides which, and the decision is written where the next reader will
- * find it.
+ * in range of a question by what it is declared to be, and one in range has exactly one answer — a
+ * rule, or its name among the ones there is nothing to say of, and never both. Adding an operation
+ * to the library therefore fails this until someone decides which, and the decision is written where
+ * the next reader will find it.
+ *
+ * <p>What is <em>not</em> asked here is whether the number an operation answers is read by more than
+ * one representation. That is a property of the declarations and holds of every operation, in range
+ * of a question or not, so it is held over the declarations themselves
+ * ({@link ANumberIsReadByAtMostOneRepresentationTest}). Asked here, how far the exclusivity
+ * reached would be whatever a range happened to cover that week.
  *
  * <p>A question whose answer is read off the declaration ({@link Question#COMBINATOR}) is held the
  * same way and for the same reason: the derivation answering for most of its range does not make a
@@ -30,22 +38,44 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AnOperationTheLibraryGainsIsAnsweredForTest {
 
+    /**
+     * One of the two, and not one or the other.
+     *
+     * <p>A rule and a silence are not two ways of covering a range. A silence says that nothing is
+     * true of the operation under the subject, so beside a rule saying what is, it is the denial of
+     * what the rule says and one of the two is wrong. Asked as "a rule <em>or</em> a silence", a
+     * silence that has become false stays where it is: {@code Int.add} declared to say nothing of
+     * what it answers in what it was given, beside the arithmetic the language reads it as, covers
+     * the range as well as anything, and covering the range is all that such a question asks.
+     *
+     * <p>A rule may be one another proposition already gives. What answers a question is what
+     * {@link Question#answeredFor} says, which for some of them is derived from a fact declared
+     * under a different subject; what is written down <em>for</em> a question is
+     * {@link Question#answeredOperations}, and the two are kept apart on purpose. So the
+     * contradiction between a rule and a silence is read here, over the range, rather than off the
+     * rows — read off the rows, an operation answered by another proposition and silenced here would
+     * be in neither list and would go unseen.
+     */
     @Test
-    void everyOperationInAQuestionsRangeAnswersIt() {
-        List<String> unanswered = new ArrayList<>();
-        for (Map.Entry<String, Prelude.PreludeEntry> e : Prelude.entries().entrySet()) {
-            ValueName operation = Prelude.operation(e.getKey());
-            for (Question question : Question.askedOf(e.getValue().signature())) {
-                if (question.answeredFor(operation)
-                        || question.nothingSaidOf().contains(operation)) {
+    void everyOperationInAQuestionsRangeAnswersItOneWayAndNotBoth() {
+        List<String> unsettled = new ArrayList<>();
+        for (Map.Entry<ValueName.Stdlib.Operation, Stdlib.Entry> e
+                : DefaultStdlib.get().entries().entrySet()) {
+            ValueName operation = e.getKey();
+            for (Question question : Question.askedOf(DefaultStdlib.get(), e.getValue().signature())) {
+                boolean answered = question.answeredFor(DefaultStdlib.get(), operation);
+                boolean silent = question.nothingSaidOf().contains(operation);
+                if (answered != silent) {
                     continue;
                 }
-                unanswered.add(e.getKey() + " — " + question);
+                unsettled.add(e.getKey() + " — " + question
+                        + (answered ? " (a rule and a silence beside it)" : " (neither)"));
             }
         }
-        assertEquals(List.of(), unanswered,
-                "these operations are in range of a question and answer it neither with a rule nor by"
-                        + " being named as one there is nothing to say of");
+        assertEquals(List.of(), unsettled,
+                "these operations are in range of a question and do not answer it exactly once —"
+                        + " with neither a rule nor a name among the ones there is nothing to say"
+                        + " of, or with both, where the silence denies the rule");
     }
 
     /**
@@ -61,12 +91,12 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
         List<String> unasked = new ArrayList<>();
         for (Question question : Question.values()) {
             for (ValueName operation : question.answeredOperations()) {
-                if (!question.asksOfOperation(operation.toString())) {
+                if (!question.asksOfOperation(DefaultStdlib.get(), operation)) {
                     unasked.add(operation + " — " + question + " (a rule)");
                 }
             }
             for (ValueName operation : question.nothingSaidOf()) {
-                if (!question.asksOfOperation(operation.toString())) {
+                if (!question.asksOfOperation(DefaultStdlib.get(), operation)) {
                     unasked.add(operation + " — " + question + " (nothing to say)");
                 }
             }
@@ -84,9 +114,9 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
      */
     @Test
     void aDeclarationThatWritesNoReturnTypeIsStillAskedWhatItHandsItsClosure() {
-        Prelude.Signature leavesItsResultToItsBody = new Prelude.Signature(
+        Stdlib.Signature leavesItsResultToItsBody = new Stdlib.Signature(
                 List.of(new Type.FnOf(List.of(Type.Prim.INT), Type.Prim.INT), Type.Prim.INT), null);
-        assertEquals(List.of(Question.COMBINATOR), Question.askedOf(leavesItsResultToItsBody),
+        assertEquals(List.of(Question.COMBINATOR), Question.askedOf(DefaultStdlib.get(), leavesItsResultToItsBody),
                 "an operation that takes a function is asked what it hands it, whatever it leaves"
                         + " unsaid about what it answers");
     }

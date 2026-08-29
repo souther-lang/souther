@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -126,8 +127,8 @@ class CompileExposedValueTest {
      * the jar, and a value is substituted from that like any other. */
     @Test
     void aValueCrossesAProjectBoundary() throws Exception {
-        Map<String, byte[]> classes = Compiler.compile(UPSTREAM);
-        ModulePath path = classes::get;
+        Map<String, ClassFileImage> classes = Compiler.compile(UPSTREAM);
+        ModulePath path = ModulePath.of(classes);
 
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
                 module app.billing exposing ( Receipt, bill )
@@ -168,7 +169,7 @@ class CompileExposedValueTest {
                 let bill (i) = Out { v = standard.value }
                 """)), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("order.Bill$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "order", "bill").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "order.In", Map.of("n", 1L)));
 
         assertEquals(10L, ((Map<?, ?>) Codecs.encode(loader, "order.Out", out)).get("v"));
@@ -200,7 +201,7 @@ class CompileExposedValueTest {
                 let bill (i) = Out { v = one.value + two.value }
                 """)), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("app.Bill$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "app", "bill").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "app.In", Map.of("n", 1L)));
 
         assertEquals(3L, ((Map<?, ?>) Codecs.encode(loader, "app.Out", out)).get("v"));

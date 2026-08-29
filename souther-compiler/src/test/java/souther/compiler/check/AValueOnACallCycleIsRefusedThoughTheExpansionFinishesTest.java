@@ -1,8 +1,12 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
 import souther.compiler.frontend.CstFrontend;
@@ -60,7 +64,7 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
     private static List<Diagnostic> diagnose(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
-        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get("a.sou");
+        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get(new SourceId("a.sou"));
     }
 
     @Test
@@ -85,10 +89,11 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
     @Test
     void theExpansionOfThatModuleFinishes() {
         Ast.Module parsed = CstFrontend.parse(CYCLE);
-        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, Symbols.of(parsed)));
+        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
 
-        Ast.Expr expanded = assertDoesNotThrow(() -> inliner.inline(
-                inliner.held().get("depth").writtenBody(), inliner.bodyOf("depth")));
+        Hir.Expr expanded = assertDoesNotThrow(() -> inliner.inline(
+                inliner.held().get(new souther.compiler.ast.DefinitionName("depth"))
+                        .definition().writtenBody(), inliner.bodyOf("depth")));
 
         assertTrue(expanded != null, "a body the expansion finished with");
     }

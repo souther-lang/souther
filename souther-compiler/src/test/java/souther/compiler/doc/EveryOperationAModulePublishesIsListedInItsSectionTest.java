@@ -1,6 +1,7 @@
 package souther.compiler.doc;
 
-import souther.compiler.check.Prelude;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.Reserved;
 
 import org.junit.jupiter.api.Test;
 
@@ -59,7 +60,7 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
         Map<String, Set<String>> published = publishedByModule();
         Map<String, Set<String>> publishes = new LinkedHashMap<>();
         Map<String, Set<String>> listed = new LinkedHashMap<>();
-        for (String module : new TreeSet<>(Prelude.qualifiers())) {
+        for (String module : new TreeSet<>(Reserved.QUALIFIERS)) {
             String anchor = "stdlib-" + module.toLowerCase(Locale.ROOT);
             SpecDocument.Section section = spec.section(anchor);
             assertNotNull(section, "`" + module + "` has no `" + anchor
@@ -80,8 +81,8 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
      */
     @Test
     void thereIsSomethingToCompareSoTheAgreementIsNotBetweenTwoEmptyThings() {
-        assertFalse(Prelude.qualifiers().isEmpty(), "no module to compare a section against");
-        assertTrue(Prelude.qualifiers().containsAll(publishedByModule().keySet()),
+        assertFalse(Reserved.QUALIFIERS.isEmpty(), "no module to compare a section against");
+        assertTrue(Reserved.QUALIFIERS.containsAll(publishedByModule().keySet()),
                 "a module the library publishes under is a module the walk reaches");
     }
 
@@ -97,7 +98,7 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
     /** The published surface, split by the qualifier a caller writes it under. */
     private static Map<String, Set<String>> publishedByModule() {
         Map<String, Set<String>> byModule = new LinkedHashMap<>();
-        for (String qualified : Prelude.published()) {
+        for (String qualified : DefaultStdlib.get().published()) {
             int dot = qualified.indexOf('.');
             byModule.computeIfAbsent(qualified.substring(0, dot), m -> new TreeSet<>())
                     .add(qualified.substring(dot + 1));

@@ -1,5 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.observe.ArmObservation;
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
@@ -38,9 +41,9 @@ class AnEvaluationThatCouldNotAnswerIsNotTheModelsFaultTest {
             """;
 
     private static RowOutcome onlyRowOf(Compilation compilation) {
-        String sourceId = compilation.exampleSourcesOf("example.answers").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.answers").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.answers", sourceId, Output.CoverageMode.NONE))
+                .ask(new Output.Examples("example.answers", sourceId, ArmObservation.OMIT))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);
@@ -49,7 +52,7 @@ class AnEvaluationThatCouldNotAnswerIsNotTheModelsFaultTest {
     /** A compile whose row is said not to come back, rather than written so that it does not. */
     private static Compilation whoseRowDoesNotAnswer() {
         Compilation compilation = Compilation.ofSource(COMES_BACK, "Main");
-        compilation.withDeadline(DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("run")));
+        compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("run")));
         compilation.answerEverything();
         return compilation;
     }

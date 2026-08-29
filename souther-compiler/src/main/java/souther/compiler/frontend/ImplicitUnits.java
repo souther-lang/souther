@@ -35,7 +35,7 @@ public final class ImplicitUnits {
     /** Names that mean something without a declaration: the primitives and library namespaces, the
      * runtime's arithmetic failure cases, and Option's two cases (which a module may not declare).
      * The namespaces come from {@link Reserved} — the language's constant — rather than from
-     * {@code Prelude}, whose loading parses sources back through {@link #expand} and so must not
+     * {@code check.StdlibLoader}, which parses sources back through {@link #expand} and so must not
      * be what this class initializes against. */
     private static final Set<String> BUILT_IN = builtIn();
 
@@ -65,18 +65,21 @@ public final class ImplicitUnits {
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
                 for (Ast.Name caseName : sum.cases()) {
-                    introduce(caseName.written(), caseName.pos(), declared, added);
+                    introduce(caseName.written(), caseName.pos(), module.name(), declared,
+                            added);
                 }
             }
         }
         for (Ast.BehaviorDef behavior : module.behaviors()) {
             switch (behavior) {
-                case Ast.SpecBehavior spec -> introduceAll(spec.ret(), declared, added);
-                case Ast.PipeBehavior pipe -> introduceAll(pipe.declaredOut(), declared, added);
+                case Ast.SpecBehavior spec ->
+                        introduceAll(spec.ret(), module.name(), declared, added);
+                case Ast.PipeBehavior pipe ->
+                        introduceAll(pipe.declaredOut(), module.name(), declared, added);
             }
         }
         for (Ast.RetType output : module.exposedOutputs().values()) {
-            introduceAll(output, declared, added);
+            introduceAll(output, module.name(), declared, added);
         }
 
         if (added.isEmpty()) {
@@ -89,7 +92,7 @@ public final class ImplicitUnits {
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
-    private static void introduceAll(Ast.RetType output, Set<String> declared,
+    private static void introduceAll(Ast.RetType output, String declaredIn, Set<String> declared,
                                      Map<String, Ast.UnitData> added) {
         if (output == null) {
             return;
@@ -97,12 +100,12 @@ public final class ImplicitUnits {
         for (Ast.TypeTerm term : output.cases()) {
             if (term instanceof Ast.TypeRef ref
                     && ref.arg() == null && ref.tupleElems() == null) {
-                introduce(ref.name(), ref.pos(), declared, added);
+                introduce(ref.name(), ref.pos(), declaredIn, declared, added);
             }
         }
     }
 
-    private static void introduce(String name, SourcePos pos,
+    private static void introduce(String name, SourcePos pos, String declaredIn,
                                   Set<String> declared, Map<String, Ast.UnitData> added) {
         if (declared.contains(name) || added.containsKey(name)
                 || name.indexOf('.') >= 0                  // qualified: another module declares it
@@ -113,6 +116,6 @@ public final class ImplicitUnits {
         // No name position: nobody wrote this declaration. The place `pos` names is the reference
         // that implied it, and reading a use as a declaration's name would answer a cursor there
         // about a declaration that is not in the file.
-        added.put(name, new Ast.UnitData(name, pos));
+        added.put(name, new Ast.UnitData(name, declaredIn, pos));
     }
 }

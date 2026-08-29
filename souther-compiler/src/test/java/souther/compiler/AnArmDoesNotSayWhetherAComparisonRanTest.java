@@ -1,9 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.query.Measurement;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -38,7 +40,6 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
             data Manual
 
             behavior gate : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let gate (r) =
                 if r.rank >= 0 && r.cost <= 100000 then Auto else Manual
 
@@ -47,30 +48,39 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
             """;
 
     /** Every line of {@code gate}, as measured against the one row this model has. */
-    private static List<BoundaryAssessment> linesFor(String rank, String cost, String out) {
+    private static List<BorderAssessment> linesFor(String rank, String cost, String out) {
         Compilation compilation = Compilation.ofSource(
                 MODEL.replace("RANK", rank).replace("COST", cost).replace("OUT", out), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        Map<String, List<BoundaryAssessment>> boundaries =
-                compilation.db().ask(new Adequacy.Boundaries(MODULE)).value();
+        Map<String, List<BorderAssessment>> boundaries =
+                Adequacy.boundariesOf(compilation.db(), MODULE);
         assertNotNull(boundaries, "the model under test compiles");
         return boundaries.get("gate");
     }
 
+    /** The points against the lines of {@code gate}, which is what a row at a value is owed for. */
+    private static List<BorderAssessment.Point> pointsFor(String rank, String cost, String out) {
+        return BorderAssessment.pointsOf(linesFor(rank, cost, out)).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null).toList();
+    }
+
     /** What the rows established about one line, named the way a report names it. */
-    private static BoundaryAssessment.Coverage coverageOf(List<BoundaryAssessment> lines,
+    private static Measurement<ItemAssessment.Coverage> coverageOf(List<BorderAssessment> lines,
                                                           String axis, String value) {
-        return lines.stream()
-                .filter(line -> line.axis().equals(axis) && line.value().equals(value))
+        return BorderAssessment.pointsOf(lines).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .filter(p -> p.border().axis().equals(axis) && value.equals(p.against()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError(
                         "no line at " + axis + " = " + value + " among " + labels(lines)))
-                .coverage();
+                .owed().coverage();
     }
 
-    private static List<String> labels(List<BoundaryAssessment> lines) {
-        return lines.stream().map(line -> line.axis() + " = " + line.value()).toList();
+    private static List<String> labels(List<BorderAssessment> lines) {
+        return BorderAssessment.pointsOf(lines).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .map(p -> p.border().axis() + " = " + p.against()).toList();
     }
 
     /**
@@ -83,19 +93,19 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
      */
     @Test
     void oneValueAndOneArmAreNotOneAnswer() {
-        assertEquals(new BoundaryAssessment.Coverage.Hit(),
-                coverageOf(linesFor("0", "100001", "Manual"), "gate/r.cost", "100001"),
+        assertEquals(new ItemAssessment.Coverage.Hit(),
+coverageOf(linesFor("0", "100001", "Manual"), "gate/r.cost", "100001").made().orElseThrow(),
                 "the comparison produced false, which is reaching it");
-        assertEquals(new BoundaryAssessment.Coverage.Missed(),
-                coverageOf(linesFor("-1", "100001", "Manual"), "gate/r.cost", "100001"),
+        assertEquals(new ItemAssessment.Coverage.NoHit(),
+coverageOf(linesFor("-1", "100001", "Manual"), "gate/r.cost", "100001").made().orElseThrow(),
                 "the comparison never ran, and the row lands in the same arm");
     }
 
     /** A row that reached the comparison and made it true meets the line's own value. */
     @Test
     void aRowThatMadeTheComparisonTrueMeetsTheValue() {
-        assertEquals(new BoundaryAssessment.Coverage.Hit(),
-                coverageOf(linesFor("0", "100000", "Auto"), "gate/r.cost", "100000"));
+        assertEquals(new ItemAssessment.Coverage.Hit(),
+coverageOf(linesFor("0", "100000", "Auto"), "gate/r.cost", "100000").made().orElseThrow());
     }
 
     /**
@@ -107,8 +117,8 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
      */
     @Test
     void aRowThatSkippedTheComparisonDoesNotMeetTheValue() {
-        assertEquals(new BoundaryAssessment.Coverage.Missed(),
-                coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000"));
+        assertEquals(new ItemAssessment.Coverage.NoHit(),
+coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000").made().orElseThrow());
     }
 
     /**
@@ -120,13 +130,13 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
      */
     @Test
     void everyLineIsMeasured() {
-        List<BoundaryAssessment> lines = linesFor("0", "100001", "Manual");
+        List<BorderAssessment> lines = linesFor("0", "100001", "Manual");
 
         assertEquals(List.of("gate/r.rank = 0", "gate/r.rank = -1",
                         "gate/r.cost = 100000", "gate/r.cost = 100001"),
                 labels(lines));
-        for (BoundaryAssessment line : lines) {
-            assertNull(line.reason(), line.label() + " was measured");
+        for (BorderAssessment.Point line : pointsFor("0", "100001", "Manual")) {
+            assertNull(line.item().weakeningSource().why(), line.label() + " was measured");
         }
     }
 
@@ -137,14 +147,14 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
         Compilation compilation = Compilation.ofSource(
                 MODEL.replace("RANK", "0").replace("COST", "100001").replace("OUT", "Manual"),
                 "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(MODULE)).value();
         assertNotNull(branches, "the model under test compiles");
 
         assertEquals(List.of("then", "else"),
-                branches.get("gate").all().stream()
-                        .map(souther.compiler.coverage.CoverageSites.Site::label).toList());
+                branches.get("gate").arms().all().stream()
+                        .map(souther.compiler.report.ArmVocabulary::label).toList());
     }
 }

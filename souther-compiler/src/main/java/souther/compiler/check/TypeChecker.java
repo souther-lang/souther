@@ -1,16 +1,20 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.check.ReadingPolicy;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.core.ValueShape;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.DataMessage;
-import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,16 +32,6 @@ import java.util.Set;
 public final class TypeChecker {
 
     private TypeChecker() {}
-
-    /**
-     * What a successful check produced for the backend (issue #81): the Core of every body it typed,
-     * carrying the type decided for each node. The backend emits from these rather than translating
-     * the AST and inferring the same types a second time.
-     *
-     * <p>What the check found is not in here. A warning belongs to the question that raised it, which
-     * is one body, and a caller that wants them reads them from there.
-     */
-    public record Checked(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers) {}
 
     /** The bodies elaborated so far, filled as the check walks them. */
     static final class Elaborated {
@@ -59,8 +53,7 @@ public final class TypeChecker {
      * report them all. It hands back the exceptions rather than the diagnostics because a diagnostic
      * does not carry the English body a throw site passed alongside it, and a caller that has to
      * raise one should raise what the pass raised.
-     */
-    /**
+     *
      * @param errors what the check found wrong
      * @param abandoned the units it could not read at all, each resting on a name that denotes
      *                  nothing — reported already, and each a reason the module cannot be emitted
@@ -82,19 +75,23 @@ public final class TypeChecker {
      * <p>{@code reqSigs} and {@code recursiveHelperFns} are handed over rather than worked out here,
      * because the body check reads the same two and they must be the same two.
      */
-    public static Reported checkModule(Ast.Module module, Symbols symbols,
-                                       Map<String, Sig> sigs, Set<String> importedInjected,
-                                       Ast.Module lowered, Map<String, ReqSig> reqSigs,
-                                       Map<String, ReqSig> calleeSigs,
+    public static Reported checkModule(Hir.Module module, Symbols symbols, ReadingPolicy policy,
+                                       Map<String, Sig> sigs,
+                                       Set<ValueName.Behavior> importedInjected,
+                                       Set<ValueName.Behavior> importedUnwritten,
+                                       Hir.Module lowered, Map<ValueName.Behavior, ReqSig> reqSigs,
+                                       Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
-                                       Map<String, Ast.FnDef> imported) {
+                                       Map<String, Hir.FnDef> imported, Set<String> settled,
+                                       Map<TypeSymbol.AtModule, ValueShape> shapes) {
         Elaborated elaborated = new Elaborated();
         List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, sigs, importedInjected, lowered, calleeSigs, errors,
-                    elaborated, abandoned, reqSigs, recursiveHelperFns, imported);
+            checkRecovering(module, symbols, policy, sigs, importedInjected, importedUnwritten,
+                    lowered, calleeSigs, errors,
+                    elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled, shapes);
         } catch (Unanswerable e) {
             abandoned.add(e);
             stopped = true;
@@ -116,33 +113,52 @@ public final class TypeChecker {
      * emits. Its own question: what it reads is the behavior, its {@code let}, and what the module
      * around it means — never another body.
      */
-    public static Core checkBehavior(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr loweredBody,
+    public static Core checkBehavior(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr loweredBody,
+                                    ReadingPolicy policy,
                                      InvariantChecker.Source discharge,
-                                     Symbols symbols, Map<String, ReqSig> calleeSigs,
-                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
+                                     Symbols symbols, Map<ValueName.Behavior, ReqSig> calleeSigs,
+                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
                                      List<Diagnostic> warnings) {
-        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, calleeSigs, reqSigs,
+        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, policy, calleeSigs, reqSigs,
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
     }
 
-    /** The signatures of a module's recursive helpers — what a self- or mutual call is typed
-     * against, and what a body that calls one reads. */
-    public static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
-        return HelperTyping.recursiveHelperSigs(inliner, symbols);
+    /**
+     * Whether every declaration being checked here had its clauses read.
+     *
+     * <p>Absence and not a count: a data is in {@code shapes} when its clauses elaborated, so a
+     * declaration missing from it is one whose rules this reading may not be built on.
+     */
+    private static boolean everyClauseWasRead(Hir.Module module, Set<String> settled,
+                                              Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        for (Hir.Def def : module.defs()) {
+            if (def instanceof Hir.Data data && settled.contains(def.name())
+                    && !shapes.containsKey(data.declares())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The signatures every recursive helper a representation can reach would be called under —
+     *  what typing a call left standing needs, whether or not this module turned out to reach it. */
+    public static Map<String, Type> recursiveCallSigs(
+            HelperTable table,
+            java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
+            Symbols symbols) {
+        return HelperTyping.recursiveCallSigs(table, references, symbols);
     }
 
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
      * constructions are attributed to the behavior that calls it (spec §blocks). */
     public static Map<String, DataChecker.Constructs> recursiveHelperConstructs(
-            Set<String> names, Map<String, Ast.Expr> loweredBodies, HelperInliner inliner,
+            Set<String> names, Map<String, Hir.Expr> loweredBodies, HelperInliner inliner,
             Symbols symbols) {
         return HelperTyping.recursiveHelperConstructs(names, loweredBodies, inliner, symbols);
     }
 
-    /** Runs one independent unit's check, recording its first error instead of throwing so the next
-     * unit is still checked — the recovery boundary that lets a module report more than one error. */
     /**
      * Runs one unit's check, recording its first error instead of throwing so the next unit is still
      * checked — the recovery boundary that lets a module report more than one error.
@@ -183,33 +199,51 @@ public final class TypeChecker {
      * phase reads (the {@code fns} map, the {@code exposed} set, {@code reqSigs}, {@code sigs}) may
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
-    static void checkRecovering(Ast.Module module, Symbols symbols,
-                                        Map<String, Sig> sigs, Set<String> importedInjected,
-                                        Ast.Module lowered, Map<String, ReqSig> calleeSigs,
+    static void checkRecovering(Hir.Module module, Symbols symbols, ReadingPolicy policy,
+                                        Map<String, Sig> sigs,
+                                       Set<ValueName.Behavior> importedInjected,
+                                       Set<ValueName.Behavior> importedUnwritten,
+                                        Hir.Module lowered, Map<ValueName.Behavior, ReqSig> calleeSigs,
                                         List<CompileException> errors,
                                         Elaborated elaborated, List<Unanswerable> abandoned,
-                                        Map<String, ReqSig> reqSigs,
+                                        Map<ValueName.Behavior, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
-                                        Map<String, Ast.FnDef> publishedToHere) {
+                                        Map<String, Hir.FnDef> publishedToHere,
+                                        Set<String> settled,
+                                        Map<TypeSymbol.AtModule, ValueShape> shapes) {
         // Both components, because what reads this walks both: a helper is checked whether the module
         // declared it or took it on to emit, and one missing here is a helper checked against a body
         // it does not have.
-        Map<String, Ast.Expr> loweredBodies = new HashMap<>();
-        for (Ast.FnDef fn : lowered.fns()) {
+        Map<String, Hir.Expr> loweredBodies = new HashMap<>();
+        // Which definitions this module processes, read off what it lowered rather than off what it
+        // was predicted to have to lower. A recursion an expansion of this module left standing is
+        // one this module emits, so it is one this module checks — and the two answers were allowed
+        // to differ while the second was a walk over the places a module writes expressions.
+        // Which definitions this module checks standing on their own: every helper it declared,
+        // whether or not anything survives to call it, and what it emits beyond them. The second is
+        // read off what it lowered rather than off what it was predicted to have to lower — a
+        // recursion an expansion of this module left standing is one this module emits, so it is one
+        // this module checks, and the two answers were allowed to differ while the second was a walk
+        // over the places a module writes expressions. A helper is a fn whose name is no behavior's,
+        // which is the reading both of these are keyed by.
+        Map<String, Hir.FnDef> toCheck =
+                new java.util.LinkedHashMap<>(HelperInliner.helpersOf(module));
+        toCheck.putAll(HelperInliner.takenOnBy(lowered));
+        for (Hir.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
         }
-        for (Ast.FnDef fn : lowered.takenOn()) {
+        for (Hir.FnDef fn : lowered.takenOn()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,
-        // and it is not one of this module's own — which is what keeps a recursive one of them in
-        // `injectedRecursiveHelpers`, to be emitted here rather than declared here.
+        // and it is not one of this module's own — which is why a recursive one of them is emitted
+        // here rather than declared here.
         // A helper is checked standing on its own as well as expanded into what calls it, and both
         // readings answer the same about a behavior's name: it becomes the function value it names,
         // which a helper may then not apply (E1818). Told nothing, the standalone reading would
         // refuse the name for being a name rather than for being a behavior a helper cannot reach.
-        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere)
+        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere, symbols.library())
                 .namingBehaviors(InjectionSigs.arities(calleeSigs));
         // Which declarations reach a `partial` helper, asked once for the two checks that ask it: the
         // invariant rule just below and the totality rule further down.
@@ -228,9 +262,12 @@ public final class TypeChecker {
         // wrong one is recorded and the next is still checked, and a declaration with two wrong
         // clauses says so about both. Within one clause the first construction is the answer: naming
         // every one of them tells the author nothing the first does not.
-        for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.Data data) {
-                for (Ast.InvariantClause clause : data.invariants()) {
+        for (Hir.Def def : module.defs()) {
+            if (!settled.contains(def.name())) {
+                continue;
+            }
+            if (def instanceof Hir.Data data) {
+                for (Hir.InvariantClause clause : data.invariants()) {
                     collect(errors, abandoned, () -> {
                         HelperTyping.rejectPartialHelperInInvariant(
                                 clause.expr(), data.name(), reachability);
@@ -240,13 +277,37 @@ public final class TypeChecker {
                 }
             }
         }
-        for (Ast.Def def : module.defs()) {
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec) {
+                for (Hir.EnsuresClause clause : spec.ensures()) {
+                    for (Hir.EnsuresArm arm : clause.arms()) {
+                        collect(errors, abandoned, () -> {
+                            HelperTyping.rejectPartialHelperInEnsures(
+                                    arm.expr(), spec.name(), reachability);
+                            HelperTyping.rejectConstructionInEnsures(
+                                    arm.expr(), spec.name(), clause);
+                            HelperTyping.rejectUnreachableInEnsures(arm.expr(), spec.name());
+                        });
+                    }
+                }
+            }
+        }
+        // Only a declaration whose meaning was settled is checked, and `settled` is what says which
+        // those are. What a check over one of the others would find is the mistake that stopped it
+        // being settled, said again from further down — that the type it is made of has no decoder,
+        // or no fields, or no value — against a line the author has no reason to look at. The caller
+        // holds the declarations that have a meaning and hands them over; there is nothing here that
+        // asks why one of the others has none.
+        for (Hir.Def def : module.defs()) {
+            if (!settled.contains(def.name())) {
+                continue;
+            }
             collect(errors, abandoned, () -> {
                 switch (def) {
-                    case Ast.Data data ->
-                            DataChecker.checkData(CheckContext.of(symbols).forData(data), recursiveHelperFns);
-                    case Ast.SumData sum -> DataChecker.checkSum(sum, symbols);
-                    case Ast.UnitData _ -> { }
+                    case Hir.Data data ->
+                            DataChecker.checkData(CheckContext.of(symbols).forData(data));
+                    case Hir.SumData sum -> DataChecker.checkSum(sum, symbols);
+                    case Hir.UnitData _ -> { }
                 }
             });
         }
@@ -255,14 +316,20 @@ public final class TypeChecker {
         // nothing -- a count read off one refuses a type on the strength of a clause the author has
         // already been told to fix. Only the declarations have been checked at this point, so a
         // mistake in a body further down does not silence this.
-        if (errors.isEmpty()) {
+        //
+        // What says a clause was read is `shapes`: a declaration whose clause could not be
+        // elaborated has no shape there, and elaborating one is what says it states a condition.
+        // That reading is not made here — it is made once, where the clause a construction runs
+        // comes from — so this asks it rather than repeating it.
+        if (errors.isEmpty() && everyClauseWasRead(module, settled, shapes)) {
             List<CompileException> withNoValue = new ArrayList<>();
             collect(errors, abandoned,
-                    () -> withNoValue.addAll(DataChecker.typesWithNoValue(module, symbols)));
+                    () -> withNoValue.addAll(
+                            DataChecker.typesWithNoValue(module.defs(), symbols, policy)));
             errors.addAll(withNoValue);
         }
-        Map<String, Ast.FnDef> fns = new HashMap<>();
-        for (Ast.FnDef fn : module.fns()) {
+        Map<String, Hir.FnDef> fns = new HashMap<>();
+        for (Hir.FnDef fn : module.fns()) {
             if (fns.put(fn.name(), fn) != null) {
                 throw CompileException.of(Diagnostic
                                 .at(fn.pos()).say(new DataMessage.ALetIsAlreadyDefined(fn.name())).build());
@@ -270,21 +337,32 @@ public final class TypeChecker {
         }
         Set<String> allBehaviors = new HashSet<>();
         Set<String> specNames = new HashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
             allBehaviors.add(b.name());
-            if (b instanceof Ast.SpecBehavior spec) {
+            if (b instanceof Hir.SpecBehavior spec) {
                 specNames.add(b.name());
                 List<String> outputCases = new ArrayList<>();
-                for (Ast.TypeTerm t : spec.ret().cases()) {
+                for (Hir.TypeTerm t : spec.ret().cases()) {
                     // a function output is refused as unrepresentable; it names no output case
-                    if (t instanceof Ast.TypeRef ref) {
+                    if (t instanceof Hir.TypeRef ref) {
                         outputCases.add(ref.name());
                     }
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 List<String> required = new ArrayList<>();
-                for (Ast.Var req : spec.dependsOn()) {
-                    required.add(req.bare());
+                for (Hir.Var req : spec.dependsOn()) {
+                    // A name nothing answered is no name for another to be a duplicate of, and it
+                    // was reported where it is written.
+                    if (req.answered() instanceof Hir.Var.Denoting named) {
+                        // The bare name, and deliberately not the declaration. Two dependencies are
+                        // two behaviors whatever modules declared them, and the clause is still
+                        // refused when they go by one spelling: what it decides is the implementing
+                        // `let`'s trailing parameters, which are named after these (§depends-on), so
+                        // a pair here that shared a spelling would be a `let` taking one name twice.
+                        // Comparing the declarations would admit `up.now, other.now` and leave that
+                        // `let` unwritable.
+                        required.add(named.denotes().name());
+                    }
                 }
                 DataChecker.rejectDuplicateNames(required, "`depends on`", spec.pos());
                 DataChecker.rejectDuplicateTypes(spec.constructs(), "`constructs`", spec.pos());
@@ -296,7 +374,7 @@ public final class TypeChecker {
         // `exposing` lists a module's own public surface. A module's own type names, as opposed to
         // `symbols`, which also holds the data it imports — an imported name is not re-exported.
         Set<String> ownTypes = new HashSet<>();
-        for (Ast.Def d : module.defs()) {
+        for (Hir.Def d : module.defs()) {
             ownTypes.add(d.name());
         }
         Set<String> exposed = new HashSet<>();
@@ -317,11 +395,23 @@ public final class TypeChecker {
                 // written against, and the rule itself. A behavior's own `let` is not — what a reader
                 // reaches there is the behavior, which it calls, and the module publishes its
                 // specification rather than the body it was given (ADR-0005).
-                if (HelperInliner.helpersOf(module).containsKey(e)) {
+                Hir.FnDef helper = HelperInliner.helpersOf(module).get(e);
+                if (helper != null) {
+                    // The same rule a body is held to (spec §an-attached-files-values-are-for-its-rows),
+                    // read here because an `exposing` list is a list of names and not an expression, so
+                    // it is not answered where a name written in one is. A value an attached file
+                    // declares is there for the rows beside it; published, it would be a name an
+                    // importer reaches with no source of it in the jar.
+                    if (!helper.role().isTheModels()) {
+                        throw CompileException.of(Diagnostic.at(module.pos())
+                                .say(new ExampleMessage.TheModelNamesAValueAnAttachedFileDeclares(e))
+                                .hint(new ExampleMessage.MoveTheValueIntoTheModuleItself(e))
+                                .build());
+                    }
                     exposed.add(e);
                     continue;
                 }
-                boolean imported = symbols.inScope(e);
+                boolean imported = symbols.scope().inScope(e);
 
                 String why = imported
                         ? " is imported into this module, not defined here; `exposing` lists a"
@@ -345,16 +435,28 @@ public final class TypeChecker {
         // settled from a call to an injected behavior (issue #178), and read again by every body check. It
         // arrives here rather than being built again because it is one question.
         Set<String> injectionTargets = new HashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior spec && !fns.containsKey(spec.name())) {
-                // `depends on` names what an implementation calls (§depends-on), and an injection target has
-                // no implementation here — the Java side provides it (§injected-behavior). Declaring `depends on` on
-                // one is meaningless: nothing calls those behaviors, and nothing injects them. The
-                // behavior that composes or calls this one carries the requirement instead (§injected-behavior).
-                if (!spec.dependsOn().isEmpty()) {
-                    throw CompileException.of(Diagnostic
-                                    .at(spec.pos()).say(new DeclarationMessage.AnInjectionTargetCannotDependOnAnything(spec.name())).build());
-                }
+        // Asked of every clause, implemented or injected: what may be named in one is a question
+        // about the clause and not about who implements it (spec §constructs-excludes-unit-data).
+        // Every behavior's, before the first is raised — a wrong clause is one thing to rewrite, and
+        // an author with two of them should not learn the second by building again. This is what
+        // E1002 and E1006 do within one clause, one frame out.
+        List<Diagnostic> unitEntries = new ArrayList<>();
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.SpecBehavior any) {
+                unitEntries.addAll(SpecChecker.unitDataNamedInConstructs(any, symbols));
+            }
+        }
+        if (!unitEntries.isEmpty()) {
+            throw CompileException.ofAll(unitEntries, DiagnosticRenderer.legacyBody(unitEntries.get(0)));
+        }
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            // `depends on` names what an implementation calls (§depends-on), so a behavior that
+            // writes one takes those dependencies as arguments of a `let` — which makes it Souther's
+            // to implement whether or not the `let` has been written yet (§unwritten-behavior). What
+            // Java supplies is the behavior that writes no clause and no `let` (§injected-behavior),
+            // and only that one gets a base for an implementation to extend.
+            if (b instanceof Hir.SpecBehavior spec
+                    && Requirements.implementationOf(b, fns.keySet()).isInjectionTarget()) {
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
                 injectionTargets.add(spec.name());
             }
@@ -370,22 +472,32 @@ public final class TypeChecker {
         if (sigs == null) {
             throw new Unanswerable(module.pos());
         }
+        // What a behavior declares about its answer is not read here. `Bodies.Contracts` owns that
+        // reading and the reports it produces, so a reader asks for the contracts and what the
+        // reading found comes with them. Read here as well, the same clause would be walked twice
+        // and whichever caller ran first would be the reason the diagnostics existed.
         // Fail-fast with the reqSigs it reads: a `depends on` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1023).
         SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
+        // Nothing that is built here may hold a behavior nobody has written (spec §unwritten-behavior).
+        SpecChecker.checkNothingBuiltHereRestsOnAnUnwrittenBehavior(module, importedUnwritten);
         // Fail-fast too: a behavior reaching itself has no first element to build, and the code that
         // works out requirement sets and emits classes would walk the loop.
         SpecChecker.checkBehaviorsDoNotRecurse(module);
         // A binding whose value is a lambda takes no annotation (spec §let). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
-        for (Ast.FnDef fn : module.fns()) {
+        for (Hir.FnDef fn : module.fns()) {
             collect(errors, abandoned, () -> Elaborator.checkAnnotatedLambdaBindings(fn.writtenBody(), symbols));
         }
         // Helper fns (no matching behavior) are expanded inline at each call site (spec §blocks); a
         // helper is checked standalone against its own parameter types, which its body settles
         // (spec §fn-declaration). Recovered so a broken helper does not hide the behavior-body errors below.
-        collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns,
-                loweredBodies, elaborated));
+        // A row's operands are among this module's definitions by now, so what each of them is was
+        // settled with the rest — and held to the position it stands at by the type its wrapper
+        // declares, which is the same check every other definition of this module gets. There is
+        // nothing left here for a reading of its own to ask.
+        collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, toCheck, symbols, reqSigs,
+                recursiveHelperFns, loweredBodies, elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
         collect(errors, abandoned, () -> TotalityChecker.check(inliner));
@@ -394,13 +506,13 @@ public final class TypeChecker {
         // per declaration, so a module needing the word in several places says so in one build. Which
         // declarations each rule is about is the rule's own to say (see PartialHelperUse): the fns here
         // hold what this module took on to emit as well as what it wrote.
-        for (Ast.FnDef helper : inliner.held().values()) {
+        for (HelperEntry entry : inliner.held().values()) {
             collect(errors, abandoned,
-                    () -> PartialHelperUse.rejectReachingPartial(helper, module.name(), reachability));
+                    () -> PartialHelperUse.rejectReachingPartial(entry, module.name(), reachability));
         }
         // Every fn and not only the helpers: a behavior's `let` may call a `partial` helper and may not
         // hand it over either.
-        for (Ast.FnDef fn : module.fns()) {
+        for (Hir.FnDef fn : module.fns()) {
             collect(errors, abandoned,
                     () -> PartialHelperUse.rejectNamedAsValue(fn, module.name(), reachability));
         }
@@ -410,7 +522,7 @@ public final class TypeChecker {
         // checkHelpers). These terminal validations build no state, so each is recovered
         // independently.
         collect(errors, abandoned, () -> {
-            for (Ast.FnDef fn : module.fns()) {
+            for (Hir.FnDef fn : module.fns()) {
                 if (!specNames.contains(fn.name()) && allBehaviors.contains(fn.name())) {
                     throw CompileException.of(Diagnostic
                                     .at(fn.pos()).say(new BehaviorMessage.ACompositionIsAlreadyItsOwnImplementation(fn.name())).build());
@@ -434,55 +546,13 @@ public final class TypeChecker {
     /** Applies {@code f} to every direct subexpression of {@code e}. Delegates to the one
      * exhaustive walk on the AST: written out here again, a node kind added later would fall
      * into a default and be skipped silently by every pass that recurses through this. */
-    static void forEachChild(Ast.Expr e, java.util.function.Consumer<Ast.Expr> f) {
-        Ast.forEachChild(e, f);
+    static void forEachChild(Hir.Expr e, java.util.function.Consumer<Hir.Expr> f) {
+        Hir.forEachChild(e, f);
     }
 
     /** The symbol table of a module compiled on its own: bare names are its own definitions. */
-    public static Symbols symbols(Ast.Module module) {
-        return Symbols.of(module);
-    }
-
-    /** A module's own definitions, keyed by the name written there. */
-    public static Map<String, Ast.Def> ownDefs(Ast.Module module) {
-        Declared declared = declared(module);
-        if (!declared.rejected().isEmpty()) {
-            throw declared.rejected().get(0);
-        }
-        return declared.defs();
-    }
-
-    /** What a module declares, and the declarations it cannot have. */
-    public record Declared(Map<String, Ast.Def> defs, List<CompileException> rejected) {}
-
-    /**
-     * Every declaration a module may have, by name, and one error per declaration it may not.
-     *
-     * <p>A name declared twice keeps the first: the second is reported and left out, so the rest of
-     * the module still means what it means. Writing a declaration twice is what copying one looks
-     * like halfway through, and taking every name in the file away until it is finished is the
-     * opposite of useful.
-     */
-    public static Declared declared(Ast.Module module) {
-        Map<String, Ast.Def> symbols = new LinkedHashMap<>();
-        List<CompileException> rejected = new ArrayList<>();
-        for (Ast.Def def : module.defs()) {
-            if (def.name().equals("Some") || def.name().equals("None")) {
-                // Some/None are the built-in Option cases (ADR-0011); a user data of the same name
-                // would make a `| Some v` pattern ambiguous between Option and the user case, so the
-                // declaration is rejected here rather than allowed to collide (ADR-0035).
-                rejected.add(CompileException.of(Diagnostic
-                                .at(def.written().reportedAt()).say(new BehaviorMessage.ABuiltInOptionCaseCannotBeDeclared(def.name())).build()));
-                continue;
-            }
-            if (symbols.containsKey(def.name())) {
-                rejected.add(CompileException.of(Diagnostic
-                                .at(def.pos()).say(new DataMessage.ADataIsAlreadyDefined(def.name())).build()));
-                continue;
-            }
-            symbols.put(def.name(), def);
-        }
-        return new Declared(symbols, List.copyOf(rejected));
+    public static Symbols symbols(Hir.Module module, Stdlib stdlib) {
+        return Symbols.of(module, stdlib);
     }
 
 }

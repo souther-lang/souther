@@ -25,25 +25,59 @@ import java.util.Set;
  * reading refutes took something more than the values to settle. Which something is not recorded, so
  * it is not claimed either.
  */
-record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quantified,
-                     Set<String> spoken, Unguarded unguarded) {
+record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
+                     Set<FactSubject> spoken, Unguarded unguarded) {
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
      * clauses are read at all, and both readings are asked about the same clauses. */
-    record Unguarded(NumericDomain numbers, PredicateFacts facts) {
+    record Unguarded(ConstraintState<FactSubject> constraints) {
 
-        Unguarded taking(LinearForm f, Rel rel, Map<String, Granularity> kinds) {
-            return new Unguarded(numbers.assume(f, rel, kinds), facts);
+        Unguarded taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, Granularity> kinds) {
+            return new Unguarded(constraints.taking(f, rel, kinds));
         }
 
-        Unguarded taking(String key, boolean positive) {
-            return new Unguarded(numbers, facts.assume(key, positive));
+        Unguarded taking(FactSubject key, boolean positive) {
+            return new Unguarded(constraints.taking(key, positive));
         }
 
-        Unguarded assigning(String atom, LinearForm f, Map<String, Granularity> kinds) {
-            return new Unguarded(numbers.assign(atom, f, kinds), facts);
+        NumericDomain<FactSubject> numbers() {
+            return constraints.numbers();
         }
+
+        PredicateFacts<FactSubject> facts() {
+            return constraints.facts();
+        }
+    }
+
+    /** The relations between numbers this state holds. Handed out for what only an interval can
+     * answer — a bound is read off one and off nothing else — and for nothing about the state as a
+     * whole. Whether a value exists and whether a path is reached are both
+     * {@link ConstraintState#isBottom}, and neither is assembled from this. */
+    NumericDomain<FactSubject> numbers() {
+        return constraints.numbers();
+    }
+
+    /** The predicates this state has settled, read the same way and for the same reason. */
+    PredicateFacts<FactSubject> facts() {
+        return constraints.facts();
+    }
+
+    /**
+     * Whether the conditions that hold here cannot all hold, so nothing stands where this does.
+     *
+     * <p>Asked of the whole state ({@link ConstraintState#isBottom}) and not of a domain, because a
+     * clause reaches whatever domain has a word for it: guards that settle a predicate both ways
+     * leave the predicates contradictory and every number untouched, and a reader that asked the
+     * numbers would walk that path and report the construction standing on it. That is a report
+     * about a value the program never builds.
+     *
+     * <p>No flag of its own, for the same reason. A second record of the answer is a second thing to
+     * keep in step, and the first domain added without touching it would put the two out of
+     * agreement — which is the shape this question already came apart along once.
+     */
+    boolean reachesNothing() {
+        return constraints.isBottom();
     }
 
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value
@@ -51,28 +85,34 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
     enum Held { OF_THE_VALUE, ON_THE_PATH }
 
     static Known top() {
-        return new Known(NumericDomain.top(), PredicateFacts.none(), List.of(), Set.of(),
-                new Unguarded(NumericDomain.top(), PredicateFacts.none()));
+        return new Known(ConstraintState.<FactSubject>top(), List.of(), Set.of(),
+                new Unguarded(ConstraintState.<FactSubject>top()));
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
-    Known taking(LinearForm f, Rel rel, Held held, Map<String, Granularity> kinds) {
-        return new Known(numbers.assume(f, rel, kinds), facts, quantified, spoken,
+    Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
+        return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
      * is false — as far as {@code held} reaches. */
-    Known taking(String key, boolean positive, Held held) {
-        return new Known(numbers, facts.assume(key, positive), quantified, spoken,
+    Known taking(FactSubject key, boolean positive, Held held) {
+        return new Known(constraints.taking(key, positive), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded);
     }
 
-    /** This, with {@code atom} standing for {@code f}. A name is an alias for what it was given
-     * wherever it is named, so this reaches both readings. */
-    Known assigning(String atom, LinearForm f, Map<String, Granularity> kinds) {
-        return new Known(numbers.assign(atom, f, kinds), facts, quantified, spoken,
-                unguarded.assigning(atom, f, kinds));
+    /**
+     * This, where the conditions on the path cannot all hold, so nothing here is reached.
+     *
+     * <p>Said of the state and not lodged in a domain ({@link ConstraintState#shownToHoldNothing}):
+     * what shows it is a reading of the cases an operation is defined in, and no interval and no
+     * predicate holds that argument. The reading that ignores the path is left as it was — it is the
+     * guards that cannot all hold, not the values that fail, and a construction under them is one
+     * the program never builds rather than one it builds wrongly.
+     */
+    Known reachingNothing() {
+        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded);
     }
 
     /**
@@ -81,17 +121,17 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
      * spoke about is known exactly then, and reading it back out of a domain would mean matching
      * key text, which is how a term that merely reads like another gets mistaken for it.
      */
-    Known speaking(Collection<String> terms) {
+    Known speaking(Collection<FactSubject> terms) {
         if (terms.isEmpty()) {
             return this;
         }
-        Set<String> all = new HashSet<>(spoken);
+        Set<FactSubject> all = new HashSet<>(spoken);
         all.addAll(terms);
-        return new Known(numbers, facts, quantified, all, unguarded);
+        return new Known(constraints, quantified, all, unguarded);
     }
 
     /** Whether an assumption on this path named {@code term}. */
-    boolean speaksOf(String term) {
+    boolean speaksOf(FactSubject term) {
         return spoken.contains(term);
     }
 
@@ -101,6 +141,6 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
         }
         List<Quantified> all = new ArrayList<>(quantified);
         all.addAll(more);
-        return new Known(numbers, facts, List.copyOf(all), spoken, unguarded);
+        return new Known(constraints, List.copyOf(all), spoken, unguarded);
     }
 }

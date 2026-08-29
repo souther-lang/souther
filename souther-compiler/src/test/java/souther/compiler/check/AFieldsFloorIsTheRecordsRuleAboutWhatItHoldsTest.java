@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -34,12 +36,12 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
-        TypeName named = new TypeName(module, type);
-        Ast.Data data = (Ast.Data) symbols.get(named);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
+        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
         assertNotNull(data, "no `" + type + "` in " + module);
-        return FieldDomains.of(named, data, symbols, settled);
+        return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, settled);
     }
 
     private static final String AGAINST_A_SIBLING = """
@@ -121,7 +123,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         assertNotNull(domains.at("n"), "a number is bounded as the value it is");
         assertNull(domains.heldAt("n"), "and nothing counts what a number holds");
         assertNotNull(domains.heldAt("xs"), "a list is bounded by how much of it there is");
-        assertNull(domains.at("xs"), "and a list is no number to bound");
+        assertNull(domains.at("xs").bounds(), "and a list is no number to bound");
     }
 
 }

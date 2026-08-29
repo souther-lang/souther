@@ -2,12 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
@@ -73,25 +76,30 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("book")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("book");
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
-        List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied());
+        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
+        InputDomain read = InputDomain.of(spec, sigs.get("book"), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec, sigs.get("book"), symbols, Exclusions.NONE),
-                GuardThresholds.of("book", body, plan, parameters, symbols).thresholds(), symbols);
+                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                read.quantities(symbols),
+                GuardThresholds.of("book", body, plan,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), symbols).thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         return new Read(partitioning.axes(),
-                new BehaviorInputs(parameters, sigs.get("book").inputTypes(), symbols),
+                new BehaviorInputs(parameters, sigs.get("book").inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 observed.rows().get(0));
     }
 
@@ -100,11 +108,10 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         ObservedValue.Constructed request = (ObservedValue.Constructed) read.row().inputs().get(0);
         Map<String, ObservedValue> fields = new LinkedHashMap<>(request.fields());
         fields.put("interval", value);
-        return new RowOutcome(read.row().at(), read.row().target(), read.row().description(),
+        return new RowOutcome(read.row().at(), read.row().target(), read.row().identity(),
                 read.row().stage(), read.row().disposition(), read.row().failurePhase(),
                 read.row().expectedArm(), read.row().resultArm(), read.row().inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), fields)), read.row().hits(),
-                read.row().stepsSpent());
+                List.of(new ObservedValue.Constructed(request.type(), fields)), read.row().run());
     }
 
     /** The interval the row wrote, with {@code inner} where the position's number was. */
@@ -117,7 +124,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     }
 
     private static Incompleteness.Code why(Read read, RowOutcome row) {
-        Map<AxisId, Classification> classes = RowClasses.of(row, read.inputs(), read.axes());
+        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.inputs(), read.axes());
         Classification where = classes.entrySet().stream()
                 .filter(e -> e.getKey().term().equals(POSITION))
                 .map(Map.Entry::getValue).findFirst()
@@ -194,10 +201,11 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
 
         assertInstanceOf(ObservedValue.Truncated.class,
                 read.inputs().valueAt(givingInterval(read, intervalHolding(read,
-                        new ObservedValue.Truncated())), position(read)),
+                        new ObservedValue.Truncated())).inputs(), position(read)),
                 "the limit was reached at the position");
         assertInstanceOf(ObservedValue.Truncated.class,
-                read.inputs().valueAt(givingInterval(read, new ObservedValue.Truncated()), position(read)),
+                read.inputs().valueAt(
+                        givingInterval(read, new ObservedValue.Truncated()).inputs(), position(read)),
                 "the limit was reached one field above the position");
     }
 }

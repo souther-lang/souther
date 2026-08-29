@@ -13,6 +13,7 @@ package souther.compiler.evaluate;
  * a stack this deep is worst at.
  */
 public final class DepthLimitExceeded extends RuntimeException {
+    private static final long serialVersionUID = 1L;
 
     public static final DepthLimitExceeded INSTANCE = new DepthLimitExceeded();
 

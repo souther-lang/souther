@@ -1,7 +1,10 @@
 package souther.compiler.check;
 
-import souther.compiler.Compiler;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.diag.Primary;
+
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -28,35 +31,35 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnExpansionOwnsWhatItWritesTest {
 
-    private static Ast.Module resolved(String source) {
+    private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
     }
 
     /** Every binding in {@code e}, in the order they are written. */
-    private static List<Ast.Binder> binders(Ast.Expr e) {
-        List<Ast.Binder> out = new ArrayList<>();
+    private static List<Hir.Binder> binders(Hir.Expr e) {
+        List<Hir.Binder> out = new ArrayList<>();
         collect(e, out);
         return out;
     }
 
-    private static void collect(Ast.Expr e, List<Ast.Binder> out) {
-        if (e instanceof Ast.LetIn li) {
+    private static void collect(Hir.Expr e, List<Hir.Binder> out) {
+        if (e instanceof Hir.LetIn li) {
             out.add(li.binder());
         }
-        if (e instanceof Ast.Expansion ex) {
+        if (e instanceof Hir.Expansion ex) {
             ex.bound().forEach(b -> out.add(b.binder()));
         }
-        if (e instanceof Ast.Block b) {
+        if (e instanceof Hir.Block b) {
             out.addAll(b.params());
         }
         TypeChecker.forEachChild(e, c -> collect(c, out));
     }
 
     /** The expansion each of {@code binders} belongs to, or null where it belongs to something else. */
-    private static Set<BindingOwner.Expansion> expansionsOf(List<Ast.Binder> binders) {
+    private static Set<BindingOwner.Expansion> expansionsOf(List<Hir.Binder> binders) {
         Set<BindingOwner.Expansion> out = new LinkedHashSet<>();
-        for (Ast.Binder b : binders) {
+        for (Hir.Binder b : binders) {
             if (b.id().owner() instanceof BindingOwner.Expansion x) {
                 out.add(x);
             }
@@ -64,32 +67,33 @@ class AnExpansionOwnsWhatItWritesTest {
         return out;
     }
 
-    private static Ast.Expr expanded(String defs, String of) {
-        Ast.Module m = resolved("""
+    private static Hir.Expr expanded(String defs, String of) {
+        Hir.Module m = resolved("""
                 module demo
                 data X = Int
                 behavior f : (x: X) -> X
                 %s
                 let f (x) = x
                 """.formatted(defs));
-        HelperInliner inliner = HelperInliner.forModule(m);
-        return inliner.inline(inliner.held().get(of).writtenBody(), inliner.bodyOf(of));
+        HelperInliner inliner = HelperInliner.forModule(m, DefaultStdlib.get());
+        return inliner.inline(inliner.held().get(new souther.compiler.ast.DefinitionName(of))
+                .definition().writtenBody(), inliner.bodyOf(of));
     }
 
     @Test
     void everyBindingOneExpansionWritesIsThatExpansionsOwn() {
         // `taxed` takes two arguments and its body binds one of its own, so the expansion writes
         // three bindings. All three are this call's.
-        Ast.Expr body = expanded("""
+        Hir.Expr body = expanded("""
                 let taxed (n: Int, rate: Int) = {
                     let scaled = n * rate
                     scaled / 100
                 }
                 let go (m: Int) = taxed(m, 11)""", "go");
-        List<Ast.Binder> written = binders(body);
+        List<Hir.Binder> written = binders(body);
         assertFalse(written.isEmpty(), "the expansion writes bindings");
         assertEquals(1, expansionsOf(written).size(), "they are one call's");
-        for (Ast.Binder b : written) {
+        for (Hir.Binder b : written) {
             assertTrue(b.id().owner() instanceof BindingOwner.Expansion,
                     "`" + b.name() + "` belongs to " + b.id().owner());
         }
@@ -97,7 +101,7 @@ class AnExpansionOwnsWhatItWritesTest {
 
     @Test
     void twoCallsOfOneHelperAreTwoExpansions() {
-        Ast.Expr body = expanded("""
+        Hir.Expr body = expanded("""
                 let twice (n: Int) = n * 2
                 let go (m: Int) = twice(m) + twice(m + 1)""", "go");
         assertEquals(2, expansionsOf(binders(body)).size(), "two calls, two expansions");
@@ -105,7 +109,7 @@ class AnExpansionOwnsWhatItWritesTest {
 
     @Test
     void anExpansionInsideAnExpansionIsAnotherExpansion() {
-        Ast.Expr body = expanded("""
+        Hir.Expr body = expanded("""
                 let inner (n: Int) = n * 2
                 let outer (n: Int) = inner(n) + 1
                 let go (m: Int) = outer(m)""", "go");
@@ -134,22 +138,22 @@ class AnExpansionOwnsWhatItWritesTest {
                         """));
         assertTrue(e.getMessage().contains("takes 2 argument(s), but is written with 1"),
                 e.getMessage());
-        assertEquals(6, e.diagnostic().region().start().line(),
+        assertEquals(6, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(),
                 "the inner lambda's line, not the outer one's: " + e.getMessage());
     }
 
     /** Two bindings of one expansion are two bindings: one minter, so the ordinals do not repeat. */
     @Test
     void noTwoBindingsOfOneExpansionAreTheSameBinding() {
-        Ast.Expr body = expanded("""
+        Hir.Expr body = expanded("""
                 let taxed (n: Int, rate: Int) = {
                     let scaled = n * rate
                     scaled / 100
                 }
                 let go (m: Int) = taxed(m, 11) + taxed(m, 12)""", "go");
-        List<Ast.Binder> written = binders(body);
+        List<Hir.Binder> written = binders(body);
         Set<BindingId> distinct = new LinkedHashSet<>();
-        for (Ast.Binder b : written) {
+        for (Hir.Binder b : written) {
             assertTrue(distinct.add(b.id()), "`" + b.name() + "` repeats " + b.id());
         }
         assertEquals(written.size(), distinct.size());

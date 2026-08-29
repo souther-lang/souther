@@ -8,7 +8,6 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -50,7 +49,6 @@ class AValueOfferedAtAPositionIsOneTheRecordLeavesItTest {
                 data Ok
 
                 behavior f : (r: R, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (r, flag) = Ok
                 """.replace("CLAUSES", clauses).replace("FIELD", field);

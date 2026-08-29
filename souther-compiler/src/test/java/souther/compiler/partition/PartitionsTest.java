@@ -2,13 +2,19 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 import java.util.Map;
@@ -31,14 +37,15 @@ class PartitionsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         assertNotNull(prepared);
         assertNotNull(sigs);
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return Partitions.of(spec, sigs.get(behavior),
-                compilation.db().ask(new Shapes.Scope(module)).value(), Exclusions.NONE);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {
@@ -141,9 +148,9 @@ class PartitionsTest {
                 axis(span, "span.from").cuts().stream().map(Cut::value).toList());
         assertEquals(List.of(new ObservedValue.Integer(1L), new ObservedValue.Integer(1440L)),
                 axis(span, "span.to").cuts().stream().map(Cut::value).toList());
-        assertEquals(List.of("invariant Minute (min)", "invariant Minute (max) within Span"),
+        assertEquals(List.of("invariant Minute (withinDay)", "invariant Minute (withinDay) within Span"),
                 axis(span, "span.from").cuts().stream()
-                        .map(c -> c.origins().get(0).describe()).toList(),
+                        .map(c -> c.origins().get(0).named()).toList(),
                 "the rule that drew each end is the one that wrote it, not the outermost name");
     }
 
@@ -178,11 +185,11 @@ class PartitionsTest {
 
         assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(10L)),
                 o.cuts().stream().map(Cut::value).toList());
-        assertEquals(List.of("invariant Outer (min)", "invariant Inner (min)"),
-                o.cuts().get(0).origins().stream().map(OriginRef::describe).toList(),
+        assertEquals(List.of("invariant Outer (outerMin)", "invariant Inner (innerMin)"),
+                o.cuts().get(0).origins().stream().map(OriginRef::named).toList(),
                 "one value, two rules, and a row is owed to each");
-        assertEquals(List.of("invariant Outer (max)"),
-                o.cuts().get(1).origins().stream().map(OriginRef::describe).toList());
+        assertEquals(List.of("invariant Outer (outerMax)"),
+                o.cuts().get(1).origins().stream().map(OriginRef::named).toList());
     }
 
     /** A `Decimal` under two names reads the same way. */
@@ -226,18 +233,26 @@ class PartitionsTest {
         OriginRef.InvariantOrigin invariant =
                 org.junit.jupiter.api.Assertions.assertInstanceOf(OriginRef.InvariantOrigin.class,
                         origin);
-        assertEquals("Amount", invariant.type().name());
+        assertEquals("Amount", invariant.rule().clause().id().declaredOn().name());
     }
 
-    /** A record is taken apart, and only so far: two levels reach a field of a record a parameter
-     * holds, which is where rules are written. */
+    /**
+     * A record is taken apart, and only so far: two levels reach a field of a record a parameter
+     * holds, which is where rules are written.
+     *
+     * <p>{@code memo@Some} is beside {@code memo} rather than instead of it, and is not a third
+     * level. The optional divides into holding something and holding nothing, which is what
+     * {@code memo} is measured on; what it holds stands at the narrowing, which is where anything
+     * written about that type is read. A narrowing is not a step into the value, so the field is
+     * where it was.
+     */
     @Test
     void aProductIsTakenApartFieldByField() {
         List<String> paths = partitioningOf(KINDS, "submit").axes().stream()
                 .map(a -> a.path().toString()).toList();
 
         assertEquals(List.of("request.kind", "request.cost", "request.urgent", "request.memo",
-                "request.note"), paths);
+                "request.memo@Some", "request.note"), paths);
     }
 
     @Test
@@ -245,7 +260,7 @@ class PartitionsTest {
         Partitions.Partitioning partitioning = partitioningOf(KINDS, "submit");
         Axis kind = axis(partitioning, "request.kind");
         assertEquals(Membership.MATCH, kind.classes().get(0).classifier().membershipOf(
-                        new ObservedValue.Unit(new TypeName("example.trip", "Domestic"))),
+                        new ObservedValue.Unit(TypeSymbols.declared(new TypeKey("example.trip", "Domestic")))),
                 "a unit case is recognised by the type it names");
 
         Axis urgent = axis(partitioning, "request.urgent");
@@ -293,8 +308,20 @@ class PartitionsTest {
         assertEquals(List.of("Remote", "NotRemote"), classIds(axis(shipping, "region")));
     }
 
+    /**
+     * Every position the model divides is an axis, however many of them there are.
+     *
+     * <p>How many positions a behavior takes is not a measure of what measuring them costs. Fifteen
+     * {@code Bool}s and two are the same work per position, and what the pair space and the row
+     * search cost is bounded where each of them is walked — so a count of positions taken as a
+     * budget bounds the evidence and not the work (see this package's documentation).
+     *
+     * <p>Fifteen rather than thirteen so the number is not the one a limit was written at. A test
+     * written at the old ceiling plus one passes again the moment somebody sets a new ceiling one
+     * higher, which is the reintroduction it exists to catch.
+     */
     @Test
-    void pastTheAxisLimitTheRestAreDroppedAndNamedRatherThanMerged() {
+    void everyPositionTheModelDividesIsAnAxisHoweverManyThereAre() {
         StringBuilder fields = new StringBuilder();
         for (int i = 0; i < 15; i++) {
             fields.append("f").append(i).append(": Bool, ");
@@ -313,14 +340,11 @@ class PartitionsTest {
 
         Partitions.Partitioning partitioning = partitioningOf(wide, "run");
 
-        assertEquals(Partitions.MAX_AXES, partitioning.derivable().size());
-        assertEquals(3, partitioning.omitted().size());
-        assertTrue(partitioning.omitted().get(0).axis().toString().contains("run/wide.f12"),
-                partitioning.omitted().get(0).axis().toString());
-        // A `Bool` is classified and never cut, so dropping one loses a measure nothing refuses a
-        // build over. What a dropped axis was carrying is decided here because it cannot be read back:
-        // a position nobody measured leaves the same absence as one the rows cover.
-        assertTrue(partitioning.omitted().stream()
-                .noneMatch(Partitions.OmittedAxis::carriedAnObligation));
+        assertEquals(15, partitioning.derivable().size(),
+                () -> "every field is divided: " + partitioning.derivable().stream()
+                        .map(each -> each.id().toString()).toList());
+        assertEquals("run/wide.f14",
+                partitioning.derivable().get(14).id().toString(),
+                "including the last, which no ordering may quietly leave out");
     }
 }

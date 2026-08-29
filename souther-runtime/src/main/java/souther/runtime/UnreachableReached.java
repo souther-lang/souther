@@ -12,6 +12,7 @@ package souther.runtime;
  * failure is distinguished from (spec §jvm-abort).
  */
 public final class UnreachableReached extends RuntimeException {
+    private static final long serialVersionUID = 1L;
 
     public UnreachableReached(String message) {
         super(message);

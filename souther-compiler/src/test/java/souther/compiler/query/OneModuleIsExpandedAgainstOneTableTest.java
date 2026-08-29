@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperTable;
@@ -59,7 +60,7 @@ class OneModuleIsExpandedAgainstOneTableTest {
      * it — which is how {@link HelperInliner#forModule} is handed the two. */
     private static HelperTable asTheCheckBuildsIt(Db db, String module) {
         return HelperTable.of(db.ask(new Bodies.Settled(module)).value(),
-                db.ask(new Bodies.ImportedDefinitions(module)).value(), InliningPolicy.FULL);
+                db.ask(new Bodies.ImportedDefinitions(module)).value(), InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     /** The table every query expands against, which the backend reads through. */
@@ -76,7 +77,7 @@ class OneModuleIsExpandedAgainstOneTableTest {
     @Test
     void aSpreadOfAPublishedValueIsSubstitutedWhicheverTableExpandsIt() {
         Db db = db();
-        Ast.FnDef raised =
+        Hir.FnDef raised =
                 HelperInliner.helpersOf(db.ask(new Bodies.Settled("down")).value()).get("raised");
 
         assertEquals(Set.of(), spreadsLeftBy(asTheCheckBuildsIt(db, "down"), raised),
@@ -87,24 +88,26 @@ class OneModuleIsExpandedAgainstOneTableTest {
 
     /** The names still written as spreads after {@code table} expands {@code fn}'s body. A value is
      * substituted where it is spread, so a name left here is one the expansion did not reach. */
-    private static Set<String> spreadsLeftBy(HelperTable table, Ast.FnDef fn) {
+    private static Set<String> spreadsLeftBy(HelperTable table, Hir.FnDef fn) {
         HelperInliner inliner = HelperInliner.over(table, HelperGraph.of(table));
-        Ast.Expr expanded = inliner.inline(fn.writtenBody(),
+        Hir.Expr expanded = inliner.inline(fn.writtenBody(),
                 new BindingOwner.OfValue(table.module(), fn.name()));
         Set<String> left = new LinkedHashSet<>();
         namedSpreads(expanded, table, left);
         return left;
     }
 
-    private static void namedSpreads(Ast.Expr e, HelperTable table, Set<String> out) {
-        if (e instanceof Ast.NewData nd) {
-            for (Ast.Var spread : nd.spreads()) {
-                if (table.reaches(spread.reaches())) {
-                    out.add(spread.reaches());
+    private static void namedSpreads(Hir.Expr e, HelperTable table, Set<String> out) {
+        if (e instanceof Hir.NewData nd) {
+            for (Hir.Var spread : nd.spreads()) {
+                if (spread.answered() instanceof Hir.Var.Denoting named
+                        && named.reachesADeclaration() != null
+                        && table.reaches(named.reachesADeclaration())) {
+                    out.add(named.reaches());
                 }
             }
         }
-        Ast.forEachChild(e, c -> namedSpreads(c, table, out));
+        Hir.forEachChild(e, c -> namedSpreads(c, table, out));
     }
 
     /** And the module the two tables are built for is one the expansion has something to say about,
@@ -112,7 +115,10 @@ class OneModuleIsExpandedAgainstOneTableTest {
     @Test
     void thePublishedValueIsThereToBeReached() {
         Db db = db();
-        assertTrue(asTheCheckBuildsIt(db, "down").reaches("up.standard"));
-        assertTrue(asTheQueryLayerBuildsIt(db, "down").reaches("up.standard"));
+        souther.compiler.types.ReachName.Declaration standard =
+                new souther.compiler.types.ReachName.OfModule(
+                new souther.compiler.types.ValueName.Helper("up", "standard"));
+        assertTrue(asTheCheckBuildsIt(db, "down").reaches(standard));
+        assertTrue(asTheQueryLayerBuildsIt(db, "down").reaches(standard));
     }
 }

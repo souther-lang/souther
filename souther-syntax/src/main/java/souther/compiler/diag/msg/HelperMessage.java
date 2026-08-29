@@ -37,6 +37,16 @@ public sealed interface HelperMessage extends Message {
     record TheBodyIsNotWhatTheHelperDeclares(String helper, String declared, String body)
             implements HelperMessage, Reported {}
 
+    /**
+     * The same rule, held of a definition no source names — a row's operand, wrapped for emission
+     * under a name no one wrote. The claim it is held to is its position's, so the sentence leans on
+     * the place, and quotes no name: a report that named the wrapper would send the author looking
+     * for a declaration that is not in their file.
+     */
+    @Code(DiagnosticCode.E1812)
+    record WhatIsWrittenHereIsNotWhatItsPositionTakes(String takes, String written)
+            implements HelperMessage, Reported {}
+
     /** A helper is called with a number of arguments it does not take. */
     @Code(DiagnosticCode.E1802)
     record CalledWithAnotherNumberOfArguments(String helper, String takes, String called)

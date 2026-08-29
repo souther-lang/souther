@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -44,7 +45,7 @@ class AReportsColumnsLineUpWhateverTheNamesAreTest {
 
     private static String report(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }

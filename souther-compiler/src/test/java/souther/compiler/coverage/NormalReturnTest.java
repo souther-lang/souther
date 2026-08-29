@@ -2,7 +2,6 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -53,7 +52,7 @@ class NormalReturnTest {
     private static Core bodyOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        TypeChecker.Checked checked = compilation.db()
+        Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);

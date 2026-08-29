@@ -1,0 +1,53 @@
+// A comparison that is reached only under a condition, which is the whole of what this corpus is
+// for.
+//
+// Two shapes, and they are the two ways a row can carry the value a line is drawn at and still
+// never arrive at the comparison that draws it: a threshold above it that the rest of the row has
+// to pass, and an arm of a fork that the rest of the row has to be in. Both are ordinary things to
+// write, and neither is reachable by choosing a value for one position alone.
+module conformance.staffing exposing
+    ( Rate, WorkDays, Days, Hours, Agreement, Standard, Extended
+    , Grant, NotEntitled, Within, Over
+    , grantLeave, judgeHours )
+
+data Rate = Decimal
+    invariant value >= 0.0m && value <= 1.0m
+
+data WorkDays = Int
+    invariant value >= 1 && value <= 7
+
+data Days = Int
+    invariant value >= 1 && value <= 20
+
+data Hours = Int
+    invariant value >= 0 && value <= 200
+
+data Grant = { days: Days }
+data NotEntitled
+
+// The line on `worked` is drawn below the guard on `rate`. A row holding five days and a rate under
+// the threshold turns back at the guard, so it carries the value the line is at and answers nothing
+// about it.
+behavior grantLeave : (worked: WorkDays, rate: Rate) -> Grant | NotEntitled
+    constructs Grant, Days
+
+let grantLeave (worked, rate) = {
+    guard rate >= 0.8m else NotEntitled
+    Grant { days = if worked >= 5 then Days(10) else Days(7) }
+}
+
+data Agreement = Standard | Extended
+
+data Within
+data Over = { limit: Hours }
+
+// And each line on `hours` is drawn inside one arm of the fork on `agreement`. A row in the other
+// arm carries the value and reaches nothing, and which arm it is in is not a value any range of
+// `hours` states.
+behavior judgeHours : (agreement: Agreement, hours: Hours) -> Within | Over
+    constructs Over, Hours
+
+let judgeHours (agreement, hours) =
+    match agreement with
+        | Extended -> if hours > 100 then Over { limit = Hours(100) } else Within
+        | Standard -> if hours > 45 then Over { limit = Hours(45) } else Within

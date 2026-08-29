@@ -2,8 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -30,11 +31,10 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo"),
-                        compilation.symbols("demo"),
-                        TypeCardinality.solve(compilation.module("demo"),
-                                compilation.symbols("demo")))
-                .stream().map(each -> each.stream().map(TypeName::name).toList()).toList();
+        return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(),
+                        TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(),
+                                Scopes.derived(compilation.db(), "demo").value(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                .stream().map(each -> each.members().stream().map(TypeSymbol::name).toList()).toList();
     }
 
     @Test

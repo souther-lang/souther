@@ -12,6 +12,7 @@ package souther.compiler.evaluate;
  * out says nothing an author can act on, because it is wherever the last step happened to be.
  */
 public final class StepLimitExceeded extends RuntimeException {
+    private static final long serialVersionUID = 1L;
 
     public static final StepLimitExceeded INSTANCE = new StepLimitExceeded();
 

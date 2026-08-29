@@ -1,13 +1,13 @@
 package souther.compiler.check;
 
-import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -38,8 +38,11 @@ class CallElaboratorNoCalleeTest {
     private static final SourcePos AT = new SourcePos(7, 3);
 
     private static RuntimeException answerFor(ValueName denotes) {
+        // As this module reaches it, whichever kind of name it is — which is what the arm of the
+        // reference then says, and what this is about is the ones that reach no callee.
         return CallElaborator.noCallee(
-                new Ast.Apply("f", denotes, new ReachName.Bare("f"), List.of(new Ast.IntLit(1, AT, null)),
+                new Hir.Apply("f", ReachName.of(denotes, "f", "m"),
+                        List.of(new Hir.IntLit(1, AT, null)),
                         ConstructionOrigin.own(), AT, null));
     }
 
@@ -61,7 +64,7 @@ class CallElaboratorNoCalleeTest {
     @Test
     void aTypeIsToldItConstructs() {
         RuntimeException e = answerFor(
-                new ValueName.OfType("Yen", new TypeName("m", "Yen"), null));
+                new ValueName.OfType("Yen", TypeSymbols.declared(new TypeKey("m", "Yen")), null));
         CompileException c = assertInstanceOf(CompileException.class, e);
         assertInstanceOf(DataMessage.AConstructionCannotBeWrittenHere.class, c.diagnostic().said());
         assertEquals(List.of("Yen"), List.copyOf(c.diagnostic().values().values()));
@@ -103,16 +106,28 @@ class CallElaboratorNoCalleeTest {
     void anUnexpandedCallIsAnInternalError() {
         for (ValueName denotes : List.of(
                 new ValueName.Helper("m", "f"),
-                new ValueName.Stdlib("List", "map"),
-                new ValueName.Unresolved("f"))) {
+                ValueName.Stdlib.operation("List", "map"))) {
             RuntimeException e = answerFor(denotes);
             assertInstanceOf(IllegalStateException.class, e, denotes.toString());
             assertTrue(e.getMessage().contains("7:3"), () -> "says where: " + e.getMessage());
         }
     }
 
+    /**
+     * And an application of something that is not a name, which is where the absent denotation
+     * actually comes from: {@code Hir.Apply#denotes} answers for the name it applies, and there is
+     * none. Written as a name with no answer instead, this pinned a node the constructor a pass
+     * writes an application with no longer builds — a pass applying a name says what it means
+     * (ADR-0067). The shape itself is still writable, since the parser has to hold a tree
+     * resolution has not seen; what is gone is a pass reaching for it.
+     */
     @Test
-    void anUnresolvedCallIsAnInternalError() {
-        assertInstanceOf(IllegalStateException.class, answerFor(null));
+    void anApplicationOfSomethingThatIsNotANameIsAnInternalError() {
+        Hir.Expr block = new Hir.Block(List.of(), new Hir.IntLit(1, AT, null), souther.compiler.types.RuleOrigin.unwritten(), AT, null);
+        RuntimeException e = CallElaborator.noCallee(new Hir.Apply(block,
+                List.of(new Hir.IntLit(1, AT, null)), ConstructionOrigin.own(), AT, null));
+
+        assertInstanceOf(IllegalStateException.class, e);
+        assertTrue(e.getMessage().contains("7:3"), () -> "says where: " + e.getMessage());
     }
 }

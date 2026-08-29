@@ -49,6 +49,13 @@ public sealed interface Advertisement {
          * Defined by the protocol for every server, with no field in the capabilities object to
          * carry it. A client sends these knowing they may be ignored.
          */
-        UNADVERTISED_PROTOCOL_METHOD
+        UNADVERTISED_PROTOCOL_METHOD,
+
+        /**
+         * Announced by a flag inside another method's capability rather than by one of its own. A
+         * client learns that this is answered from the method it completes, so a field here would be
+         * the same fact said twice and free to disagree with itself.
+         */
+        UNDER_ANOTHER_METHODS_CAPABILITY
     }
 }

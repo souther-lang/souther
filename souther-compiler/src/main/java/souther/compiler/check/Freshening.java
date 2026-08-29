@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 
 import java.util.IdentityHashMap;
@@ -32,14 +32,14 @@ final class Freshening {
 
     /** What each call has decided, by the call it is. Two calls written the same way are two
      * applications, so they are told apart by which node they are and not by how they read. */
-    private final Map<Ast.Apply, Map<String, Type>> decided = new IdentityHashMap<>();
+    private final Map<Hir.Apply, Map<String, Type>> decided = new IdentityHashMap<>();
 
     /**
      * What {@code call} decides for the variables {@code declared} left open — one fresh variable
      * each, and the same ones every time this call is asked. Empty where the declaration left none
      * open, which is most calls.
      */
-    Map<String, Type> of(Ast.Apply call, List<Type> declared) {
+    Map<String, Type> of(Hir.Apply call, List<Type> declared) {
         Map<String, Type> already = decided.get(call);
         if (already != null) {
             return already;

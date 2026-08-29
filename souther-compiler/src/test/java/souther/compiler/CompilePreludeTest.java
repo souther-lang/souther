@@ -31,7 +31,7 @@ class CompilePreludeTest {
     private boolean flip(boolean in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
         Object input = Codecs.decoded(loader, "demo.In", Map.of("flag", in));
-        Object behavior = loader.loadClass("demo.Flip" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "flip").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, input);
         return (Boolean) ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("flag");
     }

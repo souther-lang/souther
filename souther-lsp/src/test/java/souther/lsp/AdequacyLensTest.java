@@ -16,6 +16,9 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -53,13 +56,41 @@ class AdequacyLensTest {
                 | (Draft { cost = Amount(50) }) -> Submitted { cost = Amount(50) }
             """;
 
+    private static final String EDGES = "file:///edges.sou";
+
+    /** A behavior whose only gaps are the two lines its invariant draws: the output is one data, the
+     *  body forks nowhere, and the one row covers the one class the position divides into. So the
+     *  block a person is offered holds boundary rows or nothing. */
+    private static final String ONLY_EDGES = """
+            module edges
+
+            data Amount = Int
+                invariant value >= 0 && value <= 10
+
+            data Ok = { n: Amount }
+
+            behavior keep : (a: Amount) -> Ok
+                constructs Ok
+
+            let keep (a) = Ok { n = a }
+
+            example keep
+                | "mid" : (Amount(5)) -> Ok { n = Amount(5) }
+            """;
+
     private static ModuleGraph graphOf(Map<String, String> documents) {
         return ModuleGraph.of(new LinkedHashMap<>(documents));
     }
 
     private static Analyzer measuring(Adequacy.Level level) {
+        return measuring(level, true);
+    }
+
+    /** @param resolves what the client's handshake said about coming back for an action's edit */
+    private static Analyzer measuring(Adequacy.Level level, boolean resolves) {
         Analyzer analyzer = new Analyzer();
         analyzer.measure(Adequacy.Asked.reportOnly(level));
+        analyzer.resolvesActions(resolves);
         return analyzer;
     }
 
@@ -73,7 +104,14 @@ class AdequacyLensTest {
         assertFalse(analyzer.measuring());
     }
 
-    /** Asked for, the numbers appear on the behavior's own line. */
+    /**
+     * Asked for, the numbers appear on the behavior's own line.
+     *
+     * <p>The boundary ratio is over what this behavior is owed a row for. The line
+     * {@code Amount}'s invariant draws is owed to that declaration and answered by a row written
+     * for any behavior carrying the type, so the point against it is not this author's work and is
+     * not in the ratio drawn over their behavior.
+     */
     @Test
     void theNumbersAreDrawnOnTheDeclarationTheyAreAbout() {
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL)
@@ -81,7 +119,7 @@ class AdequacyLensTest {
 
         assertEquals(1, lenses.size());
         assertEquals(9, lenses.get(0).range().start().line(), "the `behavior` line, zero-based");
-        assertEquals("1 row · out 1/2 · boundary 0/3 · branch 1/2", lenses.get(0).title());
+        assertEquals("1 row · out 1/2 · boundary 2/5 · branch 1/2", lenses.get(0).title());
     }
 
     /**
@@ -104,7 +142,7 @@ class AdequacyLensTest {
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL).codeLenses(MODULE, graphOf(workspace));
 
         assertEquals(1, lenses.size());
-        assertEquals("2 rows · out 2/2 · boundary 0/3 · branch 2/2", lenses.get(0).title());
+        assertEquals("2 rows · out 2/2 · boundary 3/5 · branch 2/2", lenses.get(0).title());
     }
 
     /** Nothing has been claimed about a behavior no row names, so there is nothing to draw over it. */
@@ -134,6 +172,120 @@ class AdequacyLensTest {
     }
 
     /**
+     * A guard on a name every case of a sum spreads, with the rows written under one of them.
+     *
+     * <p>The line is read once per case and owes one row, so rows under {@code P} settle all four of
+     * its points — and {@code T}'s coordinates go on being counted, because a report counts a line
+     * at each position it was read at. Nothing is left to write and there are findings all the same.
+     */
+    private static final String SPREAD_URI = "file:///spread.sou";
+
+    private static final String SETTLED_UNDER_ONE_CASE = """
+            module spread
+
+            data Base = { deadline: Int }
+            data P = { ...Base, x: Int }
+            data T = { ...Base, y: Int }
+            data Req = P | T
+
+            data Ok
+            data No
+
+            behavior check : (r: Req) -> Ok | No
+
+            let check (r) = {
+                guard r.deadline > 10 else No
+                Ok
+            }
+
+            example check
+                | "on"   : (P { deadline = 11, x = 0 }) -> Ok
+                | "off"  : (P { deadline = 10, x = 0 }) -> No
+                | "in"   : (P { deadline = 12, x = 0 }) -> Ok
+                | "out"  : (P { deadline = 9, x = 0 }) -> No
+                | "tOn"  : (T { deadline = 11, y = 0 }) -> Ok
+                | "tOff" : (T { deadline = 10, y = 0 }) -> No
+            """;
+
+    private static final String PRODUCER_URI = "file:///producer.sou";
+
+    private static final String CARRIER_URI = "file:///carrier.sou";
+
+    /** The module that writes the rule, and so owns the line its {@code invariant} draws. */
+    private static final String PRODUCER = """
+            module example.producer exposing ( Cap )
+
+            data Cap = Int
+                invariant floor = value >= 0
+            """;
+
+    /** A module that only carries the imported type: it reads the line at its own position and owes
+     *  a row at none of its points, because the declaration that drew it is somewhere else. The ON
+     *  point of that line is one this module reads, has no row at, and does not answer for. */
+    private static final String CARRIER = """
+            module example.carrier
+
+            import example.producer (Cap)
+
+            data Holds = { c: Cap }
+
+            behavior take : (h: Holds) -> Int
+            let take (h) = 1
+
+            example take
+                | "x" : (Holds { c = Cap(1) }) -> 1
+            """;
+
+    /**
+     * Neither client is offered rows for a line another module answers for.
+     *
+     * <p>A module carrying an imported type reads that type's lines wherever it takes the position
+     * in, and the rows for them are written where the declaration is. So a coordinate of one is
+     * something this module is short of and nothing it can be asked to write.
+     *
+     * <p>The same two clients and a second way to tell them apart. Read as work, the offer is made
+     * and the search behind it leaves the point out, so a client that comes back for the edit is
+     * handed nothing — and one that wanted it at once was never shown the offer.
+     */
+    @Test
+    void neitherClientIsOfferedRowsForALineAnotherModuleAnswersFor() {
+        Map<String, String> documents = Map.of(PRODUCER_URI, PRODUCER, CARRIER_URI, CARRIER);
+
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, true)
+                        .codeActions(CARRIER_URI, CARRIER, on(6), graphOf(documents)),
+                "a client that comes back for the edit is offered nothing");
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, false)
+                        .codeActions(CARRIER_URI, CARRIER, on(6), graphOf(documents)),
+                "and neither is one that wants it now");
+    }
+
+    /**
+     * Neither client is offered rows where there are none to write.
+     *
+     * <p>What the handshake settles is when the rows are worked out and never whether the offer is
+     * made, so the two clients answer alike or the contract is only kept by the one that pays for it
+     * up front.
+     *
+     * <p>The state that tells them apart is a finding standing at a coordinate of a line another
+     * position already answered. Read off the findings, the deferred client is offered rows and gets
+     * none when it comes back; the eager client composes first and offers nothing. What is owed is
+     * the question, and a line owed no row is no work whichever coordinate a report counted it at.
+     */
+    @Test
+    void neitherClientIsOfferedRowsWhereTheLinesAreAnsweredAlready() {
+        Map<String, String> documents = Map.of(SPREAD_URI, SETTLED_UNDER_ONE_CASE);
+
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, true)
+                        .codeActions(SPREAD_URI, SETTLED_UNDER_ONE_CASE, on(10),
+                                graphOf(documents)),
+                "a client that comes back for the edit is offered nothing");
+        assertEquals(List.of(), measuring(Adequacy.Level.ALL, false)
+                        .codeActions(SPREAD_URI, SETTLED_UNDER_ONE_CASE, on(10),
+                                graphOf(documents)),
+                "and neither is one that wants it now");
+    }
+
+    /**
      * The offer on a behavior's declaration writes the block `--generate` prints.
      *
      * <p>Commented out and with every answer left open, for the same reason the command's output is:
@@ -142,15 +294,126 @@ class AdequacyLensTest {
      */
     @Test
     void theRowsABehaviorDoesNotCoverCanBeWrittenIn() {
-        List<CodeAction> actions = measuring(Adequacy.Level.ALL)
-                .codeActions(MODULE, TRIP, on(9), graphOf(Map.of(MODULE, TRIP)));
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph graph = graphOf(Map.of(MODULE, TRIP));
+        List<CodeAction> actions = analyzer.codeActions(MODULE, TRIP, on(9), graph);
 
         assertEquals(1, actions.size(), actions.toString());
         assertEquals("Write the rows `submit` does not cover", actions.get(0).title());
-        for (String line : actions.get(0).newText().lines().filter(l -> !l.isBlank()).toList()) {
+        // Offered without the rows, which is the point of offering it: what they cost is paid by
+        // somebody taking it.
+        CodeAction.Deferred offered =
+                assertInstanceOf(CodeAction.Deferred.class, actions.get(0));
+
+        CodeAction.Edit taken = analyzer.resolve(offered, TRIP, graph);
+        assertNotNull(taken, "and taking it writes rows");
+        for (String line : taken.newText().lines().filter(l -> !l.isBlank()).toList()) {
             assertTrue(line.startsWith("//"), "every line is a comment: " + line);
         }
-        assertTrue(actions.get(0).newText().contains("-> <?>"), actions.get(0).newText());
+        assertTrue(taken.newText().contains("-> <?>"), taken.newText());
+    }
+
+    /**
+     * A client that will not come back for the edit is handed it.
+     *
+     * <p>What the handshake settles is when the rows are worked out, and never whether the offer is
+     * made. Deferring to a client that does not resolve would show an offer that does nothing when
+     * it is taken, which is the same source-with-no-rows the eager path was written against.
+     */
+    @Test
+    void aClientThatDoesNotResolveIsHandedTheEditWithTheOffer() {
+        ModuleGraph graph = graphOf(Map.of(MODULE, TRIP));
+        List<CodeAction> actions = measuring(Adequacy.Level.ALL, false)
+                .codeActions(MODULE, TRIP, on(9), graph);
+
+        assertEquals(1, actions.size(), actions.toString());
+        CodeAction.Applied eager = assertInstanceOf(CodeAction.Applied.class, actions.get(0));
+
+        Analyzer resolving = measuring(Adequacy.Level.ALL, true);
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                resolving.codeActions(MODULE, TRIP, on(9), graph).get(0));
+        assertEquals(eager.edit().newText(), resolving.resolve(offered, TRIP, graph).newText(),
+                "and the rows are the same rows either way");
+    }
+
+    /**
+     * An offer names a behavior of a module written in a document, and taking it checks all three.
+     *
+     * <p>A document can be given another module's header while a behavior of that name goes on
+     * existing somewhere else. Checked only against the module, the rows would be composed from the
+     * source that still has the behavior and written into the one that no longer does.
+     */
+    @Test
+    void anOfferIsNotTakenWhereItsBehaviorHasMovedToAnotherDocument() {
+        String other = "file:///other.sou";
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph before = graphOf(Map.of(MODULE, TRIP));
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                analyzer.codeActions(MODULE, TRIP, on(9), before).get(0));
+
+        // The document the offer was made about now declares something else, and what it was made
+        // about is written in the other one.
+        ModuleGraph after = graphOf(Map.of(
+                MODULE, TRIP.replaceFirst("module \\S+", "module example.moved"),
+                other, TRIP));
+        assertNull(analyzer.resolve(offered, TRIP, after),
+                "the behavior the offer names is not written in the document it names");
+    }
+
+    /**
+     * The rows at an edge are offered whatever the build was measuring.
+     *
+     * <p>What an author asked for by taking "write the rows this does not cover" is those rows.
+     * Composing a value costs a decoder run for each point it settles, which is not what a build at
+     * {@code witness} promises — so the measurement composes none, and a build is not slowed by
+     * values nobody asked to see. But taking the action is asking, and it is asked once rather than
+     * on every keystroke, so what it costs is paid where somebody wanted it.
+     *
+     * <p>The level does not decide it, because it is not about how much to measure. Read off the
+     * level, the editor offered to write rows at {@code witness} and put a comment in somebody's
+     * source, since the block held the reason nothing was composed and no rows.
+     *
+     * <p>An offer to write rows still has to write rows. What there is to write is the generator's
+     * answer either way, and the block is asked how many rows it holds rather than whether its text
+     * is blank.
+     */
+    @Test
+    void theRowsAtAnEdgeAreOfferedWhateverTheBuildMeasured() {
+        assertEquals(1, measuring(Adequacy.Level.ALL)
+                        .codeActions(EDGES, ONLY_EDGES, on(7),
+                                graphOf(Map.of(EDGES, ONLY_EDGES))).size(),
+                "at `all` the two lines are rows to write");
+
+        assertEquals(1, measuring(Adequacy.Level.WITNESS)
+                        .codeActions(EDGES, ONLY_EDGES, on(7),
+                                graphOf(Map.of(EDGES, ONLY_EDGES))).size(),
+                "and at `witness` they are the same rows: taking the action is what asks for them");
+    }
+
+    /**
+     * The rows the action writes are not printed under a sentence saying nothing offers them.
+     *
+     * <p>Both are answers about the same request, and they were read from different places. A line
+     * an {@code invariant} drew is owed to the declaration, and what a generation can do about it is
+     * what this request's search composed — read from the measurement instead, a build at
+     * {@code witness} composes nothing while it measures, so the block printed the rows the action
+     * had just composed and then said no row was on offer (issue #1062).
+     *
+     * <p>At {@code witness} because that is where the two come apart. At {@code all} the measurement
+     * composes values of its own and the two answers agree by accident.
+     */
+    @Test
+    void theRowsTheActionWritesAreNotPrintedUnderASentenceSayingNothingOffersThem() {
+        Analyzer analyzer = measuring(Adequacy.Level.WITNESS);
+        ModuleGraph graph = graphOf(Map.of(EDGES, ONLY_EDGES));
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                analyzer.codeActions(EDGES, ONLY_EDGES, on(7), graph).get(0),
+                "there is work to offer");
+
+        CodeAction.Edit taken = analyzer.resolve(offered, ONLY_EDGES, graph);
+        assertNotNull(taken, "and taking it writes rows");
+        assertFalse(taken.newText().contains("nothing offers a row"),
+                () -> "the rows are right there: " + taken.newText());
     }
 
     /** With one document there is nothing to offer: the values a row writes are built through the
@@ -182,17 +445,10 @@ class AdequacyLensTest {
      */
     @Test
     void aLineWhoseValueCouldNotBeReadIsNotInTheRatio() {
-        StringBuilder items = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            items.append(i == 0 ? "" : ", ")
-                    .append("Item { a = \"").append(i).append("\", b = \"").append(i)
-                    .append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ")
-                    .append("Group { items = [ ").append(items).append(" ] }");
-        }
+        // Computed rather than spelled: a row's operand is compiled as a method of the module, and
+        // a literal this size is past what a JVM method holds — which would leave the module with
+        // no classes at all, where what this measures is the observation's limit.
+        String groups = "someGroups(64)";
         String unread = """
                 module example.wide
 
@@ -209,8 +465,14 @@ class AdequacyLensTest {
 
                 let take (request) = Ok { n = request.cost.value }
 
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], cost = Amount(0) }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, cost = Amount(0) }) -> Ok { n = 0 }
                 """.formatted(groups);
 
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL)

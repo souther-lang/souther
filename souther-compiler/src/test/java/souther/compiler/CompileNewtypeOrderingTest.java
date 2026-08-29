@@ -44,7 +44,7 @@ class CompileNewtypeOrderingTest {
                 Map.of("id", "c", "amount", 30L),
                 Map.of("id", "a", "amount", 10L),
                 Map.of("id", "b", "amount", 20L))));
-        Object out = Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
 
         assertEquals(List.of("a", "b", "c"),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("ids"));
@@ -71,7 +71,7 @@ class CompileNewtypeOrderingTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("amounts", List.of(30L, 10L, 20L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals(List.of(10L, 20L, 30L), m.get("sorted"));
@@ -97,7 +97,7 @@ class CompileNewtypeOrderingTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("ids", List.of("gamma", "alpha", "beta")));
-        Object out = Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
 
         assertEquals(List.of("alpha", "beta", "gamma"),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("sorted"));
@@ -121,7 +121,7 @@ class CompileNewtypeOrderingTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("grades", List.of(3L, 1L, 2L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
 
         assertEquals(List.of(1L, 2L, 3L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("sorted"));
@@ -169,7 +169,7 @@ class CompileNewtypeOrderingTest {
                 """)), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("amounts", List.of(30L, 10L, 20L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
 
         assertEquals(List.of(10L, 20L, 30L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("sorted"));
@@ -201,7 +201,7 @@ class CompileNewtypeOrderingTest {
         // the field is declared at the case, not the sum, so `Settled` is read and written as the
         // newtype it is — the adjacent tag is what `Charge` adds where a value stands as a `Charge`
         Object in = Codecs.decoded(loader, "demo.In", Map.of("amounts", List.of(30L, 10L, 20L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
         assertEquals(List.of(10L, 20L, 30L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("sorted"));
     }

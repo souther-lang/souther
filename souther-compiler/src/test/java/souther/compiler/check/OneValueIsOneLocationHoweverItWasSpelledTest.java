@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.types.BinOp;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -22,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class OneValueIsOneLocationHoweverItWasSpelledTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final Ast.Binders BINDERS =
-            new Ast.Binders(new BindingOwner.OfValue("demo", "test"));
+    private static final Hir.Binders BINDERS =
+            new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
 
     @Test
     void oneSpellingBoundTwiceIsTwoLocations() {
@@ -48,15 +50,15 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
         BindingId i = BINDERS.binder("i", POS).id();
         Location root = Location.of(i);
 
-        assertNotEquals(root, root.then(Type.INT, "n", Symbols.none()));
-        assertNotEquals(root.then(Type.INT, "n", Symbols.none()),
-                root.then(Type.INT, "m", Symbols.none()));
+        assertNotEquals(root, root.then(Type.INT, "n", Symbols.none(DefaultStdlib.get())));
+        assertNotEquals(root.then(Type.INT, "n", Symbols.none(DefaultStdlib.get())),
+                root.then(Type.INT, "m", Symbols.none(DefaultStdlib.get())));
     }
 
     @Test
     void whatIsComputedIsNowhereAFactCanBeAbout() {
         assertNull(of(new Core.Int(1, Type.INT, POS)));
-        assertNull(of(new Core.Binary(Ast.BinOp.ADD,
+        assertNull(of(new Core.Binary(BinOp.ADD,
                 new Core.Int(1, Type.INT, POS), new Core.Int(2, Type.INT, POS),
                 CoverageOrigin.unwritten(), Type.INT, POS)));
     }
@@ -66,6 +68,6 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
     }
 
     private static Location of(Core e) {
-        return Location.of(e, Symbols.none(), Location::of);
+        return Location.of(e, Symbols.none(DefaultStdlib.get()), Location::of);
     }
 }

@@ -67,6 +67,13 @@ mvn install
 
 That executable is the `souther-cli` module: the compiler, the runtime, and their dependencies in one really-executable jar (a launcher stub prepended to an uber jar), so no classpath and no `java -jar` are needed.
 
+`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin, a model, the `example` rows covering it, and a Java test that reaches the generated types, so `mvn test` and `souther examples` both answer on the first run. `--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
+
+```sh
+souther init com.example:hello
+cd hello && mvn test
+```
+
 To try a behavior without writing any Java, `souther run` compiles a `.sou` in memory and drives one behavior: it decodes the `--input` JSON through the behavior's derived decoders, applies it, and prints the result through its derived encoder. A single file run on its own may omit the `module` header — it is named after the file (ADR-0043).
 
 ```sh
@@ -93,6 +100,23 @@ java -jar souther-bench/target/souther-bench.jar
 # One measurement at a time: cold, warm, phase, edit, scale, run.
 java -jar souther-bench/target/souther-bench.jar phase edit
 ```
+
+`souther-compiler` carries a conformance corpus: a model written for this compiler, held to reaching every top-level form, every reserved word and every standard library module the language declares, and checked against what the compiler answered about it last — the whole adequacy report and every diagnostic, written down beside the sources. A change that moves an answer is a change to those documents, made in the commit that moved it. This is what answers "did this break a model of the size someone writes"; running the examples repository is not part of it.
+
+```sh
+# Everything the corpus is held to. Ten seconds after an edited compiler source.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test'
+
+# One corpus while iterating.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test' \
+  -Dsouther.conformance.corpus=catalog
+
+# Take up what a deliberate change did to the answers, then read the diff and commit it.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test' \
+  -Dsouther.conformance.update=true
+```
+
+The last one rewrites the expected documents and then fails: a run that rewrote what it was going to be measured against has not measured anything.
 
 To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. The [examples repository](https://github.com/souther-lang/examples) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
 
@@ -125,7 +149,7 @@ The compiler suite and every example pass under the flag (`mvn test -DargLine="-
 
 The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/souther-lang/souther-vscode) and is published to the Visual Studio Marketplace and Open VSX. It bundles the language server and fetches a Java 25 runtime by itself when the machine does not already have one, so installing it and opening a `.sou` file is enough. It gives diagnostics, the document outline, hover, go-to-definition, find-references, rename, completion, quick-fix code actions, formatting, and semantic tokens.
 
-The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -jar souther-lsp.jar`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The `souther` binary sets it for itself. Formatting is also on the command line: `souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted, printing each difference as the rule it answers to, where in your own source it is, and what the two forms write there.
+The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -jar souther-lsp.jar`. Where the `souther` binary is already on the path, `souther lsp` serves the same server and needs no jar path and no stack flag — this is what an agent harness takes, alongside `souther mcp`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The `souther` binary sets it for itself. Formatting is also on the command line: `souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted, printing each difference as the rule it answers to, where in your own source it is, and what the two forms write there.
 
 ## Documentation on the command line
 
@@ -209,7 +233,7 @@ Souther is deliberately small:
 
 It intentionally does not provide exceptions, `null`, mutable state, asynchronous execution, arbitrary JVM calls, type classes or higher-kinded types, a package manager, or a REPL. These omissions keep construction paths, value constraints, and outside-world dependencies tractable.
 
-Not yet implemented: incremental compilation, static invariant proofs, handwritten codec syntax, and JSON Schema / Wasm / JavaScript output. Generated classes carry `SourceFile` / `LineNumberTable` debug info, so a runtime stack trace (an invariant abort above all) points back to the `.sou` source line. An LSP server ships (`souther-lsp`); its name resolution is per-module, and workspace-wide (cross-module) resolution is future work.
+Not yet implemented: incremental compilation, static invariant proofs, handwritten codec syntax, and JSON Schema / Wasm / JavaScript output. Generated classes carry `SourceFile` / `LineNumberTable` debug info, so a runtime stack trace (an invariant abort above all) points back to the `.sou` source line. An LSP server ships (`souther-lsp`), resolving names over the workspace the editor announces.
 
 ## Details and examples
 

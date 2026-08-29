@@ -28,7 +28,7 @@ class CompileFunctionBindingTest {
     private static Map<?, ?> run(String source, Map<String, Object> in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),
                 CompileFunctionBindingTest.class.getClassLoader());
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", in)));
     }

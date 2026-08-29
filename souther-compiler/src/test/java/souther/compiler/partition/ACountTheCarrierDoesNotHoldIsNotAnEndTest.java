@@ -2,10 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.query.Bodies;
@@ -58,7 +61,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                     invariant value > Won
 
                 behavior f : (s: PastEnd) -> Verdict
-                    constructs Ok
                 let f (s) = Ok
                 """));
     }
@@ -70,7 +72,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                     invariant value < Prospecting
 
                 behavior f : (s: BeforeStart) -> Verdict
-                    constructs Ok
                 let f (s) = Ok
                 """));
     }
@@ -90,7 +91,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                     invariant value > Date("+999999999-12-31")
 
                 behavior f : (s: PastDate) -> Verdict
-                    constructs Ok
                 let f (s) = Ok
                 """));
     }
@@ -99,12 +99,11 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
      * nothing anywhere. */
     @Test
     void aBoundInsideTheCasesIsAnEnd() {
-        assertEquals(List.of("AT Qualified"), obligations("module example.inside\n" + STAGE + """
+        assertEquals(List.of("ON Qualified"), obligations("module example.inside\n" + STAGE + """
                 data FromQualified = Stage
                     invariant value >= Qualified
 
                 behavior f : (s: FromQualified) -> Verdict
-                    constructs Ok
                 let f (s) = Ok
                 """));
     }
@@ -194,10 +193,10 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         return Partitions.representativesOf(
                         souther.compiler.types.Type.ref(
-                                new souther.compiler.types.TypeName(module, name)), symbols)
+                                souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .stream().map(FixtureTemplate::text).toList();
     }
 
@@ -206,17 +205,23 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().get(0);
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         assertNotNull(sigs.get(spec.name()), "the model under test compiles");
+        InputDomain domain = InputDomain.of(spec, sigs.get(spec.name()), symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
         Partitions.Partitioning p =
-                Partitions.of(spec, sigs.get(spec.name()), symbols, Exclusions.NONE);
+                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
-                .flatMap(axis -> Partitions.obligationsOf(axis, symbols,
-                        p.domains().get(axis.term())).stream())
-                .map(o -> o.side() + " " + o.target().right())
+                .flatMap(axis -> Partitions.bordersOf(axis, symbols,
+                        reading.runsBetween(axis.term()), new LinesRead()).stream())
+                .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
+                        .filter(role -> border.demand(role).criterion() != null)
+                        .map(role -> role + " "
+                                + border.demand(role).criterion().asked(border.cut().of()).substring(2)))
                 .toList();
     }
 }

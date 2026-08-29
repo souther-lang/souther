@@ -1,6 +1,8 @@
 package souther.compiler;
 
-import souther.compiler.examples.Deadline;
+import souther.compiler.source.SourceId;
+
+import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -10,7 +12,7 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -26,6 +28,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -68,16 +71,7 @@ class CompilePartialAdequacyTest {
      * writes exactly the number the invariant's lower bound names.
      */
     private static String budgetSpent(String tail) {
-        StringBuilder inner = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            inner.append(i == 0 ? "" : ", ")
-                    .append("Item { a = \"").append(i).append("\", b = \"").append(i)
-                    .append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ").append("Group { items = [ ").append(inner).append(" ] }");
-        }
+        String groups = "someGroups(64)";
         return """
                 module example.budget
 
@@ -99,8 +93,15 @@ class CompilePartialAdequacyTest {
 
                 let take (request) = Ok { n = request.cost.value }
 
+
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
                 """.formatted(groups) + tail;
     }
 
@@ -112,7 +113,7 @@ class CompilePartialAdequacyTest {
     /** A model that comes back, on the default budget — including {@link #budgetSpent}, which walks
      * four thousand nodes and is the reason a short budget cannot be set for the whole suite. */
     private static Compilation measured(String source) {
-        return measured(source, (Deadline) null);
+        return measured(source, (JvmExampleDeadlines) null);
     }
 
     private static Compilation warned(String source) {
@@ -138,17 +139,17 @@ class CompilePartialAdequacyTest {
 
     /** Measured, with {@code overrun} the work this model does not get back from — for a model
      *  written out here, which is its own key. */
-    private static Compilation measured(String source, Deadline overrun) {
-        return measured("report:", source, overrun, Adequacy.Asked.reportOnly());
+    private static Compilation measured(String source, JvmExampleDeadlines overrun) {
+        return measured("report:", source, overrun, Adequacy.Asked.fullReport());
     }
 
     /** The same, for a model shared between tests, which needs a key of its own. */
-    private static Compilation measured(String key, String source, Deadline overrun) {
-        return measured("report:" + key, source, overrun, Adequacy.Asked.reportOnly());
+    private static Compilation measured(String key, String source, JvmExampleDeadlines overrun) {
+        return measured("report:" + key, source, overrun, Adequacy.Asked.fullReport());
     }
 
     /** The same, warned about at every level. */
-    private static Compilation warned(String key, String source, Deadline overrun) {
+    private static Compilation warned(String key, String source, JvmExampleDeadlines overrun) {
         return measured("warn:" + key, source, overrun,
                 Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
     }
@@ -161,11 +162,13 @@ class CompilePartialAdequacyTest {
      * rows that were supposed to finish as rows that did not, on any host loaded enough to make it
      * so.
      */
-    private static Compilation measured(String key, String source, Deadline overrun,
+    private static Compilation measured(String key, String source, JvmExampleDeadlines overrun,
                                         Adequacy.Asked asked) {
         return COMPILED.computeIfAbsent(key + ":" + source, _ -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.withDeadline(overrun);
+            if (overrun != null) {
+                compilation.withJvmExampleDeadlines(overrun);
+            }
             compilation.measure(asked);
             compilation.answerEverything();
             return compilation;
@@ -196,9 +199,9 @@ class CompilePartialAdequacyTest {
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value().get("go");
 
-        assertEquals(2, branch.all().size(), "the arms are there");
-        assertEquals(MeasurementStatus.PARTIAL, branch.status());
-        assertEquals(List.of(), branch.covered().stream().sorted().toList());
+        assertEquals(2, branch.arms().all().size(), "the arms are there");
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(branch.measured()));
+        assertEquals(List.of(), branch.arms().covered().stream().sorted().toList());
     }
 
     /** And nothing is warned about from it. */
@@ -217,20 +220,55 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBoundaryWhosePositionWasNotReadIsUndecided() {
-        PartitionEvidence partition = measured(budgetSpent("")).db()
-                .ask(new Adequacy.Coverage("example.budget")).value().get("take");
+        List<BorderAssessment> lines = Adequacy.readingsOf(
+                measured(budgetSpent("")).db(), "example.budget").get("take");
 
-        List<BoundaryAssessment> at = partition.boundaries().stream()
-                .filter(b -> b.value().equals("0")).toList();
+        List<BorderAssessment.Point> at = pointsAgainstTheLine(lines).stream()
+                .filter(p -> "0".equals(p.against())).toList();
         assertEquals(1, at.size());
-        assertEquals(MeasurementStatus.PARTIAL, at.get(0).status());
-        assertFalse(at.get(0).coverage().hit(), "nothing was read, so nothing was met either");
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(at.get(0).item().weakeningSource()));
+        assertFalse(at.get(0).owed().hasRowWitness(),
+                "nothing was read, so nothing was met either");
     }
 
     @Test
     void anUndecidedBoundaryWarnsAboutNothing() {
         assertFalse(warningCodes(warned(budgetSpent(""))).contains("E1916"),
                 "a boundary whose position was not read is not a boundary nothing is at");
+    }
+
+    /**
+     * A class nothing looked for is not a class a search stopped short of.
+     *
+     * <p>Two different pieces of news. A search that ran out of room leaves a class still owed and
+     * a row still writable by this compiler; a position held back leaves a class nothing was ever
+     * going to look for, and a row offered there may be one already sitting in the file. Said the
+     * first way, the block printed `the search stopped before reaching it` two lines under the
+     * line saying the position had been withheld.
+     *
+     * <p>What made this possible: the finding's answer is read off there being no attempt recorded
+     * for the class, and an absence says nothing about its cause. So the cause is read off what the
+     * run wrote down, and where it wrote nothing the answer says that rather than naming the
+     * likeliest — which is what the words this replaced were guarding.
+     */
+    @Test
+    void aClassNothingLookedForIsNotAClassASearchStoppedShortOf() {
+        Compilation compilation = measured(budgetSpent(""));
+        Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compilation.db(), "example.budget");
+        assertNotNull(generated);
+
+        List<Adequacy.GenerationDisposition> classes =
+                generated.get("take").generation().stream()
+                        .filter(each -> each.finding().kind() == Adequacy.Kind.AXIS_CLASS_UNCOVERED)
+                        .toList();
+        assertFalse(classes.isEmpty(), "the flag's classes are reported as uncovered");
+        for (Adequacy.GenerationDisposition each : classes) {
+            assertEquals(souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                            .THE_POSITION_WAS_WITHHELD,
+                    ((souther.compiler.partition.GenerationOutcome.CannotGenerate) each.outcome())
+                            .why().get(0).reason(),
+                    each.finding()::toString);
+        }
     }
 
     /**
@@ -242,15 +280,17 @@ class CompilePartialAdequacyTest {
     @Test
     void nothingIsGeneratedForAPositionThatCouldNotBeRead() {
         Compilation compilation = measured(budgetSpent(""));
-        Map<String, Adequacy.Filling> generated = compilation.db()
-                .ask(new Adequacy.Generated("example.budget")).value();
+        Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compilation.db(), "example.budget");
         assertNotNull(generated);
 
-        assertEquals(List.of(), generated.get("take").pairs().rows(),
+        assertEquals(List.of(), generated.get("take").composed().rows(),
                 "the flag's classes are undecided, so nothing is written for them");
-        assertFalse(generated.get("take").pairs().reasons().isEmpty(),
+        assertFalse(generated.get("take").composed().reasons().isEmpty(),
                 "and the position that could not be read is named");
-        String written = GeneratedRows.of("example.budget", generated, true, SourceNameResolver.identity());
+        String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                "example.budget", true)),
+                Map.of(), SourceNameResolver.identity()).text();
         assertFalse(written.contains("example take"), "no row is offered: " + written);
         assertTrue(written.contains("no rows offered at"),
                 "the position it could not read is what there is to say: " + written);
@@ -271,9 +311,39 @@ class CompilePartialAdequacyTest {
         Adequacy.SignatureEvidence signature = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value().get("go");
 
-        assertEquals(MeasurementStatus.PARTIAL, signature.status());
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(signature.counted()));
         assertFalse(warningCodes(warned("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")))).contains("E1913"),
                 "a case the unfinished row might have produced is not a case nothing claims");
+    }
+
+    /**
+     * The third disposition, which is the one a two-valued field would lose.
+     *
+     * <p>Said here rather than beside the other two, because this is where a measure that came to no
+     * answer is. A kind a build refuses over, from a measurement that did not finish, is neither a
+     * gap nor a kind nobody gates on — and the line above is the same fact from the warning's side:
+     * no code is printed for it. What a report calls it and what a build does about it come from
+     * this one word, so a finding that is undecided and a finding nobody gates on may not read
+     * alike.
+     */
+    @Test
+    void aGapFromAMeasureThatCameToNoAnswerIsUndecided() {
+        List<Adequacy.Finding> findings = AdequacyReport.of(
+                        measured("loop", TIMES_OUT,
+                                DoesNotComeBack.overrunningOn(
+                                        DoesNotComeBack.everythingAboutRowsOf("go"))))
+                .findings();
+
+        List<Adequacy.Finding> undecided = findings.stream()
+                .filter(f -> Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN.refuses(f.kind())).toList();
+
+        assertFalse(undecided.isEmpty(), () -> "the model has a kind a build gates on: " + findings);
+        for (Adequacy.Finding f : undecided) {
+            assertFalse(f.weakenedBy().isEmpty(), f::toString);
+            assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
+                    f.disposition(Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN), f::toString);
+            assertFalse(f.isAdequacyGap(Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN), f::toString);
+        }
     }
 
     /**
@@ -302,7 +372,10 @@ class CompilePartialAdequacyTest {
                 behavior cancel : (request: Draft) -> Gone
                     constructs Gone
 
-                let cancel (request) = Gone { why = "x" }
+                let cancel (request) = {
+                    guard request.n > 0 else Gone { why = "none" }
+                    Gone { why = "x" }
+                }
 
                 example submit
                     | (Draft { n = 1 }) -> Ok { n = 1 }
@@ -313,8 +386,12 @@ class CompilePartialAdequacyTest {
         AdequacyReport whole = AdequacyReport.of(compilation);
 
         assertEquals(MeasurementStatus.PARTIAL, whole.status(), "`cancel` did not finish");
-        assertEquals(List.of("cancel"), whole.modules().get(0).incompleteness().stream()
-                .map(souther.compiler.observe.Incompleteness::subject).toList());
+        // Both of them `cancel`'s: the row that did not finish — said as which row, since a
+        // behavior may have more than one that did not — and the position of its guard whose value
+        // that row was the only one to write.
+        assertEquals(List.of("cancel/0/#1", "cancel/request.n"),
+                whole.modules().get(0).incompleteness().stream()
+                        .map(souther.compiler.observe.Incompleteness::subject).toList());
 
         AdequacyReport one = whole.only(null, "submit");
         assertEquals(MeasurementStatus.COMPLETE, one.status());
@@ -369,7 +446,7 @@ class CompilePartialAdequacyTest {
         return COMPILED.computeIfAbsent("split", _ -> {
             Compilation compilation = Compilation.ofSources(SPLIT,
                     souther.compiler.meta.ModulePath.EMPTY);
-            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             return compilation;
         });
@@ -384,13 +461,13 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBoundaryIsUndecidedWhereSomeRowsWereNeverRead() {
-        PartitionEvidence partition = split().db()
-                .ask(new Adequacy.Coverage("example.split")).value().get("take");
+        List<BorderAssessment> lines =
+                Adequacy.readingsOf(split().db(), "example.split").get("take");
 
-        assertEquals(2, partition.boundaries().size());
-        for (BoundaryAssessment boundary : partition.boundaries()) {
-            assertEquals(MeasurementStatus.PARTIAL, boundary.status(), boundary.value());
-            assertFalse(boundary.coverage().hit());
+        assertEquals(2, pointsAgainstTheLine(lines).size());
+        for (BorderAssessment.Point boundary : pointsAgainstTheLine(lines)) {
+            assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(boundary.item().weakeningSource()), boundary.against());
+            assertFalse(boundary.owed().hasRowWitness());
         }
     }
 
@@ -403,12 +480,15 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void nothingIsGeneratedWhereSomeRowsWereNeverRead() {
-        Map<String, Adequacy.Filling> generated = split().db()
-                .ask(new Adequacy.Generated("example.split")).value();
+        Compilation compilation = split();
+        Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compilation.db(), "example.split");
 
-        assertEquals(List.of(), generated.get("take").pairs().rows());
+        assertEquals(List.of(), generated.get("take").composed().rows());
         assertEquals(List.of(), generated.get("take").boundaries().rows());
-        String written = GeneratedRows.of("example.split", generated, true, SourceNameResolver.identity());
+        String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        souther.compiler.query.OfferingRequest.overTheModule(
+                                "example.split", true)),
+                Map.of(), SourceNameResolver.identity()).text();
         assertFalse(written.contains("example take"),
                 "the row may be sitting in the file that could not be read: " + written);
         assertTrue(written.contains("generation stopped"),
@@ -489,6 +569,12 @@ class CompilePartialAdequacyTest {
      *
      * <p>A field named `unreached` holding an arm nothing watched says something that is not so, and
      * reading `status` beside it does not undo the name.
+     *
+     * <p>Absent rather than empty, which is the second of the two things this document says with a
+     * missing key. The counts are there — the measurement has a value — and the negative claim over
+     * them is not, because a row that did not come back may have gone through any of the arms this
+     * would otherwise name. Written as `[]` the key said "no arm goes unreached", which is a finding
+     * nobody made (issue #997).
      */
     @Test
     void theJsonNamesNoUnreachedArmUnderPartial() throws Exception {
@@ -499,7 +585,34 @@ class CompilePartialAdequacyTest {
 
         assertEquals("partial", branch.get("status").asString());
         assertEquals(2, branch.get("arms").asInt());
-        assertEquals(0, branch.get("unreached").size());
+        assertNull(branch.get("unreached"),
+                () -> "the counts stand and the negative claim over them does not: " + branch);
+    }
+
+    /**
+     * And what the JSON suppresses, the human report suppresses — which nothing checked.
+     *
+     * <p>The test above has said since it was written that these two surfaces answer alike, and only
+     * one of them was ever rendered under a reading that did not finish. So the line a person reads
+     * here — the counts, the word qualifying them, and no arm named — was carried by nobody, while
+     * the measure behind it was moved twice (issues #955 and #997).
+     *
+     * <p>The two halves are the point. A count under a reading that did not finish is worth printing
+     * to a person, because there is room beside it for the word that says how far to trust it; an arm
+     * named as unreached is not, because no word beside it undoes the name. That is one surface
+     * making its own decision about what to show, over the same measure the JSON reads.
+     */
+    @Test
+    void theHumanReportPrintsTheCountsAndNamesNoArmUnderPartial() {
+        String human = AdequacyReport.of(measured("loop", TIMES_OUT,
+                        DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go"))))
+                .human(SourceNameResolver.identity());
+
+        assertTrue(human.contains("branch      "), () -> "the counts are printed: " + human);
+        assertTrue(human.contains("(undecided: a row was not read)"),
+                () -> "and said to be over a reading that did not finish: " + human);
+        assertFalse(human.contains("no row goes through"),
+                () -> "no arm is named, the way the JSON writes no `unreached`: " + human);
     }
 
     /**
@@ -533,7 +646,7 @@ class CompilePartialAdequacyTest {
                 .ask(new Adequacy.Coverage("example.pair")).value().get("pick");
 
         assertEquals(4, partition.pairs().total());
-        assertEquals(MeasurementStatus.PARTIAL, partition.pairs().status(),
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(partition.pairs().counted()),
                 "the one row could not be placed at either position");
         assertFalse(AdequacyReport.of(compilation).human(SourceNameResolver.identity()).contains("untried"),
                 AdequacyReport.of(compilation).human(SourceNameResolver.identity()));
@@ -572,9 +685,9 @@ class CompilePartialAdequacyTest {
                 .ask(new Adequacy.Coverage("example.agree")).value().get("pick");
 
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-            assertEquals(MeasurementStatus.PARTIAL, axis.status(), axis.path());
+            assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(axis.reached()), axis.path());
         }
-        assertEquals(MeasurementStatus.PARTIAL, partition.pairs().status());
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(partition.pairs().counted()));
     }
 
     /**
@@ -586,7 +699,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBoundaryARowDemonstrablyMetStaysMet() {
-        PartitionEvidence partition = measured("mix", """
+        Compilation compilation = measured("mix", """
                 module example.mix
 
                 data Amount = Int
@@ -614,18 +727,28 @@ class CompilePartialAdequacyTest {
                     | "at the line" : (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
                     | "over it"     : (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
                 """, DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowDescribed("over it")), Adequacy.Asked.reportOnly())
-                .db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
+                        DoesNotComeBack.everythingAboutTheRowNamed("over it")),
+                Adequacy.Asked.fullReport());
+        List<BorderAssessment> lines =
+                Adequacy.readingsOf(compilation.db(), "example.mix").get("take");
 
-        BoundaryAssessment line = partition.boundaries().stream()
-                .filter(b -> b.value().equals("100")).findFirst().orElseThrow();
-        assertTrue(line.coverage().hit(), "a row wrote 100 and went through the comparison");
-        assertEquals(MeasurementStatus.COMPLETE, line.status());
+        BorderAssessment.Point line = pointsAgainstTheLine(lines).stream()
+                .filter(p -> "100".equals(p.against())).findFirst().orElseThrow();
+        assertTrue(line.owed().hasRowWitness(),
+                "a row wrote 100 and went through the comparison");
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(line.item().weakeningSource()));
 
-        BoundaryAssessment beyond = partition.boundaries().stream()
-                .filter(b -> b.value().equals("101")).findFirst().orElseThrow();
-        assertEquals(MeasurementStatus.PARTIAL, beyond.status(),
+        BorderAssessment.Point beyond = pointsAgainstTheLine(lines).stream()
+                .filter(p -> "101".equals(p.against())).findFirst().orElseThrow();
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(beyond.item().weakeningSource()),
                 "and the one nothing was found at is undecided, not missed");
+    }
+
+    /** The points a row is owed at against a line, which is what a value names. */
+    private static List<BorderAssessment.Point> pointsAgainstTheLine(
+            List<BorderAssessment> lines) {
+        return BorderAssessment.pointsOf(lines).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null).toList();
     }
 
     /**
@@ -658,7 +781,7 @@ class CompilePartialAdequacyTest {
                     | "comes back" : (Draft { n = 2 }) -> Ok { n = 2 }
                 """,
                 DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowDescribed("does not come back")));
+                        DoesNotComeBack.everythingAboutTheRowNamed("does not come back")));
 
         List<String> codes = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {
@@ -685,9 +808,9 @@ class CompilePartialAdequacyTest {
                         souther.compiler.observe.Incompleteness.Code.ROW_UNDECIDED,
                         souther.compiler.observe.Incompleteness.Scope.BEHAVIOR, "submit");
         souther.compiler.observe.Incompleteness aboutTheSource =
-                souther.compiler.observe.Incompleteness.of(
+                souther.compiler.observe.Incompleteness.ofSource(
                         souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
-                        souther.compiler.observe.Incompleteness.Scope.SOURCE, "3");
+                        new souther.compiler.source.SourceId("3"));
 
         assertTrue(aboutOne.countsAgainst("submit"));
         assertFalse(aboutOne.countsAgainst("cancel"));
@@ -726,7 +849,7 @@ class CompilePartialAdequacyTest {
     @Test
     void theUnfinishedRowIsStillReported() {
         Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
-        String sourceId = compilation.exampleSourcesOf("example.loop").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.loop").getFirst();
 
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
                 .ask(souther.compiler.query.Output.Examples.asked(

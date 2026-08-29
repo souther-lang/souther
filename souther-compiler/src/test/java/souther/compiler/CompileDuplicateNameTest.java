@@ -30,7 +30,7 @@ class CompileDuplicateNameTest {
                 data Ok = { n: Int }
                 data Bad
                 data In = { x: Int }
-                behavior mk : (i: In) -> Ok | Bad | Bad constructs Ok, Bad
+                behavior mk : (i: In) -> Ok | Bad | Bad constructs Ok
                 """));
     }
 

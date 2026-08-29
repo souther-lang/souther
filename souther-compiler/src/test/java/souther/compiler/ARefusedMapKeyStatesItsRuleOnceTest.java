@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.diag.msg.MessageKeys;
-import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Note;
 

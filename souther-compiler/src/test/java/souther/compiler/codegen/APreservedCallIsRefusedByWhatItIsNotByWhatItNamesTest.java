@@ -28,14 +28,14 @@ class APreservedCallIsRefusedByWhatItIsNotByWhatItNamesTest {
 
     @Test
     void anOperationTheEmitterHasNoBytecodeForIsRefused() {
-        assertRefused(new ValueName.Stdlib("List", "map"));
+        assertRefused(ValueName.Stdlib.operation("List", "map"));
     }
 
     @Test
     void anOperationTheEmitterDoesHaveBytecodeForIsRefusedTheSameWay() {
         // `List.sortBy` is written out by name in the emitter's own call dispatch, so this is the
         // case an operation-keyed refusal would have let through
-        assertRefused(new ValueName.Stdlib("List", "sortBy"));
+        assertRefused(ValueName.Stdlib.operation("List", "sortBy"));
     }
 
     @Test

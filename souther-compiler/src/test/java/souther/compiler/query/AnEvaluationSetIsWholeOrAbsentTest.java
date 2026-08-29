@@ -1,9 +1,11 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.generated.EvaluationArtifact;
+
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -47,8 +49,8 @@ class AnEvaluationSetIsWholeOrAbsentTest {
     /** The module that cannot be generated has no evaluation classes. */
     @Test
     void aModuleThatDoesNotCheckHasNoEvaluationClasses() {
-        Answer<Map<String, byte[]>> broken = compiled().db()
-                .ask(new Output.Evaluated("example.broken", Output.CoverageMode.NONE));
+        Answer<EvaluationArtifact> broken = compiled().db()
+                .ask(new Output.Evaluated("example.broken", ArmObservation.OMIT));
 
         assertNull(broken.value(), "nothing was generated for it");
     }
@@ -62,8 +64,8 @@ class AnEvaluationSetIsWholeOrAbsentTest {
      */
     @Test
     void aSetThatReachesItIsAbsentRatherThanShortAClass() {
-        Answer<Map<String, byte[]>> linked = compiled().db()
-                .ask(new Output.EvaluationLinked("example.reaches", Output.CoverageMode.NONE));
+        Answer<EvaluationArtifact> linked = compiled().db()
+                .ask(new Output.EvaluationLinked("example.reaches", ArmObservation.OMIT));
 
         assertNull(linked.value(),
                 "a set missing the classes of a module the rows can reach is not a set to run");
@@ -82,10 +84,10 @@ class AnEvaluationSetIsWholeOrAbsentTest {
                 """, "Main");
         compilation.answerEverything();
 
-        Map<String, byte[]> linked = compilation.db()
-                .ask(new Output.EvaluationLinked("example.whole", Output.CoverageMode.NONE)).value();
+        EvaluationArtifact linked = compilation.db()
+                .ask(new Output.EvaluationLinked("example.whole", ArmObservation.OMIT)).value();
 
         assertNotNull(linked);
-        assertFalse(linked.isEmpty(), "the module's own classes are there");
+        assertFalse(linked.classes().isEmpty(), "the module's own classes are there");
     }
 }

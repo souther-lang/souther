@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -33,12 +35,12 @@ class CompileModuleBehaviorTest {
 
     @Test
     void importedBehaviorComposesInAnotherModule() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(A, B));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(A, B));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Object five = Codecs.decoded(loader, "m.a.N", 5L);
 
-        Object twice = loader.loadClass("m.b.Twice" + "$Impl").getConstructor().newInstance();
+        Object twice = Emitted.behavior(loader, "m.b", "twice").getConstructor().newInstance();
         Object r = Codecs.apply(twice, five);
 
         // inc twice: 5 -> 6 -> 7. N is a newtype, so its encoder yields the bare Long.

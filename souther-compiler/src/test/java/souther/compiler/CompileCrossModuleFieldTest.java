@@ -3,6 +3,8 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,13 +36,13 @@ class CompileCrossModuleFieldTest {
 
     @Test
     void aBehaviorReadsAFieldOfAnImportedData() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(A, B));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(A, B));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Object req = Codecs.decoded(loader, "b.申請",
                 Map.of("申請者", Map.of("id", "e-1", "上長ID", "e-2")));
 
-        Object beh = loader.loadClass("b.上長IDを得る" + "$Impl").getConstructor().newInstance();
+        Object beh = Emitted.behavior(loader, "b", "上長IDを得る").getConstructor().newInstance();
         Object r = Codecs.apply(beh, req);
 
         // 上長ID is 従業員ID (a newtype from module a); its encoder yields the bare String.
@@ -66,12 +68,12 @@ class CompileCrossModuleFieldTest {
 
     @Test
     void spreadingAnImportedDataReadsItsFieldsThroughAccessors() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(BASE, DERIVED));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(BASE, DERIVED));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Object base = Codecs.decoded(loader, "base_m.Base", Map.of("a", "A", "b", "B"));
 
-        Object beh = loader.loadClass("derived_m.拡張する" + "$Impl").getConstructor().newInstance();
+        Object beh = Emitted.behavior(loader, "derived_m", "拡張する").getConstructor().newInstance();
         Object r = Codecs.apply(beh, base);
 
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "derived_m.Derived", r);

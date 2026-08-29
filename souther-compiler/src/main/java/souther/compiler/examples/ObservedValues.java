@@ -1,10 +1,10 @@
 package souther.compiler.examples;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -61,8 +61,14 @@ final class ObservedValues {
             case BigDecimal d -> new ObservedValue.Decimal(d);
             case String s -> text(s);
             case java.time.LocalDate d -> new ObservedValue.Temporal(d.toString());
-            case java.time.LocalTime t -> new ObservedValue.Temporal(t.toString());
-            case java.time.LocalDateTime d -> new ObservedValue.Temporal(d.toString());
+            // Spelled to the second by whatever writes the value everywhere else. `toString` drops
+            // the seconds at zero on both of these, so an observation carried `16:00` where a line
+            // drawn at the same value is named `16:00:00` — one value in two spellings, and the
+            // report holding both is the one a reader compares them in.
+            case java.time.LocalTime t ->
+                    new ObservedValue.Temporal(souther.compiler.numeric.Times.written(t));
+            case java.time.LocalDateTime d ->
+                    new ObservedValue.Temporal(souther.compiler.numeric.DateTimes.written(d));
             case java.time.Instant i -> new ObservedValue.Temporal(i.toString());
             case Map<?, ?> m -> mapping(m, depth);
             case Iterable<?> it -> sequence(it, depth);
@@ -116,11 +122,11 @@ final class ObservedValues {
                     ? new ObservedValue.Unknown("an optional's value could not be read")
                     : walk(inner, depth);
         }
-        TypeName type = symbols.resolve(name);
+        TypeSymbol type = neutral.typeOf(live);
         if (type == null) {
             return new ObservedValue.Unknown("`" + name + "` is not a type this module can name");
         }
-        if (!(symbols.get(type) instanceof Ast.Data data)) {
+        if (!(symbols.declarations().declaration(type) instanceof Hir.Data data)) {
             return new ObservedValue.Unit(type);   // a case that carries nothing
         }
         Map<String, ObservedValue> fields = ObservedValue.fields();

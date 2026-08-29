@@ -1,20 +1,20 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.Region;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
@@ -31,44 +31,66 @@ public interface Ast {
     SourcePos pos();
 
     /**
-     * A name a body binds: a parameter, a {@code let}, a lambda's parameter, a {@code match} arm's
-     * binding. Every node below that introduces one holds this rather than a bare spelling, so what a
-     * name under it means is the binding and not the text.
+     * A node an author wrote, which therefore has a stretch of source as well as an anchor.
      *
-     * <p>The two forms are the two states a binder is in. The parser writes {@link Written}, which is
-     * the spelling and nothing more; {@code Resolve} answers it with {@link Bound}, which carries the
-     * {@link BindingId} every name that resolves to it also carries. There is no third state and no
-     * absent identity: a binder with an identity and a binder without one are different types, so a
-     * reader cannot mistake one for the other, and nothing downstream tests for a missing one.
+     * <p>Here rather than on each kind of node that has one, because it is one rule: what a report
+     * about a node points at is either the characters it was written over or the point it is
+     * anchored at, and a second node kind working that out for itself would be a second answer to
+     * settle against this one.
      */
-    sealed interface Binder extends Ast {
-
-        /** The name this binds and the occurrence of it that named it — the whole of what the
-         * source says about this binding, kept as one value so a reader cannot pair the name with
-         * somewhere it is not written. */
-        WrittenName written();
-
-        /** What the binding is called. A generated local is named after it; a diagnostic quotes
-         * {@link WrittenName#quoted()} instead, which is what the author typed. */
-        default String name() {
-            return written().canonical();
-        }
+    interface Written extends Ast {
 
         /**
-         * Where the author wrote this name, or null where the author wrote no name at all.
+         * The stretch of source this node was written over, or null where no one wrote it.
          *
-         * <p>Not the same as {@link #pos()}, which is the form the binding came from: a {@code let}
-         * statement starts at its keyword, a lambda's parameters share the lambda's start, and a
-         * name a desugaring invented — the parameter {@code .field} becomes, the value a
-         * {@code match} is held in — is written nowhere and only anchored somewhere.
+         * <p>Not {@link #pos()}, and not derivable from it. A position is where a report about this
+         * node is anchored, and an anchor is chosen for the node it is about: a binary operation is
+         * anchored at its operator and a field read at its field, because that is where a complaint
+         * about either belongs. Neither is where the node begins, so a region built from an anchor
+         * and a width starts inside what the author wrote however the width is arrived at.
          *
-         * <p>A reader asking what is under a cursor has this and nothing else to compare against.
-         * Anchoring one of those invented names at a form the author did write would put it under a
-         * cursor on that form, and rename would then rewrite the source with a name no one can see.
+         * <p>Read off the tree the parser built and carried from there. Working it out later means
+         * measuring the node — its name's length, its value's length, the token kinds it is made of
+         * — and a measurement is a claim about the value rather than about the file. The two agree
+         * until the source spells something the value does not keep: an escape, a decomposed
+         * spelling, a leading zero, a pair of parentheses.
+         *
+         * <p>Null rather than a zero-width region at the anchor. A node a lowering minted was
+         * written nowhere, and a report about it has nothing to underline — which is a different
+         * answer from underlining no characters at a place the author's cursor could be.
          */
-        default SourcePos namePos() {
-            return written().authored() ? written().pos() : null;
+        Region region();
+
+        /**
+         * Where a report about this node points: the characters it was written over, or the point
+         * it is anchored at where no one wrote it.
+         *
+         * <p>The choice between two answers already held, and not a third answer worked out from
+         * either. A node a lowering minted has somewhere a complaint about it belongs and nothing to
+         * underline, and that is what a point is — a place with no characters claimed at it, which
+         * the renderer draws as the one caret it draws for anything it cannot measure.
+         *
+         * <p>Null only where the node has neither, which is a report with nowhere to point.
+         */
+        default Region reportedAt() {
+            Region written = region();
+            if (written != null) {
+                return written;
+            }
+            return pos() == null ? null : Region.point(pos());
         }
+    }
+
+    /**
+     * A name a body binds: a parameter, a {@code let}, a lambda's parameter, a {@code match} arm's
+     * binding. Every node below that introduces one holds this rather than a bare spelling, so what
+     * a name under it means is the binding and not the text.
+     *
+     * <p>The spelling and nothing more. Which binding it is, is {@code Resolve}'s to say, and a
+     * binder it has answered is a {@link Hir.Binder} — so there is no absent identity here for a
+     * reader to test for.
+     */
+    record Binder(WrittenName written, SourcePos pos) implements Ast {
 
         /**
          * A binder read off a name the author wrote, taken from the name itself so its spelling and
@@ -81,8 +103,8 @@ public interface Ast {
          * lambda; a {@code match} arm's binding, anchored at the {@code |}. The parser reads a
          * binder off its token; a pass that needs a name of its own says {@link #desugared}.
          */
-        static Binder of(Name written) {
-            return new Written(written.name(), written.pos());
+        public static Binder of(Name written) {
+            return new Binder(written.name(), written.pos());
         }
 
         /**
@@ -90,103 +112,59 @@ public interface Ast {
          * is rewriting keeps taking plain names. {@code anchor} is the form it came from, which is
          * where a complaint about it belongs and is not where its name is.
          */
-        static Binder desugared(String name, SourcePos anchor) {
-            return new Written(WrittenName.synthetic(name, anchor), anchor);
+        public static Binder desugared(String name, SourcePos anchor) {
+            return new Binder(WrittenName.synthetic(name, anchor), anchor);
+        }
+
+        /** What the binding is called. A diagnostic quotes {@link WrittenName#quoted()} instead,
+         * which is what the author typed. */
+        public String name() {
+            return written.canonical();
         }
 
         /**
-         * The binding, for a reader that is asking which one this is.
+         * Where the author wrote this name, or null where the author wrote no name at all.
          *
-         * <p>A binder still {@link Written} here is a pass reading a body it was handed before
-         * resolution answered it, which is a fault in the compiler rather than in the source, so it
-         * is refused outright. This is the one place that says so.
+         * <p>Not the same as {@link #pos()}, which is the form the binding came from: a {@code let}
+         * statement starts at its keyword, a lambda's parameters share the lambda's start, and a
+         * name a desugaring invented is written nowhere and only anchored somewhere.
          */
-        default BindingId id() {
-            if (this instanceof Bound bound) {
-                return bound.binding();
-            }
-            throw new IllegalStateException("`" + name() + "` at " + pos()
-                    + " was read as a binding before it was resolved");
+        public SourcePos namePos() {
+            return written.authored() ? written.pos() : null;
         }
 
-        /** A binder as the parser read it. */
-        record Written(WrittenName written, SourcePos pos) implements Binder {
-
-            @Override
-            public String toString() {
-                return name();
-            }
-        }
-
-        /** A binder resolution answered, and the binding it introduces. */
-        record Bound(WrittenName written, BindingId binding, SourcePos pos) implements Binder {
-
-            public Bound {
-                if (binding == null) {
-                    throw new IllegalArgumentException("a bound binder is a binding: " + written);
-                }
-            }
-
-            @Override
-            public String toString() {
-                return name();
-            }
+        @Override
+        public String toString() {
+            return name();
         }
     }
 
     /**
-     * Mints the binders a pass writes into a body that has already been resolved.
+     * A name that denotes a declared type, as the source writes it — bare {@code 金額}, qualified
+     * {@code billing.金額}, or through an import alias.
      *
-     * <p>Such a pass cannot leave a binder {@link Binder.Written}: nothing runs after it to answer
-     * one. So it says which binding each is, and the bindings it makes belong to it — to
-     * {@code owner} — rather than to the definition whose text it is writing into, which is what
-     * keeps two of them apart when one body is written into twice.
-     */
-    final class Binders {
-
-        private final BindingOwner owner;
-        private int next;
-
-        public Binders(BindingOwner owner) {
-            this.owner = owner;
-        }
-
-        /** A binding nothing else has, under this pass's owner. A pass writes its own names, so
-         * none of them is a name the author wrote. */
-        public Binder binder(String name, SourcePos pos) {
-            return new Binder.Bound(WrittenName.synthetic(name, pos),
-                    new BindingId(owner, next++), pos);
-        }
-    }
-
-    /**
-     * A name that denotes a declared type, in both forms it has: {@code name} as the source writes
-     * it — bare {@code 金額}, qualified {@code billing.金額}, or through an import alias — and
-     * {@code denotes} as it resolves. Resolution happens once, in {@code Resolve}, before any check
-     * runs; every name-bearing position in this tree carries one of these, so no later pass decides
-     * for itself what a spelling means or whether a qualified one is allowed here (issue #177).
+     * <p>What it denotes is {@code Resolve}'s to say, once, before any check runs, and a name it has
+     * answered is a {@link Hir.Name}. So no later pass decides for itself what a spelling means or
+     * whether a qualified one is allowed here (issue #177), and this form has no slot for an answer
+     * to be put in early.
      *
-     * <p>A check reads {@link #denotes()}, which is set on every name the resolve pass let through —
-     * a name that denotes nothing is reported there and the compile stops, so nothing downstream sees
-     * an unresolved one. {@link #written()} is the name, and is not what a report quotes: a bare and
-     * a qualified spelling of one type are one name, and a decomposed and a composed spelling are
-     * one name too, so neither says what the author typed. A report asks {@link WrittenName#quoted()}
-     * and underlines {@link WrittenName#region()}.
+     * <p>{@link #written()} is the name, and is not what a report quotes: a bare and a qualified
+     * spelling of one type are one name, and a decomposed and a composed spelling are one name too,
+     * so neither says what the author typed. A report asks {@link WrittenName#quoted()} and
+     * underlines {@link WrittenName#region()}.
      */
-    record Name(WrittenName name, TypeName denotes) implements Ast {
+    record Name(WrittenName name) implements Ast {
 
-        /** A name as the parser read it, before the resolve pass has said what it denotes. Only the
-         * parser writes one: every other producer knows what it means and says so. The spelling is
-         * the source's, not one a caller canonicalized on the way in — {@link WrittenName} is what
-         * canonicalizes, so the name and the characters it was written with stay one value. */
+        /** A name as the parser read it. The spelling is the source's, not one a caller
+         * canonicalized on the way in — {@link WrittenName} is what canonicalizes, so the name and
+         * the characters it was written with stay one value. */
         public static Name written(String spelling, SourcePos pos) {
-            return new Name(WrittenName.of(spelling, pos), null);
+            return new Name(WrittenName.of(spelling, pos));
         }
 
-        /** A name a pass synthesized, already knowing what it denotes. It is written nowhere;
-         * {@code pos} is what a complaint about it points at. */
-        public static Name resolved(TypeName denotes, SourcePos pos) {
-            return new Name(WrittenName.synthetic(denotes.name(), pos), denotes);
+        /** The same, off an occurrence the parser has already read. */
+        public static Name written(WrittenName name) {
+            return new Name(name);
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -194,14 +172,10 @@ public interface Ast {
             return name.canonical();
         }
 
-        /** Where the name is written, or where a synthesized one is anchored. */
+        /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return name.pos();
-        }
-
-        /** The same name, resolved to what it denotes. */
-        public Name denoting(TypeName resolved) {
-            return new Name(name, resolved);
         }
 
         @Override
@@ -219,12 +193,11 @@ public interface Ast {
      * exposed names carry no signature (their type is at the definition).
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
-     * what the module took on to emit as methods of its own without having declared them, which is
-     * two kinds of helper: a recursive one it reaches, which cannot be inlined and has to be lowered
-     * somewhere, and a non-recursive one an {@code example} row applies, which a row runs rather than
-     * expands (ADR-0077). Either may be declared by the standard library or by a module that
-     * published it. Only {@code fns} is declared here, and no rule reads a name to tell the two apart
-     * — {@code List.foldFrom} is reached under the library's alias and declared in
+     * what the module emits as methods of its own without having written them, which is two kinds of
+     * definition: a recursive helper it reaches, which cannot be inlined and has to be lowered
+     * somewhere, and a definition minted for what a row writes at a position, which has no call site
+     * to be inlined into. Only {@code fns} is declared here, and no rule reads a name to tell them
+     * apart — {@code List.foldFrom} is reached under the library's alias and declared in
      * {@code souther.list}.
      *
      * <p>Two components rather than one list a later pass appends to. Appended, every reader asking
@@ -256,16 +229,22 @@ public interface Ast {
      * evaluate an example of a behavior that {@code depends on} it. The rows form an input→output
      * table matched by value equality; a {@code _ -> out} row is the default when no input matches
      * (otherwise a miss is an error). A fake produces no run-time class (it is a proxy at evaluation).
+     *
+     * <p>The target is a name to be resolved and not a spelling to be looked up later. What it means
+     * is what the module's scope says a behavior of that spelling means, which is the same reading a
+     * {@code depends on} clause gets — so a dependency declared in another module is named here the
+     * way it is named there.
      */
-    record Fake(String target, List<FakeRow> rows, SourcePos pos) implements Ast {}
+    record Fake(Var target, List<FakeRow> rows, SourcePos pos) implements Ast {}
 
     /** One fake row: input argument expressions mapped to an output, or the default ({@code inputs}
      * null / {@code isDefault} true). */
     record FakeRow(List<Expr> inputs, Expr output, boolean isDefault, SourcePos pos) implements Ast {}
 
     /** {@code with <dep> = <value>} on an example row — a value fake for an injected dependency
-     * (a zero-argument behavior whose faked result is a constant). */
-    record With(String dep, Expr value, SourcePos pos) implements Ast {}
+     * (a zero-argument behavior whose faked result is a constant). The dependency is named as a
+     * {@link Fake}'s target is. */
+    record With(Var dep, Expr value, SourcePos pos) implements Ast {}
 
     /**
      * {@code example <target> | row ...} — compile-time-checked examples for a behavior or a pure
@@ -278,11 +257,11 @@ public interface Ast {
     record Example(String target, List<ExampleRow> rows, SourcePos pos) implements Ast {}
 
     /**
-     * One example row: an optional business description, the input argument expressions, and the
-     * expected result. A bare {@link Var} expected asserts only the result arm (the case); a
-     * {@link NewData}, a {@link Call} (a newtype constructor), or a literal asserts the whole value.
+     * One example row: what it names itself, the input argument expressions, and the expected result.
+     * A bare {@link Var} expected asserts only the result arm (the case); a {@link NewData}, a
+     * {@link Call} (a newtype constructor), or a literal asserts the whole value.
      */
-    record ExampleRow(String description, List<Expr> inputs, List<With> withs, Expr expected,
+    record ExampleRow(RowIdentity identity, List<Expr> inputs, List<With> withs, Expr expected,
                       SourcePos pos) implements Ast {}
 
     /**
@@ -364,12 +343,24 @@ public interface Ast {
                         RetType ret,
                         List<Name> constructs,
                         List<Var> dependsOn,
+                        List<EnsuresClause> ensures,
                         SourcePos pos) implements BehaviorDef {
 
         /** A behavior a pass wrote, named but written nowhere. */
         public SpecBehavior(String name, List<Param> params, RetType ret, List<Name> constructs,
-                            List<Var> dependsOn, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, pos);
+                            List<Var> dependsOn, List<EnsuresClause> ensures, SourcePos pos) {
+            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, ensures, pos);
+        }
+    }
+
+    /** One postcondition on a behavior. A single-output clause has one arm with no cases; a sum
+     * clause names the output cases for which each expression is stated. */
+    record EnsuresClause(Optional<String> name, List<EnsuresArm> arms, SourcePos pos, Region region)
+            implements Written {}
+
+    record EnsuresArm(List<Name> cases, Expr expr, SourcePos pos, Region region) implements Written {
+        public EnsuresArm with(Expr rewritten) {
+            return new EnsuresArm(cases, rewritten, pos, region);
         }
     }
 
@@ -408,16 +399,6 @@ public interface Ast {
     }
 
     /**
-     * {@code fn name (a1, ...) = body} — a behavior's implementation (spec §fn-declaration). If a same-named
-     * {@link SpecBehavior} exists, the parameter types come from it and the author writes none
-     * ({@link FnParam#type()} is null, or read off a pattern; {@link FnParam#typeFromPattern()});
-     * otherwise it is a helper {@code fn} that writes its own parameter types.
-     *
-     * <p>{@code body} is a single expression. The surface forms {@code let} and {@code guard} are
-     * desugared by the parser into {@link LetIn} and {@link If} (spec §guard), so every later stage
-     * sees one expression tree and has exactly one place where a value can be constructed.
-     */
-    /**
      * What stands to the right of a definition's {@code =}: the expression the author wrote, or —
      * in the reserved {@code souther} namespace only (spec §primitives) — the name of a shipped
      * kernel, {@code intrinsic "string.trim"}. One or the other, never neither, so a reader
@@ -453,14 +434,38 @@ public interface Ast {
      * "from somewhere else": a helper this module took on to emit was written by some module and says
      * which, and every rule here reads that rather than the absence. Anything a later pass mints that
      * <em>is</em> a declaration says which module it belongs to, so that these stay one question.
+     *
+     * <p>{@code role} is what the definition was made as, and it is a second question from the one
+     * {@code declaredIn} answers: an attached file's value is declared in the target module and is
+     * not something that module's own source wrote. See {@link DefinitionRole}.
      */
     record FnDef(WrittenName written, String declaredIn, List<FnParam> params,
-                 RetType declaredReturn, FnBody body, Modifiers modifiers, SourcePos pos)
+                 RetType declaredReturn, FnBody body, Modifiers modifiers, DefinitionRole role,
+                 SourcePos pos)
             implements Ast {
+
+        public FnDef {
+            Objects.requireNonNull(role, "a definition says what it was made as");
+        }
+
+        /** A fn read as a definition, which is every one a module's own source wrote. */
+        public FnDef(WrittenName written, String declaredIn, List<FnParam> params,
+                     RetType declaredReturn, FnBody body, Modifiers modifiers, SourcePos pos) {
+            this(written, declaredIn, params, declaredReturn, body, modifiers,
+                    DefinitionRole.Ordinary.INSTANCE, pos);
+        }
+
         /** A fn with no modifier (the common case; totality-checked if recursive, published). */
         public FnDef(WrittenName written, String declaredIn, List<FnParam> params,
                      RetType declaredReturn, FnBody body, SourcePos pos) {
             this(written, declaredIn, params, declaredReturn, body, Modifiers.NONE, pos);
+        }
+
+        /** The same declaration read as what an attached file wrote it as: a value for the rows
+         *  beside it to name, which the model neither publishes nor may reach. */
+        public FnDef asAnAttachedValue() {
+            return new FnDef(written, declaredIn, params, declaredReturn, body, modifiers,
+                    DefinitionRole.AttachedValue.INSTANCE, pos);
         }
 
         /** A block standing where a function goes, which no module declares: a lambda a binding
@@ -486,13 +491,13 @@ public interface Ast {
          */
         public FnDef reachedAs(String name) {
             return new FnDef(WrittenName.synthetic(name, pos), declaredIn, params, declaredReturn,
-                    body, modifiers, pos);
+                    body, modifiers, role, pos);
         }
 
         /** The same declaration with {@code replacement} in place of its body. */
         public FnDef withBody(FnBody replacement) {
             return new FnDef(written, declaredIn, params, declaredReturn, replacement, modifiers,
-                    pos);
+                    role, pos);
         }
 
         /** What the fn is called. */
@@ -605,9 +610,44 @@ public interface Ast {
          */
         WrittenName written();
 
+        /**
+         * The module that wrote this declaration, as {@link FnDef#declaredIn} is for a {@code let}.
+         *
+         * <p>Written once, where the source is parsed, and copied by every pass after. It is here
+         * because a declaration is read apart from the module holding it — a registry answers with
+         * one, a scope names one, a check is handed one — and from there the name cannot say which
+         * module declares it. A reader that pairs the name with the module it happens to be
+         * compiling answers for a declaration here whatever the name came from, which is what
+         * issues #464, #696 and #700 each were.
+         *
+         * <p>Not what the declaration is reached under. A runtime-backed data is written in a
+         * standard-library module and reached in the runtime namespace, because that is where its
+         * implementation class is; which module declares it and which name it answers to are two
+         * questions, and this is the first.
+         */
+        String declaredIn();
+
         /** What the declaration is called. */
         default String name() {
             return written().canonical();
+        }
+
+        /**
+         * Which declaration this is, written down.
+         *
+         * <p>Answered by the declaration, so a reader holding one has the name it goes by and no
+         * module of its own to pair it with. A spelling says nothing about which module declares
+         * what it spells, and a reader that supplies the module it happens to be compiling answers
+         * for a declaration here whatever the name came from.
+         */
+        default TypeKey declaredKey() {
+            return new TypeKey(declaredIn(), name());
+        }
+
+        /** Whether {@code module} is the module that wrote this. Asked of the declaration, so it
+         * answers for the module that wrote it however the module reading it reaches it. */
+        default boolean declaredBy(String module) {
+            return declaredIn() != null && declaredIn().equals(module);
         }
 
         /** Where the name is written, or null where nobody wrote it. */
@@ -628,6 +668,7 @@ public interface Ast {
      * representation differs.
      */
     record Data(WrittenName written,
+                String declaredIn,
                 boolean newtype,
                 List<Name> includes,
                 List<Field> fields,
@@ -646,45 +687,39 @@ public interface Ast {
      * apart from the type's other unnamed clauses, so it aborts inside the domain and fails the decode
      * outside it without saying which rule it was.
      */
-    record InvariantClause(Optional<String> name, Expr expr, SourcePos pos) implements Ast {
+    record InvariantClause(Optional<String> name, Expr expr, SourcePos pos, Region region)
+            implements Written {
 
         /** A clause no name was written for. */
         public static InvariantClause unnamed(Expr expr) {
-            return new InvariantClause(Optional.empty(), expr, expr.pos());
+            return new InvariantClause(Optional.empty(), expr, expr.pos(), expr.region());
         }
 
         /** The same clause over a rewritten expression — what a stage that rewrites expressions
-         * produces, so a rewrite never drops the name the rest of the compiler classifies by. */
+         * produces, so a rewrite never drops the name the rest of the compiler classifies by, nor
+         * where the author wrote the clause it rewrote. */
         public InvariantClause with(Expr rewritten) {
-            return new InvariantClause(name, rewritten, pos);
+            return new InvariantClause(name, rewritten, pos, region);
         }
     }
 
-    /** A sum data definition {@code data X = A | B | ...} with optional discriminate decoder/encoder. */
+    /** A sum data definition {@code data X = A | B | ...}. Carries no boundary representation — see
+     *  {@link Hir.SumData}. */
     record SumData(WrittenName written,
+                   String declaredIn,
                    List<Name> cases,
-                   Optional<Discriminate> decoder,
-                   Optional<SumEncoder> encoder,
                    SourcePos pos) implements Def {}
 
-    /** {@code encoder discriminate on "key" { Case -> "tag" ... }} — the inverse of discriminate. */
-    record SumEncoder(String key, List<EncVariant> variants, SourcePos pos) implements Ast {}
-
-    record EncVariant(Name caseType, String tag, SourcePos pos) implements Ast {}
-
     /** A unit data definition {@code data U} with no fields. */
-    record UnitData(WrittenName written, SourcePos pos) implements Def {
+    record UnitData(WrittenName written, String declaredIn, SourcePos pos) implements Def {
 
-        /** A unit data a construction implied — declared nowhere the author wrote. */
-        public UnitData(String name, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), pos);
+        /** A unit data a construction implied — declared nowhere the author wrote, by the module
+         * whose text implied it. */
+        public UnitData(String name, String declaredIn, SourcePos pos) {
+            this(WrittenName.synthetic(name, pos), declaredIn, pos);
         }
     }
 
-    /** {@code decoder from Object discriminate on "key" { "tag" -> Case.decoder ... }} */
-    record Discriminate(String key, List<Variant> variants, SourcePos pos) implements Ast {}
-
-    record Variant(String tag, Name caseType, SourcePos pos) implements Ast {}
 
     /** A field: a role name and its type. */
     record Field(WrittenName written, TypeTerm type) implements Ast {
@@ -706,38 +741,40 @@ public interface Ast {
     }
 
     /**
-     * A named type reference, optionally with one type argument (e.g. {@code List<T>}). When
-     * {@code name} is null and {@code tupleElems} is non-null the ref is a tuple type
-     * {@code (A, B, ...)} (ADR-0036), written only in a helper/stdlib signature. A {@code Map<K, V>}
-     * reuses {@code tupleElems} to carry its key type (a single element) while {@code name} is
-     * {@code "Map"} and {@code arg} is the value type (ADR-0040).
+     * A written type reference: {@code name}, the optional single type argument {@code arg}
+     * ({@code List<T>}), and {@code tupleElems}. Where {@code name} is null and {@code tupleElems}
+     * is non-null the ref is a tuple type {@code (A, B, ...)} (ADR-0036), written only in a
+     * helper/stdlib signature. A {@code Map<K, V>} reuses {@code tupleElems} to carry its key type
+     * (a single element) while {@code name} is {@code "Map"} and {@code arg} is the value type
+     * (ADR-0040).
      *
-     * <p>{@code denotes} is the type the reference stands for, decided once by {@code Resolve}
-     * (issue #177). Every reference the pass let through carries one, so nothing downstream resolves
-     * a written type a second time — nor has to know which module the reference was written in, which
-     * is what a second resolution needed to get right.
+     * <p>The spelling and the shape around it. What it stands for is decided once, in
+     * {@code Resolve} (issue #177), and a reference it has answered is a {@link Hir.TypeRef} — so
+     * nothing here has a type slot for a later reader to find empty, and no reader has to know which
+     * module the reference was written in to work one out.
      */
-    record TypeRef(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems, Type denotes,
+    record TypeRef(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems,
                    SourcePos anchor) implements TypeTerm {
 
         /** A reference the source wrote, read off the characters that spell it. */
-        public TypeRef(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems) {
-            this(written, arg, tupleElems, null, null);
+        public static TypeRef written(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems) {
+            return new TypeRef(written, arg, tupleElems, null);
         }
 
-        /** A reference a pass wrote, named but written nowhere — {@code T?} becoming
-         * {@code Option<T>}, a {@code Map} carrying its key. */
-        public TypeRef(String name, TypeTerm arg, List<TypeTerm> tupleElems, SourcePos pos) {
-            this(name == null ? null : WrittenName.synthetic(name, pos), arg, tupleElems, null, pos);
+        /** A reference a pass wrote before resolution runs, named but written nowhere — {@code T?}
+         * becoming {@code Option<T>}, a {@code Map} carrying its key. */
+        public static TypeRef written(String name, TypeTerm arg, List<TypeTerm> tupleElems,
+                                      SourcePos pos) {
+            return new TypeRef(name == null ? null : WrittenName.synthetic(name, pos), arg,
+                    tupleElems, pos);
         }
 
-        /** An ordinary (non-tuple) reference a pass wrote. */
-        public TypeRef(String name, TypeTerm arg, SourcePos pos) {
-            this(name, arg, null, pos);
+        /** An ordinary (non-tuple) reference a pass wrote before resolution runs. */
+        public static TypeRef written(String name, TypeTerm arg, SourcePos pos) {
+            return written(name, arg, null, pos);
         }
 
-        /** The name this reference stands for, or null where it names none — a tuple, or a type a
-         * pass settled and left no surface for. */
+        /** The name this reference stands for, or null where it names none. */
         public String name() {
             return written == null ? null : written.canonical();
         }
@@ -745,29 +782,20 @@ public interface Ast {
         /** Where the reference starts. A named one starts where its name does; {@code anchor} is
          * for the ones that have no name to start at, which is why it is not asked otherwise: two
          * places for one reference is two places that can disagree. */
+        @Override
         public SourcePos pos() {
             return written == null ? anchor : written.pos();
-        }
-
-        /** The same reference, resolved. */
-        public TypeRef denoting(Type type) {
-            return new TypeRef(written, arg, tupleElems, type, anchor);
-        }
-
-        /**
-         * A reference nobody wrote: it carries what it denotes and no surface text. A helper
-         * parameter whose type its body settles is written back as one (issue #178) — the type is
-         * decided, and there is no source it stands for. Everything downstream of {@code Resolve}
-         * reads {@link #denotes()}, so a reference with a decided type is as good as a written one.
-         */
-        public static TypeRef of(Type type, SourcePos pos) {
-            return new TypeRef((WrittenName) null, null, null, type, pos);
         }
 
         /** A tuple type is the nameless form; a named ref that also carries {@code tupleElems}
          *  (a {@code Map} carrying its key) is not a tuple. */
         public boolean isTuple() {
             return written == null && tupleElems != null;
+        }
+
+        @Override
+        public String toString() {
+            return name() == null ? "(tuple)" : name();
         }
     }
 
@@ -852,7 +880,6 @@ public interface Ast {
      * also the classification the checker already made, carried here rather than worked out again. */
     record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef.Bare {}
 
-    /** A primitive field decoder kind. */
     /** A statement in a single-value decoder body. */
     sealed interface DecStmt extends Ast permits Let {}
 
@@ -871,8 +898,7 @@ public interface Ast {
      */
     record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Ast {}
 
-    /** One {@code field: expr} (or shorthand {@code field}) inside a record literal. */
-    /** {@code field: value} in a construction. */
+    /** {@code field: expr}, or the shorthand {@code field}, in a construction. */
     record FieldInit(WrittenName written, Expr value) implements Ast {
 
         /** An initialiser a pass wrote — a derived encoder's, a newtype's implicit {@code value}. */
@@ -990,50 +1016,10 @@ public interface Ast {
 
     // --- expressions ---
 
-    sealed interface Expr extends Ast
+    sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Expansion, Block,
                     Tuple, TupleGet, Unreachable {
-
-        /**
-         * The stretch of source this expression was written over, or null where no one wrote it.
-         *
-         * <p>Not {@link #pos()}, and not derivable from it. A position is where a report about this
-         * node is anchored, and an anchor is chosen for the node it is about: a binary operation is
-         * anchored at its operator and a field read at its field, because that is where a complaint
-         * about either belongs. Neither is where the expression begins, so a region built from an
-         * anchor and a width starts inside what the author wrote however the width is arrived at.
-         *
-         * <p>Read off the tree the parser built and carried from there. Working it out later means
-         * measuring the node — its name's length, its value's length, the token kinds it is made of
-         * — and a measurement is a claim about the value rather than about the file. The two agree
-         * until the source spells something the value does not keep: an escape, a decomposed
-         * spelling, a leading zero, a pair of parentheses.
-         *
-         * <p>Null rather than a zero-width region at the anchor. A node a lowering minted was
-         * written nowhere, and a report about it has nothing to underline — which is a different
-         * answer from underlining no characters at a place the author's cursor could be.
-         */
-        Region region();
-
-        /**
-         * Where a report about this expression points: the characters it was written over, or the
-         * point it is anchored at where no one wrote it.
-         *
-         * <p>The choice between two answers already held, and not a third answer worked out from
-         * either. A node a lowering minted has somewhere a complaint about it belongs and nothing to
-         * underline, and that is what a point is — a place with no characters claimed at it, which
-         * the renderer draws as the one caret it draws for anything it cannot measure.
-         *
-         * <p>Null only where the node has neither, which is a report with nowhere to point.
-         */
-        default Region reportedAt() {
-            Region written = region();
-            if (written != null) {
-                return written;
-            }
-            return pos() == null ? null : Region.point(pos());
-        }
     }
 
     /**
@@ -1052,18 +1038,27 @@ public interface Ast {
      * <p>Second-class: it may only be an argument, never a value that is returned, stored in a
      * field, or bound by {@code let}. The parser only accepts one in an argument position, and
      * because it cannot escape, the backend inlines it rather than building a closure.
+     *
+     * <p>{@code rule} is which block of the source this is, minted where the syntax is read and
+     * carried by every copy. A block handed to a function parameter is the rule the fork that
+     * applies it decides by, and telling two of those apart has to survive the body being spliced —
+     * which a position does not, being stamped with the call site wherever the body is one a reader
+     * cannot open.
      */
-    record Block(List<Binder> params, Expr body, SourcePos pos, Region region) implements Expr {
+    record Block(List<Binder> params, Expr body, souther.compiler.types.RuleOrigin rule,
+                 SourcePos pos, Region region) implements Expr {
 
         /** A block whose parameters are names no one wrote — what a desugaring builds. A block the
          * author wrote is built from binders of its own, because its parameters are written one by
          * one and the block's own position is where the first of them starts at best. */
-        public static Block desugared(List<String> params, Expr body, SourcePos pos, Region region) {
+        public static Block desugared(List<String> params, Expr body,
+                                      souther.compiler.types.RuleOrigin rule, SourcePos pos,
+                                      Region region) {
             List<Binder> binders = new ArrayList<>();
             for (String p : params) {
                 binders.add(Binder.desugared(p, pos));
             }
-            return new Block(binders, body, pos, region);
+            return new Block(binders, body, rule, pos, region);
         }
 
         /** How the parameters were written, in order. */
@@ -1266,8 +1261,6 @@ public interface Ast {
             this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
         }
 
-        /** The same, as the parser read it. */
-
         /** How the binding was written. */
         public String binderName() {
             return binder.name();
@@ -1311,9 +1304,8 @@ public interface Ast {
      * holds one case name, or several joined by {@code |} (an or-pattern, spec §match). With one case,
      * {@code x} binds that case's type; with several, it binds the scrutinee's sum type, since no
      * single case type fits all alternatives.
-     */
-    /**
-     * {@code unwrapAsserts} are the inner newtype names written in a constructor-destructuring
+     *
+     * <p>{@code unwrapAsserts} are the inner newtype names written in a constructor-destructuring
      * pattern {@code X(Y(s))} — {@code [Y]} here (the case {@code X} is in {@code caseTypes}, the
      * bound variable {@code s} is dropped). {@code null} when the pattern is not a constructor
      * destructure; an empty list is the single-layer form {@code X(v)}. The {@code TypeChecker}
@@ -1337,9 +1329,8 @@ public interface Ast {
      * <p>A spread names a value like any other position, so it carries what that name resolves to: a
      * binding in force wins over a declaration here as everywhere else, and a reader downstream must
      * not go back to matching the spelling against the module's own definitions.
-     */
-    /**
-     * A construction. {@code origin} says where it came from: written here, or carried in by a
+     *
+     * <p>{@code origin} says where the construction came from: written here, or carried in by a
      * published body or by a value this body named.
      *
      * <p>Expansion makes the two look alike: a construction spliced in from another body is the same
@@ -1374,11 +1365,10 @@ public interface Ast {
     record BoolLit(boolean value, SourcePos pos, Region region) implements Expr {}
 
     /**
-     * A name used as a value — the one representation the surface AST has for one. {@code written}
-     * is how the source writes it (bare {@code price}, qualified {@code billing.price}, or through
-     * an import alias) and {@code denotes} is what it names, answered once during resolution; a
-     * reader asks that rather than deciding for itself whether the spelling is a local, a unit data
-     * or something the language provides. What {@link Name} is for a type.
+     * A name used as a value, as the parser read it — the one representation the surface AST has for
+     * one. {@code written} is how the source writes it: bare {@code price}, qualified
+     * {@code billing.price}, or through an import alias. What it denotes is {@code Resolve}'s to
+     * say, and a name it has answered is a {@link Hir.Var}. What {@link Name} is for a type.
      *
      * <p>It stands in two kinds of slot, which differ in what may replace it:
      *
@@ -1388,86 +1378,38 @@ public interface Ast {
      *   <li>a name slot, where only another name may — a construction's spread {@code T { ..base }},
      *       which copies the fields of what the name stands for and so has nothing to evaluate.</li>
      * </ul>
-     *
-     * <p>Both are children: {@link #forEachChild} reaches them, so a pass that asks about names sees
-     * a spread without knowing spreads exist. {@link #mapChildren} takes the two slots as separate
-     * operators, so a rewrite cannot put an expression where only a name may stand. A pass that does
-     * substitute an expression for a name — the inliner — binds it ahead of the construction and
-     * spreads the binding.
-     *
-     * <p>A name that denotes nothing was reported where it was written and carries
-     * {@link ValueName.Unresolved}, so a reader downstream never has a spelling to match and never
-     * repeats the report.
      */
-    record Var(WrittenName written, ValueName denotes, ReachName reachedAs,
-               Region region) implements Expr {
+    record Var(WrittenName written, Region region) implements Expr {
 
-        /**
-         * A name that has been resolved has both answers or neither.
-         *
-         * <p>Refused rather than allowed to stand, because what a name reaches is asked of a table
-         * and a table answers a key it has not got with silence. A rewrite that carried the
-         * denotation across and dropped the reach name would leave a reference that resolves to a
-         * declaration and reaches nothing, and the first reader of it would read the spelling
-         * instead — which is what this pair was separated out to stop.
-         *
-         * <p>The region is the expression's and the name's is {@code written}'s, and they part
-         * company only where the author wrapped the name in something the tree does not keep:
-         * {@code (price)} is one expression written over nine characters and one name written over
-         * five. So the one has to hold the other. A region that did not would be a claim that the
-         * name is written somewhere this expression is not, which no source can produce.
-         */
         public Var {
-            if (denotes != null && reachedAs == null) {
-                throw new IllegalArgumentException("`" + written.canonical() + "` denotes " + denotes
-                        + " and says nothing about how this module reaches it");
-            }
             if (written.region() != null && region == null) {
                 throw new IllegalArgumentException("`" + written.canonical()
                         + "` is written somewhere and the expression it is was written nowhere");
             }
+            // The region is the expression's and the name's is `written`'s, and they part company
+            // only where the author wrapped the name in something the tree does not keep:
+            // `(price)` is one expression written over nine characters and one name written over
+            // five. So the one has to hold the other.
             if (!Region.encloses(region, written.region())) {
                 throw new IllegalArgumentException("`" + written.canonical()
                         + "` is written outside the expression it is");
             }
         }
 
-        /** A name as the parser read it, before resolution has said what it denotes or how this
-         * module reaches it. */
-        public Var(String spelling, SourcePos pos) {
-            this(WrittenName.of(spelling, pos), null, null);
+        /** A name as the parser read it. */
+        public static Var written(String spelling, SourcePos pos) {
+            return written(WrittenName.of(spelling, pos));
         }
 
-        /** A name standing as an expression over exactly the characters that spell it — every one
-         * but a name the author parenthesized. */
-        public Var(WrittenName written, ValueName denotes, ReachName reachedAs) {
-            this(written, denotes, reachedAs, written.region());
+        /** The same, off an occurrence the parser has already read. */
+        public static Var written(WrittenName written) {
+            return new Var(written, written.region());
         }
 
-        /**
-         * A name a pass already knows the meaning of, written where the source writes it.
-         *
-         * <p>The reach name is given rather than worked out here. A pass writing a name into a body
-         * either has one in hand — it is rewriting a name that already carried it — or knows which
-         * module's body it is writing into, and neither is something this constructor can see. Worked
-         * out from the spelling it would be the very derivation the carried value exists to remove.
-         */
-        public Var(String spelling, ValueName denotes, ReachName reachedAs, SourcePos pos) {
-            this(WrittenName.of(spelling, pos), denotes, reachedAs);
-        }
-
-        /**
-         * A name a pass wrote in place of one the author wrote, standing where that one stood.
-         *
-         * <p>{@code spelling} is the pass's — a helper qualified by the module that declares it, so
-         * that a body carried out of its module goes on reaching the same declaration. The
-         * characters at {@code pos} spell what the author put there, which is not this, so the name
-         * is written nowhere and only the expression has a place: the region is the one the name it
-         * replaced was read over.
-         */
-        public static Var respelled(String spelling, ValueName denotes, ReachName reachedAs,
-                                    SourcePos pos, Region region) {
-            return new Var(WrittenName.synthetic(spelling, pos), denotes, reachedAs, region);
+        /** A read of a name a desugaring minted, at the form it is rewriting. Written nowhere: the
+         * characters at {@code anchor} spell whatever the author put there, which is not this. */
+        public static Var desugared(String name, SourcePos anchor) {
+            return written(WrittenName.synthetic(name, anchor));
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1476,80 +1418,14 @@ public interface Ast {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
 
-        /**
-         * The bare name this reaches its declaration by, whatever the source spelled.
-         *
-         * <p>Every name here has been through resolution by the time anything reads it, including
-         * one that denotes nothing — that is an answer too. A name with no answer at all means a
-         * tree reached a reader without being resolved, which would put this back to matching
-         * spellings, so it says so rather than falling back to the spelling.
-         */
-        public String bare() {
-            if (denotes == null) {
-                throw new IllegalStateException("`" + name() + "` was never resolved");
-            }
-            return denotes.name();
-        }
-
-        /** Whether this name denotes nothing — reported where it was written. */
-        public boolean unresolved() {
-            return denotes instanceof ValueName.Unresolved;
-        }
-
-        /**
-         * A read of something bound in the body, as a pass that put the binding there writes it.
-         *
-         * <p>A pass that runs after resolution says what it means rather than leaving a spelling for
-         * a reader to work out, so it is given the binder it is reading and answers with that
-         * binding. There is no way to write one of these without having the binding in hand.
-         */
-        public static Var local(Binder binder, SourcePos pos) {
-            ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
-            return new Var(WrittenName.synthetic(binder.name(), pos), local,
-                    new ReachName.Bare(binder.name()));
-        }
-
-        /** A read of a name a desugaring minted, at the form it is rewriting. Written nowhere: the
-         * characters at {@code anchor} spell whatever the author put there, which is not this. */
-        public static Var desugared(String name, SourcePos anchor) {
-            return new Var(WrittenName.synthetic(name, anchor), null, null);
-        }
-
-        /**
-         * The name of the declaration this reference reaches, or the name written where nothing has
-         * been resolved. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is the
-         * name the source writes, which an import may have let go without its qualifier.
-         *
-         * <p>The spelling is answered only for a tree resolution never saw — one a pass built for
-         * itself, which {@code FixtureTemplate} does and the example reader asks this of. It is not
-         * what a rewrite that dropped the reach name would get: a name that denotes something and
-         * says nothing about how it is reached cannot be built at all (see the constructor).
-         */
-        public String reaches() {
-            return reachedAs == null ? name() : reachedAs.rendered();
-        }
-
-        /**
-         * The same name, denoting {@code resolved} and reached as {@code reachedAs}.
-         *
-         * <p>The two answers together, because resolution gives them together and they are the two
-         * halves of one question: which declaration this reaches, and under what name it reaches it
-         * from here. Handed over separately, a caller could pair one name's denotation with another's
-         * reach name, and nothing would say so.
-         */
-        public Var denoting(ValueName resolved, ReachName reachedAs) {
-            return new Var(written, resolved, reachedAs, region);
-        }
-
-        /** The same name denoting {@code resolved}, reached as it already was — for a pass that
-         * changes what a name says about where its construction came from and not which declaration
-         * it reaches. */
-        public Var denoting(ValueName resolved) {
-            return new Var(written, resolved, reachedAs, region);
+        /** The same name, over {@code region}. */
+        public Var over(Region region) {
+            return new Var(written, region);
         }
 
         @Override
@@ -1618,32 +1494,6 @@ public interface Ast {
             this(function, args, origin, null, pos, region);
         }
 
-        /**
-         * Applying a name a pass chose, at the form it stands in.
-         *
-         * <p>{@code fn} is a spelling and not an occurrence — a library name a rewrite reached for,
-         * a fixture's constructor, a value rendered back out of what was computed — so the applied
-         * name is written nowhere and the characters at {@code pos} spell whatever the author put
-         * there. A name the author applied is passed as the {@link Var} it is, which is where its
-         * occurrence is; building one from a spelling and a position measures the spelling at the
-         * anchor, and the two are the same number only until they are not.
-         *
-         * <p>{@code region} is the application's and is not handed to the callee. What the callee
-         * covers is its own — a rewrite that puts another name in a call leaves the arguments where
-         * they are, so a report about what is applied would otherwise underline them too. A caller
-         * that has the callee's extent builds the {@link Var} itself and passes it.
-         */
-        public Apply(String fn, List<Expr> args, SourcePos pos, Region region) {
-            this(Var.respelled(fn, null, null, pos, null), args, ConstructionOrigin.own(), pos,
-                    region);
-        }
-
-        /** The same, for a pass that already knows what the name means and how the body it is
-         * writing into reaches it. */
-        public Apply(String fn, ValueName denotes, ReachName reachedAs, List<Expr> args,
-                     ConstructionOrigin origin, SourcePos pos, Region region) {
-            this(Var.respelled(fn, denotes, reachedAs, pos, null), args, origin, pos, region);
-        }
 
         /** Whether what this applies is a name. A reader that wants the name itself matches on
          * {@link #function()}, which is where it is. */
@@ -1696,34 +1546,6 @@ public interface Ast {
             return written != null ? written : name().reportedAt();
         }
 
-        /**
-         * The name of the declaration this application reaches, or the empty spelling where it
-         * reaches none — what a table keyed by a declaration's name is looked up with.
-         *
-         * <p>A library name is filed under its qualifier whether or not an import let it be written
-         * bare, so that is what it answers; every other name is filed as it is written. The empty
-         * answer is not a convention: it is what applying something that is not a name leaves, and
-         * no declaration is named the empty spelling.
-         *
-         * <p>Never {@link #written()}: a spelling a report quotes is not what this application
-         * reaches, and a lowering that put one there would otherwise have every table in the
-         * compiler looked up with it.
-         */
-        public String reaches() {
-            return function instanceof Var v ? v.reaches() : "";
-        }
-
-        /** How this module reaches what the application applies, or null where what it applies is
-         * not a name. Settled at resolution and carried, so it says the same thing whichever passes
-         * have run. */
-        public ReachName reachedAs() {
-            return function instanceof Var v ? v.reachedAs() : null;
-        }
-
-        /** What the name this applies denotes, or null where what it applies is not a name. */
-        public ValueName denotes() {
-            return function instanceof Var v ? v.denotes() : null;
-        }
 
 
         /** The same application, carried into a body by a value that body named. A recursive helper
@@ -1753,22 +1575,6 @@ public interface Ast {
     enum BinOp { EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT }
 
     /**
-     * {@code e} with each of its slots replaced by what the operator for that slot answers, its own
-     * kind and position kept — or {@code e} itself where every slot answered what it was given, so a
-     * walk that only reads allocates nothing.
-     *
-     * <p>The children of an expression occupy two kinds of slot, and they differ in what may stand
-     * there. An expression slot takes any expression — an argument, a field's value, the thing an
-     * {@code if} tests. A name slot takes only a name: a construction's spread {@code T { ..base }}
-     * copies the fields of what the name stands for, so there is nothing there to evaluate and
-     * nothing else that could be written.
-     *
-     * <p>This is the one place that says which slots a node has. Both {@link #mapChildren} and
-     * {@link #forEachChild} are derived from it, so a slot a node gains later is written once and
-     * neither walk can be left behind. Being exhaustive over {@code Expr}, a node kind added later
-     * stops the build here, which is the one place it has to be accounted for.
-     */
-    /**
      * {@code e} written over {@code region} instead of whatever it says now — for the one caller
      * that knows a wider stretch of source than the node it is holding.
      *
@@ -1786,7 +1592,7 @@ public interface Ast {
             case DecimalLit x -> new DecimalLit(x.value(), x.pos(), region);
             case StringLit x -> new StringLit(x.value(), x.pos(), region);
             case BoolLit x -> new BoolLit(x.value(), x.pos(), region);
-            case Var x -> new Var(x.written(), x.denotes(), x.reachedAs(), region);
+            case Var x -> x.over(region);
             case Unreachable x -> new Unreachable(x.reason(), x.pos(), region);
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
@@ -1801,7 +1607,7 @@ public interface Ast {
                     x.opens(), x.body(), x.pos(), region);
             case Expansion x -> new Expansion(x.callee(), x.application(), x.bound(), x.given(),
                     x.declaredReturn(), x.body(), x.pos(), region);
-            case Block x -> new Block(x.params(), x.body(), x.pos(), region);
+            case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.pos(), region);
             case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
             case Tuple x -> new Tuple(x.elements(), x.pos(), region);
@@ -1812,6 +1618,22 @@ public interface Ast {
         };
     }
 
+    /**
+     * {@code e} with each of its slots replaced by what the operator for that slot answers, its own
+     * kind and position kept — or {@code e} itself where every slot answered what it was given, so a
+     * walk that only reads allocates nothing.
+     *
+     * <p>The children of an expression occupy two kinds of slot, and they differ in what may stand
+     * there. An expression slot takes any expression — an argument, a field's value, the thing an
+     * {@code if} tests. A name slot takes only a name: a construction's spread {@code T { ..base }}
+     * copies the fields of what the name stands for, so there is nothing there to evaluate and
+     * nothing else that could be written.
+     *
+     * <p>This is the one place that says which slots a node has. Both {@link #mapChildren} and
+     * {@link #forEachChild} are derived from it, so a slot a node gains later is written once and
+     * neither walk can be left behind. Being exhaustive over {@code Expr}, a node kind added later
+     * stops the build here, which is the one place it has to be accounted for.
+     */
     private static Expr atSlots(Expr e, UnaryOperator<Expr> atExpr, UnaryOperator<Var> atName) {
         return switch (e) {
             case IntLit x -> x;
@@ -1882,7 +1704,8 @@ public interface Ast {
             }
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());
-                yield body == bl.body() ? bl : new Block(bl.params(), body, bl.pos(), bl.region());
+                yield body == bl.body() ? bl
+                        : new Block(bl.params(), body, bl.rule(), bl.pos(), bl.region());
             }
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);

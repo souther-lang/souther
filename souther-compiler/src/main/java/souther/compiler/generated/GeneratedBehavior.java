@@ -1,6 +1,8 @@
 package souther.compiler.generated;
 
-import souther.compiler.codegen.Backend;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.GeneratedClasses;
+import souther.compiler.jvm.SoutherJvmAbi;
 
 /**
  * A behavior this compilation emitted, entered from Java.
@@ -10,9 +12,10 @@ import souther.compiler.codegen.Backend;
  * out below because a caller has to act on them somewhere. This is that somewhere, and the only one:
  * the ABI has a producer and it has a consumer, and each is one place.
  *
- * <p>The class name is not written out, because it does not have to be. {@link Backend} decides it
- * and is asked, which is what the two of them being one rule looks like. Restating it here is exactly
- * what happened before and how the CLI and the compiler came to spell one name two ways.
+ * <p>The class name is not written out, because it cannot be. A caller names the behavior and
+ * {@link SoutherJvmAbi} says what its implementation is called; there is no way from here to a
+ * spelling that is not that one. Restating it is what happened before, and how the CLI and the
+ * compiler came to spell one name two ways.
  */
 public final class GeneratedBehavior {
 
@@ -31,16 +34,16 @@ public final class GeneratedBehavior {
      */
     public static Object apply(ClassLoader loader, String pkg, String behavior, Object[] args)
             throws ReflectiveOperationException {
-        Class<?> c = loader.loadClass(implClass(pkg, behavior));
+        Class<?> c = GeneratedClasses.load(loader, new GeneratedClass.BehaviorImpl(pkg, behavior));
         Object instance = c.getConstructor().newInstance();
         Class<?>[] paramTypes = new Class<?>[args.length];
         java.util.Arrays.fill(paramTypes, Object.class);
         return c.getMethod("apply", paramTypes).invoke(instance, args);
     }
 
-    /** Where a compiled behavior is entered. Codegen decides that name and is asked for it — the
-     *  rule was written there once, and a second statement of a name is a second name. */
+    /** Where a compiled behavior is entered, for a caller that has to say the name rather than use
+     *  it — a report that the class was not there. The ABI decides it and is asked. */
     public static String implClass(String pkg, String behavior) {
-        return pkg + "." + Backend.behaviorImplClass(behavior);
+        return SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorImpl(pkg, behavior)).binaryName();
     }
 }

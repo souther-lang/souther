@@ -40,7 +40,7 @@ class CompileOrPatternTest {
     void anOrPatternRunsOneBodyForEveryAlternative() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(ROUTING), CompileOrPatternTest.class.getClassLoader());
-        Object classify = loader.loadClass("demo.Classify" + "$Impl").getConstructor().newInstance();
+        Object classify = Emitted.behavior(loader, "demo", "classify").getConstructor().newInstance();
 
         // A and B take the same (Lo) case; C takes the other (Hi) — the or-pattern fires for both A and B
         assertEquals("demo.Lo", apply(loader, classify, "A").getClass().getName());
@@ -132,7 +132,7 @@ class CompileOrPatternTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.Pick" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "pick").getConstructor().newInstance();
 
         // inner = None -> the None arm returns the outer x (the fallback)
         Object none = Codecs.decoded(loader, "demo.Wrap", Map.of("fallback", 42L));

@@ -36,7 +36,7 @@ class CompileDatePartsTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("on", LocalDate.parse("2026-07-26")));
-        Object out = Codecs.apply(loader.loadClass("demo.Parts$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "parts").getConstructor().newInstance(), in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals(2026L, m.get("y"));
@@ -67,7 +67,7 @@ class CompileDatePartsTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Bounds$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "bounds").getConstructor().newInstance();
 
         Map<?, ?> jan = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior,
                 Codecs.decoded(loader, "demo.In", Map.of("on", LocalDate.parse("2026-01-15")))));

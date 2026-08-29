@@ -7,10 +7,14 @@ import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.HashSet;
+import souther.compiler.jvm.ClassFileImage;
+
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -22,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompileInjectedFactoryTest {
 
     private Class<?> base(String moduleSrc, String baseClass) throws Exception {
-        Map<String, byte[]> classes = Compiler.compile(moduleSrc);
+        Map<String, ClassFileImage> classes = Compiler.compile(moduleSrc);
         return new BytesClassLoader(classes, getClass().getClassLoader()).loadClass(baseClass);
     }
 
@@ -63,7 +67,7 @@ class CompileInjectedFactoryTest {
                 data Done = { result: Int }
                 data Failed
                 data In = { x: Int }
-                behavior mk : (i: In) -> Done | Failed constructs Done, Failed
+                behavior mk : (i: In) -> Done | Failed constructs Done
                 """, "demo.Mk");
         Class<?> failed = mk.getClassLoader().loadClass("demo.Failed");
         Method unit = mk.getDeclaredMethod("Failed");
@@ -92,14 +96,14 @@ class CompileInjectedFactoryTest {
     void theFieldBearingFactoryBuildsThroughConstructNotTheRawConstructor() throws Exception {
         // The factory must route through __construct (which checks the invariant) and orThrow (which
         // aborts on a violation), not the raw non-checking constructor. Verify the emitted bytecode.
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module demo
                 data OrderId = String
                     invariant String.length(value) > 0
                 data In = { x: Int }
                 behavior mk : (i: In) -> OrderId constructs OrderId
                 """);
-        Set<String> invoked = invokedIn(classes.get("demo.Mk"), "OrderId");
+        Set<String> invoked = invokedIn(classes.get("demo.Mk").bytes(), "OrderId");
         assertTrue(invoked.contains("__construct"), "the factory runs the invariant through __construct");
         assertTrue(invoked.contains("orThrow"), "a violation aborts via orThrow");
     }
@@ -117,24 +121,28 @@ class CompileInjectedFactoryTest {
         return names;
     }
 
+    /**
+     * The two factories come from two places, and this behavior writes no clause at all.
+     *
+     * <p>`Missing` gets one because it is a unit case of the output type, which is where a base
+     * class reads its unit factories from (spec §java-base-class) — not from `constructs`, where a
+     * unit could not be named anyway (spec §constructs-excludes-unit-data). `Member` gets none
+     * because a field-bearing type gets its factory from the clause, and a value read through a
+     * decoder is not in one: by shape alone there is no telling it from a minted one, which is what
+     * the clause is there to say.
+     */
     @Test
     void aPassThroughOutputTypeGetsNoFactory() throws Exception {
-        // `mk` reads Member through a decoder (it is not in `constructs`), so no factory is handed out
-        // for it — only `Missing`, which the behavior mints.
         Class<?> mk = base("""
                 module demo
                 data Member = { id: Int }
                 data Missing
                 data In = { x: Int }
-                behavior mk : (i: In) -> Member | Missing constructs Missing
+                behavior mk : (i: In) -> Member | Missing
                 """, "demo.Mk");
-        mk.getDeclaredMethod("Missing");   // present
-        boolean memberFactory = true;
-        try {
-            mk.getDeclaredMethod("Member", long.class);
-        } catch (NoSuchMethodException _) {
-            memberFactory = false;
-        }
-        assertEquals(false, memberFactory, "no factory for a pass-through (non-constructed) type");
+        assertDoesNotThrow(() -> mk.getDeclaredMethod("Missing"),
+                "a unit case of the output has its factory");
+        assertThrows(NoSuchMethodException.class, () -> mk.getDeclaredMethod("Member", long.class),
+                "no factory for a pass-through the clause does not name");
     }
 }

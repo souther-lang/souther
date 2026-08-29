@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -29,7 +31,7 @@ class CompileGrowingMapFoldTest {
                 """.formatted(body);
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", xs));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, bag);
         return (Map<?, ?>) ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("m");
     }
@@ -37,9 +39,9 @@ class CompileGrowingMapFoldTest {
     /** How many times the compiled module calls {@code method} on the runtime's map helpers. */
     private int callsTo(String src, String method) {
         int calls = 0;
-        for (byte[] bytes : Compiler.compile(src).values()) {
+        for (ClassFileImage emitted : Compiler.compile(src).values()) {
             for (java.lang.classfile.MethodModel m : java.lang.classfile.ClassFile.of()
-                    .parse(bytes).methods()) {
+                    .parse(emitted.bytes()).methods()) {
                 if (m.code().isEmpty()) {
                     continue;
                 }
@@ -164,7 +166,7 @@ class CompileGrowingMapFoldTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", List.of("a", "b", "a")));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, bag);
         assertEquals(Map.of("a", List.of("a", "a"), "b", List.of("b")),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("m"));

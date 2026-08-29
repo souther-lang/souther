@@ -1,5 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.types.TypeKey;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.types.TypeSymbols;
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassFile;
@@ -38,10 +41,10 @@ class CompileCrossModuleUnionTest {
     @Test
     void aCaseClassCarriesOnlyItsOwnModulesUnions() throws Exception {
         // the fact the rule rests on: `implements` is settled here, when `inv` is generated
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(INVENTORY));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(INVENTORY));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Class<?> shortage = loader.loadClass("inv.Shortage");
-        assertEquals(List.of(loader.loadClass("inv.AllocateResult")),
+        assertEquals(List.of(loader.loadClass(Emitted.result("inv", "allocate"))),
                 Arrays.asList(shortage.getInterfaces()),
                 "a case class implements the unions of its own module and no others");
     }
@@ -61,16 +64,16 @@ class CompileCrossModuleUnionTest {
                 let instruct (a) = Shipped { sku = a.sku }
                 behavior allocateAndShip = allocate >-> instruct
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(inventory, shipping));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        assertEquals(List.of(loader.loadClass("ship.Shipped"), loader.loadClass("ship.ShortageCase")),
-                Arrays.asList(loader.loadClass("ship.AllocateAndShipResult").getPermittedSubclasses()));
+        assertEquals(List.of(loader.loadClass("ship.Shipped"), loader.loadClass(Emitted.bridgeCase("ship", TypeSymbols.declared(new TypeKey("inv", "Shortage"))))),
+                Arrays.asList(loader.loadClass(Emitted.result("ship", "allocateAndShip")).getPermittedSubclasses()));
 
         Object composed = loader.loadClass("ship.AllocateAndShip").getMethod("of").invoke(null);
         assertEquals("ship.Shipped",
                 Codecs.apply(composed, Codecs.decoded(loader, "inv.Sku", "SKU-1")).getClass().getName());
         Object departed = Codecs.apply(composed, Codecs.decoded(loader, "inv.Sku", ""));
-        assertEquals("ship.ShortageCase", departed.getClass().getName());
+        assertEquals(Emitted.bridgeCase("ship", TypeSymbols.declared(new TypeKey("inv", "Shortage"))), departed.getClass().getName());
         assertEquals("inv.Shortage",
                 departed.getClass().getMethod("value").invoke(departed).getClass().getName(),
                 "the bridge case holds the imported value as it is");
@@ -99,8 +102,8 @@ class CompileCrossModuleUnionTest {
                     | Allocated as a -> Shipped { sku = a.sku }
                     | Shortage as s -> s
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
-        byte[] reader = Subclasses.compile(classes, "consumer.Reader", """
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(inventory, shipping));
+        ClassFileImage reader = Subclasses.compile(classes, "consumer.Reader", """
                 package consumer;
                 import inv.Sku;
                 import ship.Ship;
@@ -115,7 +118,7 @@ class CompileCrossModuleUnionTest {
                     }
                 }
                 """);
-        Map<String, byte[]> all = new LinkedHashMap<>(classes);
+        Map<String, ClassFileImage> all = new LinkedHashMap<>(classes);
         all.put("consumer.Reader", reader);
         BytesClassLoader loader = new BytesClassLoader(all, getClass().getClassLoader());
         java.lang.reflect.Method read = loader.loadClass("consumer.Reader")
@@ -140,9 +143,9 @@ class CompileCrossModuleUnionTest {
                     | Allocated as a -> Shipped { sku = a.sku }
                     | Shortage as s -> NotShipped { sku = s.sku }
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(INVENTORY, shipping));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(INVENTORY, shipping));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> union = loader.loadClass("ship.ShipResult");
+        Class<?> union = loader.loadClass(Emitted.result("ship", "ship"));
         assertEquals(List.of(loader.loadClass("ship.NotShipped"), loader.loadClass("ship.Shipped")),
                 Arrays.asList(union.getPermittedSubclasses()),
                 "the union is this module's cases, and each of them implements it");
@@ -169,7 +172,7 @@ class CompileCrossModuleUnionTest {
                     constructs Label
                 behavior instruct : (a: Allocated) -> Shipped | NoLabel
                     depends on printLabel
-                    constructs Shipped, NoLabel
+                    constructs Shipped
                 let instruct (a, printLabel) =
                     if String.length(a.sku.value) > 0
                     then Shipped { sku = a.sku, label = printLabel(a.sku) }
@@ -182,9 +185,9 @@ class CompileCrossModuleUnionTest {
                     | Allocated as a -> instruct(a)
                     | Shortage as s -> NotAllocated { sku = s.sku }
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(inventory, shipping));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> union = loader.loadClass("ship.AllocateAndShipResult");
+        Class<?> union = loader.loadClass(Emitted.result("ship", "allocateAndShip"));
         assertEquals(List.of(loader.loadClass("ship.NoLabel"), loader.loadClass("ship.NotAllocated"),
                         loader.loadClass("ship.Shipped")),
                 Arrays.asList(union.getPermittedSubclasses()),
@@ -226,7 +229,7 @@ class CompileCrossModuleUnionTest {
                 data Token = { v: String }
                 data NoToken
                 behavior mint : () -> Token | NoToken
-                    constructs Token, NoToken
+                    constructs Token
                 """;
         String stamping = """
                 module down exposing ( Stamped, Unstamped, stamp )
@@ -235,18 +238,19 @@ class CompileCrossModuleUnionTest {
                 data Unstamped
                 behavior stamp : (n: Int) -> Stamped | Unstamped
                     depends on mint
-                    constructs Stamped, Unstamped
+                    constructs Stamped
                 let stamp (n, mint) =
                     match mint() with
                     | Token as t -> Stamped { v = t.v }
                     | NoToken -> Unstamped
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(issuing, stamping));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(issuing, stamping));
         // The call is not run here: `up.Mint` is an abstract class with a protected constructor, so a
         // stand-in cannot be made by reflection alone. What the bug produced was a descriptor naming a
         // class nothing emits, which is what is checked — the call linked to `down.MintResult` before.
-        assertEquals("()Lup/MintResult;", calleeDescriptor(classes.get("down.Stamp$Impl"), "up/Mint"));
-        assertTrue(classes.containsKey("up.MintResult"), "and that class is one this compilation wrote");
+        assertEquals("()Lup/MintResult;",
+                calleeDescriptor(classes.get(Emitted.impl("down", "stamp")).bytes(), "up/Mint"));
+        assertTrue(classes.containsKey(Emitted.result("up", "mint")), "and that class is one this compilation wrote");
     }
 
     /** The descriptor {@code $Impl} calls {@code apply} with on {@code owner}, read off the bytes. */
@@ -291,9 +295,9 @@ class CompileCrossModuleUnionTest {
                     | Allocated as a -> Shipped { sku = a.sku }
                     | Shortage as s -> NotAllocated { sku = s.sku }
                 """;
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(inventory, shipping));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Object behavior = loader.loadClass("ship.Ship$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "ship", "ship").getConstructor().newInstance();
         Object sku = Codecs.decoded(loader, "inv.Sku", "SKU-1");
         assertEquals("ship.Shipped", applyTwo(behavior, sku, 3L).getClass().getName(),
                 "the call links because the union it names is inv's");

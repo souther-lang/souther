@@ -157,6 +157,12 @@ public record Count(BigDecimal at) implements Place {
         return at.stripTrailingZeros().toPlainString();
     }
 
+    /** The same count with the trailing zeros gone, which is the number {@link #key()} names. */
+    @Override
+    public Count canonical() {
+        return new Count(at.stripTrailingZeros());
+    }
+
     @Override
     public String toString() {
         return key();

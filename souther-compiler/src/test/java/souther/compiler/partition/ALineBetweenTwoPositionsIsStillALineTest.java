@@ -7,6 +7,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The line is where the two are equal. A guard's arms are above the line and below-or-on it, so a
  * row on the line takes the same arm as one well below it, and the arms cannot stand in for it — a
  * row on the line is the one thing that tells a rule written {@code >} from one written {@code >=}
- * (spec §every-guard-boundary-has-a-row).
+ * (spec §every-border-has-a-row-against-its-line).
  *
  * <p>Nothing asked for it. The reader that turns a comparison into a line wants a constant on one
  * side, and where there is none it produced nothing at all: no line, no obligation, and a note saying
@@ -47,7 +49,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Charge, ceiling: Ceiling) -> Result
-                constructs NoBenefit, Benefit, Charge
+                constructs Benefit, Charge
             let benefitOf (charge, ceiling) = {
                 guard charge.value > ceiling.value else NoBenefit
                 Benefit { amount = Charge(charge.value - ceiling.value) }
@@ -75,7 +77,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Int, ceiling: Int) -> Result
-                constructs NoBenefit, Benefit
+                constructs Benefit
             let benefitOf (charge, ceiling) = {
                 guard charge > ceiling else NoBenefit
                 Benefit { amount = charge - ceiling }
@@ -100,7 +102,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Rank, b: Rank) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { r = a }
@@ -120,7 +122,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: String, b: String) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { s = a }
@@ -146,7 +148,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Bronze, b: Gold) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { r = a }
@@ -166,7 +168,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: String, b: String) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard String.length(a) > String.length(b) else No
                 Yes { s = a }
@@ -190,7 +192,6 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (p: Pair) -> Result
-                constructs No, Yes
             let cmp (p) = {
                 guard p.a > p.b else No
                 Yes
@@ -220,7 +221,6 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: NonZero, b: Zero) -> Result
-                constructs No, Yes
             let cmp (a, b) = {
                 guard a.value > b.value else No
                 Yes
@@ -240,7 +240,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Int, ceiling: Int) -> Result
-                constructs NoBenefit, Benefit
+                constructs Benefit
             let benefitOf (charge, ceiling) = {
                 guard charge > ceiling + 1000 else NoBenefit
                 Benefit { amount = charge - ceiling }
@@ -265,7 +265,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Low, b: High) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a.value > b.value else No
                 Yes { v = a }
@@ -279,18 +279,29 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aComparisonOfTwoPositionsAsksForARowWhereTheyAreEqual() {
         String report = report(TWO_NEWTYPES);
 
-        assertTrue(report.contains("no row is at benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("boundary    2/3"), report);
+        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
+        assertTrue(report.contains("border      borders 3   coverage items 6/8   excluded 4"), report);
     }
 
-    /** The row on the line meets it, and the line is met by a row that reached the comparison — the
-     *  same rule a line against a constant is met by. */
+    /**
+     * The row on the line meets the point where the two terms meet, and is met by a row that reached
+     * the comparison — the same rule a line against a constant is met by.
+     *
+     * <p>And meets that point alone. The border owes a row one step from the line as well, which is
+     * a different pair: `charge > ceiling` is open where they meet, so the row on the line is the
+     * point outside and the point inside is where the charge is one over. A reading that had them as
+     * one set would call this border covered on the strength of a row that is at the other side of
+     * it.
+     */
     @Test
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("boundary    3/3"), report);
-        assertFalse(report.contains("no row is at benefitOf/charge = ceiling"), report);
+        assertTrue(report.contains("border      borders 3   coverage items 7/8   excluded 4"), report);
+        assertFalse(report.contains("no row is at the OFF point benefitOf/charge = ceiling ("),
+                report);
+        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1"),
+                report);
     }
 
     /**
@@ -304,8 +315,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aBehaviorWithNoAxisStillDrawsALineBetweenItsPositions() {
         String report = report(NO_AXIS);
 
-        assertTrue(report.contains("no row is at benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("boundary    0/1"), report);
+        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
+        assertTrue(report.contains("border      borders 1   coverage items 2/4"), report);
     }
 
     /** An enumeration counts on the place its cases are declared at, so it reaches this by the same
@@ -314,7 +325,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void anEnumerationDrawsOneToo() {
         String report = report(ENUMERATION);
 
-        assertTrue(report.contains("no row is at cmp/a = b"), report);
+        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
     }
 
     /** A carrier whose values are strings reaches this the way one whose values count does. Nothing
@@ -323,7 +334,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aCarrierOfStringsDrawsOneToo() {
         String report = report(TEXT);
 
-        assertTrue(report.contains("no row is at cmp/a = b"), report);
+        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
     }
 
     /**
@@ -337,34 +348,54 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aComparableTypeWithNoCarrierDrawsNone() {
         String report = report(NO_CARRIER);
 
-        assertFalse(report.contains("no row is at cmp/a = b"), report);
-        assertTrue(report.contains("boundary    not measured (no line was derived at any position)"),
+        assertFalse(report.contains("point cmp/a = b"), report);
+        assertTrue(report.contains("border      not measured (no line was derived at any position)"),
                 report);
     }
 
-    /** One side has to be a position and not something taken of one. Where it is not, the line is
-     *  where the difference is a constant, which is not a place either position can be asked for. */
+    /**
+     * An offset on one side moves the line rather than taking it away.
+     *
+     * <p>{@code charge > ceiling + 1000} is {@code charge - ceiling > 1000}: a line on the same
+     * distance, one thousand along it. Read as a position against a position, the offset made the
+     * second side something no line could be drawn against, and the rule went unread — while the
+     * check enforced it and refused every row past it.
+     *
+     * <p>It still divides neither position, so the note under the classes measure is the one a
+     * relation gets.
+     */
     @Test
-    void anOperandThatIsNotAPositionDrawsNone() {
+    void anOffsetOnOneSideMovesTheLineRatherThanTakingItAway() {
         String report = report(NOT_A_TERM);
 
-        assertFalse(report.contains("no row is at"), report);
-        assertTrue(report.contains("not read: charge"), report);
+        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling + 1000"),
+                report);
+        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1001"),
+                report);
+        assertTrue(notReadAbout(report, "charge"), report);
     }
 
     /**
-     * A line no count satisfies is reported and not counted.
+     * A line the quantity never reaches is said, and it is not a border.
      *
-     * <p>The rules leave the two positions nothing in common, so no row can be on the line. That is
-     * not a row anybody is owed and not a gap a build is refused over — and it is still the only thing
-     * there is to say about the comparison, so it is said.
+     * <p>The rules leave the two positions nothing in common: {@code a} runs to minus one and
+     * {@code b} from one, so the distance between them never comes near the place they would be
+     * equal. That is not a border whose row nobody could find — it is not a border, and the
+     * comparison says so.
+     *
+     * <p>Apart from {@link #aRuleTheRangesCouldNotTakeInIsNotAProofEither}, where the ranges do
+     * meet and the pair on the line is what the rules refuse. There the line is real and the row for
+     * it is unproven; here the quantity stops short of the line. Held alike, a rule stating
+     * something no row satisfies was reported as one this compiler could not find a witness for.
      */
     @Test
     void aLineNoCountSatisfiesIsSaidAndNotCounted() {
-        String report = report(NO_COMMON_COUNT);
-
-        assertTrue(report.contains("not known to be writable: cmp/a = b"), report);
-        assertFalse(report.contains("no row is at cmp/a = b"), report);
+        assertEquals(List.of("a: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS",
+                        "b: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS"),
+                notRead(NO_COMMON_COUNT),
+                "both positions are named, and the rule was read to the end");
+        assertEquals(2, borders(NO_COMMON_COUNT),
+                "the two the newtypes' own bounds draw, and none between the positions");
     }
 
     /**
@@ -380,14 +411,13 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(TWO_NEWTYPES);
 
         int partition = report.indexOf("    partition ");
-        int note = report.indexOf("· not read: charge");
-        int boundary = report.indexOf("    boundary ");
+        int note = report.indexOf("dividing one, about `charge`");
+        int boundary = report.indexOf("    border ");
 
         assertTrue(note > partition && note < boundary,
                 "the note about the classes sits under the classes measure:\n" + report);
         assertTrue(report.contains(
-                "not read: charge (the comparison relates it to another position"
-                        + " rather than dividing it)"), report);
+                "it relates two positions rather than dividing one, about `charge`"), report);
     }
 
     /**
@@ -402,16 +432,6 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String rows = generated(TWO_NEWTYPES);
 
         assertTrue(rows.contains("(Charge(1000), Ceiling(1000))"), rows);
-    }
-
-    /** A count both positions admit is what the offer is written at, and where the rules leave none
-     *  there is no offer — and no claim that the line cannot be written on either. */
-    @Test
-    void aLineNoCountSatisfiesIsOfferedNoRowAndCalledNoNames() {
-        String rows = generated(NO_COMMON_COUNT);
-
-        assertTrue(rows.contains("no row for `a = b`"), rows);
-        assertTrue(rows.contains("does not make one unwritable"), rows);
     }
 
     /**
@@ -431,9 +451,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(MEASURED);
         String rows = generated(MEASURED);
 
-        assertFalse(report.contains("no row is at cmp/String.length(a) = String.length(b)"), report);
+        assertFalse(report.contains("no row is at the OFF point cmp/String.length(a) = String.length(b)"), report);
         assertTrue(report.contains(
-                "not known to be writable: cmp/String.length(a) = String.length(b)"), report);
+                "not known to be writable: the OFF point cmp/String.length(a) = String.length(b)"), report);
         assertTrue(rows.contains("nothing here could build a representative for it"), rows);
         assertTrue(rows.contains("does not make one unwritable"), rows);
     }
@@ -452,9 +472,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleTheRangesCouldNotTakeInIsNotAProofEither() {
         String report = report(A_HOLE_AND_A_POINT);
 
-        assertFalse(report.contains("no row is at cmp/a = b"),
+        assertFalse(report.contains("no row is at the OFF point cmp/a = b"),
                 "zero is the only place both ranges hold and one position refuses it:\n" + report);
-        assertTrue(report.contains("not known to be writable: cmp/a = b"), report);
+        assertTrue(report.contains("not known to be writable: the OFF point cmp/a = b"), report);
     }
 
     /**
@@ -462,16 +482,23 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      *
      * <p>A place in both ranges is one each position admits on its own, and a rule relating them can
      * refuse the pair each half would have taken. Under {@code invariant a < b} the two ranges run
-     * over each other everywhere and the diagonal holds nothing, so a projection read as a proof asks
-     * for a row that cannot exist — and {@code --strict} refuses a model for not writing it.
+     * over each other everywhere and the diagonal holds nothing — so what the rules leave the
+     * distance between them never reaches the place they would be equal, and there is no border
+     * there at all. Read off the two ranges instead, a row that cannot exist was asked for and
+     * {@code --strict} refused a model for not writing it.
      */
     @Test
     void aRuleRelatingTheTwoPositionsIsNotAnsweredByTheirRangesOverlapping() {
-        String report = report(RULED_OUT_BY_THE_RECORD);
-
-        assertFalse(report.contains("no row is at cmp/p.a = p.b"),
-                "the line holds no value, so no row is owed at it:\n" + report);
-        assertTrue(report.contains("not known to be writable: cmp/p.a = p.b"), report);
+        assertEquals(List.of("p.a: UNSUPPORTED_PARTITION_SHAPE", "p.b: UNSUPPORTED_PARTITION_SHAPE",
+                        "p.a: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS",
+                        "p.b: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS"),
+                notRead(RULED_OUT_BY_THE_RECORD),
+                "the record's own rule relates them, and the guard's line is outside the distance"
+                        + " that rule leaves between them");
+        assertEquals(1, borders(RULED_OUT_BY_THE_RECORD),
+                "the diagonal holds nothing, so the guard has no border to owe a row at — and the"
+                        + " record's own rule, which is what leaves the distance where it is, has"
+                        + " the one line here");
     }
 
     /**
@@ -480,28 +507,59 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      * <p>The pair to the case above. Without it, refusing every line under a record that relates its
      * fields would pass just as well, and that would drop the rows the model does owe wherever an
      * author wrote a rule of any kind.
+     *
+     * <p>Two lines, because the model states two rules about the pair: the record's clause and the
+     * body's guard. They fall on one quantity and each is its own line — a row answering one says
+     * nothing about the other, and what each owes is read off the rule that drew it.
      */
     @Test
     void aRuleThatAdmitsTheDiagonalStillOwesTheRow() {
         String report = report(ALLOWED_BY_THE_RECORD);
 
-        assertTrue(report.contains("no row is at cmp/p.a = p.b"), report);
-        assertTrue(report.contains("boundary    0/1"), report);
+        assertTrue(report.contains("no row is at the OFF point cmp/p.a = p.b"), report);
+        assertTrue(report.contains("border      borders 2   coverage items 1/3"), report);
     }
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
+    /**
+     * What the first behavior of {@code model} left unread, as the position it is about and the
+     * reason it was left with.
+     *
+     * <p>Off the evidence rather than out of the rendered report. What a document prints for a
+     * reason is a projection made elsewhere, and a test reading the sentence is held to how it is
+     * worded as much as to what it says.
+     */
+    private static List<String> notRead(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
+                .partition().notRead().stream()
+                .map(each -> each.at() + ": " + each.reason()).toList();
+    }
+
+    /** How many borders the first behavior of {@code model} draws, which is what a line the
+     *  quantity never reaches does not add to. */
+    private static int borders(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
+                .lines().size();
+    }
+
     private static String generated(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return souther.compiler.report.GeneratedRows.of(compilation, null, null, true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
     }
 
     /** Held here so a rename of the report's own words does not quietly turn every assertion above
@@ -510,7 +568,29 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void theReportStillNamesTheMeasuresTheseAssertionsRead() {
         String report = report(TWO_NEWTYPES);
 
-        assertEquals(1, report.split("    boundary ", -1).length - 1, report);
+        assertEquals(1, report.split("    border ", -1).length - 1, report);
         assertEquals(1, report.split("    partition ", -1).length - 1, report);
+    }
+
+    /**
+     * Whether any line of {@code block} saying a rule left the position with no line is about
+     * {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     *
+     * <p>Either word, because the report writes two: a reading that stopped is `+not read+` and a
+     * rule read to the end that divided no position is `+no line+`. Which of them a rule gets is
+     * its reason's business and not this one's — what is asked here is whether the position was
+     * named at all.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line ->
+                (line.contains("not read:") || line.contains("no line:"))
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("no line: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

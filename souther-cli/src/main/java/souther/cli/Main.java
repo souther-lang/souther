@@ -1,5 +1,9 @@
 package souther.cli;
 
+import souther.compiler.source.SourceId;
+
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.jvm.JvmClassName;
 import souther.compiler.Compiler;
 import souther.compiler.Reserved;
 import souther.compiler.cst.CstError;
@@ -28,6 +32,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
+import souther.lsp.LspServer;
+import souther.cli.init.InitCommand;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -144,6 +150,7 @@ public final class Main {
      */
     private static java.util.function.IntSupplier work(CliCommand command, String[] rest) {
         return switch (command) {
+            case INIT -> () -> initSubcommand(rest);
             case RUN -> () -> runSubcommand(rest);
             case COMPILE -> () -> compileSubcommand(rest);
             case FMT -> () -> fmtSubcommand(rest);
@@ -152,6 +159,7 @@ public final class Main {
             case API -> () -> ApiCommand.run(rest, System.out, System.err);
             case JAPI -> () -> JapiCommand.run(rest, System.out, System.err);
             case MCP -> () -> mcpSubcommand(rest);
+            case LSP -> () -> lspSubcommand(rest);
             case HELP -> () -> helpSubcommand(rest);
         };
     }
@@ -189,11 +197,14 @@ public final class Main {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--adequacy" -> {
-                    if (adequacyLevel(args[++i]) == null) {
-                        System.err.println("`--adequacy` takes off, witness or all");
+                    Adequacy.Asked named = adequacyAsked(args[++i]);
+                    if (named == null) {
+                        System.err.println(
+                                "`--adequacy` takes off, witness, all, reliable-domain"
+                                        + " or classes");
                         return 2;
                     }
-                    measure = Adequacy.Asked.warningsAt(adequacyLevel(args[i]));
+                    measure = named;
                 }
                 case "--warnings" -> {
                     if (!(args[++i].equals("report") || args[i].equals("error"))) {
@@ -202,7 +213,7 @@ public final class Main {
                     }
                     refuseWarnings = args[i].equals("error");
                 }
-                case "-d" -> outDir = Path.of(args[++i]);
+                case "-d", "--dir" -> outDir = Path.of(args[++i]);
                 case "-cp", "--class-path" -> {
                     for (String entry : args[++i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
@@ -220,7 +231,8 @@ public final class Main {
         }
         List<Located> warnings = new ArrayList<>();
         try {
-            Map<String, byte[]> classes = compiledClasses(sources, classPath, warnings, measure);
+            Map<String, ClassFileImage> classes =
+                    compiledClasses(sources, classPath, warnings, measure);
             // Before the written files: the warnings are about the source, and a long list of paths
             // between them and the command would bury them.
             report(warnings, sources, render);
@@ -241,6 +253,23 @@ public final class Main {
             System.err.println("io error: " + e.getMessage());
             return 1;
         }
+    }
+
+    /**
+     * {@code souther init [<groupId>:<artifactId>]}: writes a project, or adds Souther to one.
+     *
+     * <p>Through the same flag extraction as every other command that answers a reader, so that what
+     * it writes is in the language the line asked for, and a language tag that names nothing is
+     * refused here the way it is everywhere else. No other rendering flag is one of this command's:
+     * what it writes is a list of files rather than a diagnostic.
+     */
+    private static int initSubcommand(String[] rawArgs) {
+        RenderOptions render = new RenderOptions();
+        String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
+        return InitCommand.run(args, render.locale(), System.out, System.err);
     }
 
     /**
@@ -273,8 +302,16 @@ public final class Main {
         boolean generate = false;
         boolean boundaries = false;
         // The report is this command's whole output, so everything is measured and nothing is said
-        // twice: what the warnings would say, the report says in one place.
-        Adequacy.Asked measure = Adequacy.Asked.reportOnly();
+        // twice: what the warnings would say, the report says in one place. Measuring is not a
+        // choice this command makes, and the bar it is read against is `--adequacy`'s — the same
+        // word a compile picks a bar with, meaning the same bar. Left unsaid it is the whole of
+        // what the syllabus asks for.
+        //
+        // `--strict` decides the exit status of the verdict below and no more. It names no bar,
+        // which is what keeps the report a reader is given the same whether or not it was written:
+        // a flag that chose a bar would change which findings the report marks, and the two runs a
+        // reader compares would be reports of two different questions.
+        Adequacy.Asked measure = Adequacy.Asked.fullReport();
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-cp", "--class-path" -> {
@@ -286,6 +323,21 @@ public final class Main {
                 }
                 case "--module" -> module = Reserved.name(args[++i]);   // a name from outside
                 case "--behavior" -> behavior = Reserved.name(args[++i]);   // a name from outside
+                case "--adequacy" -> {
+                    Adequacy.AdequacyBar bar = barNamed(args[++i]);
+                    if (bar == null) {
+                        // The levels are turned down in the same words they are offered in
+                        // elsewhere. This command measures everything, so `off` and `witness` name
+                        // no state it has — and a reader who wrote one is told what this option
+                        // takes here rather than that the word does not exist.
+                        System.err.println(
+                                "`--adequacy` takes reliable-domain or classes for `examples`,"
+                                        + " whose output is the report and which measures"
+                                        + " everything either way");
+                        return 2;
+                    }
+                    measure = Adequacy.Asked.fullReport(bar);
+                }
                 case "--generate" -> generate = true;
                 case "--boundaries" -> boundaries = true;
                 case "--strict" -> strict = true;
@@ -315,7 +367,7 @@ public final class Main {
                     : Compiler.analyzedModules(texts, path, warnings, measure);
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.
-            List<Located> errors = compilation.errors(compilation.db().allReports());
+            List<Located> errors = compilation.errors();
             List<Located> said = new ArrayList<>(errors);
             said.addAll(warnings);
             report(said, sources, render);
@@ -343,7 +395,7 @@ public final class Main {
                 // Beside it rather than in it where the report is JSON: the rows are source, and
                 // source in the middle of a JSON document is not a document.
                 if (generate) {
-                    String rows = GeneratedRows.of(compilation, module, behavior, boundaries, names);
+                    String rows = GeneratedRows.of(compilation, module, behavior, boundaries, names).text();
                     (render.json() ? System.err : System.out).print(rows);
                 }
             }
@@ -356,8 +408,15 @@ public final class Main {
             // them: waiting is the normal state of a model being written, and a gate on it refuses the
             // record of what an injected behavior owes — which is the thing the report exists to keep.
             if (strict && report.adequacy() == AdequacyReport.AdequacyStatus.NOT_SATISFIED) {
-                System.err.println(Messages.get("cli.examples.strict.refused", render.locale(),
-                        report.adequacyGaps().size()));
+                // Said in the terms of the report the reader was given. A count is only worth
+                // anything beside a way of finding the entries it counts, and the two surfaces name
+                // them differently: a person reads a mark and a consumer reads a field. Pointing at
+                // the mark whatever was printed sent a reader of a JSON document looking for a
+                // character that is nowhere in it.
+                System.err.println(Messages.get(render.json()
+                                ? "cli.examples.strict.refused.json"
+                                : "cli.examples.strict.refused",
+                        render.locale(), report.adequacyGaps().size()));
                 return 1;
             }
             return 0;
@@ -390,6 +449,24 @@ public final class Main {
             return 2;
         }
         return McpServer.serve(System.in, System.out);
+    }
+
+    /**
+     * {@code souther lsp}: serves the language server over LSP stdio, and takes no arguments for
+     * the reason {@code mcp} takes none.
+     *
+     * <p>The same server an editor launches from the shaded jar, in this process. A protocol on
+     * stdio has the whole of stdout, so nothing this command line writes for a reader may be
+     * written under it, and the refusal above goes to stderr like every other one.
+     */
+    private static int lspSubcommand(String[] args) {
+        if (args.length > 0) {
+            System.err.println(Messages.get("cli.lsp.arguments",
+                    RenderOptions.asking(null).locale(), String.join(", ", args)));
+            System.err.println(Usage.of(CliCommand.LSP));
+            return 2;
+        }
+        return LspServer.serve(System.in, System.out);
     }
 
     /**
@@ -437,12 +514,45 @@ public final class Main {
         return args.length == 1 ? CliCommand.named(args[0]) : null;
     }
 
-    /** The level {@code --adequacy} names, or null where it names none. */
-    private static Adequacy.Level adequacyLevel(String written) {
+    /**
+     * What {@code --adequacy} names, or null where it names none.
+     *
+     * <p>A preset and not a level. Each of these says both how much to measure and what the build is
+     * held to, and the two are not one dial: the points a row is owed away from a line are measured
+     * whenever the ones against it are, so what {@code reliable-domain} adds over {@code all} is a
+     * bar and not a measurement (issue #937).
+     */
+    private static Adequacy.Asked adequacyAsked(String written) {
+        Adequacy.AdequacyBar bar = barNamed(written);
+        if (bar != null) {
+            // A bar names no level, and every bar wants everything measured: what a bar adds over
+            // `all` is what a build refuses over and never what was looked at (issue #937).
+            return Adequacy.Asked.warningsAt(Adequacy.Level.ALL, bar);
+        }
         return switch (written) {
-            case "off" -> Adequacy.Level.OFF;
-            case "witness" -> Adequacy.Level.WITNESS;
-            case "all" -> Adequacy.Level.ALL;
+            case "off" -> Adequacy.Asked.warningsAt(Adequacy.Level.OFF);
+            case "witness" -> Adequacy.Asked.warningsAt(Adequacy.Level.WITNESS);
+            case "all" -> Adequacy.Asked.warningsAt(Adequacy.Level.ALL);
+            default -> null;
+        };
+    }
+
+    /**
+     * The bar {@code written} names, or null where it names none.
+     *
+     * <p>One reading of these words for both commands that take them. What {@code classes} means
+     * is a bar and nothing else, so a compile and a report holding a model to it are holding it to
+     * the same thing — and the word said twice is two tables free to disagree about the one thing
+     * a reader picked it for.
+     *
+     * <p>The levels are not here. {@code off}, {@code witness} and {@code all} say how much to
+     * measure, which is a question {@code souther examples} does not ask: its output is the report,
+     * so everything is measured and there is nothing for those words to choose.
+     */
+    private static Adequacy.AdequacyBar barNamed(String written) {
+        return switch (written) {
+            case "reliable-domain" -> Adequacy.AdequacyBar.RELIABLE_DOMAIN;
+            case "classes" -> Adequacy.AdequacyBar.CLASSES;
             default -> null;
         };
     }
@@ -659,10 +769,11 @@ public final class Main {
     /**
      * Which of the files handed over a source id names, or null when it names none of them.
      *
-     * <p>A compile of one source names none, and the one file it was given is the answer however the
-     * diagnostic is tagged — which is why one item is not read as "the source called 0, or nothing".
+     * <p>Matched on the id, like everything else this command resolves. A report says which source
+     * it points into, so a caller with one file to hand has nothing to guess at and a caller with
+     * several has nothing to work out.
      */
-    private static Path pathOf(List<Path> sources, String sourceId) {
+    private static Path pathOf(List<Path> sources, SourceId sourceId) {
         int at = indexOf(sources, sourceId);
         return at < 0 ? null : sources.get(at);
     }
@@ -685,12 +796,10 @@ public final class Main {
      * front of the reader. Both renderings go through {@link #displayNames}, so a run cannot quote a
      * line from {@code a/model.sou} and then say the rows of {@code model.sou} were not read.
      *
-     * <p>Matched on the id and nothing else, which is where this parts from {@link #indexOf}. That
-     * answers for a diagnostic, which may name no source at all: a compile of one file tags its
-     * problems with nothing, and the one file handed over is the answer however the diagnostic is
-     * tagged. A reason in a report always names one, so an id that is none of these files is an id
-     * about a source this command did not hand over, and answering with the only file would be
-     * inventing the very correspondence this is here to stop being guessed at.
+     * <p>Matched on the id and nothing else, as {@link #indexOf} is. An id that is none of these
+     * files is an id about a source this command did not hand over, and answering with the only file
+     * there happens to be would be inventing the very correspondence this is here to stop being
+     * guessed at.
      */
     static SourceNameResolver namesOf(List<Path> sources) {
         List<String> names = displayNames(sources);
@@ -700,7 +809,7 @@ public final class Main {
                     return names.get(i);
                 }
             }
-            return id;
+            return id.value();
         };
     }
 
@@ -712,14 +821,14 @@ public final class Main {
     /**
      * Which of the files handed over a source id names, or -1 when it names none of them.
      *
-     * <p>For a diagnostic, which may name no source: a compile of one file tags its problems with
-     * nothing, so the single file is the answer whatever the id reads. Not for a reason in a report,
-     * which always names one — {@link #namesOf} matches on the id alone.
+     * <p>On the id and nothing else. The one file handed over used to be the answer for whatever it
+     * was asked, including for no id at all, because a report could arrive here without one and the
+     * single file was the only guess to be had. A report says which source it points into now, so
+     * there is nothing left to guess — and the guess was answering for reports it had no business
+     * answering for: handed one file and a report about another, it quoted that file at the
+     * report's numbers, which put a caret past the end of a line the author never wrote.
      */
-    private static int indexOf(List<Path> sources, String sourceId) {
-        if (sources.size() == 1) {
-            return 0;
-        }
+    private static int indexOf(List<Path> sources, SourceId sourceId) {
         for (int i = 0; i < sources.size(); i++) {
             if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
                 return i;
@@ -1017,7 +1126,7 @@ public final class Main {
      * the classes are not the output of an accepted compile, and a directory holding them anyway is
      * what a later step would read as if they were.
      */
-    static Map<String, byte[]> compiledClasses(List<Path> sources, List<Path> classPath,
+    static Map<String, ClassFileImage> compiledClasses(List<Path> sources, List<Path> classPath,
                                                List<Located> warningsOut, Adequacy.Asked measure)
             throws IOException {
         List<String> texts = new ArrayList<>();
@@ -1038,12 +1147,13 @@ public final class Main {
     }
 
     /** Writes each class under {@code outDir}, and answers with the paths written, in order. */
-    static List<Path> writeClasses(Map<String, byte[]> classes, Path outDir) throws IOException {
+    static List<Path> writeClasses(Map<String, ClassFileImage> classes, Path outDir)
+            throws IOException {
         List<Path> written = new ArrayList<>();
-        for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
-            Path file = outDir.resolve(entry.getKey().replace('.', '/') + ".class");
+        for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
+            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue());
+            Files.write(file, entry.getValue().bytes());
             written.add(file);
         }
         return written;

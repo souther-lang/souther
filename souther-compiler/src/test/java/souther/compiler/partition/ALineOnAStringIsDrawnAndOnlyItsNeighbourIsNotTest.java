@@ -41,7 +41,6 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
             data Era = Newer | Older
 
             behavior classifyMonth : (m: YearMonth) -> Era
-                constructs Newer, Older
             let classifyMonth (m) = {
                 guard m.value < "2026-08" else Newer
                 Older
@@ -81,7 +80,7 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
 
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }
@@ -95,6 +94,6 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
     private static String generated() {
         return souther.compiler.report.GeneratedRows.of(measured(), "example.month",
                 "classifyMonth", true,
-                souther.compiler.diag.SourceNameResolver.identity());
+                souther.compiler.diag.SourceNameResolver.identity()).text();
     }
 }

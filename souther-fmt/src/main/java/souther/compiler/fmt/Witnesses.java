@@ -7,6 +7,7 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -25,7 +26,7 @@ import java.util.Set;
  * <p>One family per rule, and each of them answers about its own unit: a boundary for spacing, a pair
  * of items for separation, a pair of levels for indentation, a group for conditional layout, a
  * comment for the rules about comments, a site of the source for the rules about which code tokens
- * are written.
+ * are written, a column of a table for the rule that lines its rows up.
  *
  * <p>A family reads the results of the rules it depends on rather than competing with them, and
  * where what it depends on is not settled yet it says nothing: the rules are asked again once it is.
@@ -192,8 +193,13 @@ final class Witnesses {
      * next token — a line the comment is not on. That is what left a comment written anywhere at all
      * with no rule to answer for its column.
      */
-    record Pairing(List<SyntaxToken> hadCode, List<SyntaxToken> writesCode,
-            List<SyntaxToken> hadComments, List<SyntaxToken> writesComments) {
+    static final class Pairing {
+
+        private final Run hadCode;
+        private final Run writesCode;
+        private final List<SyntaxToken> hadComments;
+        private final List<SyntaxToken> writesComments;
+        private final Map<Integer, Integer> writesCommentAt;
 
         Pairing(String source, Formatter.CanonicalForm canonical) {
             this(source, canonical.layout().text());
@@ -205,6 +211,170 @@ final class Witnesses {
 
         private Pairing(SyntaxNode source, SyntaxNode text) {
             this(code(source), code(text), comments(source), comments(text));
+        }
+
+        Pairing(List<SyntaxToken> hadCode, List<SyntaxToken> writesCode,
+                List<SyntaxToken> hadComments, List<SyntaxToken> writesComments) {
+            this.hadCode = new Run(hadCode);
+            this.writesCode = new Run(writesCode);
+            this.hadComments = List.copyOf(hadComments);
+            this.writesComments = List.copyOf(writesComments);
+            Map<Integer, Integer> at = new LinkedHashMap<>();
+            for (int i = 0; i < this.writesComments.size(); i++) {
+                at.putIfAbsent(this.writesComments.get(i).start(), i);
+            }
+            this.writesCommentAt = at;
+        }
+
+        List<SyntaxToken> hadCode() {
+            return hadCode.tokens();
+        }
+
+        List<SyntaxToken> writesCode() {
+            return writesCode.tokens();
+        }
+
+        List<SyntaxToken> hadComments() {
+            return hadComments;
+        }
+
+        List<SyntaxToken> writesComments() {
+            return writesComments;
+        }
+
+        /**
+         * Which adjacency of the canonical form's tokens {@code at} stands in, or -1 where it
+         * stands in none of them.
+         *
+         * <p>Every question about a place of the canonical form is asked at an offset of it — a
+         * break's, an opportunity's — and answered at the adjacency the offset stands in. The
+         * canonical form's run is the one they are asked of, because it is the one that has the
+         * places; what the source has at the same adjacency is then read from its own tokens.
+         */
+        int adjacencyAt(int at) {
+            return writesCode.adjacencyAt(at);
+        }
+
+        /** Which of the canonical form's code tokens stands in front of {@code at}, or -1 where
+         *  none does. */
+        int writesInFrontOf(int at) {
+            return writesCode.inFrontOf(at);
+        }
+
+        /** Which of the source's code tokens stands in front of {@code at}, or -1 where none
+         *  does. */
+        int hadInFrontOf(int at) {
+            return hadCode.inFrontOf(at);
+        }
+
+        /** Which comment the canonical form writes at {@code start}, or null where it writes none
+         *  there. */
+        Integer commentWrittenAt(int start) {
+            return writesCommentAt.get(start);
+        }
+    }
+
+    /**
+     * A run of code tokens, with where an offset stands among them searched for rather than walked
+     * to.
+     *
+     * <p>The families ask the same two questions of the same two runs, once for every place they
+     * answer about: which adjacency an offset stands in, and which token stands in front of it.
+     * Asked by walking the run, each answer costs its length, and the places are as many as the
+     * tokens — so a report over a file cost the square of it.
+     *
+     * <p>A run is written in order and its tokens do not overlap, so both of a token's ends rise
+     * along it and either question is a search on a sorted list. What is held beside the tokens is
+     * two runs of {@code int} the length of the run — where each token starts, and where it ends —
+     * so that a search reads numbers laid out together rather than following a token at every step.
+     *
+     * <p>Searched and not tabulated by offset. A table indexed by character would answer in one
+     * step, and it would be the length of the text rather than of the run: a source is not made of
+     * tokens at an even rate, and one holding a long literal or a page of comments above its first
+     * declaration would carry a table many times the size of everything else about it — for a
+     * question asked at a few thousand offsets.
+     *
+     * <p>Two searches and not one, because the two questions are not the same question. An offset
+     * inside a token stands in no adjacency and still has a token in front of it, and an offset
+     * past the last token has a token in front of it and no adjacency after it.
+     */
+    static final class Run {
+
+        private final List<SyntaxToken> tokens;
+
+        /** Where each token starts, rising along the run. */
+        private final int[] starts;
+
+        /** Where each token ends, rising along the run. */
+        private final int[] ends;
+
+        Run(List<SyntaxToken> tokens) {
+            this.tokens = List.copyOf(tokens);
+            this.starts = new int[this.tokens.size()];
+            this.ends = new int[this.tokens.size()];
+            for (int i = 0; i < this.tokens.size(); i++) {
+                this.starts[i] = this.tokens.get(i).start();
+                this.ends[i] = this.tokens.get(i).end();
+            }
+        }
+
+        List<SyntaxToken> tokens() {
+            return tokens;
+        }
+
+        /**
+         * Which adjacency {@code at} stands in, or -1 where it stands in none.
+         *
+         * <p>The first of them, which is what the walk this replaced returned. An adjacency holds
+         * {@code at} where the token before it has ended and the token after it has not begun; the
+         * first is a prefix of the run and the second a suffix, so the ones that hold it are a
+         * stretch and the answer is where that stretch begins.
+         *
+         * <p>Past the last token there is no adjacency: the run has one fewer than it has tokens,
+         * and an offset after the last of them is inside none of them.
+         */
+        int adjacencyAt(int at) {
+            int ended = inFrontOf(at);
+            if (ended < 0) {
+                return -1;
+            }
+            int first = Math.max(firstStartingAt(at) - 1, 0);
+            return first <= Math.min(ended, tokens.size() - 2) ? first : -1;
+        }
+
+        /** The first token that begins at or after {@code at}, or the length of the run. */
+        private int firstStartingAt(int at) {
+            int low = 0;
+            int high = starts.length;
+            while (low < high) {
+                int mid = (low + high) >>> 1;
+                if (starts[mid] < at) {
+                    low = mid + 1;
+                } else {
+                    high = mid;
+                }
+            }
+            return low;
+        }
+
+        /**
+         * Which token stands in front of {@code at}, or -1 where none does: the last one to have
+         * ended by it.
+         */
+        int inFrontOf(int at) {
+            int low = 0;
+            int high = ends.length - 1;
+            int found = -1;
+            while (low <= high) {
+                int mid = (low + high) >>> 1;
+                if (ends[mid] <= at) {
+                    found = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            return found;
         }
     }
 
@@ -262,15 +432,13 @@ final class Witnesses {
         if (had.size() != writes.size()) {
             return null;
         }
-        for (int i = 0; i + 1 < writes.size(); i++) {
-            if (writes.get(i).end() > n.offset() || n.offset() > writes.get(i + 1).start()) {
-                continue;
-            }
-            int at = had.get(i + 1).start();
-            int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
-            return source.substring(lineStart, at).isBlank() ? lineStart : null;
+        int i = pairing.adjacencyAt(n.offset());
+        if (i < 0) {
+            return null;
         }
-        return null;
+        int at = had.get(i + 1).start();
+        int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
+        return source.substring(lineStart, at).isBlank() ? lineStart : null;
     }
 
     /**
@@ -296,19 +464,16 @@ final class Witnesses {
                 || pairing.hadCode().size() != pairing.writesCode().size()) {
             return null;
         }
-        for (int i = 0; i < pairing.writesComments().size(); i++) {
-            if (pairing.writesComments().get(i).start() != begins) {
-                continue;
-            }
-            int at = pairing.hadComments().get(i).start();
-            if (follows(pairing.writesCode(), pairing.writesComments().get(i).start())
-                    != follows(pairing.hadCode(), at)) {
-                return null;   // carried somewhere else, so this is not the line it is written on
-            }
-            int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
-            return source.substring(lineStart, at).isBlank() ? lineStart : null;
+        Integer written = pairing.commentWrittenAt(begins);
+        if (written == null) {
+            return null;
         }
-        return null;
+        int at = pairing.hadComments().get(written).start();
+        if (pairing.writesInFrontOf(begins) != pairing.hadInFrontOf(at)) {
+            return null;   // carried somewhere else, so this is not the line it is written on
+        }
+        int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
+        return source.substring(lineStart, at).isBlank() ? lineStart : null;
     }
 
     /**
@@ -346,9 +511,27 @@ final class Witnesses {
                             + " asks what the source has between the same two");
         }
         List<Gaps.Boundary> boundaries = between(canonical.construction().doc(), writes.size());
+        // At a stop the run holds this rule's answer and then the column's padding, and this is
+        // asked about the first of them. Where the source wrote spaces there, all of it is the
+        // column's and this says nothing; where it wrote anything else, what it wrote is not
+        // padding and the column rule has no answer about it, so this one does — and the round
+        // after it, with the separator written, is where the column is asked.
+        Map<Integer, String> atAColumn = new LinkedHashMap<>();
+        Set<Integer> padded = new LinkedHashSet<>();
+        for (CanonicalStop stop : stops(canonical, writes)) {
+            atAColumn.put(stop.adjacency(), stop.separator());
+            if (padsAfterTheSeparator(source, had.get(stop.adjacency()),
+                    had.get(stop.adjacency() + 1), stop.separator())) {
+                padded.add(stop.adjacency());
+            }
+        }
         List<Witness> out = new ArrayList<>();
         for (int i = 0; i + 1 < writes.size(); i++) {
-            String wrote = text.substring(writes.get(i).end(), writes.get(i + 1).start());
+            if (padded.contains(i)) {
+                continue;
+            }
+            String wrote = atAColumn.containsKey(i) ? atAColumn.get(i)
+                    : text.substring(writes.get(i).end(), writes.get(i + 1).start());
             if (wrote.indexOf('\n') >= 0) {
                 continue;   // the canonical form breaks here, so it writes no spacing
             }
@@ -367,6 +550,144 @@ final class Witnesses {
                             writes.get(i + 1).kind()),
                     wrote, has));
         }
+        return out;
+    }
+
+    /**
+     * One stop of the canonical form, and which adjacency of its code tokens it stands at.
+     *
+     * <p>The layout says where a stop is as an offset into the text it wrote. What a rule holding
+     * two texts side by side can use is which pair of tokens it stands between, since that is the
+     * one thing the two share — so the offset is read once, here, and everything downstream is
+     * about the adjacency.
+     */
+    record CanonicalStop(ColumnOccurrence occurrence, int adjacency, String separator) {
+    }
+
+    /**
+     * Whether what the source writes at a stop reads as the separator and then this rule's padding.
+     *
+     * <p>The canonical form writes a separator and then the spaces that carry the connector out to
+     * the column, and this asks whether the source's run comes apart the same way: the separator
+     * itself, and after it spaces and nothing else. That is the whole of what divides the two
+     * families at a stop, and it is asked in one place because they must neither both answer about
+     * the same characters — a conflict the repair refuses — nor both stay silent, which leaves a
+     * difference no rule accounts for.
+     *
+     * <p>Both halves are the question. Asked only whether what stands there is spaces, a run that
+     * is <em>empty</em> answers yes — a source that wrote no separator at all would be this rule's,
+     * and a one-row table with no space before its arrow would be told that its rows do not line up
+     * with each other. And a tab reaches a column as well as spaces do, so a run this admitted on
+     * the strength of the column it arrived at would leave a text that is not the canonical form
+     * with nothing said against it.
+     *
+     * <p>Written against {@code separator} rather than against one space, so a stop whose separator
+     * is nothing needs no second reading of this: the prefix is there vacuously and all of the run
+     * is padding.
+     */
+    static boolean padsAfterTheSeparator(String source, SyntaxToken before, SyntaxToken after,
+            String separator) {
+        String run = source.substring(before.end(), after.start());
+        return run.startsWith(separator)
+                && run.substring(separator.length()).chars().allMatch(c -> c == ' ');
+    }
+
+    /**
+     * Every stop the canonical form wrote, with the adjacency it stands at.
+     *
+     * <p>Read by the two rules that have to know about a stop: the column rule, whose units these
+     * are, and the spacing rule, which is not asked at one. Two readers of one value, so that a
+     * boundary cannot be a stop for the first and an ordinary boundary for the second.
+     */
+    static List<CanonicalStop> stops(Formatter.CanonicalForm canonical, List<SyntaxToken> writes) {
+        List<CanonicalStop> out = new ArrayList<>();
+        int i = 0;
+        for (ColumnOccurrence stop : canonical.layout().stops()) {
+            while (i + 1 < writes.size() && writes.get(i + 1).start() < stop.at()) {
+                i++;
+            }
+            if (i + 1 >= writes.size() || writes.get(i).end() > stop.at()) {
+                throw new IllegalStateException(
+                        "a column stop at offset " + stop.at() + " stands at no adjacency of the"
+                                + " canonical form's tokens; a stop is written between the"
+                                + " separator and the connector after it");
+            }
+            out.add(new CanonicalStop(stop, i,
+                    canonical.layout().text().substring(writes.get(i).end(), stop.at())));
+        }
+        return out;
+    }
+
+    /**
+     * What the column rule has against {@code source}: for each column of each table, the display
+     * column the canonical form writes the connector at, and the ones the source's rows come to.
+     *
+     * <p>What a row comes to is where its connector stands with the padding the source wrote and
+     * everything before it on the line as the canonical form has it — not the column the connector
+     * physically occupies in the source. An absolute column is the sum of everything to its left:
+     * the indent, every separator, and every column before it on the line. Read that way, a table
+     * an author lined up correctly and indented one column too deep departs from this rule at every
+     * row, and repairing the indentation is what makes those departures go away — which is a rule
+     * reporting somebody else's difference as its own. {@link Witness.Indentation} met the same
+     * thing and answers with a step rather than with a column for the same reason.
+     *
+     * <p>So what is read from the source is the padding, which is this rule's own, and it is said
+     * as the column that padding comes to. Where the rest of the line is already canonical the two
+     * are the same number, which is every source that has nothing else wrong with it.
+     *
+     * <p>A row the canonical form writes down the page has no stop, so it is not asked about here.
+     * Neither is a row the source broke: its connector opens a line there, and a column is not
+     * something a line's first token can be at. What the source did instead is the conditional
+     * layout rule's to report, and once that is repaired this is asked again.
+     */
+    static List<Witness> columns(String source, Formatter.CanonicalForm canonical) {
+        return columns(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<Witness> columns(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
+        if (had.size() != writes.size()) {
+            throw new NoCorrespondence(
+                    "the source has " + had.size() + " tokens and its canonical form "
+                            + writes.size() + "; the two cannot be held side by side and this rule"
+                            + " asks where the source wrote the same connector");
+        }
+        Map<Columns.Unit, Integer> written = new LinkedHashMap<>();
+        for (ColumnDecision decision : canonical.layout().columns()) {
+            written.put(decision.unit(), decision.column());
+        }
+        Map<Columns.Unit, Set<Integer>> hadAt = new LinkedHashMap<>();
+        for (CanonicalStop stop : stops(canonical, writes)) {
+            int i = stop.adjacency();
+            String between = source.substring(had.get(i).end(), had.get(i + 1).start());
+            if (between.indexOf('\n') >= 0 || between.contains("//")) {
+                continue;
+            }
+            if (!padsAfterTheSeparator(source, had.get(i), had.get(i + 1), stop.separator())) {
+                continue;   // the spacing rule is answering this run; asked again once it has
+            }
+            // The run comes apart, so what is left of it after the separator is spaces and each of
+            // them is one column.
+            int padding = between.length() - stop.separator().length();
+            hadAt.computeIfAbsent(stop.occurrence().unit(), _ -> new LinkedHashSet<>())
+                    .add(stop.occurrence().naturalColumn() + padding);
+        }
+        List<Witness> out = new ArrayList<>();
+        hadAt.forEach((unit, columns) -> {
+            Integer column = written.get(unit);
+            if (column == null) {
+                throw new IllegalStateException(
+                        "a row was written to " + unit.stop() + " and the layout says no column is"
+                                + " there; a stop and the decision it is written to are made by one"
+                                + " run");
+            }
+            if (!columns.equals(Set.of(column))) {
+                out.add(new Witness.AtAColumn(unit, column, List.copyOf(columns)));
+            }
+        });
         return out;
     }
 
@@ -396,15 +717,14 @@ final class Witnesses {
                     "the source holds " + had.size() + " comments and its canonical form "
                             + writes.size() + "; the two cannot be held side by side");
         }
-        List<SyntaxToken> hadCode = pairing.hadCode();
-        List<SyntaxToken> writesCode = pairing.writesCode();
-        boolean aligned = hadCode.size() == writesCode.size();
+        boolean aligned = pairing.hadCode().size() == pairing.writesCode().size();
+        int lastWritten = lastStandingIn(text);
         List<Witness> out = new ArrayList<>();
         for (int i = 0; i < had.size(); i++) {
             Witness.Comment unit = new Witness.Comment(had.get(i).start());
             if (aligned) {
-                int wroteAt = follows(writesCode, writes.get(i).start());
-                int hasAt = follows(hadCode, had.get(i).start());
+                int wroteAt = pairing.writesInFrontOf(writes.get(i).start());
+                int hasAt = pairing.hadInFrontOf(had.get(i).start());
                 if (wroteAt != hasAt) {
                     out.add(new Witness.CommentCarrier(unit, wroteAt, hasAt));
                     continue;   // what stands beside it is asked where it is written, not where
@@ -417,7 +737,8 @@ final class Witnesses {
                     && !hadBefore.equals(writesBefore)) {
                 out.add(new Witness.TrailingComment(unit, writesBefore, hadBefore));
             }
-            if (opensItsLine(text, writes.get(i)) && !endsTheFile(text, writes.get(i))) {
+            if (opensItsLine(text, writes.get(i))
+                    && writes.get(i).end() <= lastWritten) {
                 int wrote = newlines(after(text, writes.get(i)));
                 int has = newlines(after(source, had.get(i)));
                 if (wrote != has) {
@@ -428,26 +749,25 @@ final class Witnesses {
         return out;
     }
 
-    /** Which code token a comment stands after, as its index, or -1 where none is in front of it. */
-    private static int follows(List<SyntaxToken> tokens, int at) {
-        int found = -1;
-        for (int i = 0; i < tokens.size(); i++) {
-            if (tokens.get(i).end() <= at) {
-                found = i;
+    /**
+     * The last offset of {@code text} something is written at, or -1 where nothing is.
+     *
+     * <p>What it answers is whether anything is written after a comment. Such a comment is written
+     * above nothing, so what stands under it is not the distance the rule about a comment's line
+     * answers about — it is the end of the file, and how a file ends is the file's own rule.
+     * Answered there as well, the two would both write the same newline.
+     *
+     * <p>Read once for a whole run of comments. Asked comment by comment, of the stretch after each
+     * of them, it is the length of that stretch every time and the last comment of a file is as far
+     * from its end as the first.
+     */
+    private static int lastStandingIn(String text) {
+        for (int i = text.length() - 1; i >= 0; i--) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                return i;
             }
         }
-        return found;
-    }
-
-    /**
-     * Whether nothing is written after a comment.
-     *
-     * <p>Such a comment is written above nothing, so what stands under it is not the distance this
-     * rule answers about — it is the end of the file, and how a file ends is the file's own rule.
-     * Answered here as well, the two would both write the same newline.
-     */
-    private static boolean endsTheFile(String text, SyntaxToken comment) {
-        return text.substring(comment.end()).isBlank();
+        return -1;
     }
 
     /**
@@ -520,11 +840,12 @@ final class Witnesses {
     /** What the separation rule has against {@code source}. */
     static List<Witness> separation(String source, Formatter.CanonicalForm canonical) {
         List<Place> items = topLevel(canonical);
+        int[] separating = separatingBreaks(canonical);
         List<Witness> out = new ArrayList<>();
         for (int i = 0; i + 1 < items.size(); i++) {
             Place previous = items.get(i);
             Place next = items.get(i + 1);
-            int writes = separates(canonical, previous, next) ? 1 : 0;
+            int writes = separates(canonical, separating, previous, next) ? 1 : 0;
             Integer has = blankLines(source, canonical, previous, next);
             if (has != null && has != writes) {
                 out.add(new Witness.Separation(new Witness.Items(previous, next), writes, has));
@@ -588,7 +909,7 @@ final class Witnesses {
         Map<Doc.GroupRef, Opportunity> parted = new IdentityHashMap<>();
         Map<Doc.GroupRef, Boolean> brokeAnywhere = new IdentityHashMap<>();
         for (Opportunity o : layout.opportunities()) {
-            boolean brokeThere = brokeInSource(source, had, writes, o.at());
+            boolean brokeThere = brokeInSource(source, pairing, o.at());
             brokeAnywhere.merge(o.settledBy(), brokeThere, (a, b) -> a || b);
             if (brokeThere == o.broke()) {
                 continue;   // the source settled this place the way the group did
@@ -696,7 +1017,7 @@ final class Witnesses {
         Set<Integer> obliged = new LinkedHashSet<>();
         for (Newline n : layout.breaks()) {
             if (n.cause() instanceof Newline.Cause.Forced) {
-                obliged.add(adjacencyAt(writes, n.offset()));
+                obliged.add(pairing.adjacencyAt(n.offset()));
             }
         }
         List<Witness> out = new ArrayList<>();
@@ -705,7 +1026,7 @@ final class Witnesses {
             if (!o.broke()) {
                 continue;
             }
-            int i = adjacencyAt(writes, o.at());
+            int i = pairing.adjacencyAt(o.at());
             if (i < 0 || obliged.contains(i) || !seen.add(i)) {
                 continue;
             }
@@ -778,8 +1099,10 @@ final class Witnesses {
                                 1, ends));
                     }
                 } else {
-                    int wrote = newlines(aboveTheLastComment(text));
-                    int has = newlines(aboveTheLastComment(source));
+                    int wrote = newlines(aboveTheLastComment(text, pairing.writesCode(),
+                            pairing.writesComments()));
+                    int has = newlines(aboveTheLastComment(source, pairing.hadCode(),
+                            pairing.hadComments()));
                     if (wrote != has) {
                         out.add(new Witness.Forced(new Witness.ForcedBoundary(-2, f.obligation()),
                                 wrote, has));
@@ -787,7 +1110,7 @@ final class Witnesses {
                 }
                 continue;
             }
-            int i = adjacencyAt(writes, n.offset());
+            int i = pairing.adjacencyAt(n.offset());
             if (i >= 0) {
                 at.computeIfAbsent(i, _ -> new ArrayList<>()).add(f.obligation());
             }
@@ -810,12 +1133,15 @@ final class Witnesses {
         return out;
     }
 
-    /** What stands between a text's last code token and the comment written after it, or nothing
-     *  where no comment is. */
-    static String aboveTheLastComment(String text) {
-        SyntaxNode root = CstParser.parse(text).root();
-        List<SyntaxToken> code = code(root);
-        List<SyntaxToken> comments = comments(root);
+    /**
+     * What stands between a text's last code token and the comment written after it, or nothing
+     * where no comment is.
+     *
+     * <p>Asked with the tokens the caller has already read. Read from the text alone it is another
+     * parse of the whole file, made to answer about its last few characters.
+     */
+    static String aboveTheLastComment(String text, List<SyntaxToken> code,
+            List<SyntaxToken> comments) {
         if (code.isEmpty() || comments.isEmpty()) {
             return "";
         }
@@ -845,29 +1171,26 @@ final class Witnesses {
         return n;
     }
 
-    /** Which adjacency of {@code tokens} the offset {@code at} stands in, or -1 where it stands
-     *  before the first of them. */
-    private static int adjacencyAt(List<SyntaxToken> tokens, int at) {
-        for (int i = 0; i + 1 < tokens.size(); i++) {
-            if (tokens.get(i).end() <= at && at <= tokens.get(i + 1).start()) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     /**
      * Whether the source broke at the adjacency the canonical form has an opportunity at.
      *
      * <p>The opportunity stands between two of the canonical form's tokens, and the source's
      * answer is what it wrote between the same two of its own.
      */
-    static boolean brokeInSource(String source, List<SyntaxToken> had,
-            List<SyntaxToken> writes, int at) {
-        for (int i = 0; i + 1 < writes.size(); i++) {
-            if (writes.get(i).end() <= at && at <= writes.get(i + 1).start()) {
-                return source.substring(had.get(i).end(), had.get(i + 1).start())
-                        .indexOf('\n') >= 0;
+    static boolean brokeInSource(String source, Pairing pairing, int at) {
+        int i = pairing.adjacencyAt(at);
+        if (i < 0) {
+            return false;
+        }
+        List<SyntaxToken> had = pairing.hadCode();
+        return brokeBetween(source, had.get(i).end(), had.get(i + 1).start());
+    }
+
+    /** Whether a line ends somewhere in {@code [from, to)} of {@code text}. */
+    private static boolean brokeBetween(String text, int from, int to) {
+        for (int i = from; i < to; i++) {
+            if (text.charAt(i) == '\n') {
+                return true;
             }
         }
         return false;
@@ -887,18 +1210,36 @@ final class Witnesses {
         return out;
     }
 
-    /** Whether the canonical form wrote the break it writes to separate two items. */
-    private static boolean separates(Formatter.CanonicalForm canonical, Place previous, Place next) {
-        int from = canonical.layout().extents().get(previous).end();
-        int to = canonical.layout().extents().get(next).start();
+    /**
+     * Where the canonical form wrote the break it writes to separate two items, in order.
+     *
+     * <p>Read once for a whole run of pairs. A file's items and its breaks both grow with it, so
+     * asked pair by pair of every break the rule costs the two multiplied together.
+     */
+    private static int[] separatingBreaks(Formatter.CanonicalForm canonical) {
+        List<Integer> out = new ArrayList<>();
         for (Newline n : canonical.layout().breaks()) {
-            if (n.offset() >= from && n.offset() < to
-                    && n.cause() instanceof Newline.Cause.Forced f
+            if (n.cause() instanceof Newline.Cause.Forced f
                     && f.obligation() == Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS) {
-                return true;
+                out.add(n.offset());
             }
         }
-        return false;
+        int[] offsets = new int[out.size()];
+        for (int i = 0; i < offsets.length; i++) {
+            offsets[i] = out.get(i);
+        }
+        Arrays.sort(offsets);
+        return offsets;
+    }
+
+    /** Whether the canonical form wrote the break it writes to separate two items. */
+    private static boolean separates(Formatter.CanonicalForm canonical, int[] separating,
+            Place previous, Place next) {
+        int from = canonical.layout().extents().get(previous).end();
+        int to = canonical.layout().extents().get(next).start();
+        int at = Arrays.binarySearch(separating, from);
+        int first = at >= 0 ? at : -(at + 1);   // the first break at or after the first item's end
+        return first < separating.length && separating[first] < to;
     }
 
     /** How many lines the source left blank between two items, or null where it has nothing for

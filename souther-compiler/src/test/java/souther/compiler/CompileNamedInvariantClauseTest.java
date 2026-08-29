@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.msg.InvariantMessage;
 import org.junit.jupiter.api.Test;
 
@@ -38,7 +40,7 @@ class CompileNamedInvariantClauseTest {
                 %s
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | DuplicateItem
-                    constructs Accepted, Items, NoItems, DuplicateItem
+                    constructs Accepted, Items
 
                 let build (xs) = {
                     guard Items(xs) as items else%s
@@ -58,7 +60,7 @@ class CompileNamedInvariantClauseTest {
                         | unique   -> DuplicateItem""";
 
     private static Object build(BytesClassLoader loader, List<Long> xs) throws Exception {
-        Object impl = loader.loadClass("demo.Build$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "build").getConstructor().newInstance();
         return Codecs.apply(impl, xs);
     }
 
@@ -120,7 +122,7 @@ class CompileNamedInvariantClauseTest {
                     invariant unique = List.allDistinctBy(x -> x, value)
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems
-                    constructs Accepted, Items, NoItems
+                    constructs Accepted, Items
 
                 let build (xs) = {
                     guard Items(xs) as items else NoItems
@@ -164,7 +166,7 @@ class CompileNamedInvariantClauseTest {
                     invariant unique = List.allDistinctBy(x -> x, value)
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | DuplicateItem
-                    constructs Accepted, Items, NoItems, DuplicateItem
+                    constructs Accepted, Items
 
                 let build (xs) =
                     if Items(xs) as items
@@ -209,7 +211,7 @@ class CompileNamedInvariantClauseTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src),
                 getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Judge$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "judge").getConstructor().newInstance();
         assertEquals(Map.of("code", 2L),
                 Codecs.encode(loader, "demo.Verdict", Codecs.apply(impl, List.of(1L, 2L))));
         assertEquals(Map.of("code", 0L),
@@ -243,7 +245,7 @@ class CompileNamedInvariantClauseTest {
                     invariant _ = value > 0
                 """));
         assertInstanceOf(InvariantMessage.UnderscoreCannotNameAClause.class, e.diagnostics().get(0).said());
-        assertEquals(3, e.diagnostics().get(0).pos().line(), "reported at the clause, not at a use");
+        assertEquals(3, ((Primary.InSource) e.diagnostics().get(0).primary()).place().region().start().line(), "reported at the clause, not at a use");
     }
 
     /**
@@ -285,7 +287,7 @@ class CompileNamedInvariantClauseTest {
                 data Fine = { order: Order }
 
                 behavior make : (req: Request) -> Fine | NoTotal | NoLines
-                    constructs Fine, Order, NoTotal, NoLines
+                    constructs Fine, Order
 
                 let make (req) = {
                     guard Order { total = req.total, lines = req.lines } as order else
@@ -297,7 +299,7 @@ class CompileNamedInvariantClauseTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src),
                 getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Make$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "make").getConstructor().newInstance();
         assertEquals("demo.Fine", make(loader, impl, 5L, 1L), "neither clause is broken");
         assertEquals("demo.NoTotal", make(loader, impl, 0L, 1L),
                 "the clause the spread brought in decides, under the name its declaration gave it");
@@ -344,7 +346,7 @@ class CompileNamedInvariantClauseTest {
                 data Accepted = { items: Items }
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | DuplicateItem
-                    constructs Accepted, Items, NoItems, DuplicateItem
+                    constructs Accepted, Items
 
                 let build (xs) = {
                     guard Items(xs) as items else
@@ -370,7 +372,7 @@ class CompileNamedInvariantClauseTest {
                 data Accepted = { items: Items }
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems
-                    constructs Accepted, Items, NoItems
+                    constructs Accepted, Items
 
                 let build (xs) = {
                     guard Items(xs) as items else
@@ -441,7 +443,7 @@ class CompileNamedInvariantClauseTest {
                 data Accepted
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems
-                    constructs Accepted, NoItems
+                    constructs Accepted
 
                 let build (xs) = {
                     guard List.length(xs) >= 1 else

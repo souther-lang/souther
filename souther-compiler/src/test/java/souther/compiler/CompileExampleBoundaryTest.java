@@ -1,17 +1,19 @@
 package souther.compiler;
 
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.BoundaryAssessment;
-import souther.compiler.partition.TermPath;
-import souther.compiler.partition.UndividedPosition;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
 import java.util.Map;
+
+import static souther.compiler.AxisClasses.names;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -47,13 +49,27 @@ class CompileExampleBoundaryTest {
             }
             """;
 
-    private static PartitionEvidence evidence(String source) {
+    private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         // Measuring the arms is opted into, so a test about them opts in.
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return compilation;
+    }
+
+    private static PartitionEvidence evidence(String source) {
+        Compilation compilation = measured(source);
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+        return all.get("submit");
+    }
+
+    /** The lines the behavior's positions met, whosever the row at each point is. */
+    private static List<BorderAssessment> lines(String source) {
+        Compilation compilation = measured(source);
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
         return all.get("submit");
     }
@@ -63,9 +79,11 @@ class CompileExampleBoundaryTest {
                 .findFirst().orElseThrow();
     }
 
-    private static List<BoundaryAssessment> at(PartitionEvidence evidence,
-                                                               String value) {
-        return evidence.boundaries().stream().filter(b -> b.value().equals(value)).toList();
+    /** The points against a line at {@code value}, which is what a row there is owed for. */
+    private static List<BorderAssessment.Point> at(List<BorderAssessment> lines, String value) {
+        return BorderAssessment.pointsOf(lines).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .filter(p -> value.equals(p.against())).toList();
     }
 
     @Test
@@ -76,8 +94,8 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
 
-        assertEquals(List.of("request.cost/100 < x"), cost(one).uncovered());
-        assertEquals(MeasurementStatus.COMPLETE, cost(one).status());
+        assertEquals(List.of("request.cost/100 < x"), names(cost(one).uncovered()));
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(cost(one).reached()));
 
         PartitionEvidence both = evidence(MODEL + """
 
@@ -85,44 +103,48 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(50) })  -> Submitted
                     | (Draft { cost = Amount(500) }) -> Waiting
                 """);
-        assertEquals(List.of(), cost(both).uncovered());
+        assertEquals(List.of(), names(cost(both).uncovered()));
     }
 
     /** Nothing below the bound can be constructed, so writing the value is the whole of what there
      * is to reach — and reaching it needs no branch to have run. */
     @Test
     void anInvariantsBoundIsMetByWritingTheValue() {
-        PartitionEvidence away = evidence(MODEL + """
+        List<BorderAssessment> away = lines(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
-        BoundaryAssessment zero = at(away, "0").get(0);
-        assertFalse(zero.coverage().hit());
-        assertEquals(MeasurementStatus.COMPLETE, zero.status());
-        assertTrue(zero.origin().startsWith("invariant"), zero.origin());
+        BorderAssessment.Point zero = at(away, "0").get(0);
+        assertFalse(zero.owed().hasRowWitness());
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(zero.item().weakeningSource()));
+        assertTrue(zero.border().origin().named().startsWith("invariant"),
+                zero.border().origin().named());
 
-        PartitionEvidence edge = evidence(MODEL + """
+        List<BorderAssessment> edge = lines(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(0) }) -> Submitted
                 """);
-        assertTrue(at(edge, "0").get(0).coverage().hit(), "a row is written at the edge");
+        assertTrue(at(edge, "0").get(0).owed().hasRowWitness(),
+                "a row is written at the edge");
     }
 
     /** A row that writes the value and reaches the comparison meets the line the guard drew. */
     @Test
     void aGuardsBoundaryIsMetByARowThatReachesTheComparison() {
-        PartitionEvidence evidence = evidence(MODEL + """
+        List<BorderAssessment> lines = lines(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(100) }) -> Submitted
                 """);
 
-        BoundaryAssessment hundred = at(evidence, "100").get(0);
-        assertEquals(MeasurementStatus.COMPLETE, hundred.status());
-        assertTrue(hundred.coverage().hit(), "the row wrote 100 and the guard compared it");
-        assertTrue(hundred.origin().startsWith("guard"), hundred.origin());
+        BorderAssessment.Point hundred = at(lines, "100").get(0);
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(hundred.item().weakeningSource()));
+        assertTrue(hundred.owed().hasRowWitness(),
+                "the row wrote 100 and the guard compared it");
+        assertTrue(hundred.border().origin().isWrittenRatherThanNamed(),
+                hundred.border().origin().named());
     }
 
     /**
@@ -135,7 +157,7 @@ class CompileExampleBoundaryTest {
      */
     @Test
     void aValueWrittenButNeverComparedDoesNotMeetTheLine() {
-        PartitionEvidence evidence = evidence("""
+        List<BorderAssessment> lines = lines("""
                 module example.trip
 
                 data Amount = Int
@@ -158,25 +180,26 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(-1) }) -> Waiting { cost = Amount(-1) }
                 """);
 
-        BoundaryAssessment first = at(evidence, "0").stream()
-                .filter(b -> b.origin().startsWith("guard")).findFirst().orElseThrow();
-        BoundaryAssessment second = at(evidence, "100").get(0);
+        BorderAssessment.Point first = at(lines, "0").stream()
+                .filter(p -> p.border().origin().isWrittenRatherThanNamed()).findFirst().orElseThrow();
+        BorderAssessment.Point second = at(lines, "100").get(0);
 
-        assertEquals(MeasurementStatus.COMPLETE, second.status(), "the arms were measured");
-        assertFalse(second.coverage().hit(), "no row was ever compared against 100");
-        assertFalse(first.coverage().hit(), "and the row wrote -1, not 0");
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(second.item().weakeningSource()),
+                "the arms were measured");
+        assertFalse(second.owed().hasRowWitness(), "no row was ever compared against 100");
+        assertFalse(first.owed().hasRowWitness(), "and the row wrote -1, not 0");
     }
 
     @Test
     void bothSidesOfAGuardsLineAreAskedFor() {
-        PartitionEvidence evidence = evidence(MODEL + """
+        List<BorderAssessment> lines = lines(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
 
-        assertEquals(1, at(evidence, "100").size(), "the value itself");
-        assertEquals(1, at(evidence, "101").size(), "and the first value on the other side");
+        assertEquals(1, at(lines, "100").size(), "the value itself");
+        assertEquals(1, at(lines, "101").size(), "and the first value on the other side");
     }
 
     /** Not a gap. The model draws no line through a plain String, so there was nothing to measure,
@@ -197,7 +220,7 @@ class CompileExampleBoundaryTest {
                 example keep
                     | (Note("x")) -> Kept { note = Note("x") }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
@@ -212,6 +235,7 @@ class CompileExampleBoundaryTest {
         assertTrue(keep.notDerivable().get(0).isAbsent(),
                 "the model divides it no way, which is established rather than assumed");
         assertEquals(List.of(), keep.axes());
-        assertEquals(List.of(), keep.boundaries());
+        assertEquals(List.of(),
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0)).get("keep"));
     }
 }

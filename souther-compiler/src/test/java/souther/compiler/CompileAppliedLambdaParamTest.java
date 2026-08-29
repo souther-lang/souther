@@ -37,7 +37,7 @@ class CompileAppliedLambdaParamTest {
     void aLambdaParameterHoldingAFunctionElementIsApplied() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(ALL_OVER_FUNCTIONS), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
 
         assertEquals(true, field(loader, check, Map.of("n", 5L), "ok"));
         assertEquals(false, field(loader, check, Map.of("n", -5L), "ok"));
@@ -62,7 +62,7 @@ class CompileAppliedLambdaParamTest {
     void mapAppliesEachFunctionElementThroughTheLambdaParameter() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(MAP_OVER_FUNCTIONS), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
 
         assertEquals(List.of(11L, 20L), field(loader, check, Map.of("n", 10L), "ns"));
     }
@@ -89,7 +89,7 @@ class CompileAppliedLambdaParamTest {
     void substitutionFollowsTheBindingNotTheSpelling() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(SHADOWED_LET), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
 
         assertEquals(List.of(11L), field(loader, check, Map.of("n", 10L), "ns"));
         assertEquals(110L, field(loader, check, Map.of("n", 10L), "m"));
@@ -118,7 +118,7 @@ class CompileAppliedLambdaParamTest {
     void aParameterShadowingAnImportedNameIsTheBindingWhereItIsInForce() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(SHADOWED_IMPORT), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
 
         assertEquals(true, field(loader, check, Map.of("n", 5L, "xs", List.of(1L, 2L)), "inner"));
         assertEquals(false, field(loader, check, Map.of("n", -5L, "xs", List.of(1L, 2L)), "inner"));

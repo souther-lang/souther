@@ -73,9 +73,29 @@ E1902's hint no longer claims that an example runs a behavior "that depends on n
 next sentence of its own specification entry contradicted, since ADR-0048 made a dependency something a
 fake supplies.
 
-A composition whose stage names an imported injected behavior is not example-able, for the reason a
-behavior depending on one is not: a fake stands in for an injected behavior of the module the example is
-written in. That limit is inherited, not introduced here.
+## Amendment (issue #1108)
+
+This ADR recorded a limit that was not the language's:
+
+> A composition whose stage names an imported injected behavior is not example-able, for the reason a
+> behavior depending on one is not: a fake stands in for an injected behavior of the module the
+> example is written in. That limit is inherited, not introduced here.
+
+That is withdrawn. It was an implementation's shape written down as a decision. `depends on` names a
+behavior declared here or imported (spec `[#depends-on]`), the check and the emitter carry a
+requirement as the declaration it is, and only the rows identified it by the bare spelling an author
+wrote — so a requirement carried across a module boundary could be declared and emitted and never
+run, and where a namesake was declared beside it, that namesake's table was installed in its place
+and the row aborted casting one module's value to another's.
+
+**What each behavior takes injected is one question** is the decision this amends, one rung further
+in: *which behavior* a requirement is, is also one question. A `fake` and a `with` name it the way a
+`depends on` clause names it, resolved once, and what the compiler carries from there is the
+behavior and not the characters. A row of such a table is held to what the declaring module states,
+by the check that module emitted.
+
+The composition case follows without a rule of its own, as it did before: a composition's
+dependencies are its stages', and a stage may name an imported injection target.
 
 ## References
 

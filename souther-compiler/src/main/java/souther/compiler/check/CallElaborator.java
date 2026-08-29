@@ -1,7 +1,10 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelSignature;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
@@ -10,7 +13,6 @@ import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ReachName;
@@ -41,10 +43,10 @@ public final class CallElaborator {
      * say (ADR-0053). The declaration states the shape and this states the rest, keyed by the kernel
      * it constrains — which is what {@code sort} has always done, written out by hand.
      */
-    private static final Map<String, OrderedElement> ORDERED_ELEMENT = Map.of(
-            "list.sort", OrderedElement.OF_THE_LIST,
-            "list.max", OrderedElement.OF_THE_OPTION,
-            "list.min", OrderedElement.OF_THE_OPTION);
+    private static final Map<Kernel, OrderedElement> ORDERED_ELEMENT = Map.of(
+            Kernel.LIST_SORT, OrderedElement.OF_THE_LIST,
+            Kernel.LIST_MAX, OrderedElement.OF_THE_OPTION,
+            Kernel.LIST_MIN, OrderedElement.OF_THE_OPTION);
 
     /**
      * Refuses an element with no natural order. An ordered primitive has one, and so does a newtype
@@ -52,8 +54,9 @@ public final class CallElaborator {
      * throw at run time, so it is refused here. The empty-list literal (element {@code Nothing}) is
      * fine: it sorts to itself and its max is {@code None}.
      */
-    private static void requiresOrdering(String key, Ast.Apply call, Type result, CheckContext ctx) {
-        OrderedElement where = ORDERED_ELEMENT.get(key);
+    private static void requiresOrdering(Kernel kernel, Hir.Apply call, Type result,
+                                         CheckContext ctx) {
+        OrderedElement where = ORDERED_ELEMENT.get(kernel);
         if (where == null) {
             return;
         }
@@ -79,9 +82,9 @@ public final class CallElaborator {
      * what the list holds, so it reads the binding the key's declared result took rather than the
      * call's result.
      */
-    private static void requiresOrderedKey(String key, Ast.Apply call, Type.FnOf declaredKey,
+    private static void requiresOrderedKey(Kernel kernel, Hir.Apply call, Type.FnOf declaredKey,
                                            Map<String, Type> bindings, CheckContext ctx) {
-        if (!key.equals("list.sortBy")) {
+        if (kernel != Kernel.LIST_SORT_BY) {
             return;
         }
         Type answered = TypeOps.substitute(declaredKey.result(), bindings);
@@ -105,42 +108,110 @@ public final class CallElaborator {
      * <p>The Core is the one the application spelling produced, so nothing downstream of here tells
      * the two apart — which is what keeps a growing fold's seed the seed it was.
      */
-    static Core libraryValue(Ast.Var v, CheckContext ctx, Type expected) {
-        if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
+    static Core libraryValue(Hir.Var.Denoting v, CheckContext ctx, Type expected) {
+        // An operation of the library. The namespace applied is a construction and not a value the
+        // library declares, so it takes none of the paths below.
+        if (!(v.denotes() instanceof ValueName.Stdlib.Operation lib)) {
             return null;
         }
-        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
+        Stdlib.Entry entry = ctx.symbols().library().entry(lib);
         if (entry == null || !entry.declaration().params().isEmpty()) {
             return null;
         }
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
         BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols());
-        return new Core.Call(new ReachName.OfLibrary(lib), List.of(),
-                TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
+        return new Core.Call(reached(new ReachName.OfLibrary(lib), ctx),
+                List.of(), TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
-    static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
+    /**
+     * What a call to a name applies, as this compiler has settled it: the name the module reaches
+     * the callee by, what that name denotes, and — where the declaration behind it is a kernel of
+     * the standard library — which kernel that is.
+     *
+     * <p>The one place a {@link Core.Reached} is built. Two things reach it — an application, and a
+     * library value written on its own — and each of them asking the library whether what it reached
+     * is a kernel would be one rule kept in as many places as there are callers, which is how one of
+     * them comes to be the one that forgets. {@code Core.Call} takes what is applied and no longer
+     * takes a name, so there is no way past here to a call target built out of a spelling.
+     *
+     * <p>Asked of what the name denotes rather than of how it renders. Whether an operation is a
+     * kernel is a property of the declaration the resolver picked, and the two are one string apart
+     * only for as long as they happen to be.
+     */
+    private static Core.Reached reached(ReachName.Declaration name, CheckContext ctx) {
+        if (name instanceof ReachName.OfLibrary library) {
+            Stdlib.Intrinsic kernel = ctx.symbols().library().intrinsicOf(library.denotes());
+            if (kernel != null) {
+                return new Core.Reached.OfKernel(library, kernel.kernel());
+            }
+        }
+        return new Core.Reached.OfDeclaration(name);
+    }
+
+    static Core elaborateCall(Hir.Apply call, Scope env, CheckContext ctx,
                                       Type expected) {
+        if (call.function() instanceof Hir.Var.Unanswered) {
+            // reported where the name was written; this definition has no meaning to work out
+            throw new Unanswerable(call.pos());
+        }
+        // What this applies, as the name that names it — null where what is applied is not a name,
+        // which the typing below refuses where it reads the callee.
+        Hir.Var.Denoting callee = call.answered();
         // A call this representation said it keeps standing, asked before anything tries to expand or
         // resolve it: what it names is settled, and the only question left is its signature. Asked of
         // the representation and not of the operation — whether anything downstream has a rule about
         // it is not this walk's business, and a kept call with no rule types like any other.
-        CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
+        CompleteSignature kept = callee == null
+                ? null : ctx.preserved().signatureOf(callee.denotes());
         if (kept != null) {
-            return preservedCall(call, kept, env, ctx, expected);
+            return preservedCall(call, callee, kept, env, ctx, expected);
         }
         CallArgs ca = new CallArgs(call.args(), env, ctx);
+        // A temporal written out is a value, not an application: which it is was settled when the
+        // callee was resolved, and it becomes a value of its own here so that nothing downstream is
+        // left asking a call whether it is one. Three readers were asking, each off a different
+        // thing in reach — the spelling, the answered type, the shape of the argument — and each was
+        // right only about programs that name none of the four temporals themselves. Asked of what
+        // the name denotes, which is what the library says about itself.
+        if (callee != null && callee.denotes() instanceof ValueName.Stdlib library
+                && library.constructs() instanceof Type.Prim kind) {
+            return temporalLiteral(call, kind, ca);
+        }
         Type result = typeOfCall(ca, call, env, ctx, expected);
         // applying something this body binds is a different operation from calling something
         // declared elsewhere, and it is the only one that carries a binding into the emitted tree
-        if (call.denotes() instanceof ValueName.Local local
+        if (callee != null && callee.denotes() instanceof ValueName.Local local
                 && env.typeOf(local.id()) instanceof Type.FnOf) {
             return new Core.Apply(
                     new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
-        return new Core.Call(call.reachedAs(), ca.cores(), result, call.pos());
+        // Typing the call above refuses what is not a name outright, so what is left here names a
+        // declaration and says which one and how this module reaches it.
+        //
+        // A trailing parameter an implementation takes its `depends on` as is written as a binding
+        // and reaches the behavior the clause named: the call is to that behavior, and everything
+        // below asks what a call reaches rather than which parameter carried it here.
+        //
+        // Which makes it a different reference, and it is worked out as one. The parameter's is a
+        // reference to a binding, so keeping it beside the behavior would be a route to one thing
+        // paired with a denotation of another — the pairing `ReachName` holds both halves to
+        // prevent. What this module reaches the behavior by is asked of the behavior.
+        ValueName dependency = callee.denotes() instanceof ValueName.Local local
+                ? ctx.dependencyOf(local.id()) : null;
+        ReachName reaches = dependency == null
+                ? callee.reachedAs()
+                : ReachName.of(dependency, callee.name(), ctx.symbols().module());
+        if (!(reaches instanceof ReachName.Declaration declaration)) {
+            // The typing above refused what is not a name, and a binding applied became an apply
+            // rather than a call. So what is left reaches a declaration, and one that does not is
+            // this compiler having built a call for something no method stands behind.
+            throw new IllegalStateException("`" + call.written() + "` was elaborated as a call and"
+                    + " reaches " + reaches + ", which no method is emitted for");
+        }
+        return new Core.Call(reached(declaration, ctx), ca.cores(), result, call.pos());
     }
 
     /**
@@ -152,7 +223,8 @@ public final class CallElaborator {
      * business with a call left standing meets it as itself rather than as an ordinary call it might
      * try to emit.
      */
-    private static Core preservedCall(Ast.Apply call, CompleteSignature kept, Scope env,
+    private static Core preservedCall(Hir.Apply call, Hir.Var.Denoting callee,
+                                      CompleteSignature kept, Scope env,
                                       CheckContext ctx, Type expected) {
         List<Type> params = kept.params();
         CallArgs ca = new CallArgs(call.args(), env, ctx);
@@ -180,7 +252,7 @@ public final class CallElaborator {
                 }
             }
         }
-        return new Core.PreservedCall(call.denotes(), ca.cores(),
+        return new Core.PreservedCall(callee.denotes(), ca.cores(),
                 TypeOps.substitute(kept.result(), bind), call.pos());
     }
 
@@ -209,7 +281,7 @@ public final class CallElaborator {
      * because a difference here is not a failure but a variable settled to the wrong type, which is
      * reported somewhere else as something else.
      */
-    static Map<String, Type> settledByValues(Ast.Apply call, List<Type> params, Type result,
+    static Map<String, Type> settledByValues(Hir.Apply call, List<Type> params, Type result,
                                              Type expected,
                                              java.util.function.IntFunction<Type> argType,
                                              CheckContext ctx) {
@@ -250,12 +322,12 @@ public final class CallElaborator {
      * rather than by a separate walk that would have to reconstruct that context.
      */
     static final class CallArgs {
-        private final List<Ast.Expr> args;
+        private final List<Hir.Expr> args;
         private final Core[] cores;
         private final Scope env;
         private final CheckContext ctx;
 
-        CallArgs(List<Ast.Expr> args, Scope env, CheckContext ctx) {
+        CallArgs(List<Hir.Expr> args, Scope env, CheckContext ctx) {
             this.args = args;
             this.cores = new Core[args.size()];
             this.env = env;
@@ -346,8 +418,12 @@ public final class CallElaborator {
      * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
      * with itself and not something an author can act on.
      */
-    static RuntimeException noCallee(Ast.Apply call) {
-        return switch (call.denotes()) {
+    static RuntimeException noCallee(Hir.Apply call) {
+        if (call.answered() == null) {
+            return new IllegalStateException("`" + call.written()
+                    + "` applies something that is not a name, at " + call.pos());
+        }
+        return switch (call.answered().denotes()) {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
             case ValueName.Behavior _ -> CompileException.of(Diagnostic.at(call.appliedAt())
@@ -371,25 +447,15 @@ public final class CallElaborator {
             // told apart earlier (E1303), so reaching here is a value position no rewrite covers.
             case ValueName.Builtin b -> CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
-            // thrown out at the top of typeOfCall, before any of the work above
-            case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
             case null -> unelaborated("nothing", call);
         };
     }
 
-    private static IllegalStateException unelaborated(String what, Ast.Apply call) {
+    private static IllegalStateException unelaborated(String what, Hir.Apply call) {
         return new IllegalStateException("`" + call.written() + "` denotes " + what
                 + " and reached call elaboration unexpanded, at " + call.pos());
     }
 
-    /**
-     * The type of a call, by what the name it applies denotes.
-     *
-     * <p>Which of these a name is was answered when the module's names were resolved, so the order
-     * the cases are written in here decides nothing. Before that this was a sequence of attempts —
-     * the library, then a function-typed binding, then an injected behavior — and a name that could
-     * be read two ways was whichever came first.
-     */
     /** What one application of a declared signature settled: the declared result with the
      *  signature's variables substituted, and that substitution itself — for the checks a kernel
      *  runs on the outcome. Settled at construction: the map is copied, not shared with the
@@ -431,9 +497,9 @@ public final class CallElaborator {
      * <p>Arity is the caller's to check first, in its own words; this throws where the two
      * disagree rather than walking off the shorter list.
      */
-    private static Applied applySignature(Ast.Apply call, Type.FnOf signature, CallArgs ca,
+    private static Applied applySignature(Hir.Apply call, Type.FnOf signature, CallArgs ca,
                                           Type expected, Scope env, CheckContext ctx) {
-        List<Ast.Expr> args = call.args();
+        List<Hir.Expr> args = call.args();
         if (args.size() != signature.params().size()) {
             throw new IllegalStateException("`" + call.written() + "` reached signature application"
                     + " with " + args.size() + " argument(s) against " + signature.params().size());
@@ -449,14 +515,20 @@ public final class CallElaborator {
                 }
             }
         } catch (CompileException stepError) {
-            int seed = BottomInfer.untypedEmptySeed(args, signature, bind, call.pos());
+            int seed = BottomInfer.untypedEmptySeed(ctx.symbols().library(), args, signature, bind);
             if (seed < 0 || !BottomInfer.reportsUnresolvedBottom(stepError)) {
                 throw stepError;
             }
             Diagnostic.Builder b = Diagnostic
                     .at(args.get(seed).reportedAt());
-            if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
-                b.secondary(stepError.diagnostic().region(), new NameMessage.TheAccumulatorsTypeStaysUnknown());
+            // The step's own place, where it has one a reader can be sent to. A report about code
+            // out of sight, or one in a text this compile cannot name, has no place to lend: the
+            // region it holds is not one this label could be read at.
+            if (stepError.diagnostic() != null
+                    && stepError.diagnostic().primary()
+                            instanceof souther.compiler.diag.Primary.InSource(
+                                    souther.compiler.diag.DiagnosticPlace.InSource place)) {
+                b.secondary(place, new NameMessage.TheAccumulatorsTypeStaysUnknown());
             }
             throw CompileException.of(b.say(new NameMessage.TheElementTypeCannotBeInferredHere()).build());
         }
@@ -465,7 +537,7 @@ public final class CallElaborator {
 
     /** Each value argument held to the parameter it was given to, at its own position — the
      * refusal {@link #settledByValues} leaves to whoever has the argument in hand. */
-    private static void requireValueArgs(Ast.Apply call, List<Type> params, CallArgs ca,
+    private static void requireValueArgs(Hir.Apply call, List<Type> params, CallArgs ca,
                                          Map<String, Type> bind) {
         for (int i = 0; i < params.size(); i++) {
             Type param = params.get(i);
@@ -476,18 +548,30 @@ public final class CallElaborator {
         }
     }
 
-    static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
-        List<Ast.Expr> args = call.args();
-        if (call.denotes() == null) {
-            throw new IllegalStateException(
-                    "`" + call.written() + "` reached the check unresolved, at " + call.pos());
-        }
-        if (call.denotes() instanceof ValueName.Unresolved) {
+    /**
+     * The type of a call, by what the name it applies denotes.
+     *
+     * <p>Which of these a name is was answered when the module's names were resolved, so the order
+     * the cases are written in here decides nothing. Before that this was a sequence of attempts —
+     * the library, then a function-typed binding, then an injected behavior — and a name that could
+     * be read two ways was whichever came first.
+     */
+    static Type typeOfCall(CallArgs ca, Hir.Apply call, Scope env, CheckContext ctx, Type expected) {
+        List<Hir.Expr> args = call.args();
+        if (call.function() instanceof Hir.Var.Unanswered) {
             // reported where the name was written; this definition has no meaning to work out
             throw new Unanswerable(call.pos());
         }
-        boolean library = call.denotes() instanceof ValueName.Stdlib;
-        Prelude.PreludeEntry entry = library ? Prelude.entry(call.reaches()) : null;
+        Hir.Var.Denoting callee = call.answered();
+        if (callee == null) {
+            throw new IllegalStateException("`" + call.written()
+                    + "` applies something that is not a name, at " + call.pos());
+        }
+        // Asked with the name the library keys itself by, which the denotation carries. Asked with
+        // the reference rendered, this would be the library looked up by a spelling — the same
+        // string today, and the library's to change.
+        Stdlib.Entry entry = callee.denotes() instanceof ValueName.Stdlib.Operation operation
+                ? ctx.symbols().library().entry(operation) : null;
         // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
@@ -497,97 +581,115 @@ public final class CallElaborator {
                             .hint(new NameMessage.WriteItOnItsOwn(call.written())).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
         }
         // A shipped kernel behaves like a built-in: check the call against the declared signature
-        // and yield its result type; the backend emits the primitive for its key. A Souther-bodied
-        // library call — a recursive helper such as `List.foldFrom` — is not one of these and takes
-        // the paths below, as any helper does.
-        if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
-            Prelude.Signature intrinsic = entry.signature();
-            if (args.size() != intrinsic.params().size()) {
+        // and yield its result type; the backend emits the primitive the call says it reaches. A
+        // Souther-bodied library call — a recursive helper such as `List.foldFrom` — is not one of
+        // these and takes the paths below, as any helper does.
+        Stdlib.Intrinsic declaredKernel = callee.denotes() instanceof ValueName.Stdlib.Operation
+                operation
+                ? ctx.symbols().library().intrinsicOf(operation) : null;
+        if (declaredKernel != null) {
+            Kernel kernel = declaredKernel.kernel();
+            KernelSignature intrinsic = declaredKernel.signature();
+            if (args.size() != intrinsic.parameters().size()) {
                 throw CompileException.of(Diagnostic
                                 .at(call.appliedAt())
-                                .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.params().size()), String.valueOf(args.size()))).build());
+                                .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.parameters().size()), String.valueOf(args.size()))).build());
             }
             Applied applied = applySignature(call,
-                    new Type.FnOf(intrinsic.params(), intrinsic.result()), ca, expected, env, ctx);
-            // What remains is the kernel's own: constraints its key names on the outcome the
+                    new Type.FnOf(intrinsic.parameters(), intrinsic.result()), ca, expected, env, ctx);
+            // What remains is the kernel's own: constraints the kernel places on the outcome the
             // signature could not state, and the emitter's special cases. They read the settled
             // substitution and result — they are checks on what the application became, not part
             // of how an application is typed.
-            for (Type param : intrinsic.params()) {
+            for (Type param : intrinsic.parameters()) {
                 if (param instanceof Type.FnOf declaredStep) {
-                    requiresOrderedKey(kernel.key(), call, declaredStep, applied.substitution(), ctx);
+                    requiresOrderedKey(kernel, call, declaredStep, applied.substitution(), ctx);
                 }
             }
-            requiresOrdering(kernel.key(), call, applied.result(), ctx);
-            if (kernel.key().equals("list.sum") || kernel.key().equals("list.product")) {
+            requiresOrdering(kernel, call, applied.result(), ctx);
+            if (kernel == Kernel.LIST_SUM || kernel == Kernel.LIST_PRODUCT) {
                 return numericFold(call, applied.result(), expected);
             }
-            if (kernel.key().equals("string.matches")) {
-                validateRegexPattern(args.get(0));
+            if (kernel == Kernel.STRING_MATCHES) {
+                validateRegexPattern(args.get(0), ctx.symbols());
             }
             return applied.result();
         }
-        return switch (library ? call.reaches() : "") {
-            case "Date", "Time", "DateTime", "Instant" -> {
-                arity(call, 1);
-                ca.type(0);   // the literal text, which temporalLiteral parses
-                yield temporalLiteral(call);
+        // a function-typed value in scope (a helper's function parameter) applied to
+        // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
+        // reaches here — NewtypeDesugar has lowered it to a NewData literal.
+        // a function value in force, or a recursive helper's signature: which of the two
+        // is the denotation's to say, and only one of them is bound here
+        if (env.of(callee.denotes(), call.written()) instanceof Type.FnOf fn) {
+            if (args.size() != fn.params().size()) {
+                throw CompileException.of(Diagnostic
+                                .at(call.appliedAt())
+                                .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
             }
-            default -> {
-                // a function-typed value in scope (a helper's function parameter) applied to
-                // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
-                // reaches here — NewtypeDesugar has lowered it to a NewData literal.
-                // a function value in force, or a recursive helper's signature: which of the two
-                // is the denotation's to say, and only one of them is bound here
-                if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
-                    if (args.size() != fn.params().size()) {
-                        throw CompileException.of(Diagnostic
-                                        .at(call.appliedAt())
-                                        .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
-                    }
-                    yield applySignature(call, fn, ca, expected, env, ctx).result();
-                }
-                // A library name that matched no builtin or intrinsic above is a wrong stdlib call
-                // (spec §stdlib) — reported as that, not as a missing behavior. Asked of which kind
-                // of name this reaches and not of whether the spelling holds a dot: a field read
-                // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
-                // what is wrong with it is that it is not a function, which the report below says.
-                if (call.reachedAs() instanceof ReachName.OfLibrary) {
-                    throw CompileException.of(Diagnostic
-                                    .at(call.appliedAt()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
-                }
-                // A helper another module declares is expanded where it is called, or — where it
-                // recurses — bound as a signature and answered above. Reaching here it is neither,
-                // which is this compiler having failed to do one of them rather than anything the
-                // author wrote. Said outright: reported as a wrong library call, it named a library
-                // the author never wrote.
-                if (call.reachedAs() instanceof ReachName.OfModule reached) {
-                    throw new IllegalStateException("`" + reached + "` was neither expanded nor"
-                            + " bound before the call to it at " + call.pos() + " was typed");
-                }
-                // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
-                // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
-                // declaration; where the behavior comes from at run time is the backend's to know.
-                ReqSig callee = ctx.reqs().get(call.reaches());
-                if (callee == null) {
-                    callee = ctx.callees().get(call.reaches());
-                }
-                if (callee == null) {
-                    Elaborator.optionCaseWritten(call.written(), call.pos());
-                    CompileException bareLibraryName = StdlibNames.writtenBare(
-                            call.written(), call.written(), call.name().region());
-                    if (bareLibraryName != null) {
-                        throw bareLibraryName;
-                    }
-                    throw noCallee(call);
-                }
-                arity(call, callee.params().size());
-                for (int i = 0; i < callee.params().size(); i++) {
-                    ca.require(i, callee.params().get(i), "argument " + (i + 1) + " of " + call.written());
-                }
-                yield callee.success();
+            return applySignature(call, fn, ca, expected, env, ctx).result();
+        }
+        // A library name that matched no builtin or intrinsic above. Which of the two it is the
+        // library says, and the two are not one report. A name it declares reached here without
+        // having been expanded or bound, and neither is something an author can write or undo —
+        // it is this compiler disagreeing with itself, which is what the helper arm below says of
+        // the same failure and is said the same way here. A spelling it declares nothing under is
+        // a wrong stdlib call (spec §stdlib) and is reported as that, not as a missing behavior.
+        //
+        // A sugar declares nothing, so a call of one that got this far is a call the rewrite did
+        // not take: `List.fold` written with two arguments is not the three-argument call it is
+        // sugar for, and what is wrong with it is what was written.
+        //
+        // Asked of which kind of name this reaches and not of whether the spelling holds a dot: a
+        // field read applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding,
+        // and what is wrong with it is that it is not a function, which the report below says.
+        if (callee.reachedAs() instanceof ReachName.OfLibrary) {
+            if (entry != null) {
+                throw unelaborated("a standard-library function", call);
             }
+            throw CompileException.of(Diagnostic
+                            .at(call.appliedAt()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
+        }
+        // A helper another module declares is expanded where it is called, or — where it
+        // recurses — bound as a signature and answered above. Reaching here it is neither,
+        // which is this compiler having failed to do one of them rather than anything the
+        // author wrote. Said outright: reported as a wrong library call, it named a library
+        // the author never wrote.
+        if (callee.denotes() instanceof ValueName.Helper) {
+            throw unelaborated("a helper", call);
+        }
+        // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
+        // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
+        // declaration; where the behavior comes from at run time is the backend's to know.
+        // Asked of the declaration the call reaches. Two modules may declare a behavior
+        // of one name, and a table asked with the name this module writes answers for
+        // whichever of them the entry happens to be.
+        // A behavior named outright, or the trailing parameter an implementation takes it
+        // as — which is a binding, and which behavior it stands for was settled where the
+        // `depends on` clause was resolved.
+        ValueName.Behavior reached = switch (callee.denotes()) {
+            case ValueName.Behavior behavior -> behavior;
+            case ValueName.Local local -> ctx.dependencyOf(local.id());
+            default -> null;
         };
+        ReqSig required = reached == null ? null : ctx.reqs().get(reached);
+        if (required == null && reached != null) {
+            required = ctx.callees().get(reached);
+        }
+        if (required == null) {
+            Elaborator.optionCaseWritten(call.written(), call.pos());
+            CompileException bareLibraryName = StdlibNames.writtenBare(
+                    ctx.symbols().library().names(), call.written(), call.written(),
+                    call.name().region());
+            if (bareLibraryName != null) {
+                throw bareLibraryName;
+            }
+            throw noCallee(call);
+        }
+        arity(call, required.params().size());
+        for (int i = 0; i < required.params().size(); i++) {
+            ca.require(i, required.params().get(i), "argument " + (i + 1) + " of " + call.written());
+        }
+        return required.success();
     }
 
     /**
@@ -596,10 +698,10 @@ public final class CallElaborator {
      * form written directly. Empty when the argument is a runtime value or the data is not a
      * single-{@code value} wrapper (e.g. a product).
      */
-    static Optional<Object> newtypeConstantArg(Ast.NewData nd) {
+    static Optional<Object> newtypeConstantArg(Hir.NewData nd, Symbols symbols) {
         if (nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return ConstEval.eval(nd.inits().get(0).value());
+            return ConstEval.against(symbols).eval(nd.inits().get(0).value());
         }
         return Optional.empty();
     }
@@ -610,8 +712,8 @@ public final class CallElaborator {
      * literal is one such expression and so is a {@code ++} of literals and of a module's values,
      * which is what lets several formats share a part (issue #208). What is validated is the string
      * the whole expression composes to, not the pieces it was written in. */
-    static void validateRegexPattern(Ast.Expr e) {
-        String pattern = ConstEval.evalString(e).orElse(null);
+    static void validateRegexPattern(Hir.Expr e, Symbols symbols) {
+        String pattern = ConstEval.against(symbols).evalString(e).orElse(null);
         if (pattern == null) {
             throw CompileException.of(Diagnostic
                             .at(e.pos()).say(new TypeMessage.ThePatternMustBeWrittenOut()).build());
@@ -653,7 +755,7 @@ public final class CallElaborator {
      * that a sum does not go here — asking for an annotation would send the reader after something
      * the position already carries.
      */
-    private static Type numericFold(Ast.Apply call, Type element, Type expected) {
+    private static Type numericFold(Hir.Apply call, Type element, Type expected) {
         if (element == Type.INT || element == Type.DECIMAL) {
             return element;
         }
@@ -698,23 +800,32 @@ public final class CallElaborator {
      * rather than a run (and an {@code example} fixture, which may only hold literals, can carry a
      * temporal at all). This form spells one out; a temporal computed from values comes from the
      * boundary, from the arithmetic, or from {@code Date.fromParts} / {@code Time.fromParts}, which
-     * answer a case where the parts name no such moment. */
-    static Type temporalLiteral(Ast.Apply call) {
-        Type.Prim kind = Type.Prim.named(call.reaches());
-        if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
+     * answer a case where the parts name no such moment.
+     *
+     * <p>{@code kind} is handed in rather than read off the spelling: which temporal this builds is
+     * what the callee's denotation said ({@link ValueName.Stdlib#constructs()}), and the spelling is
+     * only what a report quotes. The node this answers with is the value itself, so the text is read
+     * here once and nothing downstream reconstructs it from a call. */
+    static Core.Temporal temporalLiteral(Hir.Apply call, Type.Prim kind, CallArgs ca) {
+        arity(call, 1);
+        ca.type(0);   // the text, typed where it stands
+        if (!(call.args().get(0) instanceof Hir.StringLit lit)) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
-        parseTemporal(call.written(), lit.value(), lit.reportedAt());
-        return kind;
+        parseTemporal(kind, call.written(), lit.value(), lit.reportedAt());
+        return new Core.Temporal(kind, lit.value(), call.pos());
     }
 
     /** Parses a written temporal, reporting a malformed one against {@code at} — the text the
      * message quotes, which is the part of the form a reader cannot work out from the message.
      * Returns the parsed value so the backend and the example verifier share this one reading of
-     * the text. */
-    public static Object parseTemporal(String fn, String text, Region at) {
-        Type.Prim kind = Type.Prim.named(fn);
+     * the text.
+     *
+     * <p>{@code kind} decides which parse runs and {@code fn} is only what a report quotes. They
+     * were one value, and the caller that had a name for a temporal it had not resolved got the
+     * parse the name spelled. */
+    public static Object parseTemporal(Type.Prim kind, String fn, String text, Region at) {
         Object parsed;
         try {
             parsed = switch (kind) {
@@ -786,7 +897,7 @@ public final class CallElaborator {
         return parsed;
     }
 
-    static void arity(Ast.Apply call, int n) {
+    static void arity(Hir.Apply call, int n) {
         if (call.args().size() != n) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt())

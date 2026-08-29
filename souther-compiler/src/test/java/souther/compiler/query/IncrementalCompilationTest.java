@@ -1,5 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
+import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -11,6 +14,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -225,15 +229,15 @@ class IncrementalCompilationTest {
     @Test
     void editingOneBodyExpandsThatBodyAndNotTheOnesBesideIt() {
         Compilation c = orders(ORDERS);
-        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
-        Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", "thrice"));
+        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
+        Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice")));
 
         c.update(thriceTimes("30"), Set.of());
         c.answerEverything();
 
-        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", "thrice")),
+        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice"))),
                 "the edit is `thrice`'s, so it is expanded again");
-        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
+        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
                 "`twice` says what it said, and `thrice` is not part of it");
     }
 
@@ -285,13 +289,13 @@ class IncrementalCompilationTest {
     @Test
     void editingAHelperReachesTheBodiesItIsExpandedInto() {
         Compilation c = orders(ORDERS);
-        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
+        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
 
         c.update(Map.of("orders.sou", ORDERS.replace("let doubled (n) = n * 2",
                 "let doubled (n) = n * 2 + 0")), Set.of());
         c.answerEverything();
 
-        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
+        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
                 "`twice` calls `doubled`, and `doubled` is part of what `twice` becomes");
     }
 
@@ -351,10 +355,485 @@ class IncrementalCompilationTest {
 
         assertFalse(c.db().isComputed(new Output.Classes("shop.customers")),
                 "nothing will ask about a module that is not there any more");
-        assertFalse(c.db().isComputed(new Front.Parsed("customers.sou")),
+        assertFalse(c.db().isComputed(new Front.Parsed(new SourceId("customers.sou"))),
                 "nor is its parse tree");
-        assertFalse(c.db().isComputed(new Front.Text("customers.sou")),
+        assertFalse(c.db().isComputed(new Front.Text(new SourceId("customers.sou"))),
                 "nor its text");
         assertEquals(List.of("shop.prices", "shop.cart"), c.modules());
+    }
+
+    // --- what a body's check depends on of the contracts around it -------------------------------
+
+    /**
+     * Two behaviors stating a relation, and a third calling one of them. The two clauses are
+     * written differently so that either can be edited on its own. The caller is written first and
+     * the two it may call after it, so that an edit to either of those moves the other without
+     * moving the caller — which is the arrangement the question is about.
+     */
+    private static final String STATING = """
+            module shop.orders exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            behavior caller : (n: Amount) -> Amount
+            let caller (n) = called(n)
+
+            behavior uncalled : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value > n.value - 1
+            let uncalled (n) = Amount(n.value * 3)
+
+            behavior called : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value >= n.value
+            let called (n) = Amount(n.value * 2)
+            """;
+
+    private static Compilation stating() {
+        Compilation c = Compilation.ofDocuments(Map.of("orders.sou", STATING), Set.of(),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
+        return c;
+    }
+
+    /**
+     * What a caller may assume of an answer is what the behavior it called declared, so a relation
+     * declared by a behavior it does not call is none of its business. Handing a body every contract
+     * its module can see made each of them depend on all of them, so editing any `ensures` in a file
+     * re-checked every body in it.
+     */
+    @Test
+    void editingAnEnsuresDoesNotRecheckABodyThatDoesNotCallIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING.replace(
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`caller` calls `called`, and what `uncalled` states is no part of that");
+    }
+
+    /** And the other way round: a relation the body did call for is what it was checked against. */
+    @Test
+    void editingAnEnsuresRechecksTheBodiesThatCallIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING.replace(
+                "ensures value.value >= n.value", "ensures value.value > n.value - 1")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`caller` took what `called` states about its answer");
+    }
+
+    /** A module declaring two behaviors that state a relation, both of them borrowed below. */
+    private static final String CALC = """
+            module lib.calc exposing ( Amount, doubled, tripled )
+
+            data Amount = Int
+                invariant value >= 0
+
+            behavior tripled : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value > n.value - 1
+            let tripled (n) = Amount(n.value * 3)
+
+            behavior doubled : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value >= n.value
+            let doubled (n) = Amount(n.value * 2)
+            """;
+
+    /** One body per borrowed behavior, so both imports are named and neither body names both. */
+    private static final String USES = """
+            module app.use exposing ( Out )
+
+            import lib.calc ( Amount, doubled, tripled )
+
+            data Out = Int
+                invariant value >= 0
+
+            behavior viaDoubled : (n: Amount) -> Out
+                constructs Out
+            let viaDoubled (n) = Out(doubled(n).value)
+
+            behavior viaTripled : (n: Amount) -> Out
+                constructs Out
+            let viaTripled (n) = Out(tripled(n).value)
+            """;
+
+    private static Map<String, String> borrowing(String calc) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("calc.sou", calc);
+        byId.put("use.sou", USES);
+        return byId;
+    }
+
+    private static Compilation borrowing() {
+        Compilation c = Compilation.ofDocuments(borrowing(CALC), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
+        return c;
+    }
+
+    /**
+     * The same across a module boundary, which is where it is felt: a library behavior's `ensures`
+     * is read by whoever calls it, so editing one re-checked every body of every module that
+     * imported anything from there.
+     */
+    @Test
+    void editingABorrowedEnsuresDoesNotRecheckABodyThatDoesNotCallIt() {
+        Compilation c = borrowing();
+        Answer<?> viaDoubled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled"));
+
+        c.update(borrowing(CALC.replace(
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+        c.answerEverything();
+
+        assertSame(viaDoubled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled")),
+                "`viaDoubled` borrows `tripled` as its module does, and calls `doubled`");
+    }
+
+    @Test
+    void editingABorrowedEnsuresRechecksTheBodiesThatCallIt() {
+        Compilation c = borrowing();
+        Answer<?> viaTripled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaTripled"));
+
+        c.update(borrowing(CALC.replace(
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(viaTripled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaTripled")),
+                "`viaTripled` took what `tripled` states about its answer");
+    }
+
+    /**
+     * And an edit above a called behavior that states nothing at all. A contract carries where its
+     * terms were written and the ordinals its module numbered them with, so a blank line above the
+     * declaration moves the first and a clause above it gaining a term moves the second — both of
+     * which reach every caller through a value nobody reads either of them from.
+     */
+    @Test
+    void aBlankLineAboveACalledBehaviorDoesNotRecheckItsCallers() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou",
+                STATING.replace("let uncalled (n) = Amount(n.value * 3)\n",
+                        "let uncalled (n) = Amount(n.value * 3)\n\n")), Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`called` says what it said, one line further down the file");
+    }
+
+    /** The same across a module boundary, where the caller cannot see the line at all. */
+    @Test
+    void aBlankLineAboveABorrowedBehaviorDoesNotRecheckItsCallers() {
+        Compilation c = borrowing();
+        Answer<?> viaDoubled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled"));
+
+        c.update(borrowing(CALC.replace("let tripled (n) = Amount(n.value * 3)\n",
+                "let tripled (n) = Amount(n.value * 3)\n\n")), Set.of());
+        c.answerEverything();
+
+        assertSame(viaDoubled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled")),
+                "`doubled` says what it said, one line further down a file this module never reads");
+    }
+
+    /** A behavior reached by being injected rather than by being built and called. */
+    private static final String INJECTING = """
+            module shop.injecting exposing ( Amount, Out, findIt )
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Out = Int
+                invariant value >= 0
+
+            behavior findIt : (n: Amount) -> Amount
+                ensures value.value >= n.value
+
+            behavior use : (n: Amount) -> Out
+                depends on findIt
+                constructs Out
+            let use (n, findIt) = Out(findIt(n).value)
+
+            behavior beside : (n: Amount) -> Out
+                constructs Out
+            let beside (n) = Out(n.value)
+            """;
+
+    /**
+     * An injected behavior is called too, and what it states reaches the body it is injected into.
+     * The two ways a behavior is reached are a difference in how a call is typed and not in whose
+     * contract is read, so the frontier a body depends on cannot be the callable behaviors alone.
+     */
+    @Test
+    void editingAnInjectedEnsuresRechecksTheBodyItIsInjectedIntoAndNothingBeside() {
+        Compilation c = Compilation.ofDocuments(Map.of("injecting.sou", INJECTING), Set.of(),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
+        Answer<?> use = c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "use"));
+        Answer<?> beside = c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "beside"));
+
+        c.update(Map.of("injecting.sou", INJECTING.replace(
+                "ensures value.value >= n.value", "ensures value.value > n.value - 1")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(use, c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "use")),
+                "`use` took what `findIt` states about its answer");
+        assertSame(beside, c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "beside")),
+                "`beside` calls nothing, so nothing states anything to it");
+    }
+
+    /**
+     * What the names written in a module mean is what a body is checked in, and declaring a behavior
+     * does not change it: a behavior is a value and not a type, so no spelling here means anything
+     * it did not mean before.
+     *
+     * <p>The whole assembly does change — the value namespace gains a name — and reading a scope off
+     * the assembly is what made that edit arrive at every reader of what the names mean. What is
+     * asked for here is the part of it that answers this question.
+     */
+    @Test
+    void declaringABehaviorDoesNotChangeWhatTheNamesOfTheModuleMean() {
+        Compilation c = stating();
+        Answer<?> meant = c.db().ask(new Names.Meanings("shop.orders"));
+        Answer<?> assembled = c.db().ask(new Names.ModuleScope("shop.orders"));
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                behavior added : (n: Amount) -> Amount
+                    constructs Amount
+                let added (n) = Amount(n.value * 4)
+                """), Set.of());
+        c.answerEverything();
+
+        assertEquals(meant, c.db().ask(new Names.Meanings("shop.orders")),
+                "`added` is a name in the value namespace and no type is spelled differently");
+        assertNotEquals(assembled, c.db().ask(new Names.ModuleScope("shop.orders")),
+                "and the assembly it is read off did change, which is why it is not read off it");
+    }
+
+    /**
+     * Declaring a behavior is none of the business of the bodies beside it. A body reads what the
+     * names of its module mean and the signatures of what it calls; the first does not change when a
+     * value name is added, and the second is what this body names rather than what the module has
+     * callable in it. Both were read as whole tables, so adding a behavior nothing calls reached
+     * every body in the file — issue #829.
+     */
+    @Test
+    void declaringABehaviorDoesNotRecheckTheBodiesBesideIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                behavior added : (n: Amount) -> Amount
+                    constructs Amount
+                let added (n) = Amount(n.value * 4)
+                """), Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`caller` neither calls `added` nor names anything of it");
+    }
+
+    /**
+     * Declaring a type is none of the business of the bodies that do not write it. What a body is
+     * checked in is still everything its module's names mean — the scope is the module's, and no
+     * narrower — and what changed is when that is asked for: {@link souther.compiler.check.Denoting}
+     * is asked as the scope is read rather than fetched to build it, so a body whose check reads no
+     * meaning depends on none of them.
+     *
+     * <p>Issue #835, and what was left of #829. Measured before it was built: over this suite a body
+     * check reads a module's meanings once in 5446 checks, and that once is the report below.
+     */
+    @Test
+    void declaringADataDoesNotRecheckTheBodiesBesideIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                data Discount = Int
+                """), Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`Discount` is a spelling `caller` does not write");
+    }
+
+    /**
+     * And the other half of it. A body that writes the spelling is checked again, because what the
+     * spelling means is what changed — it meant nothing there and now denotes a declaration. The
+     * pair is what says the dependency was narrowed and not dropped: a cut carrying only the
+     * spellings that already resolved would leave this one alone and be wrong to.
+     */
+    @Test
+    void declaringADataRechecksTheBodyThatWritesItsSpelling() {
+        Compilation c = Compilation.ofDocuments(Map.of("orders.sou", STATING + """
+
+                behavior writing : (n: Amount) -> Amount
+                    constructs Amount
+                let writing (n) = Amount(Discount(n.value).value)
+                """), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertFalse(c.db().allReports().isEmpty(), "`Discount` denotes nothing to begin with");
+        Answer<?> writing = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "writing"));
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                data Discount = Int
+
+                behavior writing : (n: Amount) -> Amount
+                    constructs Amount
+                let writing (n) = Amount(Discount(n.value).value)
+                """), Set.of());
+        c.answerEverything();
+
+        assertNotSame(writing, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "writing")),
+                "`writing` names `Discount`, which meant nothing here and now denotes a declaration");
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "and `caller` beside it still does not write it");
+    }
+
+    /**
+     * A scope answers from what the module means now, however long the thing holding it has been
+     * held.
+     *
+     * <p>A scope is built inside the question that reads it and goes no further, which is the rule
+     * and not something a scope can check. What it can do is not depend on it: what a name means is
+     * asked of the store each time and the reading built over that answer is kept only while it is
+     * the answer, so a scope kept past its question is slower and not wrong. Held instead from the
+     * first read, it would answer from that read for as long as it lived, and whether that could be
+     * seen would be a fact about who kept a scope rather than one this module can be sure of.
+     *
+     * <p>So this test keeps one on purpose, which nothing in the compiler does.
+     */
+    @Test
+    void aScopeHeldPastTheQuestionItWasBuiltForStillAnswersFromWhatTheModuleMeansNow() {
+        Compilation c = stating();
+        Symbols held = Scopes.derived(c.db(), "shop.orders").value();
+        assertFalse(held.scope().inScope("Discount"), "nothing here is written that way yet");
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                data Discount = Int
+                """), Set.of());
+        c.answerEverything();
+
+        assertTrue(held.scope().inScope("Discount"),
+                "the same scope, asked again after the declaration arrived");
+    }
+
+    /** A body whose report offers the sum an arm's name does belong to (E1203). What that report
+     * says is worked out from every name in sight, so this is the one body check that reads what a
+     * module's names mean. */
+    private static final String OFFERING = """
+            module shop.offering exposing ( Out, run )
+
+            data A = { n: Int }
+            data B = { n: Int }
+            data Inner = A | B
+            data Q
+            data Outer = Inner | Q
+            data Out = { n: Int }
+
+            behavior run : (i: Inner) -> Out
+                constructs Out
+            let run (i) =
+                match i with
+                    | A { n } -> Out { n = n }
+                    | Q -> Out { n = 0 }
+            """;
+
+    /**
+     * The other side of {@link #declaringADataDoesNotRecheckTheBodiesBesideIt}, and what says the
+     * dependency was moved rather than dropped. This body's report names the sum `Q` is a case of,
+     * which is read off every name in sight — so declaring a type does change what this check
+     * answers, and the check depends on it because it read it.
+     *
+     * <p>Written as a pair with the one above because either alone is passed by a mistake. A
+     * dependency taken whenever a scope is built passes the first and not this one; a dependency
+     * dropped altogether passes this one and not the first — and nothing else here would see it,
+     * because what the report says is checked where reports are read and not where an edit is
+     * costed.
+     */
+    @Test
+    void declaringADataRechecksTheBodyWhoseReportIsReadOffEveryNameInSight() {
+        Compilation c = Compilation.ofDocuments(Map.of("offering.sou", OFFERING), Set.of(),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertFalse(c.db().allReports().isEmpty(), "`Q` is not a case of `Inner`, which is reported");
+        Answer<?> run = c.db().ask(new Bodies.CheckedBehavior("shop.offering", "run"));
+
+        c.update(Map.of("offering.sou", OFFERING + "\ndata Discount = Int\n"), Set.of());
+        c.answerEverything();
+
+        assertNotSame(run, c.db().ask(new Bodies.CheckedBehavior("shop.offering", "run")),
+                "what this body's report offers is read off every name in sight, `Discount` among "
+                        + "them");
+    }
+
+    /**
+     * And moving one. What a body is checked against is what the declarations say, so the order they
+     * are written in is not part of it — a signature that arrived at a caller carrying where it was
+     * written, or the position its module numbered it at, would reach every caller on an edit above
+     * it.
+     */
+    @Test
+    void reorderingTheDeclarationsDoesNotRecheckTheBodiesBesideThem() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        String uncalled = """
+                behavior uncalled : (n: Amount) -> Amount
+                    constructs Amount
+                    ensures value.value > n.value - 1
+                let uncalled (n) = Amount(n.value * 3)
+
+                """;
+        String called = """
+                behavior called : (n: Amount) -> Amount
+                    constructs Amount
+                    ensures value.value >= n.value
+                let called (n) = Amount(n.value * 2)
+                """;
+        assertTrue(STATING.contains(uncalled) && STATING.endsWith(called),
+                "the fixture is the two declarations in this order");
+        c.update(Map.of("orders.sou",
+                STATING.replace(uncalled, "").replace(called, called + "\n" + uncalled.strip() + "\n")),
+                Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`called` takes what it took, wherever in the file it is written");
+    }
+
+    /** And the other way round: editing what a called behavior takes is what its callers read. */
+    @Test
+    void changingWhatACalledBehaviorTakesRechecksTheBodiesThatCallIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING.replace(
+                "behavior called : (n: Amount) -> Amount",
+                "behavior called : (n: Amount, m: Amount) -> Amount").replace(
+                "let called (n) = Amount(n.value * 2)",
+                "let called (n, m) = Amount(n.value * 2 + m.value)").replace(
+                "let caller (n) = called(n)", "let caller (n) = called(n, n)")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`caller` calls `called`, so what `called` takes is what it is typed against");
     }
 }

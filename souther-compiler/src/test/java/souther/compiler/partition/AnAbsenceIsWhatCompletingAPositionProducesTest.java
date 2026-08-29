@@ -3,6 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.StructuralInspection;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 
 import java.io.IOException;
@@ -15,6 +19,7 @@ import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -45,13 +50,91 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
 
     private static Axis measured() {
         return new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
-                List.of(PartitionClass.of("true", "true", Classifier.none(),
+                List.of(PartitionClass.of("true", "true", new Recognition.Nothing(),
                         RepresentativeSource.of(FixtureTemplate.bool(true)))),
                 List.of());
     }
 
-    private static Axis pending(StructuralInspection.Pending found) {
-        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL, found);
+    /** What is still to be answered for at the position this axis is of. The fixtures here are
+     *  axis-shaped, and the question is the position's. */
+    private static PendingPosition of(Axis axis) {
+        return PendingPosition.of(axis.at(), axis.measurable());
+    }
+
+    private static Axis pending(StructuralInspection.Continuation found) {
+        return pending(found, null);
+    }
+
+    /** The same, with a rule about the position's own values that the local reading could not take
+     *  in — which is a second way a position can be left unable to reach an absence. */
+    private static Axis pending(StructuralInspection.Continuation found,
+                                BlockReason.RuleWithoutLineReason unread) {
+        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT),
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
+                        unread == null ? null : LeftAtThePosition.of(unread)));
+    }
+
+    /**
+     * A leaf carrying a rule the local reading could not take in cannot reach an absence either.
+     *
+     * <p>The other way a position is left unable to say the model divides it no way. Nothing under
+     * it stopped the walk — it is a leaf — and a rule about its own values was written and not
+     * read, so what a body says next decides whether it is measured, and never that the model
+     * states nothing here.
+     */
+    @Test
+    void aLeafCarryingAnUnreadRuleCompletesAsThatRule() {
+        BlockReason.RuleWithoutLineReason unread = new BlockReason.UnreadValueRule();
+
+        UndividedPosition said = of(pending(new StructuralInspection.Continuation.None(), unread))
+                .complete(new BodyCutInspection.Exhausted());
+
+        assertFalse(said.isAbsent(), said.toString());
+        // And the verdict says only that: what stopped it is the rule's, said by the reader that
+        // read the rule and naming which rule it was.
+        assertNull(of(pending(new StructuralInspection.Continuation.None(), unread))
+                        .reportable(),
+                "a rule this read and could not use is not a position nothing was reached at");
+    }
+
+    /**
+     * And a leaf carrying a rule read from end to end completes as neither of the two above.
+     *
+     * <p>Not an absence: the model states something at this position. Not a derivation this
+     * compiler could not make either — the reading ran to the end, and a reader sent after a limit
+     * would be looking for one that is not there. Held as the same state a stop puts a position in,
+     * every consumer of this chain went on saying the first of those about the second.
+     */
+    @Test
+    void aLeafCarryingARuleReadToTheEndSaysNeitherOfThose() {
+        BlockReason.RuleWithoutLineReason read = new BlockReason.ComparisonBetweenPositions();
+
+        UndividedPosition said = of(
+                        pending(new StructuralInspection.Continuation.None(), read))
+                .complete(new BodyCutInspection.Exhausted());
+
+        assertFalse(said.isAbsent(), said.toString());
+        assertInstanceOf(UndividedPosition.Why.StatedWithoutALine.class, said.why(), said.toString());
+    }
+
+    /**
+     * Neither of two rules becomes the position's account, where a body's comparison came to
+     * nothing as well.
+     *
+     * <p>Both are rules this read and could not use, and each is said by the reader that read it,
+     * naming which rule. There used to be one line here and a precedence deciding which of the two
+     * reasons it carried — which is the shape of it: an author was told one limit and never
+     * learnt that the other rule existed. What the position itself has to say is that nothing was
+     * established, and no more.
+     */
+    @Test
+    void twoRulesLeaveThePositionWithNoAccountOfItsOwn() {
+        PendingPosition pending = of(pending(new StructuralInspection.Continuation.None(),
+                new BlockReason.UnreadValueRule()));
+
+        assertFalse(pending.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule()))).isAbsent());
+        assertNull(pending.reportable(), "each rule is said with its rule, not as this position");
     }
 
     // --- what can be pending at all -------------------------------------------------------------
@@ -60,24 +143,24 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      *  to an absence from it. */
     @Test
     void aPositionWithEvidenceIsNotPending() {
-        assertNull(PendingPosition.of(measured()));
+        assertNull(of(measured()));
     }
 
     /** And a position with no evidence that nothing read is not answered for at all: what would be
      *  said of it is this compiler's state, written down as what the model divides. */
     @Test
     void aPositionNothingReadIsNotAnsweredFor() {
-        assertThrows(IllegalStateException.class, () -> PendingPosition.of(
+        assertThrows(IllegalStateException.class, () -> of(
                 new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL, List.of(), List.of())));
     }
 
     @Test
     void aPositionWithoutEvidenceIsPendingWhatItsStructureFound() {
         assertEquals(new PendingPosition.Leaf(AT),
-                PendingPosition.of(pending(new StructuralInspection.Leaf())));
+                of(pending(new StructuralInspection.Continuation.None())));
         assertEquals(new PendingPosition.Blocked(AT, new BlockReason.TypeUnresolved()),
-                PendingPosition.of(pending(
-                        new StructuralInspection.Blocked(new BlockReason.TypeUnresolved()))));
+                of(pending(
+                        new StructuralInspection.Continuation.Blocked(new BlockReason.TypeUnresolved()))));
     }
 
     // --- and what completing one comes to -------------------------------------------------------
@@ -96,12 +179,47 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     /** A rule about the position that went unread is what it is left with, and not an absence. */
     @Test
     void aLeafWhoseRuleWentUnreadSaysThat() {
-        UndividedPosition done = new PendingPosition.Leaf(AT)
-                .complete(new BodyCutInspection.Blocked(new BlockReason.UnreadComparisonForm()));
+        UndividedPosition done = new PendingPosition.Leaf(AT).complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule())));
 
         assertFalse(done.isAbsent());
-        assertEquals(new UndividedPosition.Why.CannotDerive(
-                UndividedPosition.Reason.UNSUPPORTED_SYNTAX), done.why());
+        assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
+    }
+
+    /**
+     * And a rule the body read from end to end says the other thing, as the same rule does where
+     * the declaration wrote it.
+     *
+     * <p>The phase a rule was written in is no part of what it says. This one used to be the only
+     * answer the body could give — that something was left — and a verdict read it as the position
+     * having rules nothing looked at, over a {@code guard} this compiler understood completely.
+     */
+    @Test
+    void aLeafWhoseBodyRuleWasReadToTheEndSaysTheOtherThing() {
+        UndividedPosition done = new PendingPosition.Leaf(AT).complete(
+                new BodyCutInspection.NoLine(new LeftAtThePosition.ARuleWithNoLine(
+                        new BlockReason.ComparisonBetweenPositions())));
+
+        assertFalse(done.isAbsent());
+        assertEquals(new UndividedPosition.Why.StatedWithoutALine(), done.why());
+    }
+
+    /**
+     * A stop in the body outranks a rule the declaration read to the end.
+     *
+     * <p>Both phases answer about one position and the verdict is one. Read off the first phase
+     * alone, a rule read to the end at the declaration hid a reading that stopped two lines into
+     * the body — and a position nothing had read came back as one the model states something at.
+     */
+    @Test
+    void aStopInTheBodyOutranksARuleTheDeclarationReadToTheEnd() {
+        PendingPosition stated = new PendingPosition.ARuleWithNoLine(AT,
+                new BlockReason.ComparisonBetweenPositions());
+
+        UndividedPosition done = stated.complete(new BodyCutInspection.NoLine(
+                new LeftAtThePosition.AReadingStopped(new BlockReason.UnreadValueRule())));
+
+        assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
     }
 
     /**
@@ -115,13 +233,18 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     @Test
     void aReadingThatStoppedOutranksWhatTheRulesCameTo() {
         PendingPosition blocked = new PendingPosition.Blocked(AT,
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.SEQUENCE_ELEMENT));
-        UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive(
-                UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL);
+                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT));
+        UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive();
 
         assertEquals(expected, blocked.complete(new BodyCutInspection.Exhausted()).why());
-        assertEquals(expected, blocked.complete(
-                new BodyCutInspection.Blocked(new BlockReason.UnreadComparisonForm())).why());
+        assertEquals(expected, blocked.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
+                        new BlockReason.UnreadValueRule()))).why());
+        // And the finding is the stop, whatever the rules came to: a rule naming something inside a
+        // position the walk could not enter describes that same stop from the other end.
+        assertEquals(new souther.compiler.inputs.PositionReadingBlocked(AT,
+                        new BlockReason.UnsupportedTraversal(
+                                BlockReason.Traversal.MAPPING_CONTENT)),
+                blocked.reportable());
     }
 
     /** A line drawn at a position whose axis says it has none is two readings disagreeing, and
@@ -131,7 +254,10 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         assertThrows(IllegalStateException.class, () -> new PendingPosition.Leaf(AT)
                 .complete(new BodyCutInspection.Evidence()));
         assertThrows(IllegalStateException.class, () -> new PendingPosition
-                .Blocked(AT, new BlockReason.DepthLimit())
+                .Blocked(AT, new BlockReason.RecursiveExpansion(
+                        souther.compiler.types.TypeSymbols.declared(
+                                new souther.compiler.types.TypeKey("g", "Chain")),
+                        souther.compiler.inputs.TermPath.of("c")))
                 .complete(new BodyCutInspection.Evidence()));
     }
 

@@ -65,7 +65,9 @@ class CompileBrokenInputIsDiagnosedTest {
                         (Code("x")) -> Item { name = "y" }
                 """));
 
-        assertTrue(e.getMessage().contains("E1903"),
-                "expected the example-input diagnostic, got: " + e.getMessage());
+        assertTrue(e.getMessage().contains("E1812"),
+                "the row's value is not of the position's type, said as code: " + e.getMessage());
+        assertTrue(e.getMessage().contains("Item") && e.getMessage().contains("Code"),
+                e.getMessage());
     }
 }

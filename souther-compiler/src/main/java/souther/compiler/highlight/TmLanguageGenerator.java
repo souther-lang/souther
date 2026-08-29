@@ -1,6 +1,6 @@
 package souther.compiler.highlight;
 
-import souther.compiler.check.Prelude;
+import souther.compiler.Reserved;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.IdentifierAlphabet;
 import souther.compiler.editor.EditorSymbols;
@@ -56,16 +56,16 @@ public final class TmLanguageGenerator {
     /** Control and clause keywords. */
     private static final Set<String> CONTROL =
             Set.of("if", "then", "else", "match", "with", "guard", "constructs", "depends",
-                    "as", "invariant", "unreachable");
+                    "as", "invariant", "ensures", "unreachable");
 
     /** Boolean literals (scoped as language constants, not keywords). */
     private static final Set<String> BOOLEANS = Set.of("true", "false");
 
-    /** The standard-library qualifiers, taken from {@link Prelude#qualifiers()} (the single source of
-     *  truth) and sorted for a stable grammar; highlighted before a dot. Adding a module to the prelude
-     *  extends this automatically — no separate list to keep in step. */
+    /** The standard-library qualifiers, taken from {@link Reserved#QUALIFIERS} (the single source of
+     *  truth) and sorted for a stable grammar; highlighted before a dot. Adding a module to
+     *  {@link Reserved#MODULES} extends this automatically — no separate list to keep in step. */
     private static final List<String> QUALIFIERS =
-            Prelude.qualifiers().stream().sorted().toList();
+            Reserved.QUALIFIERS.stream().sorted().toList();
 
     /** The operators as {@link EditorSymbols} classifies them, spelled by their kinds, longest first
      *  so a prefix ({@code >}) never masks a longer form ({@code >->}). Sorting by length is what

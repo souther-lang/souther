@@ -1,7 +1,11 @@
 package souther.compiler.diag;
 
-import souther.compiler.check.Prelude;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
+
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 
@@ -12,8 +16,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,14 +45,15 @@ class APositionKnowsItsFileTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(id, source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), souther.compiler.meta.ModulePath.EMPTY);
-        return c.db().ask(new Front.Parsed(id)).value().module();
+        return c.db().ask(new Front.Parsed(new SourceId(id))).value().module();
     }
 
     @Test
     void aPositionParsedFromASourceNamesThatSource() {
         Ast.Module m = parsedAs("m.sou", SOURCE);
 
-        assertEquals("m.sou", m.defs().get(0).pos().sourceId(),
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("m.sou")),
+                m.defs().get(0).pos().quotedFrom(),
                 "the `data` was read from m.sou, so that is what its position says");
     }
 
@@ -56,22 +61,22 @@ class APositionKnowsItsFileTest {
     void everyPositionOfAParsedModuleNamesIt() {
         Ast.Module m = parsedAs("m.sou", SOURCE);
 
-        assertEquals("m.sou", m.pos().sourceId());
-        assertTrue(m.defs().stream().allMatch(d -> "m.sou".equals(d.pos().sourceId())),
+        assertTrue(m.pos().isIn(new SourceId("m.sou")));
+        assertTrue(m.defs().stream().allMatch(d -> d.pos().isIn(new SourceId("m.sou"))),
                 "one index made every position, so there is no part of the module it missed");
     }
 
     @Test
     void aPositionBuiltByHandNamesNoSource() {
-        assertNull(new SourcePos(4, 7).sourceId(),
+        assertInstanceOf(QuotedFrom.TextItCannotName.class, new SourcePos(4, 7).quotedFrom(),
                 "a caller with no source to name says so by naming none");
     }
 
     @Test
     void aRegionsEndIsInTheSameFileAsItsStart() {
-        Region r = Region.ofWidth(new SourcePos(4, 7, "m.sou"), 5);
+        Region r = Region.ofWidth(new SourcePos(4, 7, new SourceId("m.sou")), 5);
 
-        assertEquals("m.sou", r.end().sourceId(), "a region does not leave the source it began in");
+        assertTrue(r.end().isIn(new SourceId("m.sou")), "a region does not leave the source it began in");
     }
 
     /**
@@ -82,16 +87,16 @@ class APositionKnowsItsFileTest {
      */
     @Test
     void theSameCoordinateInTwoFilesIsTwoPlaces() {
-        assertNotEquals(new SourcePos(25, 16, "shippingfee.sou"),
-                new SourcePos(25, 16, "shippingfee.examples.sou"));
+        assertNotEquals(new SourcePos(25, 16, new SourceId("shippingfee.sou")),
+                new SourcePos(25, 16, new SourceId("shippingfee.examples.sou")));
     }
 
     @Test
     void theSameCoordinateInOneFileIsOnePlace() {
-        assertEquals(new SourcePos(25, 16, "shippingfee.sou"),
-                new SourcePos(25, 16, "shippingfee.sou"));
-        assertEquals(new SourcePos(25, 16, "shippingfee.sou").hashCode(),
-                new SourcePos(25, 16, "shippingfee.sou").hashCode());
+        assertEquals(new SourcePos(25, 16, new SourceId("shippingfee.sou")),
+                new SourcePos(25, 16, new SourceId("shippingfee.sou")));
+        assertEquals(new SourcePos(25, 16, new SourceId("shippingfee.sou")).hashCode(),
+                new SourcePos(25, 16, new SourceId("shippingfee.sou")).hashCode());
     }
 
     /**
@@ -101,9 +106,9 @@ class APositionKnowsItsFileTest {
      */
     @Test
     void aModuleReadOffThePathCarriesNoFileOfThisCompiles() {
-        Ast.FnDef helper = Prelude.helpers().values().iterator().next();
+        Hir.FnDef helper = DefaultStdlib.get().helpers().values().iterator().next();
 
-        assertNull(helper.pos().sourceId(),
+        assertInstanceOf(QuotedFrom.TextItCannotShow.class, helper.pos().quotedFrom(),
                 "the prelude is in no source of the compile that reads it");
     }
 
@@ -111,7 +116,7 @@ class APositionKnowsItsFileTest {
      *  can be quoted from that nonetheless reads as an answer. */
     @Test
     void aBlankSourceIdIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> new SourcePos(1, 1, ""));
-        assertThrows(IllegalArgumentException.class, () -> new SourcePos(1, 1, "  "));
+        assertThrows(IllegalArgumentException.class, () -> new SourcePos(1, 1, new SourceId("")));
+        assertThrows(IllegalArgumentException.class, () -> new SourcePos(1, 1, new SourceId("  ")));
     }
 }

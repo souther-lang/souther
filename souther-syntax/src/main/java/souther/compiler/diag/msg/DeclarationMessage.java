@@ -14,8 +14,12 @@ public sealed interface DeclarationMessage extends Message {
     @Code(DiagnosticCode.E1317)
     record ItExpectsAnotherType(String what, Object expects, String got) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1612)
-    record AnInjectionTargetCannotDependOnAnything(String behavior) implements DeclarationMessage, Reported {}
+    @Code(DiagnosticCode.E1627)
+    record ItRestsOnABehaviorNobodyHasWritten(String behavior, String rested)
+            implements DeclarationMessage, Reported {}
+
+    record WriteItsLetOrLeaveThisOneUnwrittenToo(String rested, String behavior)
+            implements DeclarationMessage, Supporting {}
 
     @Code(DiagnosticCode.E1024)
     record ItCannotBeHeldAsAValueHere(String name, String what) implements DeclarationMessage, Reported {}
@@ -37,6 +41,11 @@ public sealed interface DeclarationMessage extends Message {
     record ItDeclaresConstructsAndNeverBuilds(String behavior, String data) implements DeclarationMessage, Reported {}
 
     record RemoveTheConstructsEntry(String data) implements DeclarationMessage, Supporting {}
+
+    /** Apart from {@link ItDeclaresConstructsAndNeverBuilds}: the body may well build the unit, and
+     *  the entry is wrong anyway, because a unit data is in no construction set. */
+    @Code(DiagnosticCode.E1026)
+    record ItNamesAUnitDataInConstructs(String behavior, String data) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1101)
     record AnInvariantExpressionIsBool(String given) implements DeclarationMessage, Reported {}
@@ -62,7 +71,7 @@ public sealed interface DeclarationMessage extends Message {
     @Code(DiagnosticCode.E1305)
     record AnInjectedBehaviorConstructsWhatIsKept(String behavior, String data) implements DeclarationMessage, Reported {}
 
-    record ExposeItOrMakeItAUnitData(String data) implements DeclarationMessage, Supporting {}
+    record ExposeIt(String data) implements DeclarationMessage, Supporting {}
 
     @Code(DiagnosticCode.E1501)
     record CyclicModuleDependency() implements DeclarationMessage, Reported {}

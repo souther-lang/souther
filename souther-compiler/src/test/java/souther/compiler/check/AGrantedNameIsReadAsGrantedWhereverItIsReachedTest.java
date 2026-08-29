@@ -2,15 +2,17 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.numeric.Cardinality;
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Granting a declaration a value, held against every way another one reaches it.
@@ -47,13 +49,13 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        Symbols symbols = compilation.symbols("demo");
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo"), symbols);
-        assertEquals(Cardinality.NO_VALUE, solved.of(symbols.own(reader)),
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        assertTrue(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
                 "`" + reader + "` has no value while nothing is granted");
-        assertFalse(solved.granting(Set.of(symbols.own(granted)))
-                        .get(symbols.own(reader)).none(),
+        assertFalse(solved.granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), granted))))
+                        .get(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
                 "`" + reader + "` reaches `" + granted + "` and was granted it has values");
     }
 
@@ -131,10 +133,9 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        Symbols symbols = compilation.symbols("demo");
-        assertEquals(Cardinality.NO_VALUE,
-                TypeCardinality.solve(compilation.module("demo"), symbols)
-                        .granting(Set.of(symbols.own("Granted"))).get(symbols.own("Bad")),
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
+        assertTrue(TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                        .granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Granted")))).get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))).none(),
                 "and what it wraps was not granted anything");
     }
 
@@ -164,12 +165,13 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 data B = { a: A }
                 """, "Main");
         compilation.answerEverything();
-        Symbols symbols = compilation.symbols("demo");
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo"), symbols);
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-        assertEquals(List.of(Cardinality.NO_VALUE, Cardinality.NO_VALUE),
-                List.of(solved.of(symbols.own("A")), solved.of(symbols.own("B"))),
+        assertEquals(List.of(true, true),
+                List.of(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "A"))).none(),
+                        solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "B"))).none()),
                 "neither of them can be built");
     }
 }

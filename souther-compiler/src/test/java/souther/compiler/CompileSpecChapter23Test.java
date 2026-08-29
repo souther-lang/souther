@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.jvm.DecoderKind;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -91,7 +93,7 @@ class CompileSpecChapter23Test {
                 申請:    事前承認待ち,
                 承認者ID: 従業員ID
             ) -> 事前承認済み | 承認権限なし
-                constructs 事前承認済み, 承認権限なし
+                constructs 事前承認済み
                 depends on 現在時刻
 
             let 事前承認する (申請, 承認者ID, 現在時刻) = {
@@ -104,9 +106,9 @@ class CompileSpecChapter23Test {
 
     @Test
     void theChapter23ModelCompiles() {
-        Map<String, byte[]> classes = Compiler.compile(MODULE);
+        Map<String, ClassFileImage> classes = Compiler.compile(MODULE);
         assertTrue(classes.containsKey("example.businesstrip.事前承認する"));
-        assertTrue(classes.containsKey("example.businesstrip.出張申請$Dec"), "the state sum derives a decoder");
+        assertTrue(classes.containsKey(Emitted.decoder("example.businesstrip", "出張申請", DecoderKind.VALUE)), "the state sum derives a decoder");
         assertTrue(classes.containsKey("example.businesstrip.現在時刻"), "the clock gets a Java base class");
     }
 
@@ -124,7 +126,7 @@ class CompileSpecChapter23Test {
      */
     @Test
     void approvalRequiresTheApplicantsManager() throws Exception {
-        Map<String, byte[]> classes = new java.util.HashMap<>(Compiler.compile(MODULE));
+        Map<String, ClassFileImage> classes = new java.util.HashMap<>(Compiler.compile(MODULE));
         classes.put("example.businesstrip.固定時刻", Subclasses.compile(classes,
                 "example.businesstrip.固定時刻", """
                         package example.businesstrip;
@@ -148,7 +150,7 @@ class CompileSpecChapter23Test {
 
         Class<?> 現在時刻 = loader.loadClass("example.businesstrip.現在時刻");
         Object clock = loader.loadClass("example.businesstrip.固定時刻").getConstructor().newInstance();
-        Object 事前承認する = loader.loadClass("example.businesstrip.事前承認する" + "$Impl")
+        Object 事前承認する = Emitted.behavior(loader, "example.businesstrip", "事前承認する")
                 .getConstructor(現在時刻).newInstance(clock);
         var apply = 事前承認する.getClass().getMethod("apply", Object.class, Object.class);
 

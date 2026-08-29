@@ -1,8 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +29,7 @@ class CompileDestructuringTest {
     }
 
     private Object apply(BytesClassLoader loader, String cls, Object in) throws Exception {
-        Object b = loader.loadClass("demo." + cls + "$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", cls).getConstructor().newInstance();
         return Codecs.apply(b, in);
     }
 
@@ -292,6 +295,32 @@ class CompileDestructuringTest {
         assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class, e.diagnostic().said(), e.getMessage());
     }
 
+    /**
+     * A pattern naming nothing is the naming error, once, and the compile ends saying it.
+     *
+     * <p>Beside the three rules above rather than among them. Each of those holds a name against
+     * what it names; this one has nothing to hold it against, so the reading stops where the name
+     * is and what is left of the definition is not asked about. Read as a rule, a name that names
+     * nothing would be answered "it is not a newtype", which is a second sentence about the one
+     * mistake — and asked of the declaration it does not have, an internal error.
+     */
+    @Test
+    void openingSomethingNothingDeclaresIsTheNamingErrorOnce() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                import List ( length )
+                data Tags = List<String>
+
+                behavior countTags : (t: Tags) -> Int
+                let countTags (t) = {
+                    let Tgas(xs) = t
+                    length(xs)
+                }
+                """));
+        assertEquals(List.of("E1023"), e.diagnostics().stream().map(Diagnostic::code).toList(),
+                e.getMessage());
+    }
+
     @Test
     void openingANewtypeTheValueIsNotIsRejected() {
         // outside a `match` nothing else establishes what the value is, so the name the pattern
@@ -389,8 +418,8 @@ class CompileDestructuringTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
 
         String line = src.lines().toList().get(4);
-        assertEquals(5, e.diagnostic().pos().line(), e.getMessage());
-        assertEquals(line.indexOf("Line(") + 1, e.diagnostic().pos().column(),
+        assertEquals(5, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(), e.getMessage());
+        assertEquals(line.indexOf("Line(") + 1, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column(),
                 "the caret is on the pattern: " + line);
     }
 

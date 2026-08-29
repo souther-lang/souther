@@ -3,7 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,8 +42,8 @@ class WitnessAcrossSourcesTest {
             }
             """;
 
-    private static List<String> names(Set<TypeName> cases) {
-        return cases.stream().map(TypeName::name).sorted().toList();
+    private static List<String> names(Set<TypeSymbol> cases) {
+        return cases.stream().map(TypeSymbol::name).sorted().toList();
     }
 
     @Test
@@ -63,6 +63,7 @@ class WitnessAcrossSourcesTest {
                 """);
 
         Compilation compilation = Compilation.ofDocuments(documents, Set.of(), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(Map.of(), compilation.diagnostics().entrySet().stream()
                         .filter(e -> !e.getValue().isEmpty())
@@ -75,10 +76,10 @@ class WitnessAcrossSourcesTest {
         assertNotNull(witnesses);
         Adequacy.SignatureEvidence submit = witnesses.get("submit");
 
-        assertEquals(List.of("Rejected", "Submitted"), names(submit.output().specified()),
+        assertEquals(List.of("Rejected", "Submitted"), names(submit.output().seen().specified()),
                 "both files' rows are the module's rows");
         assertEquals(List.of(), submit.output().unspecified(),
                 "nothing is missing once the two sources are read together");
-        assertEquals(List.of("Rejected", "Submitted"), names(submit.output().verified()));
+        assertEquals(List.of("Rejected", "Submitted"), names(submit.output().seen().verified()));
     }
 }

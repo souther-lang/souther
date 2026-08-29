@@ -53,7 +53,10 @@ class GeneratedRowsOfferAValueAtASumOfRecordsTest {
         String report = generated();
 
         List<String> rows = report.lines().filter(line -> line.startsWith("//     | ")).toList();
-        assertTrue(rows.stream().anyMatch(line -> line.contains("bill = 0")),
+        // The value at the boundary rather than the name of the line: a row composed only for a
+        // line is offered without a name, since which of the lines it sits on is still owed is what
+        // an unrelated row changes.
+        assertTrue(rows.stream().anyMatch(line -> line.contains("Yen(0)")),
                 () -> "the row at the boundary is offered: " + rows);
     }
 

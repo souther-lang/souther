@@ -6,7 +6,7 @@
 
     <groupId>org.souther-lang</groupId>
     <artifactId>souther-parent</artifactId>
-    <version>0.1.0-rc4</version>
+    <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Souther</name>
@@ -30,13 +30,16 @@
     </developers>
 
     <modules>
+        <module>souther-test-support</module>
         <module>souther-runtime</module>
         <module>souther-syntax</module>
         <module>souther-compiler</module>
+        <module>souther-build-driver</module>
         <module>souther-fmt</module>
         <module>souther-lsp</module>
         <module>souther-cli</module>
         <module>souther-bench</module>
+        <module>souther-program-api-test</module>
     </modules>
 
     <scm>
@@ -51,7 +54,47 @@
         <maven.compiler.release>25</maven.compiler.release>
         <raoh.version>0.7.2</raoh.version>
         <jspecify.version>1.0.0</jspecify.version>
+        <!-- Where compiled classes go, named so the `m2e` profile below can send the editor's
+             somewhere else. A build outside the editor uses the Maven defaults. -->
+        <build.classes>${project.basedir}/target/classes</build.classes>
+        <build.test.classes>${project.basedir}/target/test-classes</build.test.classes>
+        <errorprone.version>2.50.0</errorprone.version>
+        <checkstyle.plugin.version>3.6.0</checkstyle.plugin.version>
+        <!-- What the pre-commit hook hands to Checkstyle: the directory it wrote the staged files
+             into. A build that is not the hook leaves it at the root module's sources, which do
+             not exist, so the goal has nothing to read. -->
+        <checkstyle.staged.dir>${project.basedir}/src/main/java</checkstyle.staged.dir>
+        <checkstyle.version>10.26.1</checkstyle.version>
+        <nullaway.version>0.13.8</nullaway.version>
+        <!-- What NullAway is asked for, written once. The gate below and the `lint` profile both
+             ask, and a gate configured differently in each is a gate whose answer depends on which
+             build asked. -->
+        <nullaway.args>-Xep:NullAway:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true</nullaway.args>
+        <!-- The nullness gate an ordinary build runs, carried by the modules that declare
+             `@NullMarked` — souther-runtime, today. Nothing else in Error Prone: this is the one
+             rule those modules state about themselves, and the other five hundred checks are the
+             `lint` profile's.
+
+             It is a property because the profile empties it. javac takes one `-Xplugin:ErrorProne`
+             per compilation and reports the second as a plugin it cannot find, so under `lint`,
+             which puts the plugin on every module, a module carrying its own would be handing javac
+             two. Emptying this leaves the profile's the only one, and NullAway is in both spellings,
+             so the gate does not lift when the profile takes over. -->
+        <errorprone.gate>-Xplugin:ErrorProne -XepDisableAllChecks ${nullaway.args}</errorprone.gate>
+        <!-- Every warning javac gives is an error. It is a property because the `lint` profile
+             empties it: under that profile Error Prone's findings arrive as javac warnings too, and
+             there are 889 of them — a backlog of its own, which this is not the thing to turn into
+             a build failure. What this holds is javac's own warnings. -->
+        <javac.werror>-Werror</javac.werror>
+        <!-- The build protocol souther-build-driver implements. Not this project's version and not
+             tracked to it: it moves when the interface between a build plugin and a driver moves,
+             which is why it is released from souther-lang/souther-build-api and named here like any
+             other outside dependency. -->
+        <souther.build.api.version>1.0.0</souther.build.api.version>
         <junit.version>6.1.2</junit.version>
+        <!-- Named rather than written where it is used: `souther init` writes a project that runs
+             its tests, and what it hands that project is this number. -->
+        <surefire.version>3.5.6</surefire.version>
         <!-- A JVM per two cores. Named here so -DforkCount=N reaches it: a literal in the plugin's
              configuration outranks the property surefire declares, so the override the comment
              below offers was not one, and a fork count could not be measured until it was.
@@ -85,6 +128,17 @@
             </dependency>
             <dependency>
                 <groupId>org.souther-lang</groupId>
+                <artifactId>souther-build-api</artifactId>
+                <version>${souther.build.api.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.souther-lang</groupId>
+                <artifactId>souther-test-support</artifactId>
+                <version>${project.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.souther-lang</groupId>
                 <artifactId>souther-runtime</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -100,7 +154,22 @@
             </dependency>
             <dependency>
                 <groupId>org.souther-lang</groupId>
+                <artifactId>souther-build-driver</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.souther-lang</groupId>
                 <artifactId>souther-fmt</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.souther-lang</groupId>
+                <artifactId>souther-lsp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.souther-lang</groupId>
+                <artifactId>souther-cli</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -114,12 +183,14 @@
     </dependencyManagement>
 
     <build>
+        <outputDirectory>${build.classes}</outputDirectory>
+        <testOutputDirectory>${build.test.classes}</testOutputDirectory>
         <pluginManagement>
             <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.6</version>
+                    <version>${surefire.version}</version>
                     <configuration>
                         <!-- Whole test classes run to completion in a fork. Forks
                              rather than threads: four classes capture `System.out` to read what the
@@ -150,9 +221,79 @@
                         <argLine>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xss4m</argLine>
                     </configuration>
                 </plugin>
+                <!-- The pre-commit hook's checker, configured here and bound to no lifecycle phase.
+                     A binding would put it in `mvn verify`, which is CI's build and already answers
+                     the same question through Error Prone; this one is for the answer a commit can
+                     wait for. The hook calls the goal by name, `checkstyle:check`, so no ordinary
+                     build runs it.
+
+                     The rule it reads is config/checkstyle.xml. What it reads it over is
+                     `checkstyle.staged.dir`, which the hook sets to a directory holding what `git`
+                     has staged — the content the commit will carry, and not what the working tree
+                     happens to hold. `sourceDirectories` takes no command-line property of its own,
+                     which is why the directory arrives through one declared here. Unset, it names
+                     the root module's sources, and the root module has none. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${checkstyle.plugin.version}</version>
+                    <configuration>
+                        <configLocation>${project.basedir}/config/checkstyle.xml</configLocation>
+                        <sourceDirectories>
+                            <sourceDirectory>${checkstyle.staged.dir}</sourceDirectory>
+                        </sourceDirectories>
+                        <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                        <inputEncoding>UTF-8</inputEncoding>
+                        <consoleOutput>true</consoleOutput>
+                        <logViolationsToConsole>true</logViolationsToConsole>
+                        <!-- `failsOnError` is about Checkstyle failing, not about a file
+                             violating a rule: on it, the goal stops at the first violation and
+                             reports a count instead of naming the import. Off, it prints each
+                             violation and `failOnViolation` ends the build afterwards. -->
+                        <failsOnError>false</failsOnError>
+                        <failOnViolation>true</failOnViolation>
+                        <violationSeverity>error</violationSeverity>
+                    </configuration>
+                    <dependencies>
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>${checkstyle.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
+            <!-- Nothing but javac here. Error Prone and the nullness gate are in the `lint`
+                 profile below, which CI runs. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.15.0</version>
+                <configuration>
+                    <compilerArgs>
+                        <!-- Every warning javac can give, and none of them is a thing to walk past.
+                             A warning nobody has to act on is read by nobody, and 152 of them had
+                             collected before anyone counted: 87 documentation comments attached to
+                             nothing, 20 serializable classes with no serialized form written down,
+                             13 calls to a deprecated method, 10 casts to what the value already
+                             was. Each was a fact about the code that javac already knew and the
+                             build was throwing away. -->
+                        <arg>-Xlint:all</arg>
+                        <arg>${javac.werror}</arg>
+                        <!-- javac prints a hundred warnings per compilation and stops counting, and
+                             a hundred errors likewise. A report that stops at a round number reads
+                             as the whole of what was found — a change that breaks two hundred call
+                             sites is read as breaking a hundred — so both limits are raised past
+                             anything this build produces. -->
+                        <arg>-Xmaxwarns</arg>
+                        <arg>100000</arg>
+                        <arg>-Xmaxerrs</arg>
+                        <arg>100000</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
             <!-- Implementation-Version in every jar's manifest. A compiled Souther module records
                  the compiler that produced it, and this is where that string comes from: Maven
                  fills it from the project version, so the root pom stays the one place the version
@@ -173,6 +314,117 @@
     </build>
 
     <profiles>
+        <!-- Error Prone, the JSpecify nullness gate included. On in CI, which sets `CI` in the
+             environment, and available anywhere as `mvn -Plint clean verify`.
+
+             Not in a development build. Measured on `clean test-compile`, whole reactor, one run
+             each: 8.7s with none of this, 12.0s with NullAway alone, 38.0s with the default checks
+             as well; and on the incremental build one edited source costs, 10.7s without it
+             against 13.5s with. A finding therefore reaches CI without having been seen locally,
+             and `mvn -Plint clean verify` is how to answer one. What it buys is the checks that
+             are errors by default — the first run of it found a `String` handed to a
+             `Map<NumericTerm, ...>`, which had left two tests asserting something about a domain
+             they were never given.
+
+             `clean` is not optional. The checks are javac's plugin, so a compilation Maven skips
+             as up to date runs none of them and reports nothing.
+
+             NullAway reads the JSpecify annotations souther-runtime carries, and `OnlyNullMarked`
+             is what decides where it looks — the packages that declare `@NullMarked`, and no
+             others. Adopting a package is one line in its `package-info.java`. Declaring the whole
+             of souther-compiler annotated instead reports 1024 findings at once, which is a
+             migration and not a check.
+
+             `compilePolicy` and `should-stop` are Error Prone's arguments, not ours: its checks
+             read the flow graph, and javac builds one per class only under that policy. The
+             exports the plugin needs to reach javac's internals are in `.mvn/jvm.config`, because
+             the compiler runs in the Maven JVM; without them the build stops at
+             `IllegalAccessError` before any source is read.
+
+             `combine.children` is what keeps the error and warning limits the build above sets:
+             without it a profile's list of arguments replaces that list rather than adding to
+             it, and a lint run would stop counting at a hundred. -->
+        <profile>
+            <id>lint</id>
+            <activation>
+                <property>
+                    <name>env.CI</name>
+                </property>
+            </activation>
+            <properties>
+                <!-- The gate a module carries, emptied: this profile's plugin argument below is the
+                     only one javac may be given. -->
+                <errorprone.gate/>
+                <!-- Emptied for the reason above: Error Prone's own findings would stop this
+                     build for something javac never said. -->
+                <javac.werror/>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <compilerArgs combine.children="append">
+                                <arg>-XDcompilePolicy=simple</arg>
+                                <arg>--should-stop=ifError=FLOW</arg>
+                                <!-- UnicodeInCode is off for good. It reads a non-ASCII identifier
+                                     as a thing that confuses a reader, and this compiler's tests
+                                     call methods the language named in Japanese: the check would be
+                                     asking the tests to stop covering what Souther supports. -->
+                                <!-- RemoveUnusedImports ships as a suggestion, and a suggestion is
+                                     a thing a build prints and nobody reads: 173 of them had
+                                     collected across 114 files before anyone counted. An import
+                                     that names what its file never uses tells a reader the file
+                                     depends on something it does not, and the reader who most
+                                     needs that to be true is the one deciding whether a package
+                                     may be split or whether a boundary is being crossed. Raised
+                                     to an error so that the next one stops the build it arrived
+                                     in. The check reads documentation too, so an import only a
+                                     {@link} mentions is not one of these. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
+                            </compilerArgs>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>com.google.errorprone</groupId>
+                                    <artifactId>error_prone_core</artifactId>
+                                    <version>${errorprone.version}</version>
+                                </path>
+                                <path>
+                                    <groupId>com.uber.nullaway</groupId>
+                                    <artifactId>nullaway</artifactId>
+                                    <version>${nullaway.version}</version>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- An editor's Java support builds these modules through m2e, and m2e points an Eclipse
+             project's output at whatever the pom names: ECJ then writes into target/classes, which
+             is where maven-compiler-plugin reads staleness from. A class file newer than its source
+             is indistinguishable from an up-to-date build, so javac is skipped and whatever ECJ
+             left is what runs — including the classes it writes under proceedOnError, whose bodies
+             throw `Unresolved compilation problem` at run time. Sending the editor's output
+             somewhere else leaves target/classes with one writer.
+
+             m2e sets the `m2e.version` property while it resolves a pom and a command-line build
+             never does, so this profile is on in the editor and off everywhere else. The editor
+             settings that would otherwise carry this are in `.vscode/`, which is not in the
+             repository: a rule that has to hold for every checkout belongs here. -->
+        <profile>
+            <id>m2e</id>
+            <activation>
+                <property>
+                    <name>m2e.version</name>
+                </property>
+            </activation>
+            <properties>
+                <build.classes>${project.basedir}/target/jdt-classes</build.classes>
+                <build.test.classes>${project.basedir}/target/jdt-test-classes</build.test.classes>
+            </properties>
+        </profile>
         <!-- Activate for a Central release: `mvn -Prelease deploy`. Attaches sources and
              javadoc, GPG-signs every artifact, and publishes the reactor to the Sonatype
              Central Portal (autoPublish=false, so the bundle is reviewed in the Portal before

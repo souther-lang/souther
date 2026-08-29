@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -98,7 +99,7 @@ class CompileRecordShapeTest {
      */
     @Test
     void anAccessorSaysEveryPositionOfItsTypeIsNonNull() {
-        ClassModel member = ClassFile.of().parse(Compiler.compile(SRC).get("demo.Member"));
+        ClassModel member = ClassFile.of().parse(Compiler.compile(SRC).get("demo.Member").bytes());
 
         assertEquals(List.of("[]"), nonNullPaths(member, "id"));
         assertEquals(List.of("[]", "[TYPE_ARGUMENT(0)]"), nonNullPaths(member, "tags"));
@@ -112,7 +113,7 @@ class CompileRecordShapeTest {
      */
     @Test
     void theRecordComponentRepeatsIt() {
-        ClassModel member = ClassFile.of().parse(Compiler.compile(SRC).get("demo.Member"));
+        ClassModel member = ClassFile.of().parse(Compiler.compile(SRC).get("demo.Member").bytes());
 
         assertEquals(List.of("[]"), componentNonNullPaths(member, "id"));
         assertEquals(List.of("[]", "[TYPE_ARGUMENT(0)]"), componentNonNullPaths(member, "tags"));
@@ -223,12 +224,12 @@ class CompileRecordShapeTest {
     }
 
     /** Writes a compiled module out as class files a javac run can read. */
-    private static Path write(Path dir, Map<String, byte[]> compiled) throws IOException {
+    private static Path write(Path dir, Map<String, ClassFileImage> compiled) throws IOException {
         Path classes = Files.createDirectories(dir.resolve("classes"));
-        for (Map.Entry<String, byte[]> e : compiled.entrySet()) {
+        for (Map.Entry<String, ClassFileImage> e : compiled.entrySet()) {
             Path target = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(target.getParent());
-            Files.write(target, e.getValue());
+            Files.write(target, e.getValue().bytes());
         }
         return classes;
     }

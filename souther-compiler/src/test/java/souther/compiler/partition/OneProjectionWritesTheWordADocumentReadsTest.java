@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
+import souther.compiler.inputs.BlockReason;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -58,9 +59,10 @@ class OneProjectionWritesTheWordADocumentReadsTest {
     void everyInternalReasonHasAWordToBeSaidIn() {
         List<BlockReason> all = List.of(
                 new BlockReason.TypeUnresolved(),
-                new BlockReason.DepthLimit(),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.SEQUENCE_ELEMENT),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.OPTIONAL_VALUE),
+                new BlockReason.RecursiveExpansion(
+                        souther.compiler.types.TypeSymbols.declared(
+                                new souther.compiler.types.TypeKey("g", "Chain")),
+                        souther.compiler.inputs.TermPath.of("c")),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),

@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * What one application of a signature has decided about the variables it left open.
  *
- * <p>It belongs to a single {@link souther.compiler.ast.Ast.Expansion} and lives as long as that
+ * <p>It belongs to a single {@link souther.compiler.ast.Hir.Expansion} and lives as long as that
  * expansion's elaboration. The signature is instantiated once into {@link Type.MetaVar}s, the
  * arguments say what those stand for, and the result is written back over the whole signature — so
  * what a declaration said between its parameters and its result reaches the caller whether or not

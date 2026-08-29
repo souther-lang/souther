@@ -37,7 +37,7 @@ class CompileUnitOnlySumBoundaryTest {
     private static Object run(BytesClassLoader loader, String in, String out, Object raw)
             throws Exception {
         Object decoded = Codecs.decoded(loader, in, raw);
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return Codecs.encode(loader, out, Codecs.apply(behavior, decoded));
     }
 
@@ -59,7 +59,7 @@ class CompileUnitOnlySumBoundaryTest {
                 data In = { n: Int }
                 data Out = { byStage: Map<Stage, Int> }
 
-                behavior run : (i: In) -> Out constructs Out, Won
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out { byStage = Map.singleton(Won, i.n) }
                 """;

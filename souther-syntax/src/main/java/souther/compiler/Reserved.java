@@ -8,8 +8,9 @@ import java.util.Set;
 /**
  * The reserved standard-library namespace (ADR-0028, spec §stdlib): the qualifiers a call or an
  * import may write. A fact of the language, not of the loaded library — held with no dependencies
- * so the frontend and the prelude both read it without one initializing the other. {@link Prelude}
- * loads the modules behind these names and parses them through the frontend, so a constant of the
+ * so the frontend and the standard library both read it without one initializing the other. The
+ * loader ({@code check.StdlibLoader}) parses the modules behind these names through the frontend,
+ * so a constant of the
  * language that lived on either side would put the two in an initialization cycle.
  */
 public final class Reserved {
@@ -22,7 +23,7 @@ public final class Reserved {
 
     /**
      * The standard library's modules, in the order the language names them. Everything that has to
-     * put library modules in an order reads this one: which resources {@link Prelude} loads and in
+     * put library modules in an order reads this one: which resources the loader reads and in
      * what order, which qualifiers exist, and the order a diagnostic offers candidates in when a
      * bare name could be several. Written here rather than derived from a map's entries, because
      * the iteration order of {@code Map.ofEntries} is not something a reader may be shown.
@@ -96,6 +97,15 @@ public final class Reserved {
     public static String name(String spelling) {
         return spelling == null ? null
                 : java.text.Normalizer.normalize(spelling, java.text.Normalizer.Form.NFC);
+    }
+
+    /** Whether {@code qualifier} names a standard-library namespace a call or an import may write:
+     *  {@code List} / {@code String} / {@code Map} / … (spec §stdlib). Asked here rather than of the
+     *  loaded library, because which qualifiers there are is settled by {@link #MODULES} and reading
+     *  it off the library made a reader that only wanted the names load and resolve every one of the
+     *  modules behind them. */
+    public static boolean isQualifier(String qualifier) {
+        return QUALIFIERS.contains(qualifier);
     }
 
     /** Whether {@code moduleName} is the reserved namespace or a module inside it. The core

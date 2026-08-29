@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Diagnostic;
 
@@ -48,16 +50,16 @@ class DiagnoseModulesTest {
                 behavior g : (n: N) -> N
                 let g (n) = bogusTwo
                 """;
-        Map<String, List<Diagnostic>> diags = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("m", m)));
-        assertEquals(2, diags.get("m").size(), diags.get("m").toString());
+        Map<SourceId, List<Diagnostic>> diags = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("m", m)));
+        assertEquals(2, diags.get(new SourceId("m")).size(), diags.get(new SourceId("m")).toString());
     }
 
     @Test
     void attributesAFailingExampleToTheModuleThatHasIt() {
-        Map<String, List<Diagnostic>> diags = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("a", A, "b", B_FAILING_EXAMPLE)));
-        assertEquals(List.of(), diags.get("a"), "the clean imported module has no diagnostics");
-        assertEquals(1, diags.get("b").size(), diags.get("b").toString());
-        assertEquals("E1905", diags.get("b").get(0).code());
+        Map<SourceId, List<Diagnostic>> diags = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("a", A, "b", B_FAILING_EXAMPLE)));
+        assertEquals(List.of(), diags.get(new SourceId("a")), "the clean imported module has no diagnostics");
+        assertEquals(1, diags.get(new SourceId("b")).size(), diags.get(new SourceId("b")).toString());
+        assertEquals("E1905", diags.get(new SourceId("b")).get(0).code());
     }
 
     @Test
@@ -70,9 +72,9 @@ class DiagnoseModulesTest {
                 behavior f : (x: M) -> M
                 let f (x) = x
                 """;
-        Map<String, List<Diagnostic>> diags = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("a", A, "b", bClean)));
-        assertEquals(List.of(), diags.get("a"));
-        assertEquals(List.of(), diags.get("b"));
+        Map<SourceId, List<Diagnostic>> diags = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("a", A, "b", bClean)));
+        assertEquals(List.of(), diags.get(new SourceId("a")));
+        assertEquals(List.of(), diags.get(new SourceId("b")));
     }
 
     @Test
@@ -89,9 +91,9 @@ class DiagnoseModulesTest {
                 behavior g : (n: N) -> N
                 let g (n) = n
                 """;
-        Map<String, List<Diagnostic>> diags = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("a", aBroken, "b", b)));
-        assertFalse(diags.get("a").isEmpty(), "the broken module reports its own error");
-        assertEquals(List.of(), diags.get("b"), "the importing module is skipped, not cascaded");
+        Map<SourceId, List<Diagnostic>> diags = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("a", aBroken, "b", b)));
+        assertFalse(diags.get(new SourceId("a")).isEmpty(), "the broken module reports its own error");
+        assertEquals(List.of(), diags.get(new SourceId("b")), "the importing module is skipped, not cascaded");
     }
 
     @Test
@@ -108,11 +110,11 @@ class DiagnoseModulesTest {
                 example f
                   | (M { n = 1 }) -> M { n = 2 }
                 """;
-        Map<String, List<Diagnostic>> diags =
+        Map<SourceId, List<Diagnostic>> diags =
                 Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("a.sou", a, "a.examples.sou", aExamples)));
 
-        assertEquals(List.of(), diags.get("a.sou"), "the module file itself is clean");
-        assertEquals(1, diags.get("a.examples.sou").size(), diags.get("a.examples.sou").toString());
-        assertEquals("E1905", diags.get("a.examples.sou").get(0).code());
+        assertEquals(List.of(), diags.get(new SourceId("a.sou")), "the module file itself is clean");
+        assertEquals(1, diags.get(new SourceId("a.examples.sou")).size(), diags.get(new SourceId("a.examples.sou")).toString());
+        assertEquals("E1905", diags.get(new SourceId("a.examples.sou")).get(0).code());
     }
 }

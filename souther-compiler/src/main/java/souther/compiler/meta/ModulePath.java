@@ -1,10 +1,13 @@
 package souther.compiler.meta;
 
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.jvm.JvmClassName;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -25,7 +28,7 @@ public interface ModulePath {
     byte[] bytes(String binaryName);
 
     /** The declarations published on these classes. */
-    default PublishedModule.Classes declarations() {
+    default PublishedClasses declarations() {
         return new ClassFileDeclarations(this::bytes);
     }
 
@@ -53,6 +56,32 @@ public interface ModulePath {
     }
 
     /**
+     * A path over class files already in hand — what another compile came to, without writing them
+     * anywhere.
+     *
+     * <p>Here rather than at each caller for the reason {@link ClassPath} is a record: two paths
+     * over the same classes are the same path, and a caller writing the lookup itself hands over
+     * something that is a new path every time it is built.
+     */
+    static ModulePath of(Map<String, ClassFileImage> classes) {
+        return new Held(classes);
+    }
+
+    /** A path over class files in hand, by the binary name each is under. */
+    record Held(Map<String, ClassFileImage> classes) implements ModulePath {
+
+        public Held {
+            classes = Map.copyOf(classes);
+        }
+
+        @Override
+        public byte[] bytes(String binaryName) {
+            ClassFileImage image = classes.get(binaryName);
+            return image == null ? null : image.bytes();
+        }
+    }
+
+    /**
      * A class path, by its entries. It is a value rather than a lambda so that two paths over the
      * same entries are the same path: a language server rebuilds one on every request, and a
      * compilation it wants to keep between edits has to be able to tell that nothing moved.
@@ -60,7 +89,7 @@ public interface ModulePath {
     record ClassPath(List<Path> entries) implements ModulePath {
         @Override
         public byte[] bytes(String binaryName) {
-            String resource = binaryName.replace('.', '/') + ".class";
+            String resource = JvmClassName.classFile(binaryName);
             for (Path entry : entries) {
                 byte[] bytes = read(entry, resource);
                 if (bytes != null) {

@@ -39,7 +39,7 @@ class CompileBlockTest {
 
     private Object run(String name, Object arg) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
-        Object b = loader.loadClass("demo." + name + "$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", name).getConstructor().newInstance();
         return Codecs.apply(b, arg);
     }
 
@@ -89,10 +89,11 @@ class CompileBlockTest {
                 import List ( map, length )
                 data 未検証明細 = { コード: String }
                 data 検証済み明細 = { コード: String }
-                data 補助
+                data 補助 = { 件数: Int }
                 data 明細 = 検証済み明細 | 補助
-                behavior 明細を検証する : (xs: List<未検証明細>) -> List<明細> constructs 補助
-                let 明細を検証する (xs) = map(x -> 検証済み明細 { コード = x.コード }, xs) ++ [補助 | length(xs) > 0]
+                behavior 明細を検証する : (xs: List<未検証明細>) -> List<明細>
+                    constructs 補助
+                let 明細を検証する (xs) = map(x -> 検証済み明細 { コード = x.コード }, xs) ++ [補助 { 件数 = length(xs) } | length(xs) > 0]
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E1002", e.code());

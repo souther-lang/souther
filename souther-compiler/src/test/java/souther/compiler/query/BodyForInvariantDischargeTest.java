@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -35,24 +35,32 @@ class BodyForInvariantDischargeTest {
             let shift (b) = List.map(x -> doubled(x), b.items)
             """;
 
-    private static Ast.Expr body(Key<Ast.FnDef> key) {
-        Map<String, String> byId = new LinkedHashMap<>();
-        byId.put("a.sou", SOURCE);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        return c.db().ask(key).value().writtenBody();
+    private static Hir.Expr body(Key<Hir.FnDef> key) {
+        return db().ask(key).value().writtenBody();
     }
 
-    private static List<String> calls(Ast.Expr e) {
+    /** The same, for a body that answers with what its expansion could not remove beside it. */
+    private static Hir.Expr lowered(Key<souther.compiler.check.Expansion<Hir.FnDef>> key) {
+        return db().ask(key).value().value().writtenBody();
+    }
+
+    private static Db db() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("a.sou", SOURCE);
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
+    }
+
+    private static List<String> calls(Hir.Expr e) {
         List<String> out = new ArrayList<>();
         collect(e, out);
         return out;
     }
 
-    private static void collect(Ast.Expr e, List<String> out) {
-        if (e instanceof Ast.Apply call) {
+    private static void collect(Hir.Expr e, List<String> out) {
+        if (e instanceof Hir.Apply call) {
             out.add(call.written());
         }
-        Ast.forEachChild(e, child -> collect(child, out));
+        Hir.forEachChild(e, child -> collect(child, out));
     }
 
     @Test
@@ -71,7 +79,8 @@ class BodyForInvariantDischargeTest {
 
     @Test
     void theEmittedBodyHasExpandedTheOperationAway() {
-        List<String> fns = calls(body(new Bodies.LoweredBody("m.a", "shift")));
+        List<String> fns = calls(lowered(new Bodies.LoweredBody("m.a",
+                new souther.compiler.ast.DefinitionName("shift"))));
         assertFalse(fns.contains("List.map"),
                 "the backend emits folds, not operations: " + fns);
     }

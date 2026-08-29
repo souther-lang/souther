@@ -1,9 +1,10 @@
 at no column at all of A_BRACKET_TAKES_A_LINE_OF_ITS_OWN / no place / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 at no column at all of A_BRACKET_TAKES_A_LINE_OF_ITS_OWN / no place / a group's own break at depth 3 and column 8
 at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
-at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DEPENDS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ELSE_ARM / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
+at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ENSURES_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_ROW / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 at no column at all of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
@@ -53,9 +54,10 @@ at no column at all of a group's own break / no place / a group's own break at d
 one column back of A_BRACKET_TAKES_A_LINE_OF_ITS_OWN / no place / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 one column back of A_BRACKET_TAKES_A_LINE_OF_ITS_OWN / no place / a group's own break at depth 3 and column 8
 one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
-one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DEPENDS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ELSE_ARM / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
+one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ENSURES_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_ROW / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 one column back of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
@@ -112,11 +114,12 @@ one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / A_BRACKE
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
-one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DEPENDS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ELSE_ARM / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
+one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ENSURES_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_ROW / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
@@ -190,10 +193,11 @@ run on into the next line of A_BRACKET_TAKES_A_LINE_OF_ITS_OWN / no place / a gr
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
-run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DEPENDS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ELSE_ARM / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
+run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ENSURES_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 run on into the next line of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
@@ -257,11 +261,12 @@ with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / A_B
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
-with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DEPENDS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ELSE_ARM / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
+with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ENSURES_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_ROW / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
@@ -332,11 +337,12 @@ with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / 
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
-with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DEPENDS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ELSE_ARM / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
+with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ENSURES_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_ROW / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
@@ -408,11 +414,12 @@ with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / A_B
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
-with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / CONSTRUCTS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DATA_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / DEPENDS_CLAUSE / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ELSE_ARM / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
+with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ENSURES_CLAUSE / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_ROW / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0

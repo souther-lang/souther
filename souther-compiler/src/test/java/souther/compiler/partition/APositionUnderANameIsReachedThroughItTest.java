@@ -41,10 +41,10 @@ class APositionUnderANameIsReachedThroughItTest {
             data Slot = { flag: Bool }
             data SlotN = Slot
 
-            behavior bare : (x: Slot) -> Ok constructs Ok
+            behavior bare : (x: Slot) -> Ok
             let bare (x) = Ok
 
-            behavior wrapped : (x: SlotN) -> Ok constructs Ok
+            behavior wrapped : (x: SlotN) -> Ok
             let wrapped (x) = Ok
 
             example bare
@@ -64,18 +64,27 @@ class APositionUnderANameIsReachedThroughItTest {
             data Pair = { low: N, high: N } invariant low.value < high.value
             data PairN = Pair
 
-            behavior bare : (p: Pair) -> Ok constructs Ok
+            behavior bare : (p: Pair) -> Ok
             let bare (p) = Ok
 
-            behavior wrapped : (p: PairN) -> Ok constructs Ok
+            behavior wrapped : (p: PairN) -> Ok
             let wrapped (p) = Ok
             """;
 
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
+    }
+
+    /** The lines that behavior's positions met, whosever the row at each point is. */
+    private static java.util.List<souther.compiler.query.BorderAssessment> lines(
+            Compilation compilation, String behavior) {
+        java.util.List<souther.compiler.query.BorderAssessment> found =
+                Adequacy.readingsOf(compilation.db(), "demo").get(behavior);
+        assertNotNull(found, behavior + " was measured");
+        return found;
     }
 
     private static PartitionEvidence evidence(Compilation compilation, String behavior) {
@@ -101,9 +110,9 @@ class APositionUnderANameIsReachedThroughItTest {
     void aRowWrittenUnderTheNameIsReadBackThroughIt() {
         Compilation compilation = measured(FLAGS);
 
-        assertEquals(Set.of("true"), evidence(compilation, "wrapped").axes().get(0).covered());
-        assertEquals(evidence(compilation, "bare").axes().get(0).covered(),
-                evidence(compilation, "wrapped").axes().get(0).covered(),
+        assertEquals(Set.of("true"), evidence(compilation, "wrapped").axes().get(0).rows().covered());
+        assertEquals(evidence(compilation, "bare").axes().get(0).rows().covered(),
+                evidence(compilation, "wrapped").axes().get(0).rows().covered(),
                 "a name is how a value is written, not what it is");
     }
 
@@ -111,7 +120,7 @@ class APositionUnderANameIsReachedThroughItTest {
     @Test
     void aRowOfferedForThePositionIsWrittenUnderTheName() {
         String rows = GeneratedRows.of(measured(FLAGS), "demo", "wrapped", true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
 
         assertTrue(rows.contains("(SlotN(Slot { flag = false }))"), rows);
     }
@@ -128,13 +137,13 @@ class APositionUnderANameIsReachedThroughItTest {
     void theRulesARecordWritesAboutItsFieldsReachThemUnderAName() {
         Compilation compilation = measured(PAIRS);
 
-        assertEquals(evidence(compilation, "bare").boundaries().size(),
-                evidence(compilation, "wrapped").boundaries().size(),
+        assertEquals(lines(compilation, "bare").size(),
+                lines(compilation, "wrapped").size(),
                 "the same record is bounded the same way under a name");
-        assertTrue(evidence(compilation, "wrapped").boundaries().size() >= 4);
+        assertTrue(lines(compilation, "wrapped").size() >= 4);
 
         String rows = GeneratedRows.of(compilation, "demo", "wrapped", true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         assertTrue(rows.contains("(PairN(Pair { low = N(9), high = N(10) }))"), rows);
     }
 }

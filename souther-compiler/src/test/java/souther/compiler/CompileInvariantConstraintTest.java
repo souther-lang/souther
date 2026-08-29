@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.jvm.DecoderKind;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Path;
 import net.unit8.raoh.Err;
@@ -195,7 +196,7 @@ class CompileInvariantConstraintTest {
                 data V = String
                     invariant String.matches("[0-9]{3}", value)
                 """), getClass().getClassLoader());
-        Class<?> dec = loader.loadClass("demo.V$Dec");
+        Class<?> dec = loader.loadClass(Emitted.decoder("demo", "V", DecoderKind.VALUE));
         long patterns = java.util.Arrays.stream(dec.getDeclaredFields())
                 .filter(f -> f.getType() == java.util.regex.Pattern.class)
                 .filter(f -> java.lang.reflect.Modifier.isStatic(f.getModifiers()))

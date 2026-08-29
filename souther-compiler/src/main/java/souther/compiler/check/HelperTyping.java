@@ -1,14 +1,18 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.ast.Hir;
+import souther.compiler.ast.RowPosition;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.InvariantMessage;
-import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.diag.Region;
+import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import java.util.ArrayList;
@@ -43,9 +47,9 @@ public final class HelperTyping {
      * {@code depends on} checks are the caller's (the helper is inlined there), so they are not
      * repeated here.
      */
-    static void checkHelpers(HelperInliner inliner, Symbols symbols,
-                                     Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
-                                     Map<String, Ast.Expr> loweredBodies,
+    static void checkHelpers(HelperInliner inliner, Map<String, Hir.FnDef> toCheck, Symbols symbols,
+                                     Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
+                                     Map<String, Hir.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
@@ -53,8 +57,19 @@ public final class HelperTyping {
         Map<ValueName, Type> settledTypes = new HashMap<>();
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
-        for (Ast.FnDef h : valuesBeforeTheValuesThatNameThem(inliner)) {
+        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
+            // Where this definition stands, or null where it stands nowhere: the one thing every
+            // rule below that is about a row's operand asks, read off the definition the rule is
+            // holding rather than off a set of names travelling beside it.
+            RowPosition standsAt = h.standsAt();
+            // What a row operand may reach. A row supplies the values a behavior is applied to and
+            // stands in for what that behavior depends on; it is not inside the application, so the
+            // dependencies are not in force where it is computed — and the definition it is
+            // compiled as is nullary and static, with nothing injected into it. Handed the same
+            // requirement table a body gets, a call to a required behavior types here and reaches
+            // no implementation at all.
+            Map<ValueName.Behavior, ReqSig> reachable = standsAt != null ? Map.of() : reqSigs;
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
             // values written through helpers reaches every link exactly as one written without them
@@ -68,7 +83,7 @@ public final class HelperTyping {
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
             for (int i = 0; i < h.params().size(); i++) {
-                Ast.FnParam p = h.params().get(i);
+                Hir.FnParam p = h.params().get(i);
                 Elaborator.rejectBuiltinShadow(p.name(), p.pos());
                 if (p.type() == null) {
                     if (recursive) {
@@ -82,21 +97,21 @@ public final class HelperTyping {
                     inferred.add(i);
                     continue;
                 }
-                env = env.with(p.binder(), TypeOps.resolveParamType(p.type(), symbols));
+                env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
             }
             Elaborator.rejectBuiltinShadowing(h.writtenBody());
-            // A helper the lowered module carries is one the backend emits — a recursive one, and one
-            // an example row applies (ADR-0077) — so it is typed on the tree the backend emits from,
-            // and the Core this check produces is what is emitted (issue #81). One that is only
+            // A definition the lowered module carries is one the backend emits — a recursive helper,
+            // and a row's operand — so it is typed on the tree the backend emits from, and the Core
+            // this check produces is what is emitted (issue #81). A helper that is only
             // inlined at its call sites has no body down there, so its standalone check expands its
             // body here; a recursive helper hides its own parameters from helper resolution while that
             // expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
             // Expanded once: the body an un-annotated parameter takes its type from is the same tree.
-            Ast.Expr emitted = loweredBodies.get(h.name());
+            Hir.Expr emitted = loweredBodies.get(h.name());
             // Not what the backend emits, and not a recursive helper's own body: a value is
             // substituted at each of its references, and those two are trees that run.
             boolean reading = emitted == null && !recursive;
-            Ast.Expr body = emitted != null ? emitted
+            Hir.Expr body = emitted != null ? emitted
                     : inliner.readingSettledValues(reading ? standing : Preserved.NONE,
                                     reading ? settledConstants::get : _ -> null)
                             .inline(h.writtenBody(), inliner.bodyOf(h.name()));
@@ -114,7 +129,7 @@ public final class HelperTyping {
                 // Complete the env from the body, then run the same standalone check an annotated
                 // helper gets — so a mis-declared return type or a mis-passed function argument in the
                 // body is caught here, at the helper, not only where it is later inlined.
-                typeFromBody(h, inferred, env, body, symbols, reqSigs, recursiveHelperFns);
+                typeFromBody(h, inferred, env, body, symbols, reachable, recursiveHelperFns);
             }
             // A recursive helper is lowered to a method, so a self- or mutual call is left standing
             // rather than expanded; its signature is what a call to it is typed against, so it goes
@@ -128,8 +143,15 @@ public final class HelperTyping {
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
-            checkFunctionArgs(h.writtenBody(), tenv, symbols, reqSigs, inliner);
-            if (Elaborator.producesFunction(body)) {
+            checkFunctionArgs(h.writtenBody(), tenv, symbols, reachable, inliner);
+            // push a declared return type into the body so an empty-collection body (Map.empty, [])
+            // takes the declared element/value type rather than a bottom
+            Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn());
+            // Only one that declares nothing: a declaration is a claim about the body, so a body
+            // that produces a function is elaborated against it and refused as a block is anywhere
+            // it escapes — skipped, the claim would go unheld and the backend would be left a
+            // method to emit with no elaborated body to emit it from.
+            if (declaredReturn == null && Elaborator.producesFunction(body)) {
                 continue;
             }
 
@@ -138,34 +160,58 @@ public final class HelperTyping {
                 // cannot reach an injected behavior — put the effect in the behavior that calls it.
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
-            // push a declared return type into the body so an empty-collection body (Map.empty, [])
-            // takes the declared element/value type rather than a bottom
-            Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn(), symbols);
             Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                    new CheckContext(symbols, null, reqSigs)
+                    new CheckContext(symbols, null, reachable)
                             .preserving(reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
+            // A definition standing at a row's position computes what the row writes there, and a
+            // position holds a value. One that answers none — `unreachable` on its own — is refused
+            // here, where the check fails the compile: the backend refuses the same shape when it
+            // emits, but what ships carries no method for a row's operand, so a refusal left to
+            // emission would surface in the evaluation build alone and fail nothing.
+            //
+            // Asked of the position and not of whether a source spelled the name. A definition
+            // another module wrote is emitted here under the name this module reaches it by, which
+            // no source spells either, and this rule refused it — for what a row in this module
+            // said about it, at a line in a file that had written nothing wrong.
+            if (standsAt != null && bodyType instanceof Type.Never
+                    && (declaredReturn == null || standsAt.required() == null)) {
+                throw CompileException.of(Diagnostic.at(h.pos(), "unreachable".length())
+                        .hint(new NameMessage.WriteItWhereTheTypeIsStated())
+                        .say(new NameMessage.NothingSaysWhatThisPositionHolds()).build());
+            }
             elaborated.definitionTypes.put(h.name(), bodyType);
             if (settled != null) {
                 settledTypes.put(settled, bodyType);
                 // What it is a constant of, read off the body it was checked as. A reference to it
                 // is written out as that constant, so every position that asks whether an
                 // expression is known at compile time goes on reading a literal.
-                ConstEval.eval(body).ifPresent(c -> settledConstants.put(settled, c));
+                ConstEval.against(symbols).eval(body)
+                        .ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
-            // match the body; a lying annotation is not silently ignored.
-            if (declaredReturn != null) {
+            // match the body; a lying annotation is not silently ignored. What a row's operand
+            // answers with is the position's contribution and not a claim of its own where the
+            // position requires nothing: a row may state what the behavior does not answer with,
+            // and reporting that disagreement is what the row is for.
+            if (declaredReturn != null && (standsAt == null || standsAt.required() != null)) {
                 Type declared = declaredReturn;
                 if (!TypeOps.assignable(bodyType, declared, symbols)) {
+                    // A definition standing at a position carries a claim the position made, so
+                    // what is said leans on the place and quotes no name the author never wrote.
+                    // A definition is named, whoever wrote it: one this module took on is another
+                    // module's `let` and is named as one.
                     throw CompileException.of(Diagnostic.at(h.pos())
-                            .say(new HelperMessage.TheBodyIsNotWhatTheHelperDeclares(h.name(),
-                                    Type.show(declared), Type.show(bodyType)))
-                                    .build());
+                            .say(standsAt == null
+                                    ? new HelperMessage.TheBodyIsNotWhatTheHelperDeclares(h.name(),
+                                            Type.show(declared), Type.show(bodyType))
+                                    : new HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes(
+                                            Type.show(declared), Type.show(bodyType)))
+                            .build());
                 }
             }
         }
@@ -200,22 +246,32 @@ public final class HelperTyping {
      * written, each copying the other, which is the answer this pass gave before there was an order
      * at all.
      */
-    private static List<Ast.FnDef> valuesBeforeTheValuesThatNameThem(HelperInliner inliner) {
-        Map<String, Ast.FnDef> held = inliner.held();
+    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(
+            HelperInliner inliner, Stdlib stdlib, Map<String, Hir.FnDef> held) {
+        // The walk below finds edges by what a name reaches and records them at the addresses this
+        // ordering is over. Where a reference is held is the table's answer, so neither coordinate
+        // is read off the other's spelling and nothing here keeps a pairing of its own.
         Map<String, Set<String>> names = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.FnDef> e : held.entrySet()) {
-            if (!(e.getValue().body() instanceof Ast.FnBody.Written written)) {
+        for (Map.Entry<String, Hir.FnDef> e : held.entrySet()) {
+            if (!(e.getValue().body() instanceof Hir.FnBody.Written written)) {
                 continue;
             }
-            Set<String> reached = new LinkedHashSet<>();
-            HelperInliner.helperCallsIn(written.expr(), held, reached);
-            ValueCycles.valuesRead(written.expr(), held, reached);
-            reached.retainAll(held.keySet());
-            names.put(e.getKey(), reached);
+            Set<souther.compiler.types.ReachName.Declaration> reached = new LinkedHashSet<>();
+            HelperInliner.helperCallsIn(stdlib, written.expr(), inliner.reachable(), reached);
+            Set<String> here = new LinkedHashSet<>();
+            reached.forEach(reference -> {
+                souther.compiler.ast.DefinitionName at = inliner.heldAt(reference);
+                if (at != null && held.containsKey(at.text())) {
+                    here.add(at.text());
+                }
+            });
+            ValueCycles.valuesRead(written.expr(), held, inliner::heldAt, here);
+            here.retainAll(held.keySet());
+            names.put(e.getKey(), here);
         }
         // Depth-first with its own stack. A module's values chain as deeply as the author wrote
         // them, and the chain is what this is for, so the call stack is the wrong one to walk it on.
-        List<Ast.FnDef> ordered = new ArrayList<>();
+        List<Hir.FnDef> ordered = new ArrayList<>();
         Set<String> placed = new LinkedHashSet<>();
         for (String root : held.keySet()) {
             if (placed.contains(root)) {
@@ -260,8 +316,8 @@ public final class HelperTyping {
      * settles back onto the parameter — so what reaches here open is what it could not settle. Reading
      * it again is what turns "not settled" into a report that names the use that named no type.
      */
-    private static void typeFromBody(Ast.FnDef h, List<Integer> open, Scope env,
-            Ast.Expr body, Symbols symbols, Map<String, ReqSig> reqSigs,
+    private static void typeFromBody(Hir.FnDef h, List<Integer> open, Scope env,
+            Hir.Expr body, Symbols symbols, Map<ValueName.Behavior, ReqSig> reqSigs,
             Map<String, Type> recursiveHelperFns) {
         // A parameter used as a function is one, and neither applying it nor handing it to a
         // combinator determines its type; the inliner also needs the annotation to tell a function
@@ -269,7 +325,7 @@ public final class HelperTyping {
         // is read, so a parameter handed to `List.map` — applied inside the expansion rather than
         // where it is written — is reported as the function it is.
         for (int idx : open) {
-            Ast.FnParam p = h.params().get(idx);
+            Hir.FnParam p = h.params().get(idx);
             if (HelperParams.isApplied(body, p.binder())) {
                 throw CompileException.of(Diagnostic.at(p.written().reportedAt())
                         .say(new HelperMessage.AFunctionTypedParameterNeedsItsType(h.name(),
@@ -288,7 +344,7 @@ public final class HelperTyping {
             });
         }
         for (int idx : open) {
-            Ast.FnParam p = h.params().get(idx);
+            Hir.FnParam p = h.params().get(idx);
             if (env.holds(p.binder().id())) {
                 continue;
             }
@@ -313,41 +369,84 @@ public final class HelperTyping {
     }
 
     /** A call in {@code body} to a behavior, which no helper reaches (spec [#calling-a-behavior]). */
-    private static Optional<Ast.Apply> callToABehavior(Ast.Expr body) {
-        if (body instanceof Ast.Apply call && call.denotes() instanceof ValueName.Behavior) {
+    private static Optional<Hir.Apply> callToABehavior(Hir.Expr body) {
+        if (body instanceof Hir.Apply call && call.answered() != null
+                && call.answered().denotes() instanceof ValueName.Behavior) {
             return Optional.of(call);
         }
-        List<Ast.Apply> found = new ArrayList<>();
+        List<Hir.Apply> found = new ArrayList<>();
         TypeChecker.forEachChild(body, child -> callToABehavior(child).ifPresent(found::add));
         return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }
 
     /**
-     * Signatures of the module's recursive helpers, each a {@link Type.FnOf} from its declared
-     * parameter types to its declared return type. A recursive helper must declare its return type:
-     * the type can't be inferred through the cycle. Registered in a body's environment so a self- or
-     * mutual call type-checks (spec §fn-declaration).
+     * The same, for the recursive helpers a caller names and reads out of {@code table}.
+     *
+     * <p>Which recursive helpers a signature is wanted for is the caller's question and there is more
+     * than one answer to it: what a module has taken on to emit is one, and what could stand
+     * unexpanded anywhere in a representation is another and is wider. What a signature is is the
+     * same either way, so it is worked out once here rather than beside each question — two readings
+     * of one declaration would agree only until one of them was edited.
      */
-    static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
+    static Map<String, Type> recursiveCallSigs(HelperInliner inliner, Symbols symbols) {
+        return sigsOf(inliner.recursiveInReach(), inliner::helper, symbols, inliner.moduleName());
+    }
+
+    /** The same, read off a table rather than off an inliner over it. */
+    static Map<String, Type> recursiveCallSigs(
+            HelperTable table, java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
+            Symbols symbols) {
+        return sigsOf(references, table::reached, symbols, table.module());
+    }
+
+    /**
+     * @param ownModule the module these are being read for. A declaration it wrote is held to
+     *     declaring its types, and is told so at the line it was written on. One it did not write is
+     *     another module's to hold to that, and is reported there while that module is compiled — so
+     *     an unreadable one contributes no signature here rather than a report about a file this
+     *     compile does not own. A call that needed it fails where the call is written, which is in
+     *     this module and is a place its author can act on.
+     */
+    private static Map<String, Type> sigsOf(
+            java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
+            java.util.function.Function<souther.compiler.types.ReachName.Declaration, Hir.FnDef>
+                    declaring,
+            Symbols symbols, String ownModule) {
         Map<String, Type> sigs = new HashMap<>();
-        for (String name : inliner.recursiveHelpers()) {
-            Ast.FnDef h = inliner.helper(name);
+        for (souther.compiler.types.ReachName.Declaration reference : references) {
+            // Which declaration each is, the reference answers. What comes out is a scope — the
+            // names a body may write for a call this representation kept standing — so it is keyed
+            // as a scope is, by what the body writes. The resolution happened here, above it.
+            String name = reference.rendered();
+            Hir.FnDef h = declaring.apply(reference);
+            boolean ours = h.declaredBy(ownModule);
             if (h.declaredReturn() == null) {
+                if (!ours) {
+                    continue;
+                }
                 throw CompileException.of(Diagnostic
                                 .at(h.pos()).say(new NameMessage.ARecursiveHelperMustDeclareItsReturnType(name)).build());
             }
             List<Type> params = new ArrayList<>();
-            for (Ast.FnParam p : h.params()) {
+            boolean readable = true;
+            for (Hir.FnParam p : h.params()) {
                 if (p.type() == null) {
+                    if (!ours) {
+                        readable = false;
+                        break;
+                    }
                     throw CompileException.of(Diagnostic.at(p.written().reportedAt())
                             .say(new HelperMessage.AParameterNeedsItsType(name, p.name()))
                             .build());
                 }
                 // a recursive helper is a static method taking its parameters as values; a function
                 // parameter is passed as a first-class Fn (a closure), applied inside the method.
-                params.add(TypeOps.resolveParamType(p.type(), symbols));
+                params.add(TypeOps.resolveParamType(p.type()));
             }
-            sigs.put(name, Type.fn(params, TypeOps.successType(h.declaredReturn(), symbols)));
+            if (!readable) {
+                continue;
+            }
+            sigs.put(name, Type.fn(params, TypeOps.successType(h.declaredReturn())));
         }
         return sigs;
     }
@@ -363,30 +462,47 @@ public final class HelperTyping {
      * behind a recursive one. The path is reported whole, so what the clause has to stop doing is named
      * rather than left to be found by reading the helpers.
      */
-    static void rejectPartialHelperInInvariant(Ast.Expr e, String data,
+    static void rejectPartialHelperInInvariant(Hir.Expr e, String data,
                                                PartialReachability reachability) {
-        List<String> path = reachability.fromExpression(e).orElse(null);
+        List<souther.compiler.types.ReachName.Declaration> path =
+                reachability.fromExpression(e).orElse(null);
         if (path == null) {
             return;
         }
-        String reached = path.get(path.size() - 1);
+        String reached = path.get(path.size() - 1).rendered();
         String rendered = "invariant -> " + PartialReachability.render(path);
-        Ast.Apply at = firstCallTo(e, path.get(0));
+        Hir.Apply at = firstCallTo(e, path.get(0));
         throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
                 .say(new InvariantMessage.TheInvariantReachesAPartialHelper(data, reached, rendered))
                 .build());
     }
 
+    static void rejectPartialHelperInEnsures(Hir.Expr e, String behavior,
+                                             PartialReachability reachability) {
+        List<souther.compiler.types.ReachName.Declaration> path =
+                reachability.fromExpression(e).orElse(null);
+        if (path == null) {
+            return;
+        }
+        String reached = path.get(path.size() - 1).rendered();
+        String rendered = "ensures -> " + PartialReachability.render(path);
+        Hir.Apply at = firstCallTo(e, path.get(0));
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
+                .say(new BehaviorMessage.TheEnsuresReachesAPartialHelper(
+                        behavior, reached, rendered)).build());
+    }
+
     /** The first application of {@code name} in {@code e}, for the report to underline, or null where
      * the clause holds none (a lowering wrote the call without a name of its own). */
-    private static Ast.Apply firstCallTo(Ast.Expr e, String name) {
-        if (e instanceof Ast.Apply call && call.reaches().equals(name)) {
+    private static Hir.Apply firstCallTo(Hir.Expr e, souther.compiler.types.ReachName.Declaration reference) {
+        if (e instanceof Hir.Apply call && call.answered() != null
+                && call.answered().reachedAs().equals(reference)) {
             return call;
         }
-        Ast.Apply[] found = new Ast.Apply[1];
+        Hir.Apply[] found = new Hir.Apply[1];
         TypeChecker.forEachChild(e, c -> {
             if (found[0] == null) {
-                found[0] = firstCallTo(c, name);
+                found[0] = firstCallTo(c, reference);
             }
         });
         return found[0];
@@ -406,8 +522,8 @@ public final class HelperTyping {
      * is somewhere else — a construction written in the clause itself has one place, and labelling it
      * twice says nothing.
      */
-    static void rejectConstructionInInvariant(Ast.Expr e, String data, Ast.InvariantClause clause) {
-        if (e instanceof Ast.NewData nd) {
+    static void rejectConstructionInInvariant(Hir.Expr e, String data, Hir.InvariantClause clause) {
+        if (e instanceof Hir.NewData nd) {
             String constructed = nd.typeName().written();
             String named = clause.name().orElse(null);
             Diagnostic.Builder b = Diagnostic
@@ -416,8 +532,8 @@ public final class HelperTyping {
                             ? new InvariantMessage.TheInvariantConstructsAData(data, constructed)
                             : new InvariantMessage.TheNamedClauseConstructsAData(data, constructed,
                                     named));
-            if (nd.pos().line() != clause.pos().line()) {
-                b.secondary(Region.point(clause.pos()),
+            if (!onOneLine(nd.pos(), clause.pos())) {
+                b.secondary(clause.reportedAt(),
                         named == null
                                 ? new InvariantMessage.ThisClauseReachesThatConstruction()
                                 : new InvariantMessage.TheClauseReachesThatConstruction(named));
@@ -425,6 +541,40 @@ public final class HelperTyping {
             throw CompileException.of(b.build());
         }
         TypeChecker.forEachChild(e, c -> rejectConstructionInInvariant(c, data, clause));
+    }
+
+    static void rejectConstructionInEnsures(Hir.Expr e, String behavior,
+                                            Hir.EnsuresClause clause) {
+        if (e instanceof Hir.NewData nd) {
+            String constructed = nd.typeName().written();
+            String named = clause.name().orElse(null);
+            Diagnostic.Builder b = Diagnostic.at(nd.pos(), constructed.length())
+                    .say(named == null
+                            ? new BehaviorMessage.TheEnsuresConstructsAData(behavior, constructed)
+                            : new BehaviorMessage.TheNamedEnsuresConstructsAData(
+                                    behavior, constructed, named));
+            if (!onOneLine(nd.pos(), clause.pos())) {
+                b.secondary(clause.reportedAt(),
+                        named == null
+                                ? new InvariantMessage.ThisClauseReachesThatConstruction()
+                                : new InvariantMessage.TheClauseReachesThatConstruction(named));
+            }
+            throw CompileException.of(b.build());
+        }
+        TypeChecker.forEachChild(e, c -> rejectConstructionInEnsures(c, behavior, clause));
+    }
+
+    /**
+     * Whether two places are the one line a reader is being shown.
+     *
+     * <p>A line number on its own is not a place. Line 10 of the file a helper is written in and line
+     * 10 of the file the declaration is in are two lines, and reading the numbers alone drops the
+     * second marker from a report whose whole point is that the two are far apart. A position that
+     * was read from no source is nowhere and shares a line with nothing.
+     */
+    private static boolean onOneLine(SourcePos here, SourcePos there) {
+        return here.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file)
+                && there.isIn(file) && here.line() == there.line();
     }
 
     /**
@@ -436,8 +586,8 @@ public final class HelperTyping {
      * <p>Walks the inlined clause, so one written in a helper the clause names is caught where it
      * was written, as a construction is.
      */
-    static void rejectUnreachableInInvariant(Ast.Expr e, String data, Ast.InvariantClause clause) {
-        if (e instanceof Ast.Unreachable u) {
+    static void rejectUnreachableInInvariant(Hir.Expr e, String data, Hir.InvariantClause clause) {
+        if (e instanceof Hir.Unreachable u) {
             throw CompileException.of(Diagnostic
                             .at(u.pos(), "unreachable".length())
                             .say(new InvariantMessage.AnInvariantAnswersOnEveryPath(data)).build());
@@ -445,9 +595,20 @@ public final class HelperTyping {
         TypeChecker.forEachChild(e, c -> rejectUnreachableInInvariant(c, data, clause));
     }
 
+    static void rejectUnreachableInEnsures(Hir.Expr e, String behavior) {
+        if (e instanceof Hir.Unreachable u) {
+            throw CompileException.of(Diagnostic.at(u.pos(), "unreachable".length())
+                    .say(new BehaviorMessage.AnEnsuresAnswersOnEveryPath(behavior)).build());
+        }
+        TypeChecker.forEachChild(e, c -> rejectUnreachableInEnsures(c, behavior));
+    }
+
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec §fn-declaration). */
-    private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
-        if (e instanceof Ast.Apply call && injected.contains(call.reaches())) {
+    private static void rejectInjectedCalls(Hir.Expr e, String helper,
+                                            Set<ValueName.Behavior> injected) {
+        if (e instanceof Hir.Apply call && call.answered() != null
+                && call.answered().denotes() instanceof ValueName.Behavior reached
+                && injected.contains(reached)) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new NameMessage.ARecursiveHelperIsPure(helper, call.written())).build());
         }
@@ -467,28 +628,28 @@ public final class HelperTyping {
      * argument's type cannot be determined in the available scope (a value bound further out), it is
      * skipped and the ordinary inlined check still applies.
      */
-    static void checkFunctionArgs(Ast.Expr e, Scope env, Symbols symbols,
-                                          Map<String, ReqSig> reqs, HelperInliner inliner) {
-        if (e instanceof Ast.Apply call) {
+    static void checkFunctionArgs(Hir.Expr e, Scope env, Symbols symbols,
+                                          Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
+        if (e instanceof Hir.Apply call) {
             checkHelperCallFnArgs(call, env, symbols, reqs, inliner);
         }
         TypeChecker.forEachChild(e, sub -> checkFunctionArgs(sub, env, symbols, reqs, inliner));
     }
 
-    private static void checkHelperCallFnArgs(Ast.Apply call, Scope env, Symbols symbols,
-                                              Map<String, ReqSig> reqs, HelperInliner inliner) {
+    private static void checkHelperCallFnArgs(Hir.Apply call, Scope env, Symbols symbols,
+                                              Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
         // what the call applies, which a binding of a helper's spelling is not: applying a
         // function-typed parameter is not a call to the helper it happens to be named after
-        Ast.FnDef h = inliner.applied(call);
+        Hir.FnDef h = inliner.applied(call);
         if (h == null || call.args().size() != h.params().size()) {
             return;   // applies no body, or an arity mismatch the inliner reports
         }
         List<Type> declared = new ArrayList<>();
         boolean hasFn = false;
-        for (Ast.FnParam p : h.params()) {
+        for (Hir.FnParam p : h.params()) {
             // an unannotated parameter takes its type from the helper's body (spec §fn-declaration); it is never a
             // function parameter, so leave its slot null and treat it as a non-function argument here.
-            Type pt = p.type() == null ? null : TypeOps.resolveParamType(p.type(), symbols);
+            Type pt = p.type() == null ? null : TypeOps.resolveParamType(p.type());
             declared.add(pt);
             hasFn |= pt instanceof Type.FnOf;
         }
@@ -547,8 +708,8 @@ public final class HelperTyping {
      * (`'b?` / `String`), not in the checker's own spelling. It takes the block rather than a
      * position, so where the report is drawn is decided here from the value being refused and not by
      * whichever position a caller had to hand. */
-    private static CompileException blockReturnMismatch(Ast.FnDef h, String paramName, Type want,
-                                                        Type got, Ast.Expr block) {
+    private static CompileException blockReturnMismatch(Hir.FnDef h, String paramName, Type want,
+                                                        Type got, Hir.Expr block) {
         return CompileException.of(Diagnostic.at(Elaborator.answerRegion(block))
                 .say(new HelperMessage.TheBlockAnswersAnotherType(paramName, h.name(),
                         Type.show(want), Type.show(got)))
@@ -562,11 +723,11 @@ public final class HelperTyping {
         return Type.mentions(t, x -> x instanceof Type.Var);
     }
 
-    private static void checkFunctionArg(Ast.FnDef h, String paramName, Type.FnOf want, Ast.Expr arg,
+    private static void checkFunctionArg(Hir.FnDef h, String paramName, Type.FnOf want, Hir.Expr arg,
                                          Scope env, Symbols symbols,
-                                         Map<String, ReqSig> reqs, HelperInliner inliner,
+                                         Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner,
                                          Map<String, Type> bind) {
-        if (arg instanceof Ast.Block lambda) {
+        if (arg instanceof Hir.Block lambda) {
             if (lambda.params().size() != want.params().size()) {
                 throw CompileException.of(Diagnostic.at(arg.pos())
                         .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(paramName,
@@ -601,7 +762,7 @@ public final class HelperTyping {
             if (!TypeOps.assignable(got, want.result(), symbols)) {
                 throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
             }
-        } else if (arg instanceof Ast.Var v
+        } else if (arg instanceof Hir.Var.Denoting v
                 && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
             throw CompileException.of(Diagnostic.at(arg.pos())
                     .say(new HelperMessage.AValueWhereAFunctionIsTaken(paramName, h.name(),
@@ -618,12 +779,12 @@ public final class HelperTyping {
      * calls construct. Non-recursive helper calls are already inlined into the bodies here.
      */
     static Map<String, DataChecker.Constructs> recursiveHelperConstructs(
-            Set<String> recursive, Map<String, Ast.Expr> loweredBodies,
+            Set<String> recursive, Map<String, Hir.Expr> loweredBodies,
             HelperInliner inliner, Symbols symbols) {
         Map<String, DataChecker.Constructs> own = new HashMap<>();
         Map<String, Set<String>> calls = new HashMap<>();
         for (String h : recursive) {
-            Ast.Expr body = loweredBodies.get(h);
+            Hir.Expr body = loweredBodies.get(h);
             DataChecker.Constructs c = DataChecker.Constructs.empty();
             DataChecker.collectConstructs(body, c, symbols, Map.of());   // recursive calls opaque here
             own.put(h, c);
@@ -653,9 +814,10 @@ public final class HelperTyping {
     }
 
     /** Collects the names in {@code names} that {@code e} calls (a recursive-helper call graph edge). */
-    private static void collectCalls(Ast.Expr e, Set<String> out, Set<String> names) {
-        if (e instanceof Ast.Apply call && names.contains(call.reaches())) {
-            out.add(call.reaches());
+    private static void collectCalls(Hir.Expr e, Set<String> out, Set<String> names) {
+        if (e instanceof Hir.Apply call && call.answered() != null
+                && names.contains(call.answered().reaches())) {
+            out.add(call.answered().reaches());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));
     }

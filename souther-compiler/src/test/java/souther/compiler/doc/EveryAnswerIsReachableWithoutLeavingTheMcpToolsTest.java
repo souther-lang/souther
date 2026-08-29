@@ -55,7 +55,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
      */
     @Test
     void aClientThatKnowsNoNameIsGivenEveryNameThereIs() {
-        Set<String> listed = names(text(call("doc_read", "{}")));
+        Set<String> listed = names(whole("doc_read", "{}"));
 
         Set<String> thereIs = new TreeSet<>();
         SpecDocument.bundled(Caller.MCP).sections()
@@ -79,7 +79,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
      */
     @Test
     void aClientAndAReaderAtAPromptAreGivenTheSameNames() {
-        assertEquals(names(printed(new String[]{})), names(text(call("doc_read", "{}"))));
+        assertEquals(names(printed(new String[]{})), names(whole("doc_read", "{}")));
     }
 
     /**
@@ -89,7 +89,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
      */
     @Test
     void everyNameADocumentSendsThisClientToIsOnTheListingItStartedFrom() {
-        Set<String> listed = names(text(call("doc_read", "{}")));
+        Set<String> listed = names(whole("doc_read", "{}"));
 
         Set<String> sentTo = new TreeSet<>();
         LibraryDocs docs = LibraryDocs.on(getClass().getClassLoader(), Caller.MCP);
@@ -129,7 +129,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
 
     @Test
     void everyNameTheListingGivesCanBeReadBack() {
-        List<String> names = text(call("doc_read", "{}")).lines()
+        List<String> names = whole("doc_read", "{}").lines()
                 .map(line -> line.substring(0, line.indexOf('\t'))).toList();
 
         for (int at : List.of(0, names.size() / 2, names.size() - 1)) {
@@ -187,6 +187,38 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
     private String text(JsonNode result) {
         return result.get("content").get(0).get("text").asString();
     }
+
+    /**
+     * A whole answer, followed to its end the way the answer itself says to follow it.
+     *
+     * <p>An answer longer than one part comes back with what to ask for the rest, and a caller
+     * reading only the first part is reading a document cut off mid-sentence. This read one part and
+     * took it for the whole, which held while the listing happened to fit and stopped holding when a
+     * section was added to the specification — the parts are counted in characters, so what a
+     * document says has nothing to do with where one ends.
+     */
+    private String whole(String tool, String arguments) {
+        StringBuilder said = new StringBuilder();
+        String cursor = null;
+        while (true) {
+            String part = text(call(tool, cursor == null ? arguments
+                    : arguments.replaceFirst("\\{", "{\"cursor\":\"" + cursor + "\",")
+                            .replace("{\"cursor\":\"" + cursor + "\",}",
+                                    "{\"cursor\":\"" + cursor + "\"}")));
+            Matcher carriesOn = CARRIES_ON.matcher(part);
+            if (!carriesOn.find()) {
+                said.append(part);
+                return said.toString();
+            }
+            said.append(part, 0, carriesOn.start());
+            cursor = carriesOn.group(1);
+        }
+    }
+
+    /** What an answer says to ask for the rest of it, and where the answer itself ends. */
+    private static final Pattern CARRIES_ON =
+            Pattern.compile("\n… \\d+ more characters; ask `[^`]+` again with the same arguments"
+                    + " and `cursor: \"([^\"]+)\"` for what follows\n", Pattern.DOTALL);
 
     private JsonNode call(String tool, String arguments) {
         return serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\""

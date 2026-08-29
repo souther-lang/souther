@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.WrittenAtMessage;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -20,7 +22,7 @@ public interface DiagnosticRenderer {
      * in that file, so there is nothing to resolve and nothing to name.
      */
     default String render(Diagnostic d, SourceContext src, Locale locale) {
-        return render(new Located(d, Located.NO_SOURCE), id -> src, locale);
+        return render(new Located(d, ReportContext.ofTheTextItself(src)), id -> src, locale);
     }
 
     /**
@@ -69,12 +71,85 @@ public interface DiagnosticRenderer {
         return said.toString();
     }
 
-    /** The message body, from what it says or the compatibility literal. */
+    /**
+     * The message body, from what it says or the compatibility literal, with what its caret stands
+     * in for said after it.
+     *
+     * <p>Here because this is what every reader reads: the terminal, the JSON, an editor, and the
+     * text an exception carries. A caret that stands in for code written out of sight is in the
+     * caller's file and is not where the code is, and a body that did not say so reads as a claim
+     * about the line under it — which is what {@code E2011} made of a call that constructs nothing.
+     * Said off the caret rather than at the sites that report one, so a rule checked on a copied body
+     * says it without being written to.
+     */
     static String body(Diagnostic d, Locale locale) {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
-        if (d.literalMessage() != null) {
-            return d.literalMessage();
+        String said = d.literalMessage() != null ? d.literalMessage()
+                : d.said() == null ? "" : Messages.render(d.said(), locale);
+        // Asked of what the report points at rather than of a position, because one of the answers
+        // is that there is no position and the code is written somewhere this compile cannot show.
+        // Read off the position alone that came back as nothing to say, and a reader was left with a
+        // sentence about a place, no place, and no account of why.
+        return switch (d.primary()) {
+            case Primary.Unavailable(SourceProvenance from) ->
+                    with(said, new WrittenAtMessage.TheCodeIsWrittenWhereThisCompileCannotShowIt(
+                            from.reachedBy()), locale);
+            case Primary.InSource(DiagnosticPlace.InSource place) ->
+                    qualified(said, place.region().start(), locale);
+            case Primary.InAnUnnamedText(UnnamedRegion where) ->
+                    qualified(said, where.region().start(), locale);
+            // Nothing pointed at is nothing to qualify: the sentence is about a file or about the
+            // compile, and a clause saying where the code is written would be about nothing.
+            case Primary.Nowhere _ -> said;
+        };
+    }
+
+    /**
+     * {@code said}, with what the place it is shown against stands in for said after it.
+     *
+     * <p>Every sentence a report puts beside a coordinate, and not only the one under the caret. A
+     * label on a second region is a sentence about the place it points at as much as the body is,
+     * and a second region pointing into a copied body is at a call in the caller's file — so a
+     * label saying what is there says it of code that is somewhere else. Which is what the caret
+     * did before this was said off it at all, repeated one region over the moment a rule started
+     * pointing at a guard.
+     *
+     * <p>So it is a rule of rendering rather than a thing the body does. A renderer that shows text
+     * against a place calls this; a renderer written later that does not is missing the same
+     * sentence the first one was.
+     *
+     * @param at where the text is shown against, or null where it is shown against nothing — there
+     *        being no claim about a place to qualify
+     */
+    static String qualified(String said, SourcePos at, Locale locale) {
+        java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
+        // Both arms that say the code is elsewhere, because this sentence is about where the code is
+        // written and the two agree about that. What they differ about is whether there was anywhere
+        // to point, which is the caret's question and not this one.
+        if (at == null || !(Citation.of(at) instanceof Citation.Elsewhere out)) {
+            return said;
         }
-        return d.said() == null ? "" : Messages.render(d.said(), locale);
+        return with(said, new WrittenAtMessage.TheCodeIsWrittenOutOfSight(
+                out.provenance().reachedBy()), locale);
+    }
+
+    /** {@code said} with {@code about} after it, or {@code about} alone where there was nothing to
+     *  put it after. */
+    private static String with(String said, WrittenAtMessage about, Locale locale) {
+        String rendered = Messages.render(about, locale);
+        return said.isEmpty() ? rendered : said + " " + rendered;
+    }
+
+    /**
+     * What a label with nothing to point at says: what it says, and where that code is.
+     *
+     * <p>Its own wording. The sentence a caret carries ends by saying what the place under it is,
+     * and there is no place under this one — a label about a clause of a published module points at
+     * nothing, so explaining a caret would be explaining something the reader cannot see.
+     */
+    static String saidAbout(DiagnosticView.Unquotable unquotable, Locale locale) {
+        return with(Messages.render(unquotable.said(), locale),
+                new WrittenAtMessage.TheCodeIsWrittenWhereThisCompileCannotShowIt(
+                        unquotable.place().provenance().reachedBy()), locale);
     }
 }

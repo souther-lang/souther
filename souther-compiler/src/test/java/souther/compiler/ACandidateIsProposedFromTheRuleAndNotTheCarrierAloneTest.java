@@ -63,25 +63,41 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * written under leaves a model that does not compile, and a test asking such a model for its rows
      * gets an empty answer that agrees with whatever it expected of one.
      */
-    private static Generator.GenerationResult generated(String source) {
+    private static souther.compiler.partition.FillResult generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream).toList(), "the model under test compiles");
-        Map<String, Adequacy.Filling> all = compilation.db()
-                .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
+                .flatMap(List::stream).map(each -> each.diagnostic().code() + " "
+                        + each.diagnostic().titleKey()).toList(),
+                "the model under test compiles");
+        Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the rows come back");
-        return all.get("look").pairs();
+        return all.get("look").composed();
     }
 
     /** The one row the generator writes for that combination, as the text an author is offered. */
     private static String generatedRow(String source) {
-        Generator.GenerationResult filled = generated(source);
+        souther.compiler.partition.FillResult filled = generated(source);
         assertEquals(List.of(), filled.unresolved(),
                 "the combination is one a value exists for, so nothing is left unresolved");
         assertEquals(1, filled.rows().size(), "one combination is uncovered, so one row is written");
         return filled.rows().get(0).inputs().get(0).text();
+    }
+
+    /**
+     * The rows the generator writes, where the collection's elements divide and each class is owed
+     * one.
+     *
+     * <p>Several rather than one, and that is the point. What a collection holds is a position, so a
+     * carrier that divides divides it — and a row is owed for each class of it, each a collection
+     * holding an element there.
+     */
+    private static List<String> generatedRows(String source) {
+        souther.compiler.partition.FillResult filled = generated(source);
+        assertEquals(List.of(), filled.unresolved(),
+                "the combination is one a value exists for, so nothing is left unresolved");
+        return filled.rows().stream().map(row -> row.inputs().get(0).text()).toList();
     }
 
     // --- a collection the rules say is not empty ---------------------------------------------------
@@ -172,12 +188,16 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aSetOfACarrierWithTwoValuesIsBuiltFromBoth() {
-        String row = generatedRow(model("""
+        List<String> rows = generatedRows(model("""
                 data Flags = Set<Bool>
                     invariant both = Set.size(value) >= 2
                 """, "flags: Flags", "flags = Flags([true, false])"));
 
-        assertEquals("T { kind = Overseas, flags = Flags([true, false]) }", row);
+        // The written row's set holds both of what a `Bool` divides into, so neither element class
+        // is owed a row and the one offered is for the other position. What it shows is still what
+        // this is about: the set at the position the row is not about is built from both values,
+        // because the rule asks for two and a `Bool` has no third.
+        assertEquals(List.of("T { kind = Overseas, flags = Flags([true, false]) }"), rows);
     }
 
     /**
@@ -189,7 +209,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aSetOfASumIsBuiltFromItsCases() {
-        String row = generatedRow(model("""
+        List<String> rows = generatedRows(model("""
                 data Red
                 data Green
                 data Blue
@@ -199,7 +219,12 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                     invariant enough = Set.size(value) >= 2
                 """, "palette: Palette", "palette = Palette([Red, Blue])"));
 
-        assertEquals("T { kind = Overseas, palette = Palette([Red, Green]) }", row);
+        // The written row holds `Red` and `Blue`, so `Green` is the case left, and the other
+        // position owes a row of its own. Both are sets of two, and the one for `Green` holds it.
+        assertEquals(List.of("Palette([Green, Red])", "Palette([Red, Green])"),
+                rows.stream().map(each -> each.replaceAll(".*palette = ", "").replace(" }", ""))
+                        .toList(),
+                "a set of two, built from the cases the sum divides into");
     }
 
     // --- a string the rules give a length ----------------------------------------------------------
@@ -445,7 +470,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
                 let look (t) = 1
                 """;
-        Generator.GenerationResult filled = generated(source);
+        souther.compiler.partition.FillResult filled = generated(source);
 
         assertEquals(List.of(), filled.rows(),
                 "no row, rather than one carrying a million elements");
@@ -465,14 +490,20 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * <p>Every pair is built before any of them is tried, so the count is what this allocates and not
      * what the search walks. Where it stops short the reader is owed that: values of the shape were
      * built and refused, and more of them exist that nothing here got to.
+     *
+     * <p>The eight formats hold together — a string of eight letters clears all of them — and that
+     * is what makes this about the count rather than about the rules. Written as eight lengths no
+     * string has at once, the values reading follows them and shows the declaration admits nothing,
+     * and a model refused before a search is asked for is not one this can say anything about.
      */
     @Test
     void moreParingsThanAreBuiltIsSaidAsASearchThatStopped() {
         String formats = "";
         for (int i = 1; i <= 8; i++) {
-            formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
+            formats += "    invariant p%d = String.matches(\"[a-h]{%d,}\", value)\n"
+                    .formatted(i, i);
         }
-        Generator.GenerationResult filled = generated("""
+        souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
 
                 data Domestic
@@ -493,7 +524,8 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 let look (t) = 1
                 """.formatted(formats, formats));
 
-        assertEquals(List.of(), filled.rows(), "no two of the eight formats hold at once");
+        assertEquals(List.of(), filled.rows(),
+                "no row, because the pairings ran out before one of them was tried");
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
                 "and the pairings this did not build are said as a search that stopped: "
@@ -517,9 +549,10 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     void aMapWhoseSearchStoppedSaysSoRatherThanCallingItARefusal() {
         String formats = "";
         for (int i = 1; i <= 8; i++) {
-            formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
+            formats += "    invariant p%d = String.matches(\"[a-h]{%d,}\", value)\n"
+                    .formatted(i, i);
         }
-        Generator.GenerationResult filled = generated("""
+        souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
 
                 data Domestic
@@ -562,7 +595,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aTypeWrittenInTermsOfItselfIsDescendedIntoAndComesBack() {
-        Generator.GenerationResult filled = generated("""
+        souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
 
                 data Domestic
@@ -622,7 +655,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                         && List.length(value) >= 2
                     invariant notTwo = List.length(value) /= 2
                 """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])");
-        Generator.GenerationResult filled = generated(source);
+        souther.compiler.partition.FillResult filled = generated(source);
 
         assertEquals(List.of(), filled.rows(), "two equal elements is not a list of two distinct ones");
         assertTrue(filled.unresolved().stream().allMatch(left ->

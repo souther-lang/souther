@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc4</version>
+        <version>0.1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-runtime</artifactId>
@@ -33,10 +33,61 @@
             <artifactId>jspecify</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- What generated code calls beside this. Nothing here calls Raoh: a data's derived
+             decoder and encoder are emitted as bytecode built from Raoh's combinators, and
+             `decoder()` is generated for every exposed data — so a project holding this artifact
+             holds classes that reach for Raoh the first time a behavior builds anything.
+
+             Declared here so that nobody has to declare it. A build plugin cannot add it — what a
+             plugin adds is not in the pom the project publishes, so a consumer of that project
+             would not get it — and asking every project to write it is asking them to remember a
+             second version. Through this one, both the project and everything downstream of it
+             resolve the Raoh the Souther that produced the code was built against. -->
+        <dependency>
+            <groupId>net.unit8.raoh</groupId>
+            <artifactId>raoh</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <!-- The nullness gate runs here in every build, `mvn test` included, because this is the module
+         whose packages declare `@NullMarked`. What the gate asks for is `errorprone.gate` in the
+         root pom, including why that is a property rather than written out here.
+
+         Which modules carry this block is not a thing to remember. A `@NullMarked` package in a
+         module that does not run the gate, and a module that runs the gate and declares no such
+         package, are both refused by a check in souther-bench that reads the two sets off the
+         tree. -->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs combine.children="append">
+                        <arg>-XDcompilePolicy=simple</arg>
+                        <arg>--should-stop=ifError=FLOW</arg>
+                        <arg>${errorprone.gate}</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.google.errorprone</groupId>
+                            <artifactId>error_prone_core</artifactId>
+                            <version>${errorprone.version}</version>
+                        </path>
+                        <path>
+                            <groupId>com.uber.nullaway</groupId>
+                            <artifactId>nullaway</artifactId>
+                            <version>${nullaway.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

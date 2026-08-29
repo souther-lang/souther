@@ -1,0 +1,114 @@
+package souther.compiler.coverage;
+
+import souther.compiler.diag.Citation;
+import souther.compiler.types.CoverageOrigin;
+
+import java.util.OptionalInt;
+
+/**
+ * A place in a body that something can or cannot arrive at, named once.
+ *
+ * <p>Not the probe number. A probe is made where a row can be recorded, which takes two things:
+ * the place has to answer a value, and it has to stand where a row can get to. So the arms an
+ * author writes and the arms a run can be observed in are different collections, and the ones with
+ * no probe are exactly the ones a claim is about — an arm answering {@code unreachable} answers no
+ * value, so it never had a number, and the reading that judges what the author declared there was
+ * looking for it under one.
+ *
+ * <p>Two layers, made together and here only. Everything below reads whichever it needs: a claim is
+ * judged at the {@code controlId}, a branch denominator counts the arms that carry a probe, and a
+ * line drawn on a comparison asks about the outcome that leads into an arm rather than about the
+ * arm. Derived apart, each of them would answer for a different collection of places, which is what
+ * a measurement number standing in for an identity already did once.
+ *
+ * <p>Numbered per plan, in the order the walk makes them. Two calls of one helper are two
+ * occurrences and two ids: each is reached under its caller's own conditions, so what can arrive at
+ * one says nothing about the other. What they share is the obligation ({@link
+ * CoverageSites.Obligation}), which is what a row is owed for and is not this.
+ */
+public sealed interface ControlPointId {
+
+    /** Which place this is, among all the places of one plan. */
+    int controlId();
+
+    /**
+     * One arm, as it stands in the tree that runs.
+     *
+     * @param probe where a run is recorded, or empty where no row that stands can be in this arm.
+     *              Empty is an ordinary answer and not a gap: the arm is still an arm, still
+     *              written, and still something a reading can prove nothing arrives at
+     * @param at     the fork this is an arm of, as a report may say it. Minted here with the rest
+     *               of the arm and not looked up afterwards: a report about an arm has to point at
+     *               the arm, and the only other place carrying one is the
+     *               {@link CoverageSites.Site}, which the arms this is for do not have
+     * @param origin what wrote the fork, and which module's source that was. Carried because a
+     *               fork spliced in from another module is not this module's to be told about:
+     *               {@code Int.max} has a fork of its own, and a call handing it an argument one
+     *               side of it can never take makes that side dead <em>here</em> while it is alive
+     *               wherever else the library is used
+     */
+    record ArmOccurrence(int controlId, OptionalInt probe, Citation at, CoverageOrigin origin)
+            implements ControlPointId {
+
+        /**
+         * Whether {@code module}'s own source wrote the fork this is an arm of.
+         *
+         * <p>What a report about the arm turns on. A fork reached through a call into another
+         * module is that module's construct standing here: nothing about it is this author's to
+         * change, and a proof that nothing takes one of its arms is a fact about this call site
+         * rather than a defect in either module. What a denominator does with such an arm is the
+         * other question — nobody can write a row through it wherever it was written, so it goes.
+         */
+        public boolean writtenBy(String module) {
+            return origin != null && origin.isWritten() && origin.module().equals(module);
+        }
+
+        public ArmOccurrence {
+            if (probe == null) {
+                throw new IllegalArgumentException(
+                        "an arm with no answer about its probe is one nothing numbered");
+            }
+        }
+
+        /** Whether a run through this arm can be observed, which is what a branch denominator
+         *  counts and what could show a proof about it wrong. */
+        public boolean isMeasured() {
+            return probe.isPresent();
+        }
+    }
+
+    /**
+     * The place a comparison comes out one way.
+     *
+     * <p>Which arm that leads to is not this, and the two are not each other's. A condition stops as
+     * soon as it is settled, so under {@code A && B} the arm taken when the condition fails is
+     * reached both by a value that made {@code B} false and by one that never reached {@code B} —
+     * the arm cannot say which comparison came out which way, and a line is drawn on the comparison.
+     *
+     * <p>The place and what a run records at it are the same value here ({@link #way}), rather than
+     * this holding a copy of its parts. A reading that carried the comparison and the way separately
+     * would be two halves a caller could pair with another place's, which is what asking a run
+     * whether it did this then takes on trust.
+     *
+     * @param way which comparison, coming out which way — as a run would record it
+     */
+    record ComparisonPoint(int controlId, ComparisonOutcome way) implements ControlPointId {
+
+        public ComparisonPoint {
+            if (way == null) {
+                throw new IllegalArgumentException(
+                        "a place a comparison comes out one way is a place of one way");
+            }
+        }
+
+        /** Which comparison this is a way out of. */
+        public ComparisonOccurrence at() {
+            return way.at();
+        }
+
+        /** The way it came out. */
+        public boolean held() {
+            return way.held();
+        }
+    }
+}

@@ -1,14 +1,15 @@
 package souther.compiler.generated;
 
 import souther.compiler.check.BoundaryInput;
-import souther.compiler.check.BoundaryMapKey;
+import souther.compiler.check.CrossingMapKey;
 import souther.compiler.check.BoundaryOutput;
-import souther.compiler.codegen.Backend;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
 import souther.runtime.Temporals;
@@ -122,7 +123,7 @@ public final class JsonBoundary {
      * the map-key rule answers with travels in the shape. A named key runs its own decoder, and a
      * lexical one is the string leaf, parsed for a temporal.
      */
-    private static Decoder<Object, ?> keyDecoder(ClassLoader loader, BoundaryMapKey key) {
+    private static Decoder<Object, ?> keyDecoder(ClassLoader loader, CrossingMapKey key) {
         return switch (key.representation()) {
             case MapKeyRepresentation.NamedKey n -> codecOf(loader, n.name(), "decoder");
             case MapKeyRepresentation.Text _ -> text();
@@ -188,14 +189,15 @@ public final class JsonBoundary {
      * a reflective failure would mean the class this run emitted is not the class it emitted, which
      * is not something a reader of the boundary can say anything useful about.
      */
-    private static <I> Decoder<I, ?> codecOf(ClassLoader loader, TypeName type, String factory) {
+    private static <I> Decoder<I, ?> codecOf(ClassLoader loader, TypeSymbol type, String factory) {
         try {
             @SuppressWarnings("unchecked")
             Decoder<I, ?> decoder = (Decoder<I, ?>)
-                    loader.loadClass(type.qualified()).getMethod(factory).invoke(null);
+                    loader.loadClass(SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()).getMethod(factory).invoke(null);
             return decoder;
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("`" + type.qualified() + "` has no `" + factory + "()`", e);
+            throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()
+                    + "` has no `" + factory + "()`", e);
         }
     }
 
@@ -271,12 +273,12 @@ public final class JsonBoundary {
                 yield Representations.sortedObject(encoded);
             }
             case BoundaryOutput.Nominal n ->
-                    encodeThrough(loader, n.name().qualified(), result);
+                    encodeThrough(loader, SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName(), result);
             // A union nobody named is generated as the behavior's result type, which is where its
             // encoder is (spec §jvm-anonymous-union). It is the only output with no name in the source, so it is the
             // behavior that says which class to reach for.
             case BoundaryOutput.Cases c -> encodeThrough(loader,
-                    pkg + "." + Backend.behaviorResultClass(behavior), result);
+                    SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorResult(pkg, behavior)).binaryName(), result);
         };
     }
 
@@ -286,10 +288,11 @@ public final class JsonBoundary {
      * encoder writes ({@code CodecGen.pushKeyRenderer}), which is what keeps the two paths from
      * spelling a key differently.
      */
-    private static String encodeKey(ClassLoader loader, BoundaryMapKey key, Object value) {
+    private static String encodeKey(ClassLoader loader, CrossingMapKey key, Object value) {
         return (String) switch (key.representation()) {
             case MapKeyRepresentation.Lexical l -> encodeLeaf(l.leaf(), value);
-            case MapKeyRepresentation.NamedKey n -> encodeThrough(loader, n.name().qualified(), value);
+            case MapKeyRepresentation.NamedKey n ->
+                    encodeThrough(loader, SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName(), value);
         };
     }
 

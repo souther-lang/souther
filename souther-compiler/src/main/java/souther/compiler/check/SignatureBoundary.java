@@ -1,16 +1,15 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.TypeMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,13 +42,13 @@ final class SignatureBoundary {
     private SignatureBoundary() {}
 
     /** The signature a declared behavior publishes — every parameter and its answer. */
-    static Sig of(Ast.SpecBehavior spec, Symbols symbols) {
+    static Sig of(Hir.SpecBehavior spec, Symbols symbols) {
         List<BoundaryInput> ins = new ArrayList<>(spec.params().size());
-        for (Ast.Param p : spec.params()) {
-            Type t = TypeOps.successType(p.type(), symbols);
+        for (Hir.Param p : spec.params()) {
+            Type t = TypeOps.successType(p.type());
             ins.add(input(t, t, Where.param(p, spec.pos()), symbols));
         }
-        Type out = TypeOps.successType(spec.ret(), symbols);
+        Type out = TypeOps.successType(spec.ret());
         return new Sig(ins, output(out, out, Where.output(spec.name(), spec.pos()), symbols));
     }
 
@@ -110,28 +109,56 @@ final class SignatureBoundary {
     private static LeafScalar scalar(Type.Prim prim, Where where) {
         LeafScalar scalar = LeafScalar.of(prim);
         if (scalar == null) {
-            throw foreignName(TypeName.primitive("Raw"), where);
+            throw foreignName(TypeSymbol.primitive("Raw"), where);
         }
         return scalar;
     }
 
     /** A name the boundary carries: one a model declared, which is what a derived codec is for. The
      *  language declares vocabulary of its own — what a division by zero answers with, what a
-     *  rounding takes — and each of those says what one of the language's operations can answer. */
-    private static TypeName nominal(TypeName name, Where where, Symbols symbols) {
-        if (!TypeOps.declaredByAModel(name, symbols)) {
+     *  rounding takes — and each of those says what one of the language's operations can answer.
+     *  The rule is {@link CrossingNominal}'s, shared with every other position that crosses; how a
+     *  refusal is worded is this position's. */
+    private static CrossingNominal nominal(TypeSymbol name, Where where, Symbols symbols) {
+        CrossingNominal admitted = CrossingNominal.admitted(name, symbols);
+        if (admitted == null) {
             throw foreignName(name, where);
         }
-        return name;
+        return admitted;
     }
 
-    /** The members of the union a behavior answers with, each a name in what crosses. */
-    private static List<TypeName> members(Type.Union union, Where where, Symbols symbols) {
-        List<TypeName> members = new ArrayList<>(union.members().size());
-        for (TypeName member : union.members()) {
-            members.add(nominal(member, where, symbols));
+    /**
+     * The members of the union a behavior answers with, each a name in what crosses.
+     *
+     * <p>The one position where a name may be a scalar's. {@code Int | DivisionByZero} answers a
+     * primitive beside a case, and a union holds its members as names, so the primitive arrives
+     * spelled like a declaration. Which of the two a member is decides which rule it is held to —
+     * a scalar the boundary writes, or a name a model declares — and neither answers for the other.
+     */
+    private static List<TypeSymbol> members(Type.Union union, Where where, Symbols symbols) {
+        List<TypeSymbol> members = new ArrayList<>(union.members().size());
+        for (TypeSymbol member : union.members()) {
+            members.add(member.isPrimitive()
+                    ? scalarMember(member, where)
+                    : nominal(member, where, symbols).name());
         }
         return members;
+    }
+
+    /**
+     * A member written in the language's own namespace, which crosses when it is a scalar the
+     * boundary writes.
+     *
+     * <p>{@code Raw} is spelled like a primitive and stands for no scalar, and {@code Some} and
+     * {@code None} are names of that namespace standing for no primitive at all. Each is the
+     * language's own word rather than a model's, which is what the report says.
+     */
+    private static TypeSymbol scalarMember(TypeSymbol member, Where where) {
+        Type.Prim prim = member.primitiveKind();
+        if (prim == null || LeafScalar.of(prim) == null) {
+            throw foreignName(member, where);
+        }
+        return member;
     }
 
     /**
@@ -142,16 +169,16 @@ final class SignatureBoundary {
      * <p>A key that classifies is still the boundary's, so a name the language declares is refused
      * here as it is anywhere else in the shape.
      */
-    private static BoundaryMapKey mapKey(Type key, Where where, Symbols symbols) {
+    private static CrossingMapKey mapKey(Type key, Where where, Symbols symbols) {
         MapKeyRepresentation representation = TypeOps.classifyConcreteMapKey(key, symbols);
         if (representation == null) {
             throw notAKey(key, where);
         }
-        switch (representation) {
-            case MapKeyRepresentation.NamedKey n -> nominal(n.name(), where, symbols);
-            case MapKeyRepresentation.Lexical _ -> { }
-        }
-        return new BoundaryMapKey(representation);
+        return switch (representation) {
+            case MapKeyRepresentation.NamedKey n ->
+                    CrossingMapKey.named(nominal(n.name(), where, symbols));
+            case MapKeyRepresentation.Lexical l -> CrossingMapKey.lexical(l);
+        };
     }
 
     private static CompileException union(Type.Union u, Where where) {
@@ -194,7 +221,7 @@ final class SignatureBoundary {
     /** What to write instead, said of the optional rather than of the position it was found in: the
      *  optional a collection carries is not the behavior's own answer, so advice naming the
      *  behavior's type would be advice about something else. */
-    private static CompileException foreignName(TypeName foreign, Where where) {
+    private static CompileException foreignName(TypeSymbol foreign, Where where) {
         return where.parameter()
                 ? where.hinted(new TypeMessage.AParameterTakesATypeTheLanguageDeclares(
                                 where.name(), foreign.name()),
@@ -233,7 +260,7 @@ final class SignatureBoundary {
      */
     private record Where(boolean parameter, String name, Region region, SourcePos pos) {
 
-        static Where param(Ast.Param p, SourcePos behavior) {
+        static Where param(Hir.Param p, SourcePos behavior) {
             return new Where(true, p.name(), p.written().region(), behavior);
         }
 

@@ -301,11 +301,15 @@ class ExampleCallsHelperTest {
                 """));
     }
 
+    /**
+     * An intrinsic a row applies is emitted as a method like any other helper the row applies
+     * (issue #680). Which function a fixture may run is decided by the fixture's own rules, and not
+     * by whether the backend happened to lower the function at its call sites.
+     */
     @Test
-    void anIntrinsicIsRefusedByThatReason() {
-        CompileException e = err("""
+    void aRowAppliesAnIntrinsic() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
-                import String ( length )
 
                 data Amount = Int
                 data Receipt = { total: Amount }
@@ -317,16 +321,137 @@ class ExampleCallsHelperTest {
 
                 example bill
                   | (Amount(String.length("abc"))) -> Receipt { total = Amount(3) }
+                """));
+    }
+
+    /** And the value is the one the intrinsic answers, not one the row was let state for itself. */
+    @Test
+    void aRowApplyingAnIntrinsicStillCatchesAMismatch() {
+        CompileException e = err("""
+                module demo
+
+                data Amount = Int
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt
+                    constructs Receipt
+
+                let bill (a) = Receipt { total = a }
+
+                example bill
+                  | (Amount(String.length("abc"))) -> Receipt { total = Amount(4) }
                 """);
-        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
-        assertTrue(e.getMessage().contains("a standard-library function is not one a fixture may apply"),
-                "a helper with no method says so rather than 'is not a newtype': " + e.getMessage());
+        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
     }
 
     /**
-     * The other thing that reaches the same refusal. A helper whose body produces a function is not a
-     * standard-library function, so it is not told to write the helper it already is — the sentence
-     * this row holds is the one the intrinsic row above must not be given.
+     * A kernel the backend writes out as instructions rather than as a call to a runtime method is
+     * applied too. What is emitted for the row is a method whose body is the one call, so whatever the
+     * backend lowers that call to is what the row runs — a division writes a branch on a zero divisor,
+     * and it writes it inside the method.
+     */
+    @Test
+    void aRowAppliesAKernelTheBackendWritesOutInPlace() {
+        // Written as `/`: `Int.divide` answers `Int | DivisionByZero`, and an Int position takes a
+        // settled value there as it does in a body (E1812) — the operator's zero branch is the
+        // lowering's own, inside the emitted method.
+        assertDoesNotThrow(() -> Compiler.compile(INT_ROW + "  | (7 / 2) -> 3\n"));
+        CompileException e = err(INT_ROW + "  | (Int.divide(7, 2)) -> 3\n");
+        assertTrue(e.getMessage().contains("E1812"), e.getMessage());
+    }
+
+    /** The other arm of that branch, which is the half that makes these three kernels different from
+     * the rest: the zero divisor answers a case, and the branch answering it is written inside the
+     * emitted method like any other lowering. */
+    @Test
+    void theZeroDivisorBranchIsWrittenInsideTheEmittedMethodToo() {
+        CompileException e = err(INT_ROW + "  | (7 / 0) -> 0\n");
+        assertTrue(e.getMessage().contains("division by zero"), e.getMessage());
+    }
+
+    /**
+     * A row's operand runs as a method emitted under a name no source can spell, and that name is
+     * where the method went — not what the row wrote. A report about a call that did not answer
+     * names the call, so the method's address does not reach the author (#680).
+     */
+    @Test
+    void aKernelThatDoesNotAnswerIsNamedAsTheKernel() {
+        CompileException e = err("""
+                module demo
+
+                behavior echoStr : (s: String) -> String
+
+                let echoStr (s) = s
+
+                example echoStr
+                  | (String.slice(0, 99, "ab")) -> "ab"
+                """);
+        // What was being evaluated is the row's own account of itself — "the value the row
+        // writes" — and the kernel is named by the failure it raised, not by a register.
+        assertTrue(e.getMessage().contains("did not produce a value"), e.getMessage());
+        assertTrue(e.getMessage().contains("String.slice"), e.getMessage());
+        assertTrue(!e.getMessage().contains("$intrinsic") && !e.getMessage().contains("$row"),
+                "the emitted method's name is not the helper's identity: " + e.getMessage());
+    }
+
+    private static final String INT_ROW = """
+            module demo
+
+            behavior echoInt : (n: Int) -> Int
+
+            let echoInt (n) = n
+
+            example echoInt
+            """;
+
+    /**
+     * A row applying a polymorphic library function is applied at the one instance its arguments
+     * determine: {@code [ 1, 2 ]} settles {@code 'a := Int}, so what the row runs is
+     * {@code List.length} at that instance and nothing about the call is left for a caller to decide.
+     */
+    @Test
+    void aRowSettlesAKernelsTypeVariablesFromTheArgumentsItWrote() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt
+                    constructs Receipt
+
+                let bill (a) = Receipt { total = a }
+
+                example bill
+                  | (Amount(List.length([ 1, 2 ]))) -> Receipt { total = Amount(2) }
+                """));
+    }
+
+    /** And what it answers with is the kernel's answer, not a number the row was let state for
+     * itself: the instance runs, and a row expecting another number reports the disagreement. */
+    @Test
+    void aRowApplyingASettledKernelStillCatchesAMismatch() {
+        CompileException e = err("""
+                module demo
+
+                data Amount = Int
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt
+                    constructs Receipt
+
+                let bill (a) = Receipt { total = a }
+
+                example bill
+                  | (Amount(List.length([ 1, 2 ]))) -> Receipt { total = Amount(3) }
+                """);
+        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
+    }
+
+    /**
+     * A helper whose body produces a function, applied by a row. It is refused by the language's own
+     * rule about where a block may go, and not by a sentence about library functions — which is what
+     * a row that names one must not be told either.
      */
     @Test
     void aHelperWhoseBodyProducesAFunctionIsRefusedByItsOwnReason() {
@@ -342,16 +467,139 @@ class ExampleCallsHelperTest {
                 example isThree
                   | (adder(1)) -> true
                 """);
-        assertTrue(e.getMessage().contains("no method was emitted for it"), e.getMessage());
+        // The lambda escapes as the operand's answer, which no position that takes a value holds:
+        // the refusal is the language's own (E1809), not a sentence about library functions.
+        assertTrue(e.getMessage().contains("A block is not a value"), e.getMessage());
         assertTrue(!e.getMessage().contains("standard-library"), e.getMessage());
     }
 
+    /**
+     * A variable is settled by what the arguments are declared to be, and not only by what a literal
+     * spells. `+Amount(1)+` is a construction of a declared type, so the list it is written in is a
+     * list of that type — nothing about the helper's answer is being worked out here.
+     */
     @Test
-    void aHelperWhoseElementEachCallDecidesCannotBuildAFixture() {
-        // `count` compiles and runs at every element type, but a fixture is built before
-        // there is a call to say which one — so the row is refused for the order, not for the type
-        // being one the compiler does not support.
-        CompileException e = err("""
+    void aRowSettlesAVariableFromAConstructionItWrote() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+
+                behavior billed : (a: Amount) -> Amount
+
+                let billed (a) = a
+
+                example billed
+                  | (Amount(List.length([ Amount(1) ]))) -> Amount(1)
+                """));
+    }
+
+    /** And by what a value or a field is declared to be, which is the other half of what a written
+     * argument can already be known to be. */
+    @Test
+    void aRowSettlesAVariableFromANameAndFromAField() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+                data Basket = { items: List<Amount> }
+
+                let sample = Basket { items = [ Amount(1), Amount(2) ] }
+
+                behavior billed : (a: Amount) -> Amount
+
+                let billed (a) = a
+
+                example billed
+                  | (Amount(List.length(sample.items))) -> Amount(2)
+                """));
+    }
+
+    /**
+     * And by what a name a {@code let} binds stands for. The pass that emits the methods a row's
+     * calls need reads the same evidence as the row does, so a call under a {@code let} settles in
+     * both or in neither — one that settled only where the row is read would be applied through a
+     * method nothing emitted.
+     */
+    @Test
+    void aRowSettlesAVariableFromANameALetBinds() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+
+                behavior billed : (a: Amount) -> Amount
+
+                let billed (a) = a
+
+                example billed
+                  | ({ let one = Amount(1) Amount(List.length([ one ])) }) -> Amount(1)
+                """));
+    }
+
+    /**
+     * A call over an empty collection settles the way it settles in a body: the element type is the
+     * bottom an empty collection has anywhere, so the row runs and answers. The old reading refused
+     * this for the variable it could not settle, which was a fact about that reading — the module's
+     * own elaboration answers it.
+     */
+    @Test
+    void aRowSettlesAnEmptyCollectionAsABodyDoes() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                behavior echo : (b: Bool) -> Bool
+
+                let echo (b) = b
+
+                example echo
+                  | (List.isEmpty([ ])) -> true
+                """));
+    }
+
+    /** And the same kernel with an element written for it is applied. The two rows differ in what
+     * the row wrote, which is what the rule is about. */
+    @Test
+    void aRowThatWroteAnElementAppliesTheSameKernel() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                behavior echo : (b: Bool) -> Bool
+
+                let echo (b) = b
+
+                example echo
+                  | (List.isEmpty([ 1 ])) -> false
+                """));
+    }
+
+    /**
+     * A kernel whose lowering reads the type it is applied at is applied too: {@code List.sum}
+     * chooses between summing {@code Int} and summing {@code Decimal} by what it is summing, and the
+     * method emitted for the row is written at the instance the row settled, so there is something
+     * for it to choose by.
+     */
+    @Test
+    void aRowAppliesAKernelWhoseLoweringReadsTheTypeItIsAppliedAt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+
+                behavior billed : (a: Amount) -> Amount
+
+                let billed (a) = a
+
+                example billed
+                  | (Amount(List.sum([ 1, 2 ]))) -> Amount(3)
+                """));
+    }
+
+    /** A helper written in Souther is settled by the same rule as a kernel: {@code count} runs at
+     * every element type, and the row wrote which one. */
+    @Test
+    void aHelperWhoseElementTheRowDecidesIsAppliedAtThatElement() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
 
                 data Amount = Int
@@ -365,10 +613,7 @@ class ExampleCallsHelperTest {
 
                 example bill
                   | (Amount(count([ 1, 2 ]))) -> Receipt { total = Amount(2) }
-                """);
-        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
-        assertTrue(e.getMessage().contains("decided by each call"),
-                "the report says why a call works where a fixture does not: " + e.getMessage());
+                """));
     }
 
     @Test

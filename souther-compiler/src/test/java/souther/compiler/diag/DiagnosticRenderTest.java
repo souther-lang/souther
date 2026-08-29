@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,7 +117,8 @@ class DiagnosticRenderTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         Diagnostic d = e.diagnostic();
         assertEquals("E1301", d.code());
-        assertEquals("E1301", d.pos() == null ? null : d.code());
+        assertInstanceOf(Primary.InSource.class, d.primary(),
+                "a report from a compile of a source points into that source");
         String json = new JsonRenderer().render(d, null, Locale.JAPANESE);
         assertTrue(json.contains("\"code\":\"E1301\""), json);
     }

@@ -1,6 +1,10 @@
 package souther.compiler;
 
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 
 import org.junit.jupiter.api.Test;
 
@@ -24,27 +28,26 @@ class CompileOutputUnionMemberTest {
 
     @Test
     void aPrimitiveIsAMemberAndReachesJavaWrapped() throws Exception {
-        Map<String, byte[]> classes = Compiler.compile("""
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """);
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> union = loader.loadClass("m.HalfResult");
-        assertEquals(List.of(loader.loadClass("m.IntCase"), loader.loadClass("m.NoAnswer")),
+        Class<?> union = loader.loadClass(Emitted.result("m", "half"));
+        assertEquals(List.of(loader.loadClass(Emitted.bridgeCase("m", TypeSymbol.primitive("Int"))), loader.loadClass("m.NoAnswer")),
                 Arrays.asList(union.getPermittedSubclasses()),
                 "the primitive joins the union as a wrapper, the local case as itself");
 
         Object answered = Codecs.apply(loader.loadClass("m.Half").getMethod("of").invoke(null), 7L);
-        assertEquals("m.IntCase", answered.getClass().getName());
+        assertEquals(Emitted.bridgeCase("m", TypeSymbol.primitive("Int")), answered.getClass().getName());
         assertEquals(3L, answered.getClass().getMethod("value").invoke(answered));
     }
 
     @Test
     void anImportedTypeIsAMemberAndReachesJavaWrapped() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Yen )
                 data Yen = Int
                     invariant value >= 0
@@ -53,14 +56,14 @@ class CompileOutputUnionMemberTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen, b: Yen) -> Yen | NothingOwed
-                    constructs Yen, NothingOwed
+                    constructs Yen
                 let owed (a, b) = if a.value >= b.value then Yen(a.value - b.value) else NothingOwed
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> union = loader.loadClass("down.OwedResult");
-        assertEquals(List.of(loader.loadClass("down.NothingOwed"), loader.loadClass("down.YenCase")),
+        Class<?> union = loader.loadClass(Emitted.result("down", "owed"));
+        assertEquals(List.of(loader.loadClass("down.NothingOwed"), loader.loadClass(Emitted.bridgeCase("down", TypeSymbols.declared(new TypeKey("up", "Yen"))))),
                 Arrays.asList(union.getPermittedSubclasses()));
-        assertTrue(union.isAssignableFrom(loader.loadClass("down.YenCase")));
+        assertTrue(union.isAssignableFrom(loader.loadClass(Emitted.bridgeCase("down", TypeSymbols.declared(new TypeKey("up", "Yen"))))));
     }
 
     @Test
@@ -70,7 +73,6 @@ class CompileOutputUnionMemberTest {
                 data NoOrders
                 data Order = { id: String }
                 behavior list : (n: Int) -> List<Order> | NoOrders
-                    constructs NoOrders
                 let list (n) = NoOrders
                 """));
         assertTrue(e.getMessage().contains("List"), e.getMessage());
@@ -140,7 +142,7 @@ class CompileOutputUnionMemberTest {
      */
     @Test
     void aValueAnsweredOpenedAndAnsweredAgainIsNotWrappedTwice() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module money exposing ( Yen )
                 data Yen = Int
                 """, """
@@ -148,7 +150,6 @@ class CompileOutputUnionMemberTest {
                 import money ( Yen )
                 data NoCharge
                 behavior charge : (a: Yen) -> Yen | NoCharge
-                    constructs NoCharge
                 let charge (a) = if a.value > 0 then a else NoCharge
                 """, """
                 module down exposing ( Free, bill )
@@ -156,7 +157,6 @@ class CompileOutputUnionMemberTest {
                 import up ( NoCharge, charge )
                 data Free
                 behavior bill : (a: Yen) -> Yen | Free
-                    constructs Free
                 let bill (a) =
                     match charge(a) with
                     | Yen as y  -> y
@@ -167,7 +167,7 @@ class CompileOutputUnionMemberTest {
         Object bill = loader.loadClass("down.Bill").getMethod("of").invoke(null);
 
         Object answered = Codecs.apply(bill, yen);
-        assertEquals("down.YenCase", answered.getClass().getName(),
+        assertEquals(Emitted.bridgeCase("down", TypeSymbols.declared(new TypeKey("up", "Yen"))), answered.getClass().getName(),
                 "the answer is a member of this behavior's union, not of the one it called");
         Object held = answered.getClass().getMethod("value").invoke(answered);
         assertEquals("money.Yen", held.getClass().getName(),
@@ -183,7 +183,7 @@ class CompileOutputUnionMemberTest {
      * the rule a local case class already follows. */
     @Test
     void oneBridgeCaseServesEveryBehaviorThatAnswersWithTheSameImportedType() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Yen )
                 data Yen = Int
                 """, """
@@ -192,15 +192,13 @@ class CompileOutputUnionMemberTest {
                 data NothingOwed
                 data NoRefund
                 behavior owed : (a: Yen) -> Yen | NothingOwed
-                    constructs NothingOwed
                 let owed (a) = if a.value > 0 then a else NothingOwed
                 behavior refund : (a: Yen) -> Yen | NoRefund
-                    constructs NoRefund
                 let refund (a) = if a.value > 0 then a else NoRefund
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> bridge = loader.loadClass("down.YenCase");
-        assertEquals(List.of(loader.loadClass("down.OwedResult"), loader.loadClass("down.RefundResult")),
+        Class<?> bridge = loader.loadClass(Emitted.bridgeCase("down", TypeSymbols.declared(new TypeKey("up", "Yen"))));
+        assertEquals(List.of(loader.loadClass(Emitted.result("down", "owed")), loader.loadClass(Emitted.result("down", "refund"))),
                 Arrays.asList(bridge.getInterfaces()),
                 "one bridge case, carrying both unions it is a member of");
     }
@@ -217,7 +215,7 @@ class CompileOutputUnionMemberTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen, b: Yen) -> Yen | NothingOwed
-                    constructs Yen, NothingOwed
+                    constructs Yen
                 let owed (a, b) = if a.value >= b.value then Yen(a.value - b.value) else NothingOwed
                 example owed
                     | "what is left after paying part of it" :
@@ -234,7 +232,6 @@ class CompileOutputUnionMemberTest {
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 example half
                     | "half of seven, rounded down" :
@@ -251,7 +248,7 @@ class CompileOutputUnionMemberTest {
      */
     @Test
     void beingAUnionMemberLeavesTheMembersExternalRepresentationAlone() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Yen )
                 data Yen = Int
                 """, """
@@ -259,11 +256,10 @@ class CompileOutputUnionMemberTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen) -> Yen | NothingOwed
-                    constructs NothingOwed
                 let owed (a) = if a.value > 0 then a else NothingOwed
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> bridge = loader.loadClass("down.YenCase");
+        Class<?> bridge = loader.loadClass(Emitted.bridgeCase("down", TypeSymbols.declared(new TypeKey("up", "Yen"))));
         for (String factory : List.of("encoder", "decoder")) {
             assertThrows(NoSuchMethodException.class, () -> bridge.getMethod(factory),
                     "a bridge case is a JVM form, not a type with an external representation");
@@ -282,7 +278,7 @@ class CompileOutputUnionMemberTest {
      */
     @Test
     void anInjectedBehaviorCanAnswerWithABridgedMember() throws Exception {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module up exposing ( Yen )
                 data Yen = Int
                 """, """
@@ -290,9 +286,9 @@ class CompileOutputUnionMemberTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen) -> Yen | NothingOwed
-                    constructs Yen, NothingOwed
+                    constructs Yen
                 """));
-        byte[] impl = Subclasses.compile(classes, "consumer.HalfOwed", """
+        ClassFileImage impl = Subclasses.compile(classes, "consumer.HalfOwed", """
                 package consumer;
                 import up.Yen;
                 import down.NothingOwed;
@@ -305,12 +301,12 @@ class CompileOutputUnionMemberTest {
                     }
                 }
                 """);
-        Map<String, byte[]> all = new LinkedHashMap<>(classes);
+        Map<String, ClassFileImage> all = new LinkedHashMap<>(classes);
         all.put("consumer.HalfOwed", impl);
         BytesClassLoader loader = new BytesClassLoader(all, getClass().getClassLoader());
         Object behavior = loader.loadClass("consumer.HalfOwed").getConstructor().newInstance();
         Object answered = Codecs.apply(behavior, Codecs.decoded(loader, "up.Yen", 500L));
-        assertEquals("down.YenCase", answered.getClass().getName());
+        assertEquals(Emitted.bridgeCase("down", TypeSymbols.declared(new TypeKey("up", "Yen"))), answered.getClass().getName());
         Object held = answered.getClass().getMethod("value").invoke(answered);
         assertEquals(250L, held.getClass().getMethod("value").invoke(held));
     }
@@ -332,7 +328,6 @@ class CompileOutputUnionMemberTest {
                         data YenCase = String
                         data NothingOwed
                         behavior owed : (a: Yen) -> Yen | NothingOwed
-                            constructs NothingOwed
                         let owed (a) = if a.value > 0 then a else NothingOwed
                         """)));
         assertTrue(e.getMessage().contains("`YenCase`"), e.getMessage());
@@ -345,7 +340,6 @@ class CompileOutputUnionMemberTest {
                 data IntCase = String
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """));
         assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());
@@ -360,7 +354,6 @@ class CompileOutputUnionMemberTest {
                 behavior intCase : (n: Int) -> Int
                 let intCase (n) = n
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """));
         assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());

@@ -1,7 +1,10 @@
 package souther.compiler.doc;
 
-import souther.compiler.check.Prelude;
-import souther.compiler.ast.Ast;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.Reserved;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.ValueName;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 
 import java.io.IOException;
@@ -29,8 +32,14 @@ public final class ApiCommand {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err, Caller caller) {
+        // The boundary: a command that lists the library is not downstream of a compile, so this is
+        // where the process's library is read. Everything below is handed the value.
+        return run(args, out, err, caller, DefaultStdlib.get());
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller, Stdlib stdlib) {
         if (args.length == 0) {
-            listPublished(out, null);
+            listPublished(out, null, stdlib);
             return 0;
         }
         // Which of the things this line asked for is the one being answered. The forms below read
@@ -57,7 +66,7 @@ public final class ApiCommand {
                 return 2;
             }
             String needle = args[1].toLowerCase();
-            List<String> found = surface().entrySet().stream()
+            List<String> found = surface(stdlib).entrySet().stream()
                     .filter(e -> e.getKey().toLowerCase().contains(needle))
                     .map(e -> line(e.getKey(), e.getValue()))
                     .toList();
@@ -70,7 +79,7 @@ public final class ApiCommand {
         }
         String asked = args[0];
         if (asked.contains(".")) {
-            Signature signature = surface().get(asked);
+            Signature signature = surface(stdlib).get(asked);
             if (signature == null) {
                 err.println("no stdlib declaration `" + asked + "`");
                 return 2;
@@ -81,12 +90,12 @@ public final class ApiCommand {
             err.println(caller.stdlibSource(asked.substring(0, asked.indexOf('.'))));
             return 0;
         }
-        if (!Prelude.isQualifier(asked)) {
+        if (!Reserved.isQualifier(asked)) {
             err.println("no stdlib module `" + asked + "`");
-            err.println("modules: " + String.join(", ", Prelude.qualifiers().stream().sorted().toList()));
+            err.println("modules: " + String.join(", ", Reserved.QUALIFIERS.stream().sorted().toList()));
             return 2;
         }
-        listPublished(out, asked + ".");
+        listPublished(out, asked + ".", stdlib);
         return 0;
     }
 
@@ -94,8 +103,8 @@ public final class ApiCommand {
      *  none is a value rather than a function of no arguments. */
     record Signature(List<String> paramNames, List<Type> paramTypes, Type result) {}
 
-    private static void listPublished(PrintStream out, String prefix) {
-        surface().forEach((name, signature) -> {
+    private static void listPublished(PrintStream out, String prefix, Stdlib stdlib) {
+        surface(stdlib).forEach((name, signature) -> {
             if (prefix == null || name.startsWith(prefix)) {
                 out.println(line(name, signature));
             }
@@ -111,23 +120,29 @@ public final class ApiCommand {
      * with only the arguments its caller writes. Leaving it out would have this command contradict the
      * specification about what exists.
      *
-     * <p>Which names those are and what order they come in are both {@link Prelude#published()}'s
+     * <p>Which names those are and what order they come in are both {@link Stdlib#published()}'s
      * answer, walked here rather than rebuilt: a listing assembled from the declarations and then
      * the rewrites puts every sugar after every module, whichever module it reads as. What each
      * name's signature comes from is this command's own question, and the only one it decides.
      */
-    static Map<String, Signature> surface() {
+    static Map<String, Signature> surface(Stdlib stdlib) {
         Map<String, Signature> surface = new LinkedHashMap<>();
-        for (String name : Prelude.published()) {
-            Prelude.Rewrite rewrite = Prelude.rewriteOf(name);
+        for (String name : stdlib.published()) {
+            // A published name is a spelling, and the library is what turns one into the operation
+            // it reaches. Everything below is asked with that operation.
+            ValueName.Stdlib.Operation operation = stdlib.operation(name);
+            if (operation == null) {
+                continue;
+            }
+            Stdlib.Rewrite rewrite = stdlib.rewriteOf(operation);
             if (rewrite != null) {
-                Prelude.PreludeEntry target = Prelude.entry(rewrite.target().qualified());
+                Stdlib.Entry target = stdlib.entry(rewrite.target());
                 if (target != null) {
                     surface.put(name, declared(target, rewrite.keptArgs()));
                 }
                 continue;
             }
-            Prelude.PreludeEntry entry = Prelude.entry(name);
+            Stdlib.Entry entry = stdlib.entry(operation);
             if (entry != null) {
                 surface.put(name, declared(entry, entry.signature().params().size()));
             }
@@ -135,8 +150,8 @@ public final class ApiCommand {
         return surface;
     }
 
-    private static Signature declared(Prelude.PreludeEntry entry, int arity) {
-        List<Ast.FnParam> params = entry.declaration().params();
+    private static Signature declared(Stdlib.Entry entry, int arity) {
+        List<Hir.FnParam> params = entry.declaration().params();
         List<Type> types = entry.signature().params();
         List<String> names = new ArrayList<>();
         List<Type> kept = new ArrayList<>();
@@ -174,9 +189,9 @@ public final class ApiCommand {
     }
 
     private static int printSource(String alias, PrintStream out, PrintStream err) {
-        if (!Prelude.isQualifier(alias)) {
+        if (!Reserved.isQualifier(alias)) {
             err.println("no stdlib module `" + alias + "`");
-            err.println("modules: " + String.join(", ", Prelude.qualifiers().stream().sorted().toList()));
+            err.println("modules: " + String.join(", ", Reserved.QUALIFIERS.stream().sorted().toList()));
             return 2;
         }
         String resource = "/souther/" + alias.toLowerCase() + ".sou";

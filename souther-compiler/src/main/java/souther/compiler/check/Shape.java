@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -44,7 +44,7 @@ import java.util.Set;
  * itself writing this switch out again wants a question of its own asked once, the way
  * {@link Carrier#ofValue} asks whether a line can be drawn, rather than a copy of this one.
  */
-public sealed interface Shape permits Shape.PartitionInputShape, Shape.Cases, Shape.Tuple,
+public sealed interface Shape permits Shape.ReadablePositionShape, Shape.Cases, Shape.Tuple,
         Shape.Function, Shape.Uninhabited, Shape.Bottom, Shape.Erroneous, Shape.Undecided {
 
     /**
@@ -52,40 +52,91 @@ public sealed interface Shape permits Shape.PartitionInputShape, Shape.Cases, Sh
      *
      * <p>A subset of the classification and not a second one: these are the same cases, grouped so
      * that a reader over positions can be held to all of them and to nothing else. What admits a
-     * shape into it is the reader's own contract — the partition walk decides for itself, rather
-     * than deriving the set from what a signature or a field admits, because those two disagree
-     * (an {@code Option} may be a field and may not be a parameter) and neither is this question.
+     * shape into it is the reader's own contract — the walk that reads a behavior's inputs decides
+     * for itself, rather than deriving the set from what a signature or a field admits, because
+     * those two disagree (an {@code Option} may be a field and may not be a parameter) and neither
+     * is this question.
      *
-     * <p>{@link Unresolved} is a member. It is a shape a position legitimately has — a declaration
-     * reachable from itself compiles — and what a reader does with it is answer that it could not
-     * be interpreted. Leaving it out would put a compiling model through a path that throws.
+     * <p>{@link Unresolved} is a member. It is a shape a position legitimately has — a newtype whose
+     * base the walk over the names could not reach compiles — and what a reader does with it is
+     * answer that it could not be interpreted. Leaving it out would put a compiling model through a
+     * path that throws.
+     *
+     * <p><b>A record that names itself is not one of them.</b> It is a {@link Product} like any
+     * other, and its fields are read like any other's; what its own name at a field of it means for
+     * a walk is the walk's to answer. A reader taking this case for the one that ends a cycle would
+     * have no terminator at all.
      */
-    sealed interface PartitionInputShape extends Shape
+    sealed interface ReadablePositionShape extends Shape
             permits Scalar, Product, Sum, Sequence, Unit, Mapping, Optional, Unresolved {}
 
     /** A primitive, written as itself. */
-    record Scalar(Type.Prim prim) implements PartitionInputShape {}
+    record Scalar(Type.Prim prim) implements ReadablePositionShape {}
 
     /** A data with no contents: one value, which is which case it is. */
-    record Unit(TypeName name) implements PartitionInputShape {}
+    record Unit(TypeSymbol name) implements ReadablePositionShape {}
 
     /** A data with fields, and what they are, in the order the declaration writes them.
      *
      *  <p>The order is part of the answer, not an accident of the map: what a report names first
      *  and which field a row is built for first are read off it. So the copy keeps it — an
      *  unordered one would leave every reader depending on a hash. */
-    record Product(TypeName name, Map<String, Type> fields) implements PartitionInputShape {
+    record Product(TypeSymbol name, Map<String, Type> fields) implements ReadablePositionShape {
         public Product {
             fields = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(fields));
         }
     }
 
-    /** A declared sum, {@code data S = A | B}. */
-    record Sum(TypeName name) implements PartitionInputShape {}
+    /**
+     * A declared sum, {@code data S = A | B}, and the part its cases hold in common.
+     *
+     * <p>The two are independent and the record says so by holding both. A sum is a common product
+     * times a choice of case, never a choice between the common part and the cases: sharing a spread
+     * adds no case and changes no case's identity, so a reader asking what the position divides into
+     * reads {@link #name} and is right to ignore {@link #common}.
+     */
+    record Sum(TypeSymbol name, CommonProduct common) implements ReadablePositionShape {}
+
+    /**
+     * What every case of a sum spreads, or that they spread nothing.
+     *
+     * <p>Sharing is nominal: the cases hold this in common because the author wrote the same
+     * {@code ...Common} in each, not because two of them happen to declare a field of one name. So
+     * what is shared is declarations, and the fields are read off them — which is why {@link Shared}
+     * keeps both. Held as fields alone, a reader wanting the rules written over them has only the
+     * field names to find the declaration back from, and works it out again.
+     */
+    sealed interface CommonProduct {
+
+        /** The cases share no spread, so the sum has no part of its own. */
+        record None() implements CommonProduct {}
+
+        /**
+         * The declarations every case spreads, and the fields they contribute.
+         *
+         * @param origins the shared declarations, outermost spread first — what a rule written over
+         *                the shared fields is written on
+         * @param fields  what those declarations declare, in the order they are written
+         */
+        record Shared(List<TypeSymbol> origins, Map<String, Type> fields) implements CommonProduct {
+
+            public Shared {
+                // A data with no fields is a unit data and is written without a body (E1008), so a
+                // shared declaration has fields and a clause of it is about them.
+                if (origins.isEmpty() || fields.isEmpty()) {
+                    throw new IllegalArgumentException("a shared part sharing nothing is None");
+                }
+                origins = List.copyOf(origins);
+                fields = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(fields));
+            }
+        }
+    }
 
     /** A union nobody named — what a branch widened to, or a behavior's written answer. Told apart
-     *  from {@link Sum} because it has no declaration to be read off. */
-    record Cases(Set<TypeName> members) implements Shape {
+     *  from {@link Sum} because it has no declaration to be read off, which is also why it has no
+     *  {@link CommonProduct}: a spread is shared by being written, and nothing writes these
+     *  together. */
+    record Cases(Set<TypeSymbol> members) implements Shape {
         public Cases {
             members = Set.copyOf(members);
         }
@@ -93,16 +144,16 @@ public sealed interface Shape permits Shape.PartitionInputShape, Shape.Cases, Sh
 
     /** A {@code List} or a {@code Set}, and what it holds. Which of the two is the declared type's
      *  to say — the values are the same either way, and how they are written is not. */
-    record Sequence(Kind kind, Type element) implements PartitionInputShape {
+    record Sequence(Kind kind, Type element) implements ReadablePositionShape {
 
         public enum Kind { LIST, SET }
     }
 
     /** A {@code Map}, by what it is keyed by and what it holds. */
-    record Mapping(Type key, Type value) implements PartitionInputShape {}
+    record Mapping(Type key, Type value) implements ReadablePositionShape {}
 
     /** An {@code Option}, and what it holds when it holds anything. */
-    record Optional(Type element) implements PartitionInputShape {}
+    record Optional(Type element) implements ReadablePositionShape {}
 
     /** A tuple, which carries values through a computation and crosses nothing. */
     record Tuple(List<Type> elements) implements Shape {
@@ -156,11 +207,12 @@ public sealed interface Shape permits Shape.PartitionInputShape, Shape.Cases, Sh
 
     /**
      * A name that denotes no declaration this can read, or a newtype whose {@code value} it could
-     * not reach — a declaration reachable from itself ends the walk with the name still on.
+     * not reach — a newtype spine that comes back to itself ends the walk over the names with the
+     * name still on.
      *
      * <p>Its own case because the provenance differs from {@link Undecided}: this one was looked up.
      * The interpretation was attempted and did not reach a terminal shape, which is a different
      * thing for a reader to report and a different thing for anyone to fix.
      */
-    record Unresolved(TypeName name) implements PartitionInputShape {}
+    record Unresolved(TypeSymbol name) implements ReadablePositionShape {}
 }

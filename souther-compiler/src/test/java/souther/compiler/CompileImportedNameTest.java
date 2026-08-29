@@ -41,7 +41,7 @@ class CompileImportedNameTest {
                     invariant String.length(value) > 0
                 data In = { s: String }
                 data Out = { t: String }
-                behavior go : (i: In) -> Out | Empty constructs Out, Name, Empty
+                behavior go : (i: In) -> Out | Empty constructs Out, Name
                 let go (i) = {
                     guard Name(i.s) as n
                         else Empty
@@ -214,7 +214,7 @@ class CompileImportedNameTest {
                     invariant length(value) > 0
                 data In = { s: String }
                 data Out = { v: NonEmpty }
-                behavior go : (i: In) -> Out | Empty constructs Out, NonEmpty, Empty
+                behavior go : (i: In) -> Out | Empty constructs Out, NonEmpty
                 let go (i) = {
                     guard String.length(i.s) > 0
                         else Empty

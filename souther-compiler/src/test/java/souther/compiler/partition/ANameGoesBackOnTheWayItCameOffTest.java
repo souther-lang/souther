@@ -2,19 +2,25 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -49,23 +55,28 @@ class ANameGoesBackOnTheWayItCameOffTest {
             data DecisionN = Decision
             data DecisionNN = DecisionN
 
-            behavior run : (x: DecisionN) -> Ok constructs Ok
+            behavior run : (x: DecisionN) -> Ok
             let run (x) = Ok
             """;
 
-    private final Symbols symbols = Symbols.of(resolved());
+    private final Symbols symbols = Symbols.of(resolved(), DefaultStdlib.get());
 
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
     }
 
-    private TypeName named(String name) {
-        return symbols.own(name);
+    private TypeSymbol named(String name) {
+        return TypeSymbols.declared(new TypeKey(symbols.module(), name));
+    }
+
+    /** The same name as this module writes it, which is what a row is written with. */
+    private souther.compiler.types.TypeReachName.Written reached(String name) {
+        return (souther.compiler.types.TypeReachName.Written) symbols.scope().reach(named(name));
     }
 
     private PartitionClass classOf(String type, String id) {
-        return PartitionClasses.of(Type.ref(named(type)), symbols).stream()
+        return PartitionClasses.of(Type.ref(named(type)), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).stream()
                 .filter(each -> each.id().equals(id)).findFirst().orElseThrow();
     }
 
@@ -104,9 +115,9 @@ class ANameGoesBackOnTheWayItCameOffTest {
                 classOf("DecisionNN", "Approved").representatives().evaluate());
 
         assertEquals(named("Approved"), compose.through());
-        assertEquals(List.of(named("DecisionNN"), named("DecisionN")), compose.worn());
+        assertEquals(List.of(reached("DecisionNN"), reached("DecisionN")), compose.worn());
         assertEquals("DecisionNN(DecisionN(Approved { id = 1 }))",
-                compose.written(FixtureTemplate.record(named("Approved"),
+                compose.written(FixtureTemplate.record(reached("Approved"),
                         Map.of("id", FixtureTemplate.integer(1)))).text());
     }
 
@@ -151,14 +162,14 @@ class ANameGoesBackOnTheWayItCameOffTest {
     @Test
     void aRowIsWrittenUnderTheNameAndReadBackThroughIt() {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
 
         assertEquals(List.of("Approved", "Rejected"), evidence.axes().get(0).classes());
         String rows = GeneratedRows.of(compilation, "demo", "run", true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         assertTrue(rows.contains("DecisionN(Approved { id = 0 })"), rows);
         assertTrue(rows.contains("DecisionN(Rejected)"), rows);
     }
@@ -171,12 +182,12 @@ class ANameGoesBackOnTheWayItCameOffTest {
                 example run
                     | (DecisionN(Approved { id = 1 })) -> Ok
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
 
-        assertEquals(java.util.Set.of("Approved"), evidence.axes().get(0).covered());
+        assertEquals(java.util.Set.of("Approved"), evidence.axes().get(0).rows().covered());
     }
 
     /** The observation of {@code value} written under {@code names}, outermost first. */
@@ -189,7 +200,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     }
 
     private List<String> written(PartitionClass each) {
-        return Partitions.standingFor(each.representatives(), symbols, java.util.Set.of()).stream()
+        return Partitions.standingFor(each.representatives(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, java.util.Set.of()).stream()
                 .map(FixtureTemplate::text).toList();
     }
 }

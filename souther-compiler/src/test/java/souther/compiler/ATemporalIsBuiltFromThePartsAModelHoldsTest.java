@@ -59,7 +59,7 @@ class ATemporalIsBuiltFromThePartsAModelHoldsTest {
                     | NotADate -> Out { same = false }
                 """);
         for (String iso : DATES) {
-            assertEquals(true, run(loader, "demo.RoundTrip$Impl", "demo.In", "demo.Out",
+            assertEquals(true, run(loader, Emitted.impl("demo", "roundTrip"), "demo.In", "demo.Out",
                             Map.of("on", LocalDate.parse(iso))).get("same"),
                     "Date.fromParts must answer the date its parts were read from: " + iso);
         }
@@ -81,7 +81,7 @@ class ATemporalIsBuiltFromThePartsAModelHoldsTest {
                     | NotATime -> Out { same = false }
                 """);
         for (String iso : TIMES) {
-            assertEquals(true, run(loader, "demo.RoundTrip$Impl", "demo.In", "demo.Out",
+            assertEquals(true, run(loader, Emitted.impl("demo", "roundTrip"), "demo.In", "demo.Out",
                             Map.of("at", LocalTime.parse(iso))).get("same"),
                     "Time.fromParts must answer the time its parts were read from: " + iso);
         }
@@ -166,7 +166,7 @@ class ATemporalIsBuiltFromThePartsAModelHoldsTest {
                     | Date -> Out { byArithmetic = anchored(i.y, i.m, i.d), byParts = true }
                     | NotADate -> Out { byArithmetic = anchored(i.y, i.m, i.d), byParts = false }
                 """);
-        Map<?, ?> out = run(loader, "demo.Both$Impl", "demo.In", "demo.Out",
+        Map<?, ?> out = run(loader, Emitted.impl("demo", "both"), "demo.In", "demo.Out",
                 Map.of("y", 2026L, "m", 2L, "d", 30L));
         assertEquals(LocalDate.parse("2026-03-02").toString(), String.valueOf(out.get("byArithmetic")),
                 "the arithmetic still normalises — that is what it is for");
@@ -196,7 +196,7 @@ class ATemporalIsBuiltFromThePartsAModelHoldsTest {
                 }
                 """);
         for (String iso : List.of("2026-07-26T09:30", "2026-07-26T00:00", "2026-12-31T23:59:59")) {
-            Map<?, ?> out = run(loader, "demo.Split$Impl", "demo.In", "demo.Out",
+            Map<?, ?> out = run(loader, Emitted.impl("demo", "split"), "demo.In", "demo.Out",
                     Map.of("at", LocalDateTime.parse(iso)));
             assertEquals(true, out.get("same"), iso);
             assertEquals(true, out.get("sameDate"), iso);
@@ -242,7 +242,7 @@ class ATemporalIsBuiltFromThePartsAModelHoldsTest {
 
                 let order (i) = Out { aFirst = i.a < i.b, keyed = Map.singleton(i.a, 1) }
                 """);
-        Map<?, ?> out = run(loader, "demo.Order$Impl", "demo.In", "demo.Out",
+        Map<?, ?> out = run(loader, Emitted.impl("demo", "order"), "demo.In", "demo.Out",
                 Map.of("a", Instant.parse("2026-01-01T00:00:00Z"),
                         "b", Instant.parse("2026-01-01T00:00:00.000000001Z")));
         assertEquals(true, out.get("aFirst"), "an Instant orders to the nanosecond");
@@ -321,7 +321,7 @@ class ATemporalIsBuiltFromThePartsAModelHoldsTest {
 
                     let pass (i) = Out { v = i.v }
                     """.formatted(prim.shown(), prim.shown()));
-            Map<?, ?> out = run(loader, "demo.Pass$Impl", "demo.In", "demo.Out", Map.of("v", sent));
+            Map<?, ?> out = run(loader, Emitted.impl("demo", "pass"), "demo.In", "demo.Out", Map.of("v", sent));
             if (out.get("v") == null) {
                 missing.add(prim.shown());
             }
@@ -345,12 +345,12 @@ class ATemporalIsBuiltFromThePartsAModelHoldsTest {
     }
 
     private static boolean built(BytesClassLoader loader, long y, long m, long d) throws Exception {
-        return (Boolean) run(loader, "demo.Build$Impl", "demo.In", "demo.Out",
+        return (Boolean) run(loader, Emitted.impl("demo", "build"), "demo.In", "demo.Out",
                 Map.of("y", y, "m", m, "d", d)).get("named");
     }
 
     private static boolean timeBuilt(BytesClassLoader loader, long h, long mi, long s) throws Exception {
-        return (Boolean) run(loader, "demo.Build$Impl", "demo.In", "demo.Out",
+        return (Boolean) run(loader, Emitted.impl("demo", "build"), "demo.In", "demo.Out",
                 Map.of("h", h, "mi", mi, "s", s)).get("named");
     }
 

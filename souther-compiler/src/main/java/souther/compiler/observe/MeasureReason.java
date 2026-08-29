@@ -1,15 +1,26 @@
 package souther.compiler.observe;
 
 /**
- * Why a measure has no number, and which of the two kinds of no-number that is.
+ * Why a measure has no number.
  *
- * <p>Which reasons a measure can have stays the measure's own business — this says only that a
- * reason knows whether it is one nothing can be done about or one that says what to do. Kept on the
- * reason rather than chosen beside it, so that a measure cannot come back saying its arms do not
- * apply and that somebody should go and measure them.
+ * <p>Which reasons a measure can have stays the measure's own business. What is not the measure's is
+ * which kind of no-number a reason is, and that is now the reason's <em>type</em> rather than
+ * something it answers: {@link souther.compiler.query.NotApplicableReason},
+ * {@link souther.compiler.query.NotMeasuredReason} and {@link souther.compiler.query.FailureReason}
+ * are three interfaces and a constant implements exactly one. Each of them names its arms, which it
+ * can do only where they are written — so the three stand with the measures and this stands with
+ * what reads a measure.
+ *
+ * <p>It used to answer {@code status()} and {@code somethingWasUnreadable()}, and a measure whose
+ * status and reason disagreed was refused where the value was built. A check over a state the type
+ * still lets anybody write is a check somebody has to keep running; three types is the same rule
+ * with nothing left to run (issue #953).
+ *
+ * <p>{@code name()} is here so that a document can write the constant's word without every reader
+ * holding the enum. It is what {@link Enum} already provides, which is why every reason is one.
  */
 public interface MeasureReason {
 
-    /** {@link MeasurementStatus#NOT_APPLICABLE} or {@link MeasurementStatus#NOT_MEASURED}. */
-    MeasurementStatus status();
+    /** The constant's own word, which is what the JSON form lowercases. */
+    String name();
 }

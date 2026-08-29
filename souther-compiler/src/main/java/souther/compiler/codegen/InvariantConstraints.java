@@ -1,12 +1,14 @@
 package souther.compiler.codegen;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.types.BinOp;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.ValueName;
 import souther.compiler.check.ConstEval;
+import souther.compiler.check.Symbols;
+import souther.compiler.core.Kernel;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -23,8 +25,6 @@ import java.util.Optional;
  * prove equivalent is left to the emitter's fallback.
  */
 public final class InvariantConstraints {
-
-    private InvariantConstraints() {}
 
     /** The name a newtype's single field carries, and so the name its invariant reads it by. */
     private static final String VALUE = "value";
@@ -89,23 +89,37 @@ public final class InvariantConstraints {
 
     public record MapMaxSize(int n) implements OfMap {}
 
+    /** The symbols this reads clauses against. Which operations state a constraint is a fact about
+     *  the library the clause was resolved against, so it is held here rather than asked at each
+     *  call. */
+    private final Symbols symbols;
+
+    private InvariantConstraints(Symbols symbols) {
+        this.symbols = symbols;
+    }
+
+    /** Reading clauses resolved against the library {@code symbols} names. */
+    public static InvariantConstraints against(Symbols symbols) {
+        return new InvariantConstraints(symbols);
+    }
+
     /**
      * The Raoh constraint equivalent to {@code clause} on a newtype whose value is {@code base}, or
      * empty when this cannot prove one.
      */
-    public static Optional<Constraint> of(Ast.Expr clause, Type base) {
-        if (clause instanceof Ast.Apply call) {
+    public Optional<Constraint> of(Hir.Expr clause, Type base) {
+        if (clause instanceof Hir.Apply call) {
             return ofCall(call, base);
         }
-        if (!(clause instanceof Ast.Binary bin)) {
+        if (!(clause instanceof Hir.Binary bin)) {
             return Optional.empty();
         }
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
-        Ast.Expr left = bin.left();
-        Ast.Expr right = bin.right();
-        Ast.BinOp op = bin.op();
+        Hir.Expr left = bin.left();
+        Hir.Expr right = bin.right();
+        BinOp op = bin.op();
         if (!bearsValue(left) && bearsValue(right)) {
-            Ast.Expr swap = left;
+            Hir.Expr swap = left;
             left = right;
             right = swap;
             op = mirrored(op);
@@ -137,8 +151,8 @@ public final class InvariantConstraints {
      * duplicates while mapping it (spec §collections), so a constraint chained after that mapping is no
      * longer on a typed decoder, and one chained before it would count the duplicates.
      */
-    private static Optional<Constraint> ofListSize(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
-        Integer n = sizeBound("List.length", left, right);
+    private Optional<Constraint> ofListSize(BinOp op, Hir.Expr left, Hir.Expr right) {
+        Integer n = sizeBound(Kernel.LIST_LENGTH, left, right);
         if (n == null) {
             return Optional.empty();
         }
@@ -155,8 +169,8 @@ public final class InvariantConstraints {
 
     /** The same for a map, which Raoh decodes as a record of its values and bounds by entry count.
      * There is no emptiness constraint of its own there, so {@code >= 1} is a minimum of one. */
-    private static Optional<Constraint> ofMapSize(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
-        Integer n = sizeBound("Map.size", left, right);
+    private Optional<Constraint> ofMapSize(BinOp op, Hir.Expr left, Hir.Expr right) {
+        Integer n = sizeBound(Kernel.MAP_SIZE, left, right);
         if (n == null) {
             return Optional.empty();
         }
@@ -170,8 +184,8 @@ public final class InvariantConstraints {
     }
 
     /** The literal bound {@code size(value)} is compared against, or null when this is not that shape. */
-    private static Integer sizeBound(String size, Ast.Expr left, Ast.Expr right) {
-        if (!(left instanceof Ast.Apply call) || !call.reaches().equals(size)
+    private Integer sizeBound(Kernel size, Hir.Expr left, Hir.Expr right) {
+        if (!(left instanceof Hir.Apply call) || !applies(call, size)
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return null;
         }
@@ -182,21 +196,21 @@ public final class InvariantConstraints {
         return bound.intValue();
     }
 
-    private static Optional<Constraint> ofCall(Ast.Apply call, Type base) {
+    private Optional<Constraint> ofCall(Hir.Apply call, Type base) {
         // `String.matches(p, value)` is whole-string anchored (Strings.matches), and so is Raoh's
         // pattern (Matcher.matches), so the two accept the same strings. The regex is asked for the
         // same way the check asks — one reading of which expressions are compile-time strings and of
         // what one composes to, so a pattern the check accepted cannot arrive here unrecognised and
         // lose its constraint. It has been compiled once at check time, so it is known well-formed.
-        if (base == Type.STRING && "String.matches".equals(call.reaches()) && call.args().size() == 2
+        if (base == Type.STRING && applies(call, Kernel.STRING_MATCHES) && call.args().size() == 2
                 && isValue(call.args().get(1))) {
-            return ConstEval.evalString(call.args().get(0)).map(Pattern::new);
+            return ConstEval.against(symbols).evalString(call.args().get(0)).map(Pattern::new);
         }
         // `List.allDistinctBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
         // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
         // is not the identity says it of something else — the elements' products, their ids — and Raoh
         // has no constraint for that, so the clause keeps its own check.
-        if (base instanceof Type.ListOf && "List.allDistinctBy".equals(call.reaches())
+        if (base instanceof Type.ListOf && statesDistinctness(call)
                 && call.args().size() == 2 && isValue(call.args().get(1))
                 && isIdentity(call.args().get(0))) {
             return Optional.of(new Unique());
@@ -204,8 +218,8 @@ public final class InvariantConstraints {
         return Optional.empty();
     }
 
-    private static Optional<Constraint> ofStringLength(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
-        if (!(left instanceof Ast.Apply call) || !"String.length".equals(call.reaches())
+    private Optional<Constraint> ofStringLength(BinOp op, Hir.Expr left, Hir.Expr right) {
+        if (!(left instanceof Hir.Apply call) || !applies(call, Kernel.STRING_LENGTH)
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return Optional.empty();
         }
@@ -226,7 +240,7 @@ public final class InvariantConstraints {
         };
     }
 
-    private static Optional<Constraint> ofInt(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+    private static Optional<Constraint> ofInt(BinOp op, Hir.Expr left, Hir.Expr right) {
         if (!isValue(left)) {
             return Optional.empty();
         }
@@ -247,7 +261,7 @@ public final class InvariantConstraints {
         };
     }
 
-    private static Optional<Constraint> ofDecimal(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+    private static Optional<Constraint> ofDecimal(BinOp op, Hir.Expr left, Hir.Expr right) {
         if (!isValue(left)) {
             return Optional.empty();
         }
@@ -267,44 +281,74 @@ public final class InvariantConstraints {
     }
 
     /** Whether the expression reads the newtype's value — directly, or through {@code String.length}. */
-    private static boolean bearsValue(Ast.Expr e) {
+    private static boolean bearsValue(Hir.Expr e) {
         if (isValue(e)) {
             return true;
         }
-        return e instanceof Ast.Apply call && call.args().size() == 1 && isValue(call.args().get(0));
+        return e instanceof Hir.Apply call && call.args().size() == 1 && isValue(call.args().get(0));
     }
 
-    private static boolean isValue(Ast.Expr e) {
-        return e instanceof Ast.Var v && v.name().equals(VALUE);
+    private static boolean isValue(Hir.Expr e) {
+        return e instanceof Hir.Var v && v.name().equals(VALUE);
+    }
+
+    /**
+     * Whether {@code call} applies {@code kernel} — asked of what the name reaches, which is what a
+     * library operation is filed under whether or not an import let it be written bare, and then of
+     * which kernel the library declares that operation to be.
+     *
+     * <p>The kernel and not the alias. What makes a length comparison a size constraint is that the
+     * call computes a length; the alias it is published under is the library's, and a clause
+     * recognised by one would go on being recognised for exactly as long as the two agreed.
+     *
+     * <p>A call applying a name nothing declares, or one that is no kernel, applies no operation
+     * this recognises. There is no constraint to map it to, and the clause keeps the check it
+     * already has.
+     */
+    private boolean applies(Hir.Apply call, Kernel kernel) {
+        return applied(call) instanceof ValueName.Stdlib.Operation operation
+                && symbols.kernelOf(operation) == kernel;
+    }
+
+    /** Whether {@code call} states that the elements are distinct — the library's own predicate for
+     *  it, which has a Souther body rather than a kernel and so is a value the library hands over
+     *  ({@link Symbols#theDistinctnessPredicate}). */
+    private boolean statesDistinctness(Hir.Apply call) {
+        return symbols.theDistinctnessPredicate().equals(applied(call));
+    }
+
+    /** What {@code call} applies, or null where it applies a name nothing declares. */
+    private static ValueName applied(Hir.Apply call) {
+        return call.answered() == null ? null : call.answered().denotes();
     }
 
     /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is
      * spelled. A block with one parameter is how a lambda arrives here (spec §blocks). The body reads
      * the parameter when it reads that binding; a name spelled like it, bound elsewhere, is another
      * value. */
-    private static boolean isIdentity(Ast.Expr e) {
-        return e instanceof Ast.Block b && b.params().size() == 1
-                && b.body() instanceof Ast.Var v
+    private static boolean isIdentity(Hir.Expr e) {
+        return e instanceof Hir.Block b && b.params().size() == 1
+                && b.body() instanceof Hir.Var.Denoting v
                 && v.denotes() instanceof ValueName.Local local
                 && local.id().equals(b.params().get(0).id());
     }
 
-    private static Ast.BinOp mirrored(Ast.BinOp op) {
+    private static BinOp mirrored(BinOp op) {
         return switch (op) {
-            case LT -> Ast.BinOp.GT;
-            case LE -> Ast.BinOp.GE;
-            case GT -> Ast.BinOp.LT;
-            case GE -> Ast.BinOp.LE;
+            case LT -> BinOp.GT;
+            case LE -> BinOp.GE;
+            case GT -> BinOp.LT;
+            case GE -> BinOp.LE;
             default -> op;   // == and /= read the same either way
         };
     }
 
     /** An Int literal, negation included ({@code -1}), or null when the operand is not one. */
-    private static Long intLiteral(Ast.Expr e) {
-        if (e instanceof Ast.IntLit lit) {
+    private static Long intLiteral(Hir.Expr e) {
+        if (e instanceof Hir.IntLit lit) {
             return lit.value();
         }
-        if (e instanceof Ast.Neg neg && neg.operand() instanceof Ast.IntLit lit
+        if (e instanceof Hir.Neg neg && neg.operand() instanceof Hir.IntLit lit
                 && lit.value() != Long.MIN_VALUE) {
             return -lit.value();
         }
@@ -312,11 +356,11 @@ public final class InvariantConstraints {
     }
 
     /** A Decimal literal; an Int literal counts, since a bare literal takes the other side's type. */
-    private static BigDecimal decimalLiteral(Ast.Expr e) {
-        if (e instanceof Ast.DecimalLit lit) {
+    private static BigDecimal decimalLiteral(Hir.Expr e) {
+        if (e instanceof Hir.DecimalLit lit) {
             return lit.value();
         }
-        if (e instanceof Ast.Neg neg && neg.operand() instanceof Ast.DecimalLit lit) {
+        if (e instanceof Hir.Neg neg && neg.operand() instanceof Hir.DecimalLit lit) {
             return lit.value().negate();
         }
         Long asInt = intLiteral(e);

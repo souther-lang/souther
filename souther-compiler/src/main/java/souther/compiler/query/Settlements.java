@@ -1,0 +1,525 @@
+package souther.compiler.query;
+
+import souther.compiler.check.Sig;
+import souther.compiler.execute.BoundaryValues;
+import souther.compiler.partition.Axis;
+import souther.compiler.partition.BehaviorInputs;
+import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.Generator;
+import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.ObservedInputs;
+import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.observe.Classification;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.SequencedMap;
+import java.util.Set;
+
+/**
+ * What each row a run offers would do about each thing the run was asked to offer a row for.
+ *
+ * <p>The whole table and not the diagonal. A row is composed for one thing, and what else it turns
+ * out to answer is the question this exists to put — so every row is asked about every item, and a
+ * row's own item is one entry of its column like any other.
+ *
+ * <p><b>The items are what was asked for.</b> They come from the plan a run was made with and from
+ * the points its searches were put, never from what the rows say they were composed for: a row
+ * carries the classes and arms it may be named after and never a line, so an item universe read off
+ * the rows would be missing every line in the block.
+ *
+ * <p>Nothing here is a measurement. Each entry says what would follow if the row were written, and
+ * the rows are questions nobody has answered yet.
+ */
+public record Settlements(List<OfferItem> requested,
+                          SequencedMap<OfferItem, RowKey> composedFor,
+                          SequencedMap<RowKey, Map<OfferItem, Settlement>> byRow) {
+
+    public Settlements {
+        requested = List.copyOf(requested);
+        composedFor = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(composedFor));
+        byRow = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byRow));
+    }
+
+    /** What {@code row} would do about {@code item}, for a reader holding both. */
+    public Settlement at(RowKey row, OfferItem item) {
+        Map<OfferItem, Settlement> here = byRow.get(row);
+        if (here == null || !here.containsKey(item)) {
+            throw new IllegalArgumentException("no entry for " + row + " at " + item);
+        }
+        return here.get(item);
+    }
+
+    /**
+     * What a set of rows puts in front of a person for one item.
+     *
+     * <p>Two ways, and a reduction has to keep both. A row that settles the item answers it whoever
+     * it was composed for; and the row composed <em>for</em> the item is what a person was offered
+     * for it, whether or not this walk can tell that it settles it — a row whose reading came back
+     * undetermined is still the one piece of work anybody was handed there.
+     *
+     * <p>Written once because it is what {@link #keeping()} preserves. Said as two rules in two
+     * places, the second is the one a later reader drops as an oversight.
+     */
+    public boolean offers(Set<RowKey> rows, OfferItem item) {
+        for (RowKey row : rows) {
+            if (byRow.get(row).get(item).settles()) {
+                return true;
+            }
+        }
+        return rows.contains(composedFor.get(item));
+    }
+
+    /**
+     * The rows to keep: every one whose going would cost the offering something.
+     *
+     * <p>What is preserved is {@link #offers}, for every item. So the result holds, of the rows
+     * {@code R*} it comes back with and the rows {@code R} it was given:
+     *
+     * <ol>
+     *   <li>every item {@code R} offers something for, {@code R*} offers something for;</li>
+     *   <li>no row of {@code R*} can go and leave that true.</li>
+     * </ol>
+     *
+     * <p><b>Which is not "every row left settles something nothing else does".</b> A row kept by the
+     * second half of {@code offers} settles nothing this could tell about — it is there because it
+     * is the only thing composed for its item — and a reduction written to the shorter sentence
+     * would drop it and take that item's only offer with it.
+     *
+     * <p>Nor is it the smallest set: a different, smaller set of rows may offer for the same items.
+     * Irredundant is what this is, and finding a minimum is a different question.
+     *
+     * <p>Only {@link Settlement.Settles} counts as settling. A row that cannot be told about is not
+     * a row that answers, and counting it would drop the row that did.
+     *
+     * <p>Walked from the back, so a row that came first stays. Which of two rows answering the same
+     * things a person is handed is arbitrary, and taking the earlier one keeps the block steady:
+     * the order rows are composed in is the order the searches were asked, and an edit somewhere
+     * later in the model does not move what is offered above it.
+     */
+    public Set<RowKey> keeping() {
+        Map<OfferItem, Integer> count = new LinkedHashMap<>();
+        for (OfferItem item : requested) {
+            int settling = 0;
+            for (Map<OfferItem, Settlement> here : byRow.values()) {
+                if (here.get(item).settles()) {
+                    settling++;
+                }
+            }
+            count.put(item, settling);
+        }
+        // What each row was composed for, the way round this asks it. Read out of the map the other
+        // way for every row, the walk would go over every item once per row to find the few that
+        // name it.
+        Map<RowKey, List<OfferItem>> composedHere = new LinkedHashMap<>();
+        composedFor.forEach((item, row) ->
+                composedHere.computeIfAbsent(row, _ -> new ArrayList<>()).add(item));
+        List<RowKey> inOrder = new ArrayList<>(byRow.keySet());
+        Set<RowKey> kept = new LinkedHashSet<>(inOrder);
+        for (int at = inOrder.size() - 1; at >= 0; at--) {
+            RowKey row = inOrder.get(at);
+            if (goes(row, composedHere.getOrDefault(row, List.of()), count)) {
+                kept.remove(row);
+                byRow.get(row).forEach((item, settlement) -> {
+                    if (settlement.settles()) {
+                        count.merge(item, -1, Integer::sum);
+                    }
+                });
+            }
+        }
+        return Collections.unmodifiableSet(new LinkedHashSet<>(
+                inOrder.stream().filter(kept::contains).toList()));
+    }
+
+    /**
+     * Whether the offering offers as much without {@code row} as with it — {@link #offers} for
+     * every item, read off the counts rather than walked again.
+     *
+     * <p>The counts hold the kept rows and this one among them. So an item this row settles needs a
+     * second settler to be left after it goes, and an item it was composed for and settles nothing
+     * of needs one at all: without a settler, taking the row away takes the item's only offer.
+     *
+     * @param composedHere what this row was composed for
+     */
+    private boolean goes(RowKey row, List<OfferItem> composedHere, Map<OfferItem, Integer> count) {
+        Map<OfferItem, Settlement> here = byRow.get(row);
+        for (Map.Entry<OfferItem, Settlement> each : here.entrySet()) {
+            if (each.getValue().settles() && count.get(each.getKey()) <= 1) {
+                return false;
+            }
+        }
+        // And what was composed for it. An item whose own row settles nothing this could tell about
+        // is one nobody would be offered a row for at all, which is a piece of work going missing
+        // rather than a row being said once instead of twice.
+        for (OfferItem item : composedHere) {
+            if (!here.get(item).settles() && count.get(item) < 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The items some row of this offering settles, which is what a reduction has to keep answered. */
+    public Set<OfferItem> settled() {
+        Set<OfferItem> out = new LinkedHashSet<>();
+        for (OfferItem item : requested) {
+            for (Map<OfferItem, Settlement> here : byRow.values()) {
+                if (here.get(item).settles()) {
+                    out.add(item);
+                    break;
+                }
+            }
+        }
+        return Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * The table for one offering.
+     *
+     * <p>Read with the same walk a written row is read with. Where a candidate's values sit is
+     * {@link InputClassifications}'s answer, whether it stands at a line is
+     * {@link StandingAtAPoint}'s, and which arms it takes is what running it recorded — the three
+     * questions a measurement puts to the rows in a file, put here to the rows a person is being
+     * handed.
+     */
+    public static Settlements of(Db db, Composition offering) {
+        String module = offering.request().module();
+        Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
+        BoundaryValues building = Adequacy.constructing(db, module);
+        souther.compiler.execute.RowTrials trials = Adequacy.trialling(db, module);
+        List<OfferItem> requested = new ArrayList<>();
+        SequencedMap<OfferItem, RowKey> composedFor = new LinkedHashMap<>();
+        SequencedMap<RowKey, Map<OfferItem, Settlement>> byRow = new LinkedHashMap<>();
+        // How each behavior reads the lines the module's declarations own. A behavior's own account
+        // holds the lines it is owed a row at and none of these — that is what the account is for —
+        // so a walk that looked only there would find no reading of a declared line anywhere and
+        // answer that no row stands at one, of rows composed to stand at exactly that.
+        Map<BorderObligationPoint, Map<String, List<BorderAssessment>>> declaredReadings =
+                readingsOfTheDeclaredLines(db, module, offering.request().boundaries());
+        // A reader for every behavior a row is written under, and not only for the ones a search
+        // answered about. A row a declaration's line is owed is composed by whichever reading could
+        // compose it, and that behavior need not be one anything else was asked of — read off the
+        // searches alone, such a row came back undetermined at every item, so nothing it stands at
+        // could ever make another row redundant.
+        Map<String, OneBehavior> reading = new LinkedHashMap<>();
+        Set<String> carriers = new LinkedHashSet<>(offering.rows().keySet());
+        carriers.addAll(offering.searched().keySet());
+        for (String behavior : carriers) {
+            Adequacy.Filling filling = offering.searched().get(behavior);
+            OneBehavior read = OneBehavior.of(db, module, behavior, filling,
+                    sigs == null ? null : sigs.get(behavior), building, trials,
+                    offering.request().boundaries(), declaredReadings);
+            if (read == null) {
+                continue;   // nothing here can read a row of it, which its rows are told below
+            }
+            reading.put(behavior, read);
+            requested.addAll(read.owed());
+            if (filling != null) {
+                composedFor.putAll(read.composed(filling));
+            }
+        }
+        // And the points the module's declarations are owed, which are no behavior's own. A row of
+        // whichever behavior composed one answers the line for everybody, so they are items of the
+        // offering rather than of the block a row happens to sit in.
+        if (offering.account() != null) {
+            offering.account().resolved().forEach((point, answer) -> {
+                OfferItem item = new OfferItem.APointOfALine(point);
+                switch (answer.resolution()) {
+                    case PointResolution.Generated(var at, var row) -> {
+                        requested.add(item);
+                        composedFor.put(item, RowKey.of(at.behavior(), row));
+                    }
+                    // Asked for and nothing came of it, which is still a thing this run is short of
+                    // — and something else may stand there, which is what makes it worth asking.
+                    case PointResolution.Unresolved _ -> requested.add(item);
+                    // Not asked for at all: a row already stands there, or nothing measured it. A
+                    // point in nobody's way is not work this run offers, and holding it here would
+                    // let a candidate be the only offer for it.
+                    case PointResolution.NoSearch _ -> { }
+                }
+            });
+        }
+        List<OfferItem> items = List.copyOf(new LinkedHashSet<>(requested));
+        offering.rows().forEach((behavior, rows) -> {
+            OneBehavior read = reading.get(behavior);
+            for (OfferedRow row : rows) {
+                // Read once for the row and asked of every item. What a row is — where its values
+                // sit and what running it recorded — does not change between the questions put to
+                // it, and reading it per item would be the same row read as many times as this run
+                // happens to be asked about, at the price of running it that many times.
+                RowAsRead one = read == null ? RowAsRead.nothingRead() : read.read(row.inputs());
+                Map<OfferItem, Settlement> here = new LinkedHashMap<>();
+                for (OfferItem item : items) {
+                    here.put(item, read == null ? undetermined(one) : read.settlementOf(one, item));
+                }
+                byRow.put(row.key(), Collections.unmodifiableMap(here));
+            }
+        });
+        return new Settlements(items, composedFor, byRow);
+    }
+
+    /**
+     * Which behaviors read each line a declaration owns, and what each of their readings is.
+     *
+     * <p>Asked of the debts and not of any behavior. A line a declaration draws is read wherever the
+     * type is carried, and where a row written in one behavior's terms stands is a question about
+     * that behavior's reading of it — so the readings are what a row is put to, one per position
+     * that meets the line.
+     */
+    private static Map<BorderObligationPoint, Map<String, List<BorderAssessment>>>
+            readingsOfTheDeclaredLines(Db db, String module, boolean boundaries) {
+        Map<BorderObligationPoint, Map<String, List<BorderAssessment>>> out = new LinkedHashMap<>();
+        if (!boundaries) {
+            return out;
+        }
+        Adequacy.DeclaredBoundaries account = db.ask(new Adequacy.DeclaredBorders(module)).value();
+        if (account == null) {
+            return out;
+        }
+        for (Adequacy.DeclaredDebt owed : account.owed()) {
+            Map<String, List<BorderAssessment>> here =
+                    out.computeIfAbsent(owed.debt().point(), _ -> new LinkedHashMap<>());
+            owed.debt().met().forEach((reading, at) ->
+                    here.computeIfAbsent(reading.behavior(), _ -> new ArrayList<>()).add(at));
+        }
+        return out;
+    }
+
+    /**
+     * One behavior's own reading of a candidate: what it is asked for, and how a row of it is read.
+     *
+     * <p>Made once per behavior and not once per row. What a row is read against — where its
+     * positions are, what the model divides them into, and which lines this behavior's readings meet
+     * — is the behavior's and does not move between the rows of one block.
+     */
+    private record OneBehavior(String behavior, BehaviorInputs where, List<Axis> axes, Sig sig,
+                               BoundaryValues building, Generator.Trial trial,
+                               List<Generator.ClassOwed> classes, List<Generator.ArmOwed> arms,
+                               Map<OfferItem.APointOfALine, List<AtAPoint>> reads) {
+
+        /**
+         * A reader for one behavior, and what this run asked of that behavior.
+         *
+         * <p><b>Two things, and a carrier may have only the first.</b> How a row is read is what its
+         * positions are and what runs it; what this run asked for is a search's answer, and a
+         * behavior that composed a row for somebody else's line was asked nothing. Read together,
+         * the account of a behavior nothing was searched for is fetched to build it — which asks the
+         * search this run had decided not to make, and puts its points into a universe as work
+         * nobody was set.
+         *
+         * @param filling what this run asked of the behavior, or null where it asked nothing. A
+         *                carrier with rows and no filling still has its rows read: what it holds is
+         *                a row somebody else's line needed
+         */
+        static OneBehavior of(Db db, String module, String behavior, Adequacy.Filling filling,
+                              Sig sig, BoundaryValues building,
+                              souther.compiler.execute.RowTrials trials, boolean boundaries,
+                              Map<BorderObligationPoint, Map<String, List<BorderAssessment>>>
+                                      declared) {
+            // How a row of this behavior is read, asked of the store rather than taken off a
+            // search. A behavior that composed a row for a declaration's line and was asked
+            // nothing else has no search to take it from, and its rows are read like any other.
+            Adequacy.HowARowIsRead read = Adequacy.readingOf(db, module, behavior);
+            if (read == null) {
+                return null;
+            }
+            Map<OfferItem.APointOfALine, List<AtAPoint>> reads = new LinkedHashMap<>();
+            // Where this behavior meets each point its own rules are owed a row at. Read whether or
+            // not anything was asked of the behavior, for the reason the declarations' lines below
+            // are: a row written under it stands where it stands, and whether this run went looking
+            // for one has nothing to do with it.
+            //
+            // Which row is offered there is not here. That is one search over every reading of the
+            // point, and the module's account holds it ({@link BorderAccount}) — a behavior
+            // resolving its own points beside that would be one search made twice, free to come to
+            // two answers about one row.
+            List<BorderObligationPointAssessment> points = db.ask(
+                    new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior)))
+                    .value();
+            for (BorderObligationPointAssessment point
+                    : points == null ? List.<BorderObligationPointAssessment>of() : points) {
+                if (!point.owedToTheReading() || !point.carriedBy(behavior)) {
+                    continue;
+                }
+                OfferItem.APointOfALine item = new OfferItem.APointOfALine(point.point());
+                point.met().forEach((_, at) -> reads.computeIfAbsent(item, _ -> new ArrayList<>())
+                        .add(new AtAPoint(at.border(), at.owedAt(point.role()).criterion())));
+            }
+            // And this behavior's readings of the lines the declarations own, which its own rules
+            // are owed none of. Read the same way and for the same reason.
+            declared.forEach((point, byBehavior) -> {
+                for (BorderAssessment at : byBehavior.getOrDefault(behavior, List.of())) {
+                    if (at.at(point.role()) instanceof ItemAssessment.Owed owed) {
+                        reads.computeIfAbsent(new OfferItem.APointOfALine(point),
+                                _ -> new ArrayList<>())
+                                .add(new AtAPoint(at.border(), owed.criterion()));
+                    }
+                }
+            });
+            // What this behavior was asked to offer a row for, which is the search's answer and
+            // is nothing where nothing asked it.
+            return new OneBehavior(behavior, read.where(), read.axes(), sig, building,
+                    sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
+                            : Adequacy.runningRowsOf(trials, behavior, sig),
+                    filling == null ? List.of() : filling.composed().plan().classesOwed(),
+                    filling == null ? List.of() : filling.composed().plan().armsOwed(),
+                    reads);
+        }
+
+        /**
+         * Which row was composed for each of them, where one was.
+         *
+         * <p>Read off what the searches answered with and never off the rows. A row carries the
+         * classes and arms it may be named after and never a line, so a walk from the rows would
+         * have every line in the block composed for nothing.
+         */
+        Map<OfferItem, RowKey> composed(Adequacy.Filling filling) {
+            Map<OfferItem, RowKey> out = new LinkedHashMap<>();
+            for (Generator.ClassOwed each : classes) {
+                if (filling.composed().discharge().at(each)
+                        instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                    out.put(new OfferItem.AClass(each),
+                            RowKey.of(behavior, filling.composed().rowFor(built.row())));
+                }
+            }
+            for (Generator.ArmOwed each : arms) {
+                if (filling.composed().discharge().at(each)
+                        instanceof souther.compiler.partition.ArmDisposition.Built built) {
+                    out.put(new OfferItem.AnArm(each),
+                            RowKey.of(behavior, filling.composed().rowFor(built.row())));
+                }
+            }
+            return out;
+        }
+
+        /**
+         * What this behavior was asked to offer a row for.
+         *
+         * <p>Its classes and its arms, and no point of a line. A row at a point is owed once
+         * however many readings there are, and it is offered from the module's account of them —
+         * so a behavior listing its own points here would put one piece of work into a run twice
+         * and let the two answer differently.
+         */
+        List<OfferItem> owed() {
+            List<OfferItem> out = new ArrayList<>();
+            classes.forEach(each -> out.add(new OfferItem.AClass(each)));
+            arms.forEach(each -> out.add(new OfferItem.AnArm(each)));
+            return out;
+        }
+
+        /** The row as the two things every question here is put to ({@link RowAsRead}). */
+        RowAsRead read(List<FixtureTemplate> inputs) {
+            return RowAsRead.of(sig, building, trial, inputs);
+        }
+
+        Settlement settlementOf(RowAsRead row, OfferItem item) {
+            return switch (item) {
+                case OfferItem.AClass(var owed) -> inClass(row, owed);
+                case OfferItem.AnArm(var owed) -> throughArm(row, owed);
+                case OfferItem.APointOfALine at -> atThePoint(row, at);
+            };
+        }
+
+        /**
+         * Whether the row's value at the position falls in the class.
+         *
+         * <p>Of this behavior's positions only. An axis names the behavior it divides, so a class of
+         * another one is not something a row written here has a value at — which is a row that does
+         * not settle it rather than one nothing could tell about.
+         */
+        private Settlement inClass(RowAsRead row, Generator.ClassOwed owed) {
+            if (!behavior.equals(owed.at().behavior())) {
+                return new Settlement.DoesNotSettle();
+            }
+            if (row.values() == null) {
+                return undetermined(row);
+            }
+            Classification at =
+                    InputClassifications.of(row.values(), where, axes).get(owed.at());
+            if (at == null) {
+                return new Settlement.DoesNotSettle();
+            }
+            return switch (at) {
+                case Classification.Classified in -> in.classIds().contains(owed.classId())
+                        ? new Settlement.Settles() : new Settlement.DoesNotSettle();
+                case Classification.Unclassified _ -> new Settlement.Undetermined(
+                        Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+            };
+        }
+
+        /**
+         * Whether running the row goes through the arm.
+         *
+         * <p>Not something the values answer. A row whose values sit in the classes a way into an
+         * arm leaves may still go elsewhere, so the account of the run is the whole of the evidence
+         * — and where there is none, this says so rather than reading the absence as a row that
+         * missed.
+         */
+        private Settlement throughArm(RowAsRead row, Generator.ArmOwed owed) {
+            return switch (row.watched()) {
+                case Generator.Watched.Ran(var account) -> account.taken().contains(owed.probe())
+                        ? new Settlement.Settles() : new Settlement.DoesNotSettle();
+                case Generator.Watched.NoAccount _ ->
+                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+            };
+        }
+
+        /**
+         * Whether the row stands at the point, as this behavior reads the line.
+         *
+         * <p>A line is owed a row once and is met at whichever position reads it, so a point this
+         * behavior's readings do not meet is one a row written here does not settle. Where they do,
+         * the walk that reads a written row against the point reads this one.
+         */
+        private Settlement atThePoint(RowAsRead read, OfferItem.APointOfALine at) {
+            List<AtAPoint> here = reads.get(at);
+            if (here == null || here.isEmpty()) {
+                // No reading of this line in this behavior. A row written here has no value on the
+                // line at all, which is a row that does not settle the point rather than one
+                // nothing could tell about.
+                return new Settlement.DoesNotSettle();
+            }
+            if (read.values() == null) {
+                return undetermined(read);
+            }
+            ObservedInputs row = read.asInputs();
+            // Existential over the readings, the way a point met at one position of a behavior is
+            // met: a row standing on the line anywhere the behavior reads it is a row at the point.
+            Settlement answer = new Settlement.DoesNotSettle();
+            for (AtAPoint one : here) {
+                Settlement said = switch (StandingAtAPoint.met(one.line().cut().of(), where,
+                        List.of(row), one.criterion(), one.line().origin().comparisonAt())) {
+                    case YES -> new Settlement.Settles();
+                    case NO -> new Settlement.DoesNotSettle();
+                    case NOT_WATCHED ->
+                            new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+                    case UNREADABLE -> new Settlement.Undetermined(
+                            Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+                };
+                if (said.settles()) {
+                    return said;
+                }
+                if (said instanceof Settlement.Undetermined) {
+                    answer = said;
+                }
+            }
+            return answer;
+        }
+
+    }
+
+    /** One position's reading of one line, as a row is put to it: the border this behavior met and
+     *  what a row there has to do. */
+    private record AtAPoint(souther.compiler.partition.Border line,
+                            souther.compiler.partition.Criterion criterion) {}
+
+    /** What an item that needs the values is told, where they are not here. */
+    private static Settlement undetermined(RowAsRead row) {
+        return new Settlement.Undetermined(row.whyNotRead());
+    }
+}

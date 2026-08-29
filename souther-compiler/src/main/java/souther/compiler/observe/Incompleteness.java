@@ -1,9 +1,11 @@
 package souther.compiler.observe;
 
-import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.diag.SourceRef;
+import souther.compiler.source.SourceId;
 
-import java.util.List;
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.SourcePos;
+
 import java.util.Optional;
 
 /**
@@ -20,9 +22,11 @@ import java.util.Optional;
  *               in a source, and while that was a guess from the shape of a string, three readers
  *               guessed differently and each was found separately
  * @param at     where, when there is a source to point at; empty for something with no position of
- *               its own, such as an invariant that arrived from a module compiled elsewhere
+ *               its own, such as an invariant that arrived from a module compiled elsewhere. A
+ *               {@link Citation}, so that a reason about a place says what the place is —
+ *               the same question every other thing this report points at now answers
  */
-public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
+public record Incompleteness(Code code, Target target, Optional<Citation> at) {
 
     /** What a reason is about, and so who it counts against. */
     public enum Scope {
@@ -33,17 +37,40 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
         /** The module, and so everything in it. */
         MODULE,
         /** A position inside a value — an axis path, a field chain — and so inside one behavior. */
-        POSITION
+        POSITION,
+        /** One row of one behavior, which is what the running of that row would have decided. */
+        ROW
     }
 
+    /**
+     * Why a measure could not be made, and whether the rows it was to be made from were read.
+     *
+     * <p>Each code answers {@link #leftNoRowRead()} for itself. A reader asking whether anything
+     * was read asks that rather than listing the codes that mean it: a list is a copy of this one,
+     * and the copy is what a code added later is missing from.
+     */
     public enum Code {
         /** A value could not be read back into an observed form at all. */
-        VALUE_UNREADABLE,
+        VALUE_UNREADABLE(false),
         /** A value was larger than the limits allow, so only its shape was kept. */
-        VALUE_TRUNCATED,
+        VALUE_TRUNCATED(false),
         /** A row could not be decided — it spent its budget, or the evaluation did not answer — so
          * what it would have covered is unknown. */
-        ROW_UNDECIDED,
+        ROW_UNDECIDED(false),
+        /**
+         * A row was not handed to what was to apply it: nothing could establish that the answer's
+         * declarations are the ones the row is written for.
+         *
+         * <p>One code for both of the ways that happens. They are two things to tell a person — one
+         * build has moved on from another, against nothing here being able to read what the answer
+         * carries — and what a measure loses is the same either way: what the running would have
+         * decided. Which of the two it was is said where a person reads it.
+         *
+         * <p>The rows behind it were read. They were built, held to their invariants, and recorded;
+         * a measure over them is over rows that are there, and what is missing from it is everything
+         * only the running establishes.
+         */
+        ANSWERER_NOT_ESTABLISHED(false),
         /**
          * The generated classes would not link.
          *
@@ -60,9 +87,9 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
          * generator's to report and say so in the generator's own words. What a reader of this code
          * knows is the linking failed and that the rows behind it did not run.
          */
-        LINKAGE_FAILED,
+        LINKAGE_FAILED(true),
         /** Nothing was observed from here, so what its rows cover is unknown. */
-        OBSERVATION_ABSENT,
+        OBSERVATION_ABSENT(true),
         /**
          * The classes an arm-measuring evaluation needs were not made.
          *
@@ -74,7 +101,26 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
          * <p>Its one producer takes this branch only where arm coverage was asked for, and returns
          * no rows with it. So the request and the empty result are both part of what this says.
          */
-        INSTRUMENTATION_ABSENT
+        INSTRUMENTATION_ABSENT(true);
+
+        private final boolean leftNoRowRead;
+
+        Code(boolean leftNoRowRead) {
+            this.leftNoRowRead = leftNoRowRead;
+        }
+
+        /**
+         * Whether nothing behind this was read at all, as against read and not finished.
+         *
+         * <p>The difference decides who has to notice. A row that ran out of time is there and says
+         * so; where nothing was read there is no row to find, and a measure over the rows that
+         * remain is a measure over some of them with nothing in it to say so. A generated row is a
+         * specific piece of work handed to a person, so it may not be offered from here — it may
+         * already be sitting in what was not read.
+         */
+        public boolean leftNoRowRead() {
+            return leftNoRowRead;
+        }
     }
 
     public Incompleteness {
@@ -97,16 +143,44 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
     }
 
     /** The source this is about, where what it names is one. Empty otherwise. */
-    public Optional<String> sourceIdentity() {
+    public Optional<SourceId> sourceIdentity() {
         return target.sourceIdentity();
     }
 
+    /** What a whole source left unmeasured, taking the identity as one rather than as its
+     *  spelling: the scope follows from the subject, so the two cannot be given disagreeing. */
+    public static Incompleteness ofSource(Code code, SourceId source) {
+        return new Incompleteness(code, new Target.OfSource(source), Optional.empty());
+    }
+
+    /** @throws IllegalArgumentException for a scope whose subject is not a name — a source is
+     *          {@link #ofSource} and a position is {@link #atPosition} */
     public static Incompleteness of(Code code, Scope scope, String subject) {
         return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
     }
 
-    public static Incompleteness at(Code code, Scope scope, String subject, SourceRef where) {
-        return new Incompleteness(code, Target.of(scope, subject), Optional.ofNullable(where));
+    /** A reason about a place. The coordinate and not a reference over one: a reference holds a
+     *  source beside the one the coordinate has, this reads the coordinate's, and a signature that
+     *  still asked for the pair would let a caller write a half nothing reads.
+     *
+     *  @throws IllegalArgumentException for a scope whose subject is not a name, as {@link #of} */
+    public static Incompleteness at(Code code, Scope scope, String subject, SourcePos where) {
+        return new Incompleteness(code, Target.of(scope, subject),
+                Optional.ofNullable(where).map(Citation::of));
+    }
+
+    /**
+     * What one row that did not come back leaves unmeasured, read off the row.
+     *
+     * <p>The one place a row's outcome becomes a reason a measure could not read everything. What
+     * stopped the row is a fact about the row and is written where it stopped; what a measure can
+     * no longer answer is a fact about the measure. Taking the row here means the two vocabularies
+     * are joined once, and means the identity and the place a reader is sent to come from the same
+     * row rather than from two arguments a caller could pair wrongly.
+     */
+    public static Incompleteness ofRow(Code code, RowOutcome row) {
+        return new Incompleteness(code, new Target.OfRow(RowRef.of(row)),
+                Optional.of(souther.compiler.diag.Citation.of(row.at())));
     }
 
     /** A position, which takes the behavior it sits in as well as the path. Both, because whose
@@ -138,9 +212,17 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
         return behavior().map(behavior::equals).orElse(true);
     }
 
-    /** What makes two of these the same reason. A module's classes failing to be instrumented is one
-     * fact however many sources went looking for them. */
-    public Object identity() {
-        return List.of(code, target);
+    /**
+     * What makes two of these the same reason: what happened, and what it happened to.
+     *
+     * <p>Where it was said is not part of it. A module's classes failing to be instrumented is one
+     * fact however many sources went looking for them, and each of those cites it somewhere else.
+     */
+    public Fact identity() {
+        return new Fact(code, target);
     }
+
+    /** A reason with the place it was said left out, which is the whole of what makes two of them
+     *  one. */
+    public record Fact(Code code, Target target) {}
 }

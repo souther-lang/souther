@@ -16,6 +16,7 @@ import souther.compiler.diag.SourcePos;
  * checked, which is the point — an author fixing one name should still be told about the rest.
  */
 public final class Unanswerable extends RuntimeException {
+    private static final long serialVersionUID = 1L;
 
     private final transient SourcePos pos;
 

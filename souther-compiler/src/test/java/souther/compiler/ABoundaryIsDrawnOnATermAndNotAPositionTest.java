@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
@@ -13,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -67,7 +68,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
 
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }
@@ -77,8 +78,14 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
         return compilation.db().ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
     }
 
-    private static List<String> labels(PartitionEvidence partition) {
-        return partition.boundaries().stream().map(BoundaryAssessment::label).sorted().toList();
+    /** The lines each behavior of the one module in {@code source} was measured at. */
+    private static Map<String, List<BorderAssessment>> lines(String source) {
+        Compilation compilation = compiled(source);
+        return Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+    }
+
+    private static List<String> labels(List<BorderAssessment> lines) {
+        return lines.stream().map(BorderAssessment::label).sorted().toList();
     }
 
     /** A size call in an invariant draws the line its number names, and the line is named by the term
@@ -91,17 +98,23 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
                         "Set.size(t.codes) = 1",
                         "String.length(t.label) = 1",
                         "t.size = 1"),
-                labels(partitions(MODEL).get("look")));
+                labels(lines(MODEL).get("look")));
     }
 
-    /** One obligation each, and at the edge. Everything outside an invariant is refused at
-     * construction, so there is no row beyond it to ask for — which is what the numeric bound beside
-     * them has always done. */
+    /** One point against the line each, and it is the {@code ON} point. Everything outside an
+     * invariant is refused at construction, so there is no row beyond it to ask for — which is what
+     * the numeric bound beside them has always done, and what the border now says in so many
+     * words. */
     @Test
     void anInvariantsEdgeIsOwedOnceAndNotOnBothSides() {
-        for (BoundaryAssessment line : partitions(MODEL).get("look").boundaries()) {
-            assertEquals(souther.compiler.partition.BoundaryObligation.BoundarySide.AT, line.side(),
-                    line.label());
+        for (BorderAssessment line : lines(MODEL).get("look")) {
+            assertNotNull(line.owedAt(souther.compiler.partition.PointRole.ON), line.label());
+            assertEquals(new ItemAssessment.NotOwed(
+                            souther.compiler.partition.NotOwedReason.THE_RULES_REFUSE_IT),
+                    line.at(souther.compiler.partition.PointRole.OFF), line.label());
+            assertEquals(new ItemAssessment.NotOwed(
+                            souther.compiler.partition.NotOwedReason.THE_RULES_REFUSE_IT),
+                    line.at(souther.compiler.partition.PointRole.OUT), line.label());
         }
     }
 
@@ -109,23 +122,48 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
      * boundary and a row of three names is not at the one that wants two. */
     @Test
     void aRowIsReadThroughTheTermThatDrewTheLine() {
-        Map<String, BoundaryAssessment> byLabel = new java.util.LinkedHashMap<>();
-        partitions(MODEL).get("look").boundaries().forEach(b -> byLabel.put(b.label(), b));
+        Map<String, BorderAssessment> byLabel = new java.util.LinkedHashMap<>();
+        lines(MODEL).get("look").forEach(b -> byLabel.put(b.label(), b));
 
-        assertTrue(byLabel.get("String.length(t.label) = 1").coverage().hit(),
+        assertTrue(onPointOf(byLabel, "String.length(t.label) = 1").hasRowWitness(),
                 "the row's label is one character long");
-        assertTrue(byLabel.get("Set.size(t.codes) = 1").coverage().hit(),
+        assertTrue(onPointOf(byLabel, "Set.size(t.codes) = 1").hasRowWitness(),
                 "the row's set holds one code");
-        assertEquals(BoundaryAssessment.Coverage.Missed.class,
-                byLabel.get("List.length(t.names) = 2").coverage().getClass(),
+        assertEquals(ItemAssessment.Coverage.NoHit.class,
+                onPointOf(byLabel, "List.length(t.names) = 2").coverage().made().orElseThrow().getClass(),
                 "the row holds three names, and nothing was unreadable about it");
     }
 
-    /** The report stops saying the model draws no line through a position its own type bounds. */
+    /** The borders of {@code behavior} in {@code source}, by the line each is at. */
+    private static Map<String, BorderAssessment> byLabel(String source, String behavior) {
+        Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
+        lines(source).get(behavior).forEach(b -> out.put(b.label(), b));
+        return out;
+    }
+
+    /** The point on the line of the border named {@code label}. */
+    private static ItemAssessment.Owed onPointOf(Map<String, BorderAssessment> byLabel,
+                                                 String label) {
+        return byLabel.get(label).owedAt(souther.compiler.partition.PointRole.ON);
+    }
+
+    /**
+     * The report stops saying the model draws no line through a position its own type bounds.
+     *
+     * <p>Of the positions this is about, which are the ones a clause bounds. What the collections
+     * hold is a position too and no clause of this model says anything about it, so the model
+     * really does divide those no way — that sentence is the true one there, and it is what the
+     * lines below are held to being.
+     */
     @Test
     void noneOfThemIsReportedAsAPositionNothingDivides() {
         String human = AdequacyReport.of(compiled(MODEL)).human(SourceNameResolver.identity());
-        assertFalse(human.contains("not derivable"), human);
+        List<String> said = human.lines().map(String::strip)
+                .filter(line -> line.startsWith("· not derivable:")).toList();
+
+        assertEquals(List.of(), said.stream()
+                        .filter(line -> !line.contains("[*]")).toList(),
+                () -> "every position a clause bounds is one the report says is divided: " + human);
     }
 
     private static final String GUARDED = """
@@ -157,9 +195,17 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
     void aGuardOverATermDrawsTheLineAndItsNeighbour() {
         assertEquals(List.of(
                         "String.length(t.label) = 1",
-                        "String.length(t.label) = 3",
-                        "String.length(t.label) = 4"),
-                labels(partitions(GUARDED).get("guarded")));
+                        "String.length(t.label) = 3"),
+                labels(lines(GUARDED).get("guarded")),
+                "two borders, and the guard's owes a row at 4 as its OFF point rather than being a"
+                        + " line of its own");
+        // `> 3` puts the 3 outside the partition it names, so the row there is the border's OFF
+        // point and the 4 is its ON point — one border, two points, and neither is a line of its
+        // own.
+        assertEquals("3", byLabel(GUARDED, "guarded").get("String.length(t.label) = 3")
+                        .against(souther.compiler.partition.PointRole.OFF));
+        assertEquals("4", byLabel(GUARDED, "guarded").get("String.length(t.label) = 3")
+                        .against(souther.compiler.partition.PointRole.ON));
     }
 
     /** And the position is measured, where before the body compared a number at a position the report
@@ -200,9 +246,8 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
     void aMeasureWrittenWithoutItsQualifierIsTheSameTerm() {
         assertEquals(List.of(
                         "String.length(t.label) = 1",
-                        "String.length(t.label) = 3",
-                        "String.length(t.label) = 4"),
-                labels(partitions(IMPORTED).get("look")));
+                        "String.length(t.label) = 3"),
+                labels(lines(IMPORTED).get("look")));
     }
 
     private static final String UNBOUNDED = """
@@ -231,6 +276,6 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
     @Test
     void aSizeIsNeverNegativeAndNoRowIsAskedForBelowZero() {
         assertEquals(List.of("List.length(t.names) = 0"),
-                labels(partitions(UNBOUNDED).get("atLeastNone")));
+                labels(lines(UNBOUNDED).get("atLeastNone")));
     }
 }

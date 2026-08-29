@@ -39,7 +39,7 @@ class CompileOptionMatchTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
         Object trip = Codecs.decoded(loader, "demo.Trip", tripObject);
 
-        Object behavior = loader.loadClass("demo.ApproverLabel" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "approverLabel").getConstructor().newInstance();
         Object label = Codecs.apply(behavior, trip);
 
         // Label is a single-field newtype, so its encoder yields the bare String.
@@ -64,7 +64,7 @@ class CompileOptionMatchTest {
                 "| Some(Id(v)) -> Label { value = v }");
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object trip = Codecs.decoded(loader, "demo.Trip", Map.of("id", "t-1", "approver", "e-9"));
-        Object behavior = loader.loadClass("demo.ApproverLabel$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "approverLabel").getConstructor().newInstance();
         Object label = Codecs.apply(behavior, trip);
         assertEquals("e-9", (String) Codecs.encode(loader, "demo.Label", label));
     }
@@ -137,7 +137,7 @@ class CompileOptionMatchTest {
         // `Some(Verified(Raw(s)))` opens both layers of the element in one pattern; s is the base String
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(NESTED), getClass().getClassLoader());
         Object box = Codecs.decoded(loader, "demo.Box", Map.of("token", "tok-7"));
-        Object behavior = loader.loadClass("demo.Open$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "open").getConstructor().newInstance();
         assertEquals("tok-7", (String) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, box)));
     }
@@ -158,7 +158,7 @@ class CompileOptionMatchTest {
             data Next = { member: String }
             data Nobody
 
-            behavior peek : (q: Queue) -> Next | Nobody constructs Next, Nobody
+            behavior peek : (q: Queue) -> Next | Nobody constructs Next
 
             let peek (q) =
                 match q.head with
@@ -173,7 +173,7 @@ class CompileOptionMatchTest {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(RECORD_ELEMENT), getClass().getClassLoader());
         Object queue = Codecs.decoded(loader, "demo.Queue", Map.of("head", Map.of("member", "m-1")));
-        Object behavior = loader.loadClass("demo.Peek$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "peek").getConstructor().newInstance();
         Map<?, ?> next = (Map<?, ?>) Codecs.encode(loader, "demo.Next", Codecs.apply(behavior, queue));
         assertEquals("m-1", next.get("member"));
     }
