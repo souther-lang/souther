@@ -722,6 +722,8 @@ public final class InvariantChecker {
             // arrived would be built out of less than the rules say — and which of two ways of
             // writing the same rules was affordable would be a fact about the writing.
             StatedByClauses.Answered<Written> answered = asked.resolve(reader, stated, allowed);
+            // What the answer has left, before a word of the account is read.
+            Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
             AdmissibleValues<FactSubject> values = answered.whole().values();
             answered.perClause().forEach((each, one) -> {
                 one.adopted().forEach(position -> took.record(each.from(), position));
@@ -732,6 +734,17 @@ public final class InvariantChecker {
                         .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>());
                 parts.forEach(part -> out.put(part.getKey(), part.getValue().adopted()));
             });
+            // And the same after it. Reading the account is reading an answer: the whole was worked
+            // out once above, and what each clause and each part of it took in is looked up in
+            // that. Worked out again per clause instead, asking what a rule adopted bought machines
+            // the answer had no use for — so how exactly the rest of the declaration could be
+            // answered depended on how much of its own account somebody had read.
+            //
+            // An assertion because it is about this compiler and not about any model, and here
+            // rather than in one test because every declaration a corpus holds goes through it.
+            // What comes after this line is the answer being carried on with, which may spend.
+            assert unspent.equals(leftOf(allowed, positions.keySet()))
+                    : "reading the account of " + named.name() + " spent its allowance";
             // What was counted bounds what was built, which is the whole of why counting before
             // reading is enough. It is an induction and its steps are held where they are taken —
             // a leaf is one alternative, a choice holds at most the sum and a conjunction at most
@@ -953,6 +966,16 @@ public final class InvariantChecker {
     /** One clause reaching a value, rebased onto the positions of that value, and which clause it
      * is. */
     private record Written(RuleRef.Invariant from, Core clause) {}
+
+    /** What each of {@code positions} has left of its allowance, for holding an answer to what it
+     *  spent between two moments. */
+    private static Map<FactSubject, Integer> leftOf(
+            souther.compiler.values.Allowance<FactSubject> allowed,
+            Set<FactSubject> positions) {
+        Map<FactSubject, Integer> out = new LinkedHashMap<>();
+        positions.forEach(each -> out.put(each, allowed.left(each)));
+        return out;
+    }
 
     /**
      * Whether the value a stop left unread is one every value of what is being read has.
