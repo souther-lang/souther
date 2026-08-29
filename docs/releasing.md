@@ -1,9 +1,9 @@
 # Releasing
 
-develop never carries a release version. It is `0.1.0-SNAPSHOT` from one release to the next, and
-the number a release is cut at is set on `main`. That is what keeps a release to one pull request:
-bumping develop to the release version and taking it back off afterwards were two more, and both
-existed only because develop had been made to claim a number it was not.
+develop never carries a release version. It carries the snapshot of the version after the last one
+released, and the number a release is cut at is set on `main`. That is what keeps a release to one
+pull request: bumping develop to the release version and taking it back off afterwards were two
+more, and both existed only because develop had been made to claim a number it was not.
 
 ## Cutting one
 
@@ -51,7 +51,16 @@ existed only because develop had been made to claim a number it was not.
    souther-lsp and souther-bench do not: the really-executable jar and the language server are
    distributed through GitHub Releases, and the benchmarks are not an artifact anyone depends on.
 
-Nothing goes back to develop afterwards. It is on the snapshot already.
+6. Move develop to the next snapshot:
+
+   ```sh
+   git switch develop && git pull
+   bin/set-version.sh <next version>-SNAPSHOT
+   ```
+
+   on a branch of its own, as any other change to develop is. Nothing of the release goes back —
+   what this carries is that the version just released is behind develop rather than ahead of it.
+   `souther-lang/examples` names the snapshot, so it moves with this.
 
 ## The examples
 
