@@ -189,6 +189,18 @@ public sealed interface ValueOrigin<K> {
          *  stands for something of its own. */
         AffineForms.ReadThrough<E> readThrough(Core.Read read, E at);
 
+        /**
+         * Every value {@code read}'s name can stand for, or null where the environment has not got
+         * all of them.
+         *
+         * <p>The same answer the arithmetic beside this one is given
+         * ({@link AffineForms.Reading#alternativesOf}), and asked here for the reason it is asked
+         * there: a name a plurality stands behind is one both walks meet, and a walk that could not
+         * read it answered that the rule was about nothing — while the other drew the rule's line.
+         * A position divided by a line, reported as one the model divides no way.
+         */
+        java.util.List<AffineForms.ReadThrough<E>> alternativesOf(Core.Read read, E at);
+
         /** What {@code li}'s body is read in. */
         E inside(Core.LetIn li, E at);
     }
@@ -212,7 +224,8 @@ public sealed interface ValueOrigin<K> {
                 following.remove(read.binding());
                 return inside;
             }
-            return leafOf(e, at, reading);
+            ValueOrigin<K> agreed = through != null ? null : ofEach(read, at, reading, following);
+            return agreed != null ? agreed : leafOf(e, at, reading);
         }
         // The operation a call reaches, asked of {@link Terms} so that what counts as one is
         // settled where the arithmetic already settles it. A two-argument call the language has an
@@ -240,6 +253,38 @@ public sealed interface ValueOrigin<K> {
             return leafOf(e, at, reading);
         }
         return new Composed<>(partsOf(children, at, reading, following));
+    }
+
+    /**
+     * What every value {@code read}'s name can stand for is made of, where they are all made of the
+     * same thing — or null.
+     *
+     * <p>The same discipline the arithmetic keeps over such a name: what may be said of a position
+     * several values stand at is what holds of every one of them. Members made of different things
+     * leave nothing to say, and the name falls back to what it is on its own.
+     *
+     * <p>Compared by what the origins are and not by which member answered. Two members that are
+     * the same position are one answer about that position, however many of them a container was
+     * written with.
+     */
+    private static <K, E> ValueOrigin<K> ofEach(Core.Read read, E at, Reading<K, E> reading,
+                                                Set<souther.compiler.types.BindingId> following) {
+        List<AffineForms.ReadThrough<E>> alternatives = reading.alternativesOf(read, at);
+        if (alternatives == null || alternatives.isEmpty() || !following.add(read.binding())) {
+            return null;
+        }
+        ValueOrigin<K> agreed = null;
+        for (AffineForms.ReadThrough<E> each : alternatives) {
+            ValueOrigin<K> one = of(each.value(), each.at(), reading, following);
+            if (agreed == null) {
+                agreed = one;
+            } else if (!agreed.equals(one)) {
+                agreed = null;
+                break;
+            }
+        }
+        following.remove(read.binding());
+        return agreed;
     }
 
     private static <K, E> List<ValueOrigin<K>> partsOf(List<Core> of, E at, Reading<K, E> reading,

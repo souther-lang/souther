@@ -79,6 +79,63 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
                     }"""));
     }
 
+    /**
+     * The model this is about, written the way a model of this size writes it.
+     *
+     * <p>The candidates come back from a helper, one of them wraps its number in a value type, the
+     * arm that admits it is one of three, and the comparison is inside a second helper the first
+     * one calls. None of that is a case of its own: it is one reading through the names a model puts
+     * between a rule and the value it is written about, and a fixture with the names taken out would
+     * be testing a shape nobody writes.
+     *
+     * <p>Two lines come of it, and the second is why the first is not the whole claim. The arm that
+     * admits the candidate holding a value type states a hundred thousand, and the arm that admits
+     * the one holding a parameter states that parameter — so what a member contributes is whatever
+     * it wrote, and a reading that only ever answered with written numbers would pass the first and
+     * fail the second.
+     */
+    @Test
+    void aModelReachesItsThresholdThroughACandidateListAndAnArm() {
+        assertEquals("[予定費用/x < 100000, 予定費用/100000 <= x, 役職/x <= 3, 役職/3 < x] "
+                        + "unread [] points ["
+                        + "判定する/予定費用 ON 100000, 判定する/予定費用 OFF 99999, "
+                        + "判定する/予定費用 IN 100000 < 予定費用, 判定する/予定費用 OUT 予定費用 < 99999, "
+                        + "判定する/役職 ON 4, 判定する/役職 OFF 3, "
+                        + "判定する/役職 IN 4 < 役職, 判定する/役職 OUT 役職 < 3]",
+                readingOf("""
+                module g
+
+                data 金額 = Int
+                data 高額出張 = { 基準金額: 金額 }
+                data 権限不足 = { 役職: Int }
+                data 先方費用負担
+                data 事前承認理由 = 高額出張 | 権限不足 | 先方費用負担
+                data Yes
+                data No
+
+                let 事前承認理由の候補 (役職: Int): List<事前承認理由> =
+                    [ 高額出張 { 基準金額 = 金額(100000) }
+                    , 権限不足 { 役職 = 役職 }
+                    , 先方費用負担 ]
+
+                let 高額か (予定費用: Int, 基準金額: 金額): Bool = 予定費用 >= 基準金額.value
+
+                let 該当するか (予定費用: Int, 理由: 事前承認理由): Bool =
+                    match 理由 with
+                        | 高額出張 { 基準金額 } -> 高額か(予定費用, 基準金額)
+                        | 権限不足 { 役職 }     -> 役職 > 3
+                        | 先方費用負担          -> false
+
+                behavior 判定する : (予定費用: Int, 役職: Int) -> Yes | No
+                let 判定する (予定費用, 役職) =
+                    if List.any((理由) -> 該当するか(予定費用, 理由), 事前承認理由の候補(役職))
+                        then Yes else No
+
+                example 判定する
+                    | "one" : (1, 1) -> No
+                """, "判定する"));
+    }
+
     /** The classes, what went unread, and the points a row is owed, of {@code classify}. */
     private static String reading(String body) {
         String source = """
@@ -103,13 +160,21 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
                 example classify
                     | "one" : (1) -> No
                 """.formatted(body);
+        return readingOf(source, "classify");
+    }
 
+    /** The same, of whichever behavior {@code source} is about. */
+    private static String readingOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(java.util.List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " "
+                        + each.diagnostic().primary()).toList(),
+                "the model under test compiles");
         AdequacyReport.BehaviorReport read = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().stream()
-                .filter(each -> each.name().equals("classify")).findFirst().orElseThrow();
+                .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();
         return "[" + read.partition().axes().stream()
                 .flatMap(axis -> axis.classes().stream())
                 .collect(Collectors.joining(", "))

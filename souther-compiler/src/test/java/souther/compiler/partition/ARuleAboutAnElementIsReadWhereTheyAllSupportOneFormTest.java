@@ -128,6 +128,29 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
     }
 
     /**
+     * A container a member of another container holds states nothing.
+     *
+     * <p>Where the way to a written list runs through a name standing for several, the list is not
+     * one this reading arrives at: what a member holds is followed through the steps with one
+     * successor, and a member is not one of those. Every number written here is the same and it is
+     * still no answer.
+     *
+     * <p>Which is also what keeps the reading of one rule linear in the members of one container. A
+     * plurality inside a plurality would be read once per member of the outer, and a reader that
+     * gained the inner one would want the cost of it measured before it did.
+     */
+    @Test
+    void aContainerAMemberHoldsStatesNoNumber() {
+        assertEquals("stopped", cut("""
+                {
+                        let ks = [ Holder { items = [ Big { threshold = 100000 } ] }
+                                 , Holder { items = [ Big { threshold = 100000 } ] } ]
+                        if List.any((k) -> List.any((j) -> n >= j.threshold, k.items), ks)
+                            then Yes else No
+                    }"""));
+    }
+
+    /**
      * A choice between two constructions still states nothing, even between two alike.
      *
      * <p>Which is the boundary as it was. The reading names no values for what stands at a choice,
@@ -151,6 +174,7 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
                 module g
 
                 data Big = { threshold: Int }
+                data Holder = { items: List<Big> }
                 data Yes
                 data No
 
