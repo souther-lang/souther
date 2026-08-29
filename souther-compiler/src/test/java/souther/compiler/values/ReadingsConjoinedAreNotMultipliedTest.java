@@ -24,12 +24,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ReadingsConjoinedAreNotMultipliedTest {
 
+    /**
+     * What puts the sets of these readings together.
+     *
+     * <p>One for the file, and one for every conjunction in it: a conjunction is the one place two
+     * readings of a declaration come together, so the composer that paid for the sets in one is the
+     * composer the next meet spends from. Every set here is values written out, so nothing is built
+     * and no allowance is spent.
+     */
+    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
+
     /** Two readings over positions neither shares, each holding two alternatives. */
     @Test
     void readingsOverDisjointPositionsStayApart() {
         ConjoinedAdmissibleValues<String> both =
-                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"))
-                        .meet(ConjoinedAdmissibleValues.of(twoAlternatives("c", "d")));
+                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"), SETS)
+                        .meet(ConjoinedAdmissibleValues.of(twoAlternatives("c", "d"), SETS));
 
         assertEquals(2, both.factors().size(), "one factor per reading");
         both.factors().forEach(each -> assertEquals(2, alternativesOf(each),
@@ -40,8 +50,8 @@ class ReadingsConjoinedAreNotMultipliedTest {
     @Test
     void andEachPositionIsAnsweredAsItWas() {
         ConjoinedAdmissibleValues<String> both =
-                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"))
-                        .meet(ConjoinedAdmissibleValues.of(twoAlternatives("c", "d")));
+                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"), SETS)
+                        .meet(ConjoinedAdmissibleValues.of(twoAlternatives("c", "d"), SETS));
 
         assertEquals(twoAlternatives("a", "b").at("a"), both.at("a"));
         assertEquals(twoAlternatives("c", "d").at("d"), both.at("d"));
@@ -60,12 +70,14 @@ class ReadingsConjoinedAreNotMultipliedTest {
     @Test
     void factorsReachingEachOtherThroughAThirdAreOneFactor() {
         ConjoinedAdmissibleValues<String> apart =
-                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"))
-                        .meet(ConjoinedAdmissibleValues.of(AdmissibleValues.at("c", just("x"))));
+                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"), SETS)
+                        .meet(ConjoinedAdmissibleValues.of(
+                                AdmissibleValues.at("c", just("x")), SETS));
         assertEquals(2, apart.factors().size());
 
         ConjoinedAdmissibleValues<String> joined = apart.meet(ConjoinedAdmissibleValues.of(
-                AdmissibleValues.at("b", just("y")).meet(AdmissibleValues.at("c", just("x")))));
+                AdmissibleValues.at("b", just("y"))
+                        .meet(AdmissibleValues.at("c", just("x")), SETS), SETS));
 
         assertEquals(1, joined.factors().size(), "all three reach each other");
         assertEquals(Set.of("a", "b", "c"), joined.subjects());
@@ -77,10 +89,10 @@ class ReadingsConjoinedAreNotMultipliedTest {
     @Test
     void oneFactorHoldingNothingIsTheWholeHoldingNothing() {
         ConjoinedAdmissibleValues<String> both =
-                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"))
+                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"), SETS)
                         .meet(ConjoinedAdmissibleValues.of(
                                 AdmissibleValues.at("c", just("x"))
-                                        .meet(AdmissibleValues.at("c", just("y")))));
+                                        .meet(AdmissibleValues.at("c", just("y")), SETS), SETS));
 
         assertTrue(both.isBottom());
     }
@@ -104,18 +116,18 @@ class ReadingsConjoinedAreNotMultipliedTest {
     @Test
     void aComponentIsMetInTheOrderItsReadingsArrived() {
         AdmissibleValues<String> named = AdmissibleValues.at("a", just("x"))
-                .meet(AdmissibleValues.at("b", just("y")));
+                .meet(AdmissibleValues.at("b", just("y")), SETS);
         AdmissibleValues<String> arrivedSecond =
                 AdmissibleValues.unreadable(Set.of("x"), UnreadReason.FORM_NOT_READ);
         AdmissibleValues<String> bridge =
                 AdmissibleValues.unreadable(Set.of("b", "x"), UnreadReason.RELATES_TWO_POSITIONS);
 
-        ConjoinedAdmissibleValues<String> apart = ConjoinedAdmissibleValues.of(named)
-                .meet(ConjoinedAdmissibleValues.of(arrivedSecond));
+        ConjoinedAdmissibleValues<String> apart = ConjoinedAdmissibleValues.of(named, SETS)
+                .meet(ConjoinedAdmissibleValues.of(arrivedSecond, SETS));
         assertEquals(2, apart.factors().size(), "these two share nothing");
 
         ConjoinedAdmissibleValues<String> joined =
-                apart.meet(ConjoinedAdmissibleValues.of(bridge));
+                apart.meet(ConjoinedAdmissibleValues.of(bridge, SETS));
 
         assertEquals(1, joined.factors().size(), "and the third reaches both of them");
         assertEquals(List.of(UnreadReason.FORM_NOT_READ, UnreadReason.RELATES_TWO_POSITIONS),
@@ -140,7 +152,7 @@ class ReadingsConjoinedAreNotMultipliedTest {
         assertTrue(read.projectionExactAt("elsewhere"));
         assertEquals(List.of(), read.whyUnread("elsewhere"));
 
-        assertTrue(ConjoinedAdmissibleValues.of(read).at("elsewhere").isAny());
+        assertTrue(ConjoinedAdmissibleValues.of(read, SETS).at("elsewhere").isAny());
         assertTrue(ConjoinedAdmissibleValues.<String>top().at("elsewhere").isAny(),
                 "and a conjunction of no readings names nothing at all");
     }
@@ -160,8 +172,9 @@ class ReadingsConjoinedAreNotMultipliedTest {
         assertFalse(nothing.hasReadings());
 
         ConjoinedAdmissibleValues<String> overOneVocabulary =
-                ConjoinedAdmissibleValues.of(AdmissibleValues.at("x", just("A")))
-                        .meet(ConjoinedAdmissibleValues.of(AdmissibleValues.at("x", just("B"))));
+                ConjoinedAdmissibleValues.of(AdmissibleValues.at("x", just("A")), SETS)
+                        .meet(ConjoinedAdmissibleValues.of(
+                                AdmissibleValues.at("x", just("B")), SETS));
 
         assertEquals(1, overOneVocabulary.factors().size(),
                 "two readings of one position are one factor");
@@ -192,9 +205,10 @@ class ReadingsConjoinedAreNotMultipliedTest {
     /** A reading of two positions leaving two alternatives, which is what a choice written across
      *  two positions comes to. */
     private static AdmissibleValues<String> twoAlternatives(String one, String other) {
-        return AdmissibleValues.at(one, just("x")).meet(AdmissibleValues.at(other, just("y")))
+        return AdmissibleValues.at(one, just("x"))
+                .meet(AdmissibleValues.at(other, just("y")), SETS)
                 .joinApart(AdmissibleValues.at(one, just("p"))
-                        .meet(AdmissibleValues.at(other, just("q"))));
+                        .meet(AdmissibleValues.at(other, just("q")), SETS), SETS);
     }
 
     private static ValueSet just(String text) {

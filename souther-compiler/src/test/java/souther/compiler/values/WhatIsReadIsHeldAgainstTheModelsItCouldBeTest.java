@@ -44,6 +44,10 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
     private static final Value A = Value.text("A");
     private static final Value B = Value.text("B");
 
+    /** What puts the sets of these readings together. Every set here is values written out, so
+     *  nothing is built and no allowance is spent. */
+    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
+
     /**
      * A record of this model is one of four, and a set of them is a bit of a nibble.
      *
@@ -93,10 +97,7 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
     }
 
     private static boolean holds(ValueSet set, Value value) {
-        return switch (set) {
-            case ValueSet.Finite it -> it.values().contains(value);
-            case ValueSet.Cofinite it -> !it.excluded().contains(value);
-        };
+        return set.has(value);
     }
 
     /** A rule read in full: one set of records and no doubt about it. */
@@ -163,8 +164,8 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
         boolean overOne = left.choicesOverOnePosition() && right.choicesOverOnePosition()
                 && (by.equals("&&") || about.size() <= 1);
         return new Rule("(" + left.wrote() + " " + by + " " + right.wrote() + ")",
-                by.equals("&&") ? left.read().meet(right.read())
-                        : left.read().join(right.read()),
+                by.equals("&&") ? left.read().meet(right.read(), SETS)
+                        : left.read().join(right.read(), SETS),
                 List.copyOf(could), about, overOne);
     }
 

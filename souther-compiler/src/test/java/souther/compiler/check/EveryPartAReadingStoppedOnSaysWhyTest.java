@@ -37,7 +37,7 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
             module demo
 
             data N = { a: String, b: String }
-                invariant both = a /= b && String.matches("x+", a)
+                invariant both = a /= b && String.startsWith("x", a)
             """;
 
     /** The two written the other way round, which is the same clause. */
@@ -45,7 +45,7 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
             module demo
 
             data N = { a: String, b: String }
-                invariant both = String.matches("x+", a) && a /= b
+                invariant both = String.startsWith("x", a) && a /= b
             """;
 
     /**
@@ -60,8 +60,8 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
             module demo
 
             data N = { a: String, b: String }
-                invariant shape = String.matches("x+", a)
-                invariant either = a == "q" || String.matches("x+", b)
+                invariant shape = String.startsWith("x", a)
+                invariant either = a == "q" || String.startsWith("x", b)
             """;
 
     /**

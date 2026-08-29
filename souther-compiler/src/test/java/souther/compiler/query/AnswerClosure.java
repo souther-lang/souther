@@ -295,6 +295,17 @@ final class AnswerClosure {
                             + "on that, which is a sum nobody has written down: until it is, what "
                             + "may stand here is settled by whatever happens to be put there");
 
+    /** The machine under a language, which is one way of holding the strings and not the strings. */
+    private static final Reading A_MACHINE_UNDER_A_LANGUAGE =
+            new Reading("A_MACHINE_UNDER_A_LANGUAGE", MISSING_EQUALITY,
+                    "the states a set of strings is walked between. A value, and one nothing "
+                            + "compares on its own: two machines built from patterns written "
+                            + "differently accept the same strings and are the same set, so the "
+                            + "language above it writes its own equality and asks the strings. "
+                            + "Comparing the states instead would answer that two spellings of one "
+                            + "rule are two sets, which is the answer a reading that came to it by "
+                            + "another route would then disagree with");
+
     /** One end of what a reading leaves a position. */
     private static final Reading NARROWED_END = new Reading("NARROWED_END", MISSING_EQUALITY,
             "one end of what a reading leaves a position, with what is holding it. A value, and one "
@@ -442,6 +453,16 @@ final class AnswerClosure {
                 GENERATION_READERS, Traversal.Why.SAYS_NOTHING_OF_ITSELF);
     }
 
+    /** The machine a language is held as, under the class that denotes a pattern's strings. */
+    private static void theMachineUnderALanguage(List<KnownDeclared> into, String question,
+                                                 TypePath.Step... under) {
+        into.add(new KnownDeclared(declared(question, "souther.compiler.regex.Automaton",
+                then(under, arm("souther.compiler.values.ValueSet$Matching"),
+                        part("souther.compiler.values.ValueSet$Matching", "language"),
+                        part("souther.compiler.regex.Language", "machine"))),
+                A_MACHINE_UNDER_A_LANGUAGE, Traversal.Why.SAYS_NOTHING_OF_ITSELF));
+    }
+
     /**
      * Both ends of one range, which are one thing to fix met twice.
      *
@@ -542,6 +563,16 @@ final class AnswerClosure {
                     then(positions, part("souther.compiler.inputs.ReadPosition", "narrowedEnds")));
             whatATermHolds(out, positions);
         }
+        // The machine a class denotes where what it denotes is a pattern's strings, reached at each
+        // of the two places an axis is carried from.
+        theMachineUnderALanguage(out, Q + "Adequacy$Divided",
+                part("souther.compiler.partition.Partitions$Partitioning", "axes"), HELD,
+                part("souther.compiler.partition.Axis", "classes"), HELD,
+                part("souther.compiler.partition.PartitionClass", "denotes"));
+        theMachineUnderALanguage(out, Q + "Adequacy$Generated",
+                then(A_SUBJECT, part("souther.compiler.partition.Generator$Subject", "axes"), HELD,
+                        part("souther.compiler.partition.Axis", "classes"), HELD,
+                        part("souther.compiler.partition.PartitionClass", "denotes")));
         // The same ends, reached where an axis carries what the reading left the position.
         bothEndsOfARange(out, Q + "Adequacy$Divided",
                 part("souther.compiler.partition.Partitions$Partitioning", "axes"), HELD,

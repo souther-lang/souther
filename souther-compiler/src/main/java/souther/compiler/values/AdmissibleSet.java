@@ -116,6 +116,20 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
          * compiler could not take in.
          */
         record AlternativesNotSeparated() implements Widening {}
+
+        /**
+         * Every rule was read, and the set they leave between them cost more to build than this
+         * compiler allows itself.
+         *
+         * <p>Beside {@link RuleUnread} and never instead of it, for the reason above and one more.
+         * Nothing went unread — each rule was followed to the end, and where two of them came from
+         * two declarations each was read in full where it was written. What was not built is the
+         * set the two of them come to, and no rule is answerable for that: two patterns each small
+         * on its own have a meet the size of their product. Written as a rule going unread, a
+         * reader would be told to go and change one of them, which for a product of two is false of
+         * each.
+         */
+        record ExactValuesTooCostly() implements Widening {}
     }
 
     /** Every rule about the position was read, which is what a reader holding no reading of its own
@@ -149,6 +163,18 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
     public boolean alternativesNotSeparated() {
         return completeness instanceof Completeness.Wider wider
                 && wider.why().contains(new Widening.AlternativesNotSeparated());
+    }
+
+    /**
+     * Whether the reading ran to the end of the rules and the set they leave was not built.
+     *
+     * <p>The third of these, asked the way the one above is and for the same reason: it leaves the
+     * values an upper bound, and what would lift it is neither a reader for a form nor a sharper
+     * way of holding alternatives but an allowance this compiler does not give itself.
+     */
+    public boolean exactValuesTooCostly() {
+        return completeness instanceof Completeness.Wider wider
+                && wider.why().contains(new Widening.ExactValuesTooCostly());
     }
 
     /**

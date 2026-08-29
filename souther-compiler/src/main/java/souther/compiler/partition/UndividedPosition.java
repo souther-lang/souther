@@ -147,6 +147,34 @@ public record UndividedPosition(TermPath at, Why why) {
          * standing, and that nothing answered it.
          */
         RULE_NOT_INTERPRETED_HERE,
+
+        /**
+         * The compiler followed the rules about this position, and building the exact set of values
+         * they leave between them cost more than it allows itself.
+         *
+         * <p>Its own word because nothing else here says it. {@link #UNSUPPORTED_SYNTAX} promises a
+         * rule was read and could not be used, which sends an author after the form it is written
+         * in; {@link #RULE_NOT_INTERPRETED_HERE} promises nothing established an interpretation.
+         * Here every rule was interpreted and the interpretation is what turned out to be too
+         * large, so both of those would send a reader after something that is not the matter.
+         *
+         * <p><b>About the answer and not about a rule.</b> Two rules each cheap on their own can
+         * have an answer between them that is not, so nothing here names a rule to go and change.
+         * What a reader may do about it is state the position's values in a way that composes to
+         * less — or take the answer as the upper bound it is.
+         */
+        EXACT_VALUES_TOO_COSTLY,
+
+        /**
+         * A rule is written more deeply nested than this compiler reads.
+         *
+         * <p>Its own word because what a reader may do about it is its own. {@link
+         * #UNSUPPORTED_SYNTAX} promises a construct nothing here enters, and every construct in
+         * this rule is entered; {@link #EXACT_VALUES_TOO_COSTLY} promises the values were worked
+         * out as far as an allowance allowed, and this stopped before any of that. What is left is
+         * how the rule is bracketed, which is something an author can write differently.
+         */
+        PATTERN_TOO_DEEPLY_NESTED,
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
         /**

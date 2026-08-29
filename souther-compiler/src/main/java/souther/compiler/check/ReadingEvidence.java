@@ -109,12 +109,26 @@ final class ReadingEvidence {
      * is still one nobody took in. Asked through the second, a rule left standing under alternatives
      * that cover it came back with no reason at all, and an accounting with the decision from one
      * question and the reason from the other has a seam to fill.
+     *
+     * <p><b>And only what a rule is answerable for.</b> Everything filed here is filed under a rule,
+     * so a reason about no rule may not arrive: an allowance run down by everything a position
+     * admits is a fact about the answer, and the same rules in another order would have been built.
+     * Refused rather than dropped, because a caller handing one over has an account of a rule made
+     * out of something that is not about it, and that is worth stopping where it is written.
      */
-    void stoppedBy(RuleRef rule, AdmissibleValues<FactSubject> read) {
+    void stoppedBy(RuleRef rule, Map<FactSubject, List<UnreadReason>> read) {
         Map<FactSubject, List<UnreadReason>> here =
                 stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>());
-        read.standing().forEach((position, why) -> here.merge(position, why,
-                ReadingEvidence::appended));
+        read.forEach((position, why) -> {
+            why.forEach(each -> {
+                if (each.about() != UnreadReason.About.A_RULE) {
+                    throw new IllegalArgumentException(
+                            "a reason about " + each.about() + " is not one a rule is answerable"
+                                    + " for: " + each);
+                }
+            });
+            here.merge(position, why, ReadingEvidence::appended);
+        });
     }
 
     /**

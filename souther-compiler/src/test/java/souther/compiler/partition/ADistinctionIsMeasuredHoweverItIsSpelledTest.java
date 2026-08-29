@@ -139,7 +139,7 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 module g
 
                 data Email = String
-                    invariant String.matches("[a-z]+@[a-z]+", value)
+                    invariant String.startsWith("a", value)
 
                 data Accepted = { at: String }
 

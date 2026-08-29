@@ -90,8 +90,8 @@ class EveryPartOfAReadingIsAValueTest {
             return new Sample(UnreadReason.FORM_NOT_READ, List.of());
         }
         if (type == AdmissibleValues.Held.class) {
-            return new Sample(new AdmissibleValues.Held.Alternatives<>(
-                    Set.of(new AdmissibleValues.Box<>(Map.of()))), List.of());
+            return new Sample(AdmissibleValues.Held.Alternatives.of(
+                    new AdmissibleValues.Box<String>(Map.of())), List.of());
         }
         // A position, which this reading is generic over. What one is is the caller's; that two of
         // them are not the same one is all this needs.
@@ -207,7 +207,7 @@ class EveryPartOfAReadingIsAValueTest {
         Set<AdmissibleValues.Box<String>> boxes = new LinkedHashSet<>();
         boxes.add(box);
         AdmissibleValues.Held.Alternatives<String> held =
-                new AdmissibleValues.Held.Alternatives<>(boxes);
+                AdmissibleValues.Held.Alternatives.of(boxes, Allowance.ofAdmittedValues()).held();
 
         boxes.add(new AdmissibleValues.Box<>(Map.of("b", ValueSet.ANY)));
         assertEquals(1, held.boxes().size(), "the alternatives are the ones it was made of");

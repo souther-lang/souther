@@ -44,6 +44,22 @@ public sealed interface BlockReason {
     sealed interface ReadingStopReason extends BlockReason {}
 
     /**
+     * A reading that ran to the end of the rules and could not work out what they leave.
+     *
+     * <p>The third kind of stop, beside a rule this could not use and a position whose rules it
+     * never reached. Every rule arrived and every one of them was understood; what was not worked
+     * out is the answer they come to between them, and no rule is answerable for that — two that
+     * are cheap apart can have an answer that is not.
+     *
+     * <p>Its own capability because what a caller may do with it differs. One of these carries no
+     * rule and never will: a reader asking which rule to name gets nothing, and that is the fact
+     * rather than a gap. Put among the reasons that do name one, every such reader would have to
+     * remember which arms are the exception, and the day one forgot it would name a rule that
+     * nothing was wrong with.
+     */
+    sealed interface AnswerRealizationStopped extends ReadingStopReason {}
+
+    /**
      * A rule of the model that is no line at a position it is about, however that came about.
      *
      * <p>Whose rule it is, is the producer's to carry. What this says is that there is one: a
@@ -126,14 +142,25 @@ public sealed interface BlockReason {
             return switch (measure) {
                 // A comparison in a form no reader takes apart may have divided the position or
                 // bounded it, and nothing knows which — so both.
+                // And a pattern whose machine was not made is a rule that leaves no line, which is
+                // what every other reason here is. What the position holds is wider than the rule
+                // says, so a division the rule implies is not made and an end it states is not
+                // found — short of both, and short of them because of this rule.
+                //
+                // What is not here is the answer nobody could work out. That leaves the position
+                // short of the same two things and is not a rule without a line, because it is not
+                // about a rule at all — a caller asking which of an author's rules has no line
+                // would be handed one that is not the matter.
                 case PARTITION -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, ValueRuleRelatingTwoPositions _,
+                         UnreadValueRule _, ValueRuleRelatingTwoPositions _, PatternTooCostly _,
+                         PatternTooDeeplyNested _,
                          CompetingCoordinates _, CasePairingNotDetermined _ -> true;
                 };
                 case BOUNDARY -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, ValueRuleRelatingTwoPositions _,
+                         UnreadValueRule _, ValueRuleRelatingTwoPositions _, PatternTooCostly _,
+                         PatternTooDeeplyNested _,
                          CompetingCoordinates _, CasePairingNotDetermined _ -> true;
                 };
             };
@@ -207,12 +234,22 @@ public sealed interface BlockReason {
      * {@link AboutThePosition} is beside this for.
      */
     static RuleReadingStopped ofARuleTheValueReadingLeft(souther.compiler.values.UnreadReason why) {
+        // Whether there is a rule to name is the reason's own answer and not a list kept here.
+        // Kept here, this was a third place saying which reasons are about a rule, and three
+        // answers to one question are three chances for two of them to disagree.
+        if (why.about() != souther.compiler.values.UnreadReason.About.A_RULE) {
+            throw new IllegalArgumentException(
+                    "a reason about " + why.about() + " holds no rule to say this of: " + why);
+        }
         return switch (why) {
             case RELATES_TWO_POSITIONS -> new ValueRuleRelatingTwoPositions();
             case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new UnreadValueRule();
-            case NOT_REACHED -> throw new IllegalArgumentException(
-                    "a reading that did not reach the rules of a position holds no rule to say"
-                            + " this of");
+            case PATTERN_TOO_COSTLY -> new PatternTooCostly();
+            case PATTERN_TOO_DEEPLY_NESTED -> new PatternTooDeeplyNested();
+            // Refused above, each of them, and named here so that a reason added to the vocabulary
+            // stops this rather than arriving as whichever arm is nearest.
+            case EXACT_VALUES_TOO_COSTLY, NOT_REACHED -> throw new IllegalStateException(
+                    "refused above: " + why);
         };
     }
 
@@ -229,8 +266,15 @@ public sealed interface BlockReason {
      * returns may reach a caller as a rule read from end to end.
      */
     static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
-        return why == souther.compiler.values.UnreadReason.NOT_REACHED
-                ? new ValueRulesNotReached() : ofARuleTheValueReadingLeft(why);
+        return switch (why) {
+            case NOT_REACHED -> new ValueRulesNotReached();
+            // The one a reading can be short of that is about no rule at all, and the reason this
+            // answers a wider type than the one below. A caller here is asking what stopped the
+            // reading of a position, which this is; asking which rule it was is the other question
+            // and has no answer.
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
+            default -> ofARuleTheValueReadingLeft(why);
+        };
     }
 
     /**
@@ -316,6 +360,47 @@ public sealed interface BlockReason {
      * values that follows a rule into a shape it does not enter today.
      */
     record UnreadValueRule() implements RuleReadingStopped {}
+
+    /**
+     * A rule naming a set of strings whose machine is more than this compiler will make.
+     *
+     * <p>Its own case beside {@link UnreadValueRule}, and the difference is what an author can do
+     * about it. That one says a rule is written in a shape no reader here enters, and what lifts it
+     * is a wider reading. This says the shape was entered and the rule is simply large — a pattern
+     * is a machine as big as it is written — so an author told the other would go looking for a
+     * syntax that was never the difficulty.
+     *
+     * <p>A rule all the same, which is why it is here and not beside the one below. Somebody wrote
+     * this pattern and could write it differently.
+     */
+    record PatternTooCostly() implements RuleReadingStopped {}
+
+    /**
+     * A rule written more deeply nested than this compiler reads.
+     *
+     * <p>Its own case beside the two above, and the difference is again what an author does about
+     * it. {@link UnreadValueRule} sends them to the construct nothing here enters, and every
+     * construct in this one is entered; {@link PatternTooCostly} says the machine would be too
+     * large, and this never reached one. What is left is the brackets, which is something they can
+     * write differently.
+     */
+    record PatternTooDeeplyNested() implements RuleReadingStopped {}
+
+    /**
+     * The rules about this position were followed, every one of them became the set it names, and
+     * what those sets come to between them is more than this compiler will build.
+     *
+     * <p><b>About the answer and about none of the rules.</b> Two patterns each small on its own
+     * have a meet the size of their product, and two rules of one declaration meet at a position as
+     * surely as two halves of one clause do. So what ran out is the allowance for what the position
+     * finally admits, and naming one of the rules would say that rule is why — which for a product
+     * of two is false of each of them.
+     *
+     * <p>So it carries no rule and is not among the reasons that do ({@link
+     * AnswerRealizationStopped}). A reader here has nothing to send an author to, and that is the
+     * answer rather than something missing from it.
+     */
+    record ExactValuesTooCostly() implements AnswerRealizationStopped {}
 
     /**
      * Every reading was asked about the rule at this position and none of them took it in, and none
