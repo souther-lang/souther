@@ -182,10 +182,10 @@ public final class GuardThresholds {
      *
      * <p>Which is why a comparison nothing can measure is in and one nothing reads is out, and the
      * split is the same one {@link NotABoundary} is made of. {@link NotABoundary#NOTHING_RECORDS_IT}
-     * and {@link NotABoundary#REPEATED_IN_ONE_RUN} are the author's rules, written at a position,
-     * that this could not draw a line from — the sentence {@code not read} is there to say.
-     * {@link NotABoundary#NOTHING_READS_IT} is not a rule of the model at all, and saying it went
-     * unread would put a statement into the report that the behavior does not make.
+     * is the author's rule, written at a position, that this could not draw a line from — the
+     * sentence {@code not read} is there to say. {@link NotABoundary#NOTHING_READS_IT} is not a rule
+     * of the model at all, and saying it went unread would put a statement into the report that the
+     * behavior does not make.
      */
     private static void noticed(String behavior, ComparisonReadings read, List<Core> assessed,
                                 CoverageSites.Plan plan, Symbols symbols, List<RuleWithoutALine> out) {
