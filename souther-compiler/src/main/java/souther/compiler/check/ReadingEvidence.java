@@ -121,9 +121,10 @@ final class ReadingEvidence {
                 stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>());
         read.forEach((position, why) -> {
             why.forEach(each -> {
-                if (each == UnreadReason.EXACT_VALUES_TOO_COSTLY || each == UnreadReason.NOT_REACHED) {
+                if (each.about() != UnreadReason.About.A_RULE) {
                     throw new IllegalArgumentException(
-                            "a reason about no rule is not one a rule is answerable for: " + each);
+                            "a reason about " + each.about() + " is not one a rule is answerable"
+                                    + " for: " + each);
                 }
             });
             here.merge(position, why, ReadingEvidence::appended);

@@ -18,13 +18,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * What a position admits, and whether this compiler could say so, are the same for the same rules.
  *
  * <p>Two patterns whose meet is a large machine, beside a rule naming one string. What the three of
- * them leave is that one string, and working it out costs nothing: the answer is inside what the
- * third rule names, so it is settled by asking that string of the other two.
+ * them leave is that one string, and it is settled by asking that string of the other two: each
+ * pattern is still made — a pattern is a machine and asking it anything means having it — and the
+ * product of the two is not.
  *
  * <p>Which is only true of a reading that has all three before it builds anything. Read as it goes,
  * the two patterns meet first wherever the author happened to write them first — a machine of some
  * ninety thousand states — and a compiler that would not build it reports the position as one it
- * could not work out. The same rules, written in another order, cost nothing at all.
+ * could not work out. The same rules, written in another order, build six hundred states and stop.
  *
  * <p>So this is the same model six ways: the three rules in every order they can be written in. The
  * answer has to be the same, and so does what the reading says about itself. What is asserted is
@@ -32,8 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * them wrong.
  *
  * <p>Held with an ordinary allowance rather than a small one. The point is not that a large machine
- * is refused — that is {@code WhatOneAnswerIsAllowedIsSpentOnce} — but that nothing here has to
- * build one at all, whichever way round the rules arrive.
+ * is refused — that is {@code WhatOneAnswerIsAllowedIsSpentOnce} — but that no product of two
+ * patterns is built at all, whichever way round the rules arrive.
  */
 class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
 
@@ -96,7 +97,7 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
                     "the values and the account of them, written as " + order);
         }
         assertEquals(AdmissibleSet.READ_IN_FULL, first.completeness(),
-                "and every one of them is read in full, since nothing here has to be built");
+                "and every one of them is read in full, since no product of patterns is built");
     }
 
     /**

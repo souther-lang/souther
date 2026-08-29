@@ -101,6 +101,19 @@ public final class Allowance<A> {
     }
 
     /**
+     * The values any of them admits, said as one plan over all of them.
+     *
+     * <p>For a caller holding several at once, which is what a position holds across the
+     * alternatives of a reading. Handed over together they are one plan however they were held, so
+     * what they come to is worked out in the order the plan settles and costs one number. Folded
+     * two at a time by the caller, the order would be the order it happened to hold them in — and a
+     * set is a set however it was filled, so the same alternatives would cost two different things.
+     */
+    public Composed joining(A atom, List<ValueSet> these) {
+        return put(atom, AdmittedPlan.joining(these.stream().map(AdmittedPlan::of).toList()));
+    }
+
+    /**
      * The same two, where what comes out is a promise rather than a bound.
      *
      * <p>Giving up leaves nothing and not everything, which is the other direction. What

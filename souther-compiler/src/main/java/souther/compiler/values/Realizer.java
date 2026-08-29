@@ -90,9 +90,14 @@ final class Realizer {
      * about the values they name, asked of each — free whatever the other side is, and exact.
      * Everything after it is a meet with what that left, which is those values again.
      *
-     * <p>So a plan holding one written set costs nothing however many languages are beside it, and
-     * the languages meet each other only where nothing was written. That is the whole of the
-     * choosing: it is read off the plan and is the same for the same plan.
+     * <p>So a plan holding one written set builds no product of languages however many are beside
+     * it: each of them is still made — a pattern is a machine and asking which of the written
+     * values it holds means having it — and none of them is met with another. What that is worth is
+     * the product: two patterns of three hundred states apiece are six hundred made and ninety
+     * thousand not made.
+     *
+     * <p>That is the whole of the choosing, and it is read off the plan: the same plan comes to the
+     * same work.
      */
     private Realization met(java.util.Set<AdmittedPlan> parts) {
         List<AdmittedPlan> rest = new ArrayList<>();
@@ -105,8 +110,9 @@ final class Realizer {
             }
         }
         // The written values first, and that is the whole of the choosing. A meet with them is a
-        // question about the values they name — asked of each, which builds nothing whatever the
-        // other side is — so the answer to all of it is settled without a machine. What is left
+        // question about the values they name — asked of each, which builds no machine of its own
+        // whatever the other side is — so what all of it comes to is settled without a product.
+        // What is left
         // after them is folded in the order the plan holds it, which the plan settled from what its
         // parts are; either order taken from how the parts arrived would cost a product one way
         // round and nothing the other, for rules that are the same rules.

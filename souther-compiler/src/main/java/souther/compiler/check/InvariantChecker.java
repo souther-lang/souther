@@ -706,38 +706,32 @@ public final class InvariantChecker {
             // branch that survives and one that does not — a clause's adoption included. Asked
             // here, a reading answered from what it happened to hold, and an account named a rule
             // of a branch nothing satisfies.
-            List<Written> inOrder = new ArrayList<>();
-            Map<Written, StatedByClauses> byClause = new LinkedHashMap<>();
-            Map<Written, Map<Core, StatedByClauses>> byPart = new LinkedHashMap<>();
+            //
+            // Kept in the order they were read and not in a map keyed by what a node happens to be,
+            // because the order these are worked out in is the order the allowance is spent in: a
+            // walk over an identity map would make what a declaration can be told exactly turn on
+            // where its clauses landed in a table.
+            StatedByClauses.Asked<Written> asked = new StatedByClauses.Asked<>();
             for (Written each : written) {
-                Map<Core, StatedByClauses> parts = new java.util.IdentityHashMap<>();
-                StatedByClauses one = reader.read(each.clause(), true,
-                        (part, said) -> parts.put(part, said));
-                inOrder.add(each);
-                byClause.put(each, one);
-                byPart.put(each, parts);
-                stated = stated.meet(one);
+                stated = stated.meet(asked.read(reader, each, each.clause()));
             }
             // And now that every rule about this value has been said, what its positions admit is
-            // worked out. Once, and here: a position's answer is met out of every clause that
-            // reached it, so anything built before the last of them arrived would be built out of
-            // less than the rules say — and which of two ways of writing the same rules was
-            // affordable would be a fact about the writing.
-            ReadByClauses said = reader.resolve(stated, allowed);
-            AdmissibleValues<FactSubject> values = said.values();
-            // And now that the branches are decided, what each clause and each part of it took in.
-            // Kept per clause because that is the granularity a question has: a clause the readings
-            // took in whole sat beside one they could not, and the position-wide account said both
-            // had gone unread.
-            for (Written each : inOrder) {
-                ReadByClauses one = reader.resolve(byClause.get(each), allowed);
+            // worked out — and with it what each clause and each part of it took in, since a branch
+            // decided is what every one of those turns on. Once, and here: a position's answer is
+            // met out of every clause that reached it, so anything built before the last of them
+            // arrived would be built out of less than the rules say — and which of two ways of
+            // writing the same rules was affordable would be a fact about the writing.
+            StatedByClauses.Answered<Written> answered = asked.resolve(reader, stated, allowed);
+            AdmissibleValues<FactSubject> values = answered.whole().values();
+            answered.perClause().forEach((each, one) -> {
                 one.adopted().forEach(position -> took.record(each.from(), position));
                 took.stoppedBy(each.from(), one.aboutARule());
-                Map<Core, Set<FactSubject>> parts = adoptedBy
+            });
+            answered.perPart().forEach((each, parts) -> {
+                Map<Core, Set<FactSubject>> out = adoptedBy
                         .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>());
-                byPart.get(each).forEach((part, was) ->
-                        parts.put(part, reader.resolve(was, allowed).adopted()));
-            }
+                parts.forEach(part -> out.put(part.getKey(), part.getValue().adopted()));
+            });
             // What was counted bounds what was built, which is the whole of why counting before
             // reading is enough. It is an induction and its steps are held where they are taken —
             // a leaf is one alternative, a choice holds at most the sum and a conjunction at most
@@ -758,7 +752,7 @@ public final class InvariantChecker {
                     new PartsRead(readBy, adoptedBy));
             ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(values, allowed)
-                    .taking(said.ordered());
+                    .taking(answered.whole().ordered());
             // How each atom's values are spaced, kept so that settling one afterwards states the
             // equality the same way this does. A count is a whole number of things whatever the
             // things are spaced by; a position's own value is spaced by its type.

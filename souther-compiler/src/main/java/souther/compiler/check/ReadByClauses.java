@@ -49,9 +49,8 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
                 new java.util.LinkedHashMap<>();
         values.standing().forEach((position, why) -> {
             java.util.List<souther.compiler.values.UnreadReason> mine = why.stream()
-                    .filter(each -> each != souther.compiler.values.UnreadReason
-                            .EXACT_VALUES_TOO_COSTLY
-                            && each != souther.compiler.values.UnreadReason.NOT_REACHED)
+                    .filter(each -> each.about()
+                            == souther.compiler.values.UnreadReason.About.A_RULE)
                     .toList();
             if (!mine.isEmpty()) {
                 out.put(position, mine);

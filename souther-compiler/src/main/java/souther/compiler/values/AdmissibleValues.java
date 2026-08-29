@@ -101,6 +101,53 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                                   Set<A> tangled, Set<A> widened) {
 
     /**
+     * The whole of what this reading is, written out for putting several of them in a work order.
+     *
+     * <p>Its own, because it is its own state. Written by whoever needed the order, this was a
+     * second spelling of what a reading holds with nothing keeping the two in step — two components
+     * were left out and two readings that differ came out alike, which put the order back where it
+     * came from: the order they happened to arrive in.
+     *
+     * <p>So the components are walked and every one of them is answered for. A component added to
+     * this record arrives here with nothing said about it and stops the walk, which is a question
+     * somebody has to answer rather than a gap nobody sees.
+     *
+     * <p>What is left out is left out by name and for a reason. {@link #standing} is what the rules
+     * of the model could not say and the order they were written in is the author's; ordering by it
+     * would make how much a model costs turn on how its reasons were listed.
+     */
+    void schedulingForm(StringBuilder out) {
+        for (String each : COMPONENTS) {
+            switch (each) {
+                case "held" -> PlanOrder.written(held, out);
+                case "perPosition" -> PlanOrder.written(perPosition, out);
+                case "guaranteed" -> PlanOrder.written(guaranteed, out);
+                case "defaultGuaranteed" -> PlanOrder.write(defaultGuaranteed, out);
+                case "dropped" -> out.append(dropped).append(';');
+                case "guaranteedTogether" -> out.append(guaranteedTogether).append(';');
+                case "tangled" -> named(tangled, out);
+                case "widened" -> named(widened, out);
+                // The author's, and not this. See above.
+                case "standing" -> { }
+                default -> throw new IllegalStateException(
+                        "a reading holds " + each + " and nothing says how two readings holding"
+                                + " different ones are put in an order");
+            }
+        }
+    }
+
+    /** Positions by name, sorted, so that a set is written the same way however it was filled. */
+    private void named(Set<A> these, StringBuilder out) {
+        out.append(these.size()).append(';');
+        these.stream().map(String::valueOf).sorted().forEach(each -> out.append(each).append(';'));
+    }
+
+    /** Every part of a reading, in the order this record declares them. */
+    private static final List<String> COMPONENTS =
+            java.util.Arrays.stream(AdmissibleValues.class.getRecordComponents())
+                    .map(java.lang.reflect.RecordComponent::getName).toList();
+
+    /**
      * What the rules a reading took in leave: some alternatives, or nothing at all.
      *
      * <p>The two are not one shape with a flag. Nothing is not an empty union — read as one, a
@@ -181,20 +228,17 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                     if (!boxes.stream().allMatch(box -> box.at().containsKey(atom))) {
                         continue;
                     }
-                    ValueSet held = null;
-                    for (Box<A> box : boxes) {
-                        if (held == null) {
-                            held = box.get(atom);
-                            continue;
-                        }
-                        Allowance.Composed made = sets.join(atom, held, box.get(atom));
-                        held = made.set();
-                        if (made.gaveUp()) {
-                            gaveUp.add(atom);
-                        }
+                    // Said as one plan over every alternative and worked out once. Folded over the
+                    // alternatives two at a time, the order they were put together in was the order
+                    // this happened to hold them — and a set is a set however it was filled, so the
+                    // same alternatives would have cost two different things.
+                    Allowance.Composed made = sets.joining(atom, boxes.stream()
+                            .map(box -> box.get(atom)).toList());
+                    if (made.gaveUp()) {
+                        gaveUp.add(atom);
                     }
-                    if (!held.isAny()) {
-                        across.put(atom, held);
+                    if (!made.set().isAny()) {
+                        across.put(atom, made.set());
                     }
                 }
                 return new Made<>(new Alternatives<>(boxes, across), gaveUp);

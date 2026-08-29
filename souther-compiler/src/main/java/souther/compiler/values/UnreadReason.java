@@ -83,6 +83,9 @@ public enum UnreadReason {
     /**
      * The reading never reached the rules about this position.
      *
+     * <p>Marked as being about neither: there is no rule in hand for it to be about, and it is not
+     * a fact about what the rules leave either.
+     *
      * <p>A different thing from a rule it read and could not use. The walk that gathers clauses
      * stopped — at a depth, at a type it had already been through — or a clause could not be typed
      * and so never arrived. Which of those it was is not recorded: none of them is a fact about the
@@ -93,5 +96,51 @@ public enum UnreadReason {
      * those are is settled in one place and not restated here — see {@code PathEngine.leftBy} in
      * {@code souther.compiler.check}, which this package may not name.
      */
-    NOT_REACHED
+    NOT_REACHED;
+
+    /**
+     * What a reason is a fact about, which decides who may be shown it.
+     *
+     * <p>Held by the reason and not by whoever is reading one. The same question was answered in
+     * three places — a store deciding what it may file under a rule, a report deciding what to name,
+     * a reading deciding which bag to put it in — and three answers to one question is three chances
+     * to disagree. Asked here, a reason added arrives with the question already put to whoever added
+     * it.
+     *
+     * <p>Not context-dependent, and if a reason is ever found to be one of these here and the other
+     * there, that is two reasons and they are told apart by being two.
+     */
+    public enum About {
+
+        /**
+         * A rule somebody wrote, which a report may name and an author may change.
+         *
+         * <p>A form nothing reads, a rule relating two positions, a pattern larger than any machine
+         * this holds: each of those is about a thing in front of somebody.
+         */
+        A_RULE,
+
+        /**
+         * What the rules leave between them, which names no rule.
+         *
+         * <p>Every rule that reached the position was read and every one of them was turned into
+         * the set it names; what ran out was the allowance for what those come to. The same rules
+         * in another order would have been built, so naming the one that happened to be last sends
+         * an author to change something that is not why.
+         */
+        THE_ANSWER,
+
+        /** Neither, because no rule reached the position for anything to be about. */
+        NEITHER
+    }
+
+    /** What this reason is a fact about — see {@link About}. */
+    public About about() {
+        return switch (this) {
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ,
+                 PATTERN_TOO_DEEPLY_NESTED, PATTERN_TOO_COSTLY -> About.A_RULE;
+            case EXACT_VALUES_TOO_COSTLY -> About.THE_ANSWER;
+            case NOT_REACHED -> About.NEITHER;
+        };
+    }
 }

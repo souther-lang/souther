@@ -60,11 +60,14 @@ public final class Meter {
 
     /**
      * Which limit refused the state that stopped the construction that just came back with nothing,
-     * or null where nothing has been refused.
+     * or null where nothing has been refused since {@link #starting}.
      *
-     * <p>The last refusal, which is that construction's, because a refusal stops the construction
-     * it happened in: every place a state is refused abandons what it was making there and then, so
-     * a refusal recorded here has been read by the caller it belongs to before another can happen.
+     * <p><b>The first refusal and not the last.</b> A refusal stops the construction it happened
+     * in, so there should be no second one to choose between — but that is a rule every builder has
+     * to keep, and one that built a sibling after its brother was refused would put its own limit
+     * here and the answer would be about work nobody needed. Kept as the first, the attribution
+     * survives a builder that forgets, which is what makes it a fact about the construction rather
+     * than about how carefully it was written.
      *
      * <p>What is answered is which limit said no, and not what would have happened under some other
      * allowance. Working that out means building the machine a second way to see how far it gets,
@@ -73,6 +76,24 @@ public final class Meter {
      */
     public Stopped stoppedBy() {
         return stopped;
+    }
+
+    /**
+     * A construction is beginning, so what refused an earlier one is not about this.
+     *
+     * <p>Said by whoever is about to build, because a meter outlives any one construction: it is a
+     * position's whole allowance and several things are made out of it. Without this, a build that
+     * came back with nothing would be answered with the reason of a build that finished long ago.
+     */
+    void starting() {
+        stopped = null;
+    }
+
+    /** The first one stands. See {@link #stoppedBy}. */
+    private void refused(Stopped why) {
+        if (stopped == null) {
+            stopped = why;
+        }
     }
 
     /** One machine about to be made, counting its own states as well as this meter's. */
@@ -112,11 +133,11 @@ public final class Meter {
             // limit refused this request, and a request larger than any machine may be is one no
             // allowance would have let through — so it is that, whatever else is also true of it.
             if (many > mostStates - (long) mine) {
-                stopped = Stopped.ONE_MACHINE;
+                refused(Stopped.ONE_MACHINE);
                 return false;
             }
             if (many > left) {
-                stopped = Stopped.THE_ANSWER;
+                refused(Stopped.THE_ANSWER);
                 return false;
             }
             mine += (int) many;

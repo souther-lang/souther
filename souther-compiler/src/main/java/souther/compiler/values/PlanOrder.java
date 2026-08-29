@@ -131,11 +131,11 @@ final class PlanOrder {
     static String of(AdmissibleValues<?> reading) {
         StringBuilder out = new StringBuilder();
         out.append("%012d;".formatted(states(reading.perPosition().values())));
-        written(reading.held(), out);
-        written(reading.perPosition(), out);
-        written(reading.guaranteed(), out);
-        write(reading.defaultGuaranteed(), out);
-        out.append(reading.dropped()).append(';').append(reading.guaranteedTogether()).append(';');
+        // What a reading is, written by the reading. Copied out here component by component, this
+        // was a second spelling of another type's state that nothing held to it: two of them went
+        // missing the first time and the order fell back to the order the readings arrived in,
+        // which is the one thing it exists to be independent of.
+        reading.schedulingForm(out);
         return out.toString();
     }
 
@@ -151,7 +151,7 @@ final class PlanOrder {
      * <p>A set of boxes and not a sequence: the alternatives are a union, so each is written out and
      * the writings are sorted. What each box holds is written by position, for the same reason.
      */
-    private static void written(AdmissibleValues.Held<?> held, StringBuilder out) {
+    static void written(AdmissibleValues.Held<?> held, StringBuilder out) {
         switch (held) {
             case AdmissibleValues.Held.Nothing<?> _ -> out.append("0;");
             case AdmissibleValues.Held.Alternatives<?> it -> {
@@ -192,7 +192,7 @@ final class PlanOrder {
      * rather than by a reader of this comment. An assertion because it is about this compiler and
      * not about any model.
      */
-    private static void written(java.util.Map<?, ValueSet> at, StringBuilder out) {
+    static void written(java.util.Map<?, ValueSet> at, StringBuilder out) {
         out.append(at.size()).append(';');
         java.util.List<String> named = at.keySet().stream().map(String::valueOf).toList();
         assert java.util.Set.copyOf(named).size() == at.size()
@@ -209,7 +209,7 @@ final class PlanOrder {
                 .forEach(each -> out.append(each).append(';'));
     }
 
-    private static void write(ValueSet set, StringBuilder out) {
+    static void write(ValueSet set, StringBuilder out) {
         switch (set) {
             case ValueSet.Finite it -> {
                 out.append("0;");

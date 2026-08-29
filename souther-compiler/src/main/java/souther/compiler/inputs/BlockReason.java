@@ -234,21 +234,22 @@ public sealed interface BlockReason {
      * {@link AboutThePosition} is beside this for.
      */
     static RuleReadingStopped ofARuleTheValueReadingLeft(souther.compiler.values.UnreadReason why) {
+        // Whether there is a rule to name is the reason's own answer and not a list kept here.
+        // Kept here, this was a third place saying which reasons are about a rule, and three
+        // answers to one question are three chances for two of them to disagree.
+        if (why.about() != souther.compiler.values.UnreadReason.About.A_RULE) {
+            throw new IllegalArgumentException(
+                    "a reason about " + why.about() + " holds no rule to say this of: " + why);
+        }
         return switch (why) {
             case RELATES_TWO_POSITIONS -> new ValueRuleRelatingTwoPositions();
             case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new UnreadValueRule();
             case PATTERN_TOO_COSTLY -> new PatternTooCostly();
             case PATTERN_TOO_DEEPLY_NESTED -> new PatternTooDeeplyNested();
-            // Refused rather than answered, for the reason `NOT_REACHED` is. This one is about
-            // what the rules leave between them, so a caller here would be naming a rule that the
-            // reason is not about — which is the whole of what {@link AnswerRealizationStopped} is
-            // beside this for.
-            case EXACT_VALUES_TOO_COSTLY -> throw new IllegalArgumentException(
-                    "an answer nobody could work out is about no rule, so there is none to say"
-                            + " this of");
-            case NOT_REACHED -> throw new IllegalArgumentException(
-                    "a reading that did not reach the rules of a position holds no rule to say"
-                            + " this of");
+            // Refused above, each of them, and named here so that a reason added to the vocabulary
+            // stops this rather than arriving as whichever arm is nearest.
+            case EXACT_VALUES_TOO_COSTLY, NOT_REACHED -> throw new IllegalStateException(
+                    "refused above: " + why);
         };
     }
 

@@ -304,6 +304,9 @@ public final class PatternPlan {
      * the guess refused answers this could afford and charged for states nobody built.
      */
     public Language compile(Meter meter) {
+        // A construction is beginning. The meter is the position's whole allowance and outlives any
+        // one of these, so what refused an earlier build is not what refused this.
+        meter.starting();
         // Made canonical here and not by whoever holds it. A language is the one machine that
         // accepts its strings, and turning a machine into that one is the largest thing this does —
         // left to the reader, it would happen inside whichever question was asked first, where
@@ -316,30 +319,37 @@ public final class PatternPlan {
     /**
      * One step, or null where it ran past what the meter allows.
      *
+     * <p><b>The first refusal stops the whole of it.</b> Every step asks for its operands one at a
+     * time and gives up on the first that comes back with nothing. Written as one expression over
+     * both, the second operand was built after the first had been refused — states made for a step
+     * that was never going to happen, taken out of the same allowance the rest of the answer draws
+     * on, and a second refusal to be told about instead of the one that stopped it.
+     *
      * <p>No {@code default}: a step added and not built stops the compile rather than arriving here
      * as whichever operation is nearest.
      */
     private static Automaton built(Step step, Meter meter) {
         return switch (step) {
             case Step.Of it -> Automaton.of(it.syntax(), meter);
-            case Step.Both it -> both(built(it.one(), meter), built(it.other(), meter), meter);
+            case Step.Both it -> {
+                Automaton one = built(it.one(), meter);
+                Automaton other = one == null ? null : built(it.other(), meter);
+                yield other == null ? null : one.and(other, meter);
+            }
             case Step.Either it -> {
                 Automaton one = built(it.one(), meter);
-                Automaton other = built(it.other(), meter);
-                yield one == null || other == null ? null : one.or(other, meter);
+                Automaton other = one == null ? null : built(it.other(), meter);
+                yield other == null ? null : one.or(other, meter);
             }
             // What one holds and the other does not, which is the one step that has to make a
             // machine deterministic. The complement is a machine and its states are what it costs,
             // counted as they are made like everything else.
             case Step.Less it -> {
                 Automaton mine = built(it.one(), meter);
-                Automaton theirs = built(it.other(), meter);
-                yield both(mine, theirs == null ? null : theirs.not(meter), meter);
+                Automaton theirs = mine == null ? null : built(it.other(), meter);
+                Automaton left = theirs == null ? null : theirs.not(meter);
+                yield left == null ? null : mine.and(left, meter);
             }
         };
-    }
-
-    private static Automaton both(Automaton one, Automaton other, Meter meter) {
-        return one == null || other == null ? null : one.and(other, meter);
     }
 }

@@ -374,4 +374,73 @@ sealed interface StatedByClauses {
                     here.byOrder().either(there.byOrder()));
         }
     }
+
+    /**
+     * The clauses of one value as they were read, and every part of them, waiting to be worked out.
+     *
+     * <p>Held rather than asked. What a clause adopted, and what each part of it adopted, turn on
+     * which branch of a choice anybody can be in — and that is not known until the machines are
+     * made. Asked as each clause was read, the account answered from what the reading happened to
+     * hold, and a rule of a branch nothing satisfies was written down as a rule of this declaration
+     * that went unanswered.
+     *
+     * <p><b>And worked out together, once.</b> Everything here is the same declaration's answer and
+     * draws on the same allowance, so the order they are worked out in is the order it is spent in.
+     * Kept in the order the clauses were read and the parts were reached: a walk over a table keyed
+     * by what a node happens to be would make what a declaration can be told exactly turn on where
+     * its clauses landed in it.
+     *
+     * @param <K> what a caller files each clause under
+     */
+    final class Asked<K> {
+
+        private final Map<K, StatedByClauses> byClause = new java.util.LinkedHashMap<>();
+        private final Map<K, java.util.List<Map.Entry<Core, StatedByClauses>>> byPart =
+                new java.util.LinkedHashMap<>();
+
+        /** One clause read, with every part of it kept in the order the reading reached it. */
+        StatedByClauses read(Reading reader, K key, Core clause) {
+            java.util.List<Map.Entry<Core, StatedByClauses>> parts = new java.util.ArrayList<>();
+            StatedByClauses one = reader.read(clause, true,
+                    (part, said) -> parts.add(Map.entry(part, said)));
+            byClause.put(key, one);
+            byPart.put(key, parts);
+            return one;
+        }
+
+        private boolean answered;
+
+        /**
+         * All of it worked out, in the order it was read, and once.
+         *
+         * <p>Once because working it out is spending. Asked a second time, the questions a reader
+         * has already been answered would be paid for again out of what is left for the answer
+         * itself — and what a model could be told exactly would depend on how many times somebody
+         * looked at it.
+         */
+        Answered<K> resolve(Reading reader, StatedByClauses whole,
+                            souther.compiler.values.Allowance<FactSubject> by) {
+            if (answered) {
+                throw new IllegalStateException(
+                        "the clauses of one value are worked out once, and this is asking again");
+            }
+            answered = true;
+            ReadByClauses said = reader.resolve(whole, by);
+            Map<K, ReadByClauses> clauses = new java.util.LinkedHashMap<>();
+            byClause.forEach((key, one) -> clauses.put(key, reader.resolve(one, by)));
+            Map<K, java.util.List<Map.Entry<Core, ReadByClauses>>> parts =
+                    new java.util.LinkedHashMap<>();
+            byPart.forEach((key, these) -> {
+                java.util.List<Map.Entry<Core, ReadByClauses>> out = new java.util.ArrayList<>();
+                these.forEach(each ->
+                        out.add(Map.entry(each.getKey(), reader.resolve(each.getValue(), by))));
+                parts.put(key, out);
+            });
+            return new Answered<>(said, clauses, parts);
+        }
+    }
+
+    /** What {@link Asked} came to: the whole, each clause, and each part of each clause. */
+    record Answered<K>(ReadByClauses whole, Map<K, ReadByClauses> perClause,
+                       Map<K, java.util.List<Map.Entry<Core, ReadByClauses>>> perPart) {}
 }
