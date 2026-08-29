@@ -358,17 +358,6 @@ public final class GuardThresholds {
                 return NameAnswers.denoting(read, at, symbols);
             }
 
-            /**
-             * A name an operation handed an element on, where the container was written out. The
-             * same one answer the arithmetic is given, so the two walks meet a plurality with the
-             * same knowledge rather than one of them naming nothing where the other draws a line.
-             */
-            @Override
-            public java.util.List<souther.compiler.check.AffineForms.ReadThrough<InputReads>>
-                    alternativesOf(Core.Read read, InputReads at) {
-                return NameAnswers.alternativesOf(read, at, symbols);
-            }
-
             @Override
             public InputReads inside(Core.LetIn li, InputReads at) {
                 return at.and(li.binder(), li.value());

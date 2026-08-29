@@ -68,9 +68,23 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             }
         }
 
-        /** Read to the end, and the quantity it cuts is nothing: a comparison of constants, or one
-         *  whose positions cancel. Nothing is missing here. */
-        record CutsNothing() implements OfAComparison {}
+        /**
+         * Read to the end, and the quantity it cuts is nothing: a comparison of constants, or one
+         * whose positions cancel. Nothing is missing here.
+         *
+         * <p>{@code read} is every number of the input this reading named on the way, whether or not
+         * it survived the cancellation. What the rule is about is not what is left of it: {@code a -
+         * a <= 0} states something about {@code a} and holds of every row, and a reader told only
+         * that the quantity is empty would have to go back to the operands to find out where to say
+         * so — which is a second account of what the rule names, beside the reading that has just
+         * read it. A comparison of constants named nothing and comes back with nothing.
+         */
+        record CutsNothing(java.util.Set<NumericTerm> read) implements OfAComparison {
+
+            public CutsNothing {
+                read = java.util.Set.copyOf(read);
+            }
+        }
 
         /** The reading stopped, at this expression and in the environment it was being read in. */
         record Stopped(Core node, InputReads at) implements OfAComparison {
@@ -85,13 +99,16 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     /** The same, saying which of the three it is. */
     static OfAComparison read(Core.Binary comparison, InputReads reads, Symbols symbols) {
         if (!comparison.op().compares()) {
-            return new OfAComparison.CutsNothing();
+            return new OfAComparison.CutsNothing(java.util.Set.of());
         }
+        // What this reading names as it goes, kept so that a reading which ran to the end can say
+        // what it was about without anybody reading the comparison again.
+        java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
-                    AffineForms.outcome(side, reads, reading(symbols));
+                    AffineForms.outcome(side, reads, reading(symbols, named));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
                 return new OfAComparison.Stopped(stopped.node(), stopped.at());
             }
@@ -101,7 +118,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 LinearForm<NumericTerm> whole = left.minus(
                         ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form());
                 if (whole.coefs().isEmpty()) {
-                    return new OfAComparison.CutsNothing();
+                    return new OfAComparison.CutsNothing(named);
                 }
                 AffineReading here = new AffineReading(
                         new LinearForm<>(BigDecimal.ZERO, whole.coefs()),
@@ -134,12 +151,20 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
     /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */
     static LinearForm<NumericTerm> affine(Core e, InputReads reads, Symbols symbols) {
-        return AffineForms.of(e, reads, reading(symbols));
+        return AffineForms.of(e, reads, reading(symbols, new java.util.LinkedHashSet<>()));
     }
 
-    /** What this reader answers about its own environment, which is what tells its atoms from
-     *  another reader's. */
-    private static AffineForms.Reading<NumericTerm, InputReads> reading(Symbols symbols) {
+    /**
+     * What this reader answers about its own environment, which is what tells its atoms from
+     * another reader's.
+     *
+     * <p>{@code named} takes every number this names, which is the one place a node of the tree
+     * becomes a term of the input. Collected here rather than recovered afterwards: what a rule is
+     * about is what the reading of it named, and a reader working that out again from the operands
+     * is a second account of it.
+     */
+    private static AffineForms.Reading<NumericTerm, InputReads> reading(
+            Symbols symbols, java.util.Set<NumericTerm> named) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
@@ -150,7 +175,11 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
                 NumericTerm term = InputNumber.of(node, at, symbols);
-                return term == null ? null : LinearForm.atom(term);
+                if (term == null) {
+                    return null;
+                }
+                named.add(term);
+                return LinearForm.atom(term);
             }
 
             @Override

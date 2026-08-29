@@ -1557,14 +1557,6 @@ public final class InvariantChecker {
                 return terms.readThrough(name, where);
             }
 
-            /** No name here stands for several values: a clause is read once for the value in
-             *  front of it, and nothing in one hands a closure the elements of a container. */
-            @Override
-            public java.util.List<AffineForms.ReadThrough<Denotations>> alternativesOf(
-                    Core.Read name, Denotations where) {
-                return null;
-            }
-
             @Override
             public Denotations inside(Core.LetIn li, Denotations where) {
                 return terms.inside(li, where);
