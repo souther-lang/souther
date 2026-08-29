@@ -51,16 +51,22 @@ more, and both existed only because develop had been made to claim a number it w
    souther-lsp and souther-bench do not: the really-executable jar and the language server are
    distributed through GitHub Releases, and the benchmarks are not an artifact anyone depends on.
 
-6. Move develop to the next snapshot:
+6. Move develop to the next snapshot, committed to develop and pushed:
 
    ```sh
    git switch develop && git pull
    bin/set-version.sh <next version>-SNAPSHOT
+   git commit -am "Take develop to the snapshot after the release"
+   git push
    ```
 
-   on a branch of its own, as any other change to develop is. Nothing of the release goes back —
-   what this carries is that the version just released is behind develop rather than ahead of it.
-   `souther-lang/examples` names the snapshot, so it moves with this.
+   No pull request. The whole of it is what `set-version.sh` wrote, there is nothing in it to
+   review, and it is the tail of a release rather than work anyone is proposing. This is the one
+   change to develop that goes straight there; anything carrying a decision still opens one.
+
+   Nothing of the release goes back — what this carries is that the version just released is behind
+   develop rather than ahead of it. `souther-lang/examples` names the snapshot, so it moves with
+   this.
 
 ## The examples
 
