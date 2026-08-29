@@ -216,10 +216,13 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * answer is that it holds every value the name can take, and a filter that let through what it
      * could not classify would be keeping a member the arm excludes, while one that dropped it would
      * be losing a member the arm admits. Neither is the set, so the name is left with none.
+     *
+     * <p>And nothing is narrowed to no members. An arm admitting none of what the container holds is
+     * an arm no value reaches, so the name inside it stands for nothing — which is what a name with
+     * no meaning here already says, and is not a set of no members.
      */
     private InputReads admitting(Core.Match match, Core.Case arm, Symbols symbols) {
-        ReadMeaning.OneOf one = pluralityOf(match.scrutinee(), symbols,
-                new java.util.HashSet<>());
+        ReadMeaning.OneOf one = pluralityOf(match.scrutinee(), symbols);
         if (one == null) {
             return this;
         }
@@ -257,18 +260,18 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * <p>Following is this reader's own and is not written into {@link #meaningOf}. That answers
      * what a name is, one step, for every reader; whether a reader may go on through a name that
      * stands for one value is what the answer licenses rather than something it does.
+     *
+     * <p>The same walk a container is found by ({@link #standing}), asked for what is standing at
+     * the end of it rather than for a list written there. Two walks over the run of names between a
+     * {@code match} and what it matches would be two answers about which names may be gone through,
+     * and the day they differed the arm would narrow a set the arithmetic never met.
      */
-    private ReadMeaning.OneOf pluralityOf(Core e, Symbols symbols,
-                                          java.util.Set<BindingId> met) {
-        if (!(e instanceof Core.Read name) || !met.add(name.binding())) {
-            return null;
-        }
-        return switch (meaningOf(name, symbols)) {
-            case ReadMeaning.OneOf one -> one;
-            case ReadMeaning.Through through ->
-                    through.denotes().at().pluralityOf(through.denotes().value(), symbols, met);
-            default -> null;
-        };
+    private ReadMeaning.OneOf pluralityOf(Core e, Symbols symbols) {
+        Denotation standing = standing(new Denotation(e, this), symbols,
+                new java.util.HashSet<>());
+        return standing.value() instanceof Core.Read name
+                && standing.at().meaningOf(name, symbols) instanceof ReadMeaning.OneOf one
+                ? one : null;
     }
 
     /** Which case {@code e} is written as, or null where it is not written as one. */
@@ -321,6 +324,19 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * further out.
      */
     public ReadMeaning meaningOf(Core.Read read, Symbols symbols) {
+        return meaningOf(read, symbols, new java.util.HashSet<>());
+    }
+
+    /**
+     * The same, through the bindings a walk into a container has already met.
+     *
+     * <p>One set for the whole answer, because the answer reaches back into this: a name an
+     * operation handed an element on is answered by walking to the container it came from, and that
+     * walk meets names this has to answer about. Threaded rather than started afresh at each step,
+     * so what stops the walk is the bindings met and not a depth anybody chose.
+     */
+    private ReadMeaning meaningOf(Core.Read read, Symbols symbols,
+                                  java.util.Set<BindingId> met) {
         TermPath path = pathOf(read, symbols);
         if (path != null) {
             return new ReadMeaning.Position(path);
@@ -331,7 +347,8 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         }
         Core container = elements.containerOf(read.binding());
         if (container != null) {
-            java.util.List<Denotation> written = writtenElementsOf(new Denotation(container, this));
+            java.util.List<Denotation> written =
+                    writtenElementsOf(new Denotation(container, this), symbols, met);
             return written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
         }
         Core held = bound.get(read.binding());
@@ -365,8 +382,10 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * a statement about every member to be about, and a statement quantified over no members holds
      * whatever it says.
      */
-    private static java.util.List<Denotation> writtenElementsOf(Denotation container) {
-        Denotation standing = standing(container, new java.util.HashSet<>());
+    private static java.util.List<Denotation> writtenElementsOf(Denotation container,
+                                                                Symbols symbols,
+                                                                java.util.Set<BindingId> met) {
+        Denotation standing = standing(container, symbols, met);
         if (!(standing.value() instanceof Core.ListLit written) || written.elements().isEmpty()) {
             return null;
         }
@@ -378,23 +397,33 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
     /**
      * {@code from} followed through the steps that have one successor, as far as they go.
      *
-     * <p>The names this environment bound and the bodies of the bindings inside it, and nothing
-     * else. A normal form and never a failure: what comes back where nothing applies is what went
-     * in, which a caller reads rather than treating as an absence.
+     * <p>A name standing for one value and the body of a binding, and nothing else. A normal form
+     * and never a failure: what comes back where nothing applies is what went in, which a caller
+     * reads rather than treating as an absence.
+     *
+     * <p><b>Which names those are is {@link #meaningOf}'s answer and is not read off the bindings
+     * here.</b> A name is a position, or one of several values, or an element, before it is what it
+     * was bound to, and reading {@code bound} would be this walk deciding that order for itself —
+     * beside the one place that decides it, and free to differ. No model here comes out differently
+     * for it: what would tell them apart is a binding that both holds a value and is what an
+     * operation handed an element on, which is a shape a fused pair of walks can leave
+     * ({@link InputPath}) and which none of these tests writes.
      *
      * <p>By the bindings met, which is what makes it stop. Each tells itself from every other, so a
      * name that came round to itself is one already answered for.
      */
-    private static Denotation standing(Denotation from, java.util.Set<BindingId> met) {
+    private static Denotation standing(Denotation from, Symbols symbols,
+                                       java.util.Set<BindingId> met) {
         Denotation at = from;
         while (true) {
             switch (at.value()) {
                 case Core.Read name -> {
-                    Core held = at.at().bound.get(name.binding());
-                    if (held == null || held == name || !met.add(name.binding())) {
+                    if (!met.add(name.binding())
+                            || !(at.at().meaningOf(name, symbols, met)
+                                    instanceof ReadMeaning.Through through)) {
                         return at;
                     }
-                    at = new Denotation(held, at.at());
+                    at = through.denotes();
                 }
                 case Core.LetIn let ->
                         at = new Denotation(let.body(), at.at().and(let.binder(), let.value()));

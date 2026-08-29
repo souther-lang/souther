@@ -8,7 +8,6 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
 import java.math.BigDecimal;
@@ -172,30 +171,18 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
              */
             @Override
             public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
-                return at.meaningOf(read, symbols) instanceof ReadMeaning.Through through
-                        ? new AffineForms.ReadThrough<>(through.denotes().value(),
-                                through.denotes().at()) : null;
+                return NameAnswers.denoting(read, at, symbols);
             }
 
             /**
-             * A name an operation handed an element on, where the container was written out.
-             *
-             * <p>The same one answer as the one above ({@link InputReads#meaningOf}), read for the
-             * count it comes back with. A container an operation built answers no plurality here,
-             * and a rule about an element of one is a rule about no position — which is what it was
-             * before there was anything to write out.
+             * A name an operation handed an element on, where the container was written out. Read
+             * for the count the one answer comes back with, beside the walk that says which
+             * positions a rule is about, so the two meet a plurality with the same knowledge.
              */
             @Override
             public java.util.List<AffineForms.ReadThrough<InputReads>> alternativesOf(
                     Core.Read read, InputReads at) {
-                if (!(at.meaningOf(read, symbols) instanceof ReadMeaning.OneOf one)) {
-                    return null;
-                }
-                java.util.List<AffineForms.ReadThrough<InputReads>> each =
-                        new java.util.ArrayList<>();
-                one.alternatives().forEach(stands ->
-                        each.add(new AffineForms.ReadThrough<>(stands.value(), stands.at())));
-                return each;
+                return NameAnswers.alternativesOf(read, at, symbols);
             }
 
             @Override

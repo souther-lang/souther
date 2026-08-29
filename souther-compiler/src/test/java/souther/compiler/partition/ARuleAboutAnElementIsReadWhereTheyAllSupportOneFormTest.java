@@ -1,13 +1,6 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.check.Symbols;
-import souther.compiler.coverage.CoverageSites;
-import souther.compiler.inputs.InputReads;
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Bodies;
-import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -47,6 +40,33 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
                 {
                         let ks = [ Big { threshold = 100000 }, Big { threshold = 200000 } ]
                         if List.any((k) -> n >= k.threshold, ks) then Yes else No
+                    }"""));
+    }
+
+    /**
+     * And the member need not be taken apart to be read.
+     *
+     * <p>Beside the two above and reaching the agreement by the other way in. There a projection out
+     * of the name is what the members answer for; here the name is the number, and what a rule
+     * compares against is what the members are. A reading that only agreed under an elimination
+     * would have this one back as a rule about nothing.
+     */
+    @Test
+    void membersThatAreTheNumberStateItToo() {
+        assertEquals("n cut 100000", cut("""
+                {
+                        let ks = [ 100000, 100000 ]
+                        if List.any((k) -> n >= k, ks) then Yes else No
+                    }"""));
+    }
+
+    /** And state none where they differ, by the same rule. */
+    @Test
+    void membersThatAreTwoNumbersStateNeither() {
+        assertEquals("stopped", cut("""
+                {
+                        let ks = [ 100000, 200000 ]
+                        if List.any((k) -> n >= k, ks) then Yes else No
                     }"""));
     }
 
@@ -121,7 +141,7 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
         assertEquals("stopped", cut("""
                 {
                         let ks = [ Big { threshold = 100000 }
-                                 , if n > 0 then Big { threshold = 100000 }
+                                 , if c then Big { threshold = 100000 }
                                    else Big { threshold = 100000 } ]
                         if List.any((k) -> n >= k.threshold, ks) then Yes else No
                     }"""));
@@ -161,14 +181,19 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
     void aChoiceBetweenTwoConstructionsStatesNoNumber() {
         assertEquals("stopped", cut("""
                 {
-                        let k = if n > 0 then Big { threshold = 100000 }
+                        let k = if c then Big { threshold = 100000 }
                                 else Big { threshold = 100000 }
                         if n >= k.threshold then Yes else No
                     }"""));
     }
 
-    /** The number a comparison cuts, or that the reading stopped. The last comparison of the body,
-     *  which is the one these fixtures are about. */
+    /**
+     * The number the body's comparison cuts, or that the reading stopped.
+     *
+     * <p>Each of these bodies writes one comparison, which is why the choice they are told apart by
+     * is made on a parameter rather than on a number: a second comparison would leave this picking
+     * one of them by where it stands, after which a fixture could be about a rule nobody meant.
+     */
     private static String cut(String body) {
         String source = """
                 module g
@@ -187,32 +212,16 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
                         | AtMost { threshold } -> n >= threshold
                         | Whatever             -> false
 
-                behavior classify : (n: Int) -> Yes | No
-                let classify (n) = %s
+                behavior classify : (n: Int, c: Bool) -> Yes | No
+                let classify (n, c) = %s
 
                 example classify
-                    | "one" : (1) -> No
+                    | "one" : (1, true) -> No
                 """.formatted(body);
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(java.util.List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " "
-                        + each.diagnostic().primary()).toList(),
-                "the model under test compiles");
-        String module = compilation.modules().get(0);
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        ComparisonReadings.Reading against = ComparisonReadings.of(
-                        checked.behaviorBodies().get("classify"),
-                        CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                                checked.supplied()),
-                        InputReads.of(compilation.db().ask(new Adequacy.Inputs(module)).value()
-                                .get("classify"), checked.elementBindings().get("classify")),
-                        symbols)
-                .all().stream().reduce((first, last) -> last).orElseThrow();
-
-        return switch (AffineReading.read(against.comparison(), against.reads(), symbols)) {
+        ReadComparisons read = ReadComparisons.of(source, "classify");
+        ComparisonReadings.Reading against = read.only();
+        return switch (AffineReading.read(against.comparison(), against.reads(), read.symbols())) {
             case AffineReading.OfAComparison.Stopped _ -> "stopped";
             case AffineReading.OfAComparison.CutsNothing _ -> "cuts nothing";
             case AffineReading.OfAComparison.Cuts cuts -> said(cuts);

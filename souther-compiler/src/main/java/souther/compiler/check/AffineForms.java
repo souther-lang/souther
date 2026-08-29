@@ -293,8 +293,12 @@ public final class AffineForms {
      *
      * <p>And a name the reading names every value of is read as what those values agree on. The same
      * step as the one above with the count changed: one value is what the name comes to, and several
-     * come to whatever all of them come to. Where they come to different forms this answers nothing,
-     * and the name is where the reading stopped — which is the list an author would have to change.
+     * come to whatever all of them come to.
+     *
+     * <p>Where a member stopped, that is where the reading stopped — as it is for the one value a
+     * name denotes, since a member of a written list is an expression an author wrote and is the one
+     * they would have to change. Where every member was read and they came to different forms,
+     * nothing stopped and this answers nothing, and the stop is reported at the name.
      */
     private static <A, E> Outcome<A, E> read(Core e, E at, Reading<A, E> reading,
                                              java.util.Set<BindingId> following) {
@@ -316,9 +320,13 @@ public final class AffineForms {
         }
         java.util.List<Standing<E>> each = new java.util.ArrayList<>();
         alternatives.forEach(one -> each.add(new Standing<>(one.value(), one.at())));
-        LinearForm<A> agreed = commonForm(each, reading, following, new Stop<>());
+        Stop<A, E> stopped = new Stop<>();
+        LinearForm<A> agreed = commonForm(each, reading, following, stopped);
         following.remove(r.binding());
-        return agreed == null ? null : new Outcome.Composed<>(agreed);
+        if (agreed != null) {
+            return new Outcome.Composed<>(agreed);
+        }
+        return stopped.at;
     }
 
     /**

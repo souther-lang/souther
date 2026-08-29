@@ -355,10 +355,7 @@ public final class GuardThresholds {
             @Override
             public souther.compiler.check.AffineForms.ReadThrough<InputReads> readThrough(
                     Core.Read read, InputReads at) {
-                return at.meaningOf(read, symbols) instanceof ReadMeaning.Through through
-                        ? new souther.compiler.check.AffineForms.ReadThrough<>(
-                                through.denotes().value(), through.denotes().at())
-                        : null;
+                return NameAnswers.denoting(read, at, symbols);
             }
 
             /**
@@ -369,15 +366,7 @@ public final class GuardThresholds {
             @Override
             public java.util.List<souther.compiler.check.AffineForms.ReadThrough<InputReads>>
                     alternativesOf(Core.Read read, InputReads at) {
-                if (!(at.meaningOf(read, symbols) instanceof ReadMeaning.OneOf one)) {
-                    return null;
-                }
-                java.util.List<souther.compiler.check.AffineForms.ReadThrough<InputReads>> each =
-                        new java.util.ArrayList<>();
-                one.alternatives().forEach(stands ->
-                        each.add(new souther.compiler.check.AffineForms.ReadThrough<>(
-                                stands.value(), stands.at())));
-                return each;
+                return NameAnswers.alternativesOf(read, at, symbols);
             }
 
             @Override

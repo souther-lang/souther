@@ -1470,7 +1470,8 @@ final class Terms {
             return false;
         }
         for (int i = 0; i < a.size(); i++) {
-            if (a.get(i).rel() != b.get(i).rel() || !sameForm(a.get(i).form(), b.get(i).form())) {
+            if (a.get(i).rel() != b.get(i).rel()
+                    || !AffineForms.sameForm(a.get(i).form(), b.get(i).form())) {
                 return false;
             }
         }
@@ -1484,7 +1485,7 @@ final class Terms {
 
         @Override
         public boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {
-            return sameForm(a, b);
+            return AffineForms.sameForm(a, b);
         }
 
         @Override
@@ -1505,12 +1506,6 @@ final class Terms {
             return a == b;
         }
         return a.inclusive() == b.inclusive() && a.at().sameAs(b.at());
-    }
-
-    /** Asked of the walk that reads forms, which is where what counts as one answer is decided for
-     *  every reader of one. */
-    private static boolean sameForm(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {
-        return AffineForms.sameForm(a, b);
     }
 
     /**

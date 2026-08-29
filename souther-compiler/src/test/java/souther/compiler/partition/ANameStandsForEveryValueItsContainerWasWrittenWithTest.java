@@ -3,19 +3,13 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Bodies;
-import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * What a name an operation handed an element on stands for, where the container was written out.
@@ -146,24 +140,9 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
                     | "one" : (1) -> No
                 """.formatted(body);
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(java.util.List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " "
-                        + each.diagnostic().primary()).toList(),
-                "the model under test compiles");
-        String module = compilation.modules().get(0);
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        assertNotNull(checked, "the model under test compiles");
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        ComparisonReadings.Reading only = ComparisonReadings.of(
-                        checked.behaviorBodies().get("classify"),
-                        CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                                checked.supplied()),
-                        InputReads.of(compilation.db().ask(new Adequacy.Inputs(module)).value()
-                                .get("classify"), checked.elementBindings().get("classify")),
-                        symbols)
-                .all().stream().findFirst().orElseThrow();
+        ReadComparisons read = ReadComparisons.of(source, "classify");
+        ComparisonReadings.Reading only = read.only();
+        Symbols symbols = read.symbols();
 
         Core side = only.comparison().right();
         InputReads at = only.reads();
