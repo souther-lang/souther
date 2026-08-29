@@ -16,11 +16,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * model that says a hundred thousand or two hundred thousand — a rule about a value, reported as a
  * rule about the model.
  *
- * <p>Nothing here refuses anything. What holds these open is that the relation which follows a
- * value has no rule for a choice and none for an element: it takes an elimination against the
- * introduction written for it, and neither an arm nor a list element is one. So there is no list of
- * shapes to keep in step with the shapes that do read, and a construction that becomes readable
- * does not quietly make these readable with it.
+ * <p>Nothing here refuses anything. What holds these open is that the reading names no values for
+ * what stands at a choice: the relation which follows a value takes an elimination against the
+ * introduction written for it and a name the reading answers for, and an arm of a choice is
+ * neither. So there is no list of shapes to keep in step with the shapes that do read, and a
+ * construction that becomes readable does not quietly make these readable with it.
+ *
+ * <p>Which is a different boundary from the one a container has, and it is why an element of a
+ * written list is not here. That one is a name the reading can write out every value of, and what a
+ * rule over it comes to is what those values agree on
+ * ({@link ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest}). A choice has no such answer
+ * and gets none from anywhere.
  *
  * <p>The helper is the stronger of the two alternatives. The name it was given is read through, so
  * the reading is inside the helper's body when it meets the choice — which is where a relation that
@@ -58,45 +64,6 @@ class ARuleIsNotReadWhereMoreThanOneValueCanStandTest {
         assertEquals(nothingButTheChoice, read);
     }
 
-    /**
-     * And an element of a written list answers for none of them either.
-     *
-     * <p>Its own claim beside the three above. A choice is written where the value stands and a
-     * list element is not: what names the element is a binding an operation handed it, and what
-     * holds this open is that such a name is not one the reading says stands for a single value.
-     * The two boundaries are kept by different answers and are stated apart.
-     */
-    @Test
-    void anElementOfAWrittenListAnswersForNoneOfThem() {
-        assertEquals("[] unread [n UNSUPPORTED_SYNTAX]", reading("""
-                {
-                        let ks = [ Big { threshold = 100000 }, Big { threshold = 200000 } ]
-                        if List.any((k) -> n >= k.threshold, ks) then Yes else No
-                    }"""));
-    }
-
-    /**
-     * And a case bound off one is still an element, however narrowly the arm names it.
-     *
-     * <p>An arm that admits one case looks as though it says which element is standing there, and
-     * it does not: a list may be written with two of the same case, and each of them would satisfy
-     * the arm with a different number under it. So the number a rule compares against is reached
-     * here through a name whose value the reading does not single out, and the arm is no part of
-     * whether it does.
-     *
-     * <p>This is the shape a model reaches it by, which is why it is written out rather than left
-     * to the two above. Narrowing an element to a case is where a reader would expect the value to
-     * become one, and it is exactly where nothing has said so.
-     */
-    @Test
-    void andACaseBoundOffAnElementIsStillOne() {
-        assertEquals("[] unread [n UNSUPPORTED_SYNTAX]", reading("""
-                {
-                        let ks = [ AtMost { threshold = 100000 }, Whatever ]
-                        if List.any((k) -> reaches(n, k), ks) then Yes else No
-                    }"""));
-    }
-
     private static String reading(String body) {
         return MeasuredBehavior.reading("""
                 module g
@@ -105,17 +72,8 @@ class ARuleIsNotReadWhereMoreThanOneValueCanStandTest {
                 data Yes
                 data No
 
-                data AtMost = { threshold: Int }
-                data Whatever
-                data Reason = AtMost | Whatever
-
                 let chooseBig (c: Bool) =
                     if c then Big { threshold = 100000 } else Big { threshold = 200000 }
-
-                let reaches (n: Int, reason: Reason): Bool =
-                    match reason with
-                        | AtMost { threshold } -> n >= threshold
-                        | Whatever             -> true
 
                 behavior classify : (n: Int) -> Yes | No
                 let classify (n) = %s

@@ -212,6 +212,12 @@ public sealed interface ValueOrigin<K> {
                 following.remove(read.binding());
                 return inside;
             }
+            // A name standing for several values is not one this walk reads through. What may be
+            // said of such a name is what all of its values support, and that is one law with one
+            // owner — the arithmetic, which is asked before this walk is
+            // ({@link souther.compiler.partition.ComparisonAssessment}). Answered here as well, it
+            // would be a second account of it: two values agree as arithmetic and are made of
+            // different things, so the two would differ about a name and the stricter would win.
             return leafOf(e, at, reading);
         }
         // The operation a call reaches, asked of {@link Terms} so that what counts as one is

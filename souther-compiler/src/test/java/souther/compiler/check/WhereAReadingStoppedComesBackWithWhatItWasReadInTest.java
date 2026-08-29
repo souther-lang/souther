@@ -100,6 +100,14 @@ class WhereAReadingStoppedComesBackWithWhatItWasReadInTest {
                         : null;
             }
 
+            /** One name denotes one value here, and no name stands for several: what this test is
+             *  about is the environment a stop comes back with, which a plurality would not add to. */
+            @Override
+            public java.util.List<AffineForms.ReadThrough<String>> alternativesOf(Core.Read read,
+                                                                                  String at) {
+                return null;
+            }
+
             @Override
             public boolean readsThrough(Core.FieldAccess fa, String at) {
                 return false;

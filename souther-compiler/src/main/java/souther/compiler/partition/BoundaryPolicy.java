@@ -67,15 +67,26 @@ final class BoundaryPolicy {
      * decision that took the reading only to hand it back was a second place holding it, and the
      * walk that has it is {@link ComparisonReadings}.
      *
+     * <p><b>How many times a run passes the comparison is not asked.</b> A recording holds that a
+     * place was passed and not how many times, so two outcomes of one comparison in one run would
+     * have to be told from two rows' outcomes — and what settles that is the reading of the
+     * comparison rather than anything about the construct it stands in.
+     *
+     * <p>What the reading settles is this: <b>every atom of a form it composed is a term the row
+     * decides.</b> A value at a position of the input is one, a number taken of one is one, and a
+     * number taken over the occurrences of one path in a single run is one — that last names no
+     * single position, and what makes the row decide it is the run naming exactly one sequence
+     * ({@link souther.compiler.inputs.RunSource}). What a row does not decide is not an atom at all:
+     * it enters a form only where it was written out and every value of it came to the same form
+     * ({@link souther.compiler.check.AffineForms}), after which it is a number and no longer an
+     * uncertainty. So every pass of a comparison that bears a line reads what the row holds — at one
+     * occurrence of a position where the passes stand at different occurrences of one, and at the
+     * same values where they do not — and a pass reading anything else is one no line came of.
+     *
      * @param live whether what is computed at this position is read on the way to what the behavior
      *             answers with, which is {@link LiveFlow}'s answer carried down the walk
-     * @param eachPassIsAnOccurrence whether every pass of this position in one run is one occurrence
-     *                               of a position of the input, which is
-     *                               {@link souther.compiler.check.ElementBindings}'s answer carried
-     *                               down the walk beside {@code live}
      */
-    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, boolean live,
-                               boolean eachPassIsAnOccurrence) {
+    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, boolean live) {
         if (!live) {
             return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_READS_IT);
         }
@@ -84,15 +95,6 @@ final class BoundaryPolicy {
         // reached, and a border on it would owe a row nothing can measure.
         if (plan.comparisonAt(comparison).isEmpty()) {
             return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_RECORDS_IT);
-        }
-        // A recording holds that a place was passed and not how many times, so two outcomes of one
-        // comparison in one run cannot be told from two rows' outcomes — unless something else tells
-        // the passes apart. Where the closure that repeats this one is applied to the elements of a
-        // container the input walk has a position for, each pass is one occurrence of that position,
-        // and the row's own values there say which pass came out which way. The comparison is one
-        // rule about the element and not several about the container.
-        if (plan.mayRepeat(comparison) && !eachPassIsAnOccurrence) {
-            return new Standing.DrawsNone(comparison, NotABoundary.REPEATED_IN_ONE_RUN);
         }
         return new Standing.DrawsALine(comparison);
     }

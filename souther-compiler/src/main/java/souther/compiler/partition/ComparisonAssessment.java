@@ -115,8 +115,21 @@ sealed interface ComparisonAssessment {
     /** The comparison names no position of the behavior's input. */
     record NoInput() implements ComparisonAssessment {}
 
-    /** Read to the end, and the quantity it cuts is nothing: the positions cancel. */
-    record CutsNothing() implements ComparisonAssessment {}
+    /**
+     * Read to the end, and the quantity it cuts is nothing: the positions cancel.
+     *
+     * <p>{@code filedAt} is where the rule is said to have cut nothing, and it comes off the
+     * reading rather than off a second walk over the operands. What is left of the quantity is not
+     * what the rule is about — {@code a - a <= 0} is about {@code a} and cuts nothing — so the
+     * coordinates are the numbers the reading named, whether or not they survived, and they are the
+     * numbers rather than the places they sit at ({@link AffineReading#filedAt}).
+     */
+    record CutsNothing(List<FilingCoordinate> filedAt) implements ComparisonAssessment {
+
+        public CutsNothing {
+            filedAt = List.copyOf(filedAt);
+        }
+    }
 
     /** Read in full, and the quantity does not run as far as the line the rule draws. */
     record OutsideTheDomain(Cutting cutting) implements ComparisonAssessment {
@@ -180,6 +193,16 @@ sealed interface ComparisonAssessment {
      *
      * <p>The one way in. {@code answer} is the binding a clause calls what the behavior answers, or
      * null where the comparison is written in a body and there is nothing to be the answer.
+     *
+     * <p><b>The arithmetic answers before anything else is asked.</b> Which positions a rule is
+     * about is what the quantity it cuts is over: every atom of a form is a number of a location
+     * ({@link souther.compiler.inputs.InputNumber}), so a comparison that came to a line is about
+     * the positions of that line and there is nothing left to look up. What the walk over the
+     * expression says a side is made of is the answer for a rule that came to no line — where it is
+     * the only account there is — and asked first it would be a second reading standing in front of
+     * the first, able to veto it and never to add to it: two members of a written list holding one
+     * form written two ways agree as arithmetic and are made of different things, so the rule they
+     * state would come back as one about no input at all.
      */
     static ComparisonAssessment of(String behavior, Core.Binary comparison, InputReads reads,
                                    Symbols symbols, Quantities quantities, BindingId answer,
@@ -191,19 +214,26 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison, answer)) {
             return new AnswerDependent();
         }
-        List<FilingCoordinate> filedAt = GuardThresholds.filedAt(comparison, reads, symbols);
-        if (filedAt.isEmpty()) {
-            return aboutNoPosition(comparison, reads, symbols);
-        }
         return switch (Cutting.read(behavior, comparison, reads, symbols, quantities)) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(comparison, cuts.cutting(), quantities, drawnByAnInvariant);
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
-            // of this compiler: `a <= a` holds of every row.
-            case Cutting.Read.CutsNothing _ -> new CutsNothing();
+            // of this compiler: `a <= a` holds of every row. Where the comparison names no position
+            // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
+            // constants and states nothing anywhere.
+            case Cutting.Read.CutsNothing over -> over.read().isEmpty()
+                    ? aboutNoPosition(comparison, reads, symbols)
+                    : new CutsNothing(AffineReading.filedAt(over.read()));
             // And where the reading stopped, its own answer for having stopped — decided where it
-            // stopped rather than worked out again from the comparison afterwards.
-            case Cutting.Read.Stopped stopped -> new Unread(stopped.why(), filedAt);
+            // stopped rather than worked out again from the comparison afterwards. Here the walk
+            // over the expression is the only account of what the rule is about, which is what it
+            // is for.
+            case Cutting.Read.Stopped stopped -> {
+                List<FilingCoordinate> filedAt =
+                        GuardThresholds.filedAt(comparison, reads, symbols);
+                yield filedAt.isEmpty() ? aboutNoPosition(comparison, reads, symbols)
+                        : new Unread(stopped.why(), filedAt);
+            }
         };
     }
 
@@ -306,7 +336,7 @@ sealed interface ComparisonAssessment {
             // the input empty says nothing about which positions this rule is about.
             case NoFeasibleInput none -> none.cutting().over();
             case Unread unread -> unread.filedAt();
-            case CutsNothing _ -> GuardThresholds.filedAt(comparison, reads, symbols);
+            case CutsNothing cuts -> cuts.filedAt();
             case AtAPosition _, AnswerDependent _, NoInput _ -> List.of();
         };
     }

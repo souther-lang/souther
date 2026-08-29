@@ -125,6 +125,14 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
                 return null;
             }
 
+            /** No name here stands for several values either: what is being shown is that the
+             *  grammar reads these shapes with an environment that answers nothing. */
+            @Override
+            public java.util.List<AffineForms.ReadThrough<String>> alternativesOf(Core.Read read,
+                                                                                  String at) {
+                return null;
+            }
+
             @Override
             public boolean readsThrough(Core.FieldAccess fa, String at) {
                 return false;

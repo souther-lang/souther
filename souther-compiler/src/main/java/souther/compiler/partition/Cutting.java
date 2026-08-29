@@ -62,8 +62,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
         }
 
-        /** Read to the end, and the quantity it cuts is nothing. */
-        record CutsNothing() implements Read {}
+        /** Read to the end, and the quantity it cuts is nothing. {@code read} is what the reading
+         *  named on the way, which is what the rule is about however much of it cancelled
+         *  ({@link AffineReading.OfAComparison.CutsNothing}). */
+        record CutsNothing(java.util.Set<souther.compiler.inputs.NumericTerm> read)
+                implements Read {
+
+            public CutsNothing {
+                read = java.util.Set.copyOf(read);
+            }
+        }
 
         /** The reading stopped, and this is what it stopped on. */
         record Stopped(souther.compiler.inputs.BlockReason.RuleReadingStopped why) implements Read {
@@ -91,7 +99,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // `a <= a` names one position on either side and the arithmetic has already said the
             // two are one, so a reading of the operands finding a distance there is that reading
             // being wrong about the rule.
-            case AffineReading.OfAComparison.CutsNothing _ -> new Read.CutsNothing();
+            case AffineReading.OfAComparison.CutsNothing over ->
+                    new Read.CutsNothing(over.read());
             // The quantity is what the arithmetic says it is, and the realization is the only thing
             // left to try. Read the other way round, a spelling that produced a line took the
             // comparison before the canonical form was consulted at all.
@@ -409,15 +418,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * position it does not mention.
      */
     java.util.List<souther.compiler.inputs.FilingCoordinate> over() {
-        // By the position's own name, which is the one thing about a form that does not depend on
-        // how it was written — the same order {@link AffineReading#ordered} puts a form's
-        // coefficients in. Read off the map instead, the entries come back in an order salted once
-        // per run, and a report is a document compared against the one written last time.
-        return AffineReading.ordered(direction(of)).stream()
-                .map(java.util.Map.Entry::getKey)
-                .<souther.compiler.inputs.FilingCoordinate>map(
-                        souther.compiler.inputs.FilingCoordinate::of)
-                .distinct().toList();
+        // Where a reading that reached the numbers files them, which is one answer for every such
+        // reading ({@link AffineReading#filedAt}): the terms themselves, in the order a document
+        // names them. Written out here, a reader that reached the numbers by another way would
+        // write it out again, and the two would file one rule at two coordinates.
+        return AffineReading.filedAt(direction(of).coefs().keySet());
     }
 
     /** Whether the rule singles a value out rather than ordering the values around it. */
