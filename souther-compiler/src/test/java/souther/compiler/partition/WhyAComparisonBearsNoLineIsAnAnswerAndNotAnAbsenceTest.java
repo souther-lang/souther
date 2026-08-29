@@ -19,17 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * A comparison that bears no line says which of the reasons it is.
  *
  * <p>They are not one answer. A truth nothing reads is one the behavior draws no boundary on at all,
- * and a report that stayed silent about it is right. A comparison one run passes more than once is
- * one the behavior may well draw a boundary on and this cannot show a row to have met: a recording
- * holds that a place was passed and not how many times, so two outcomes of one comparison in one run
- * cannot be told from two rows' outcomes. Folded into one {@code false}, the second becomes silence
- * that reads like the first.
+ * and a report that stayed silent about it is right. A comparison no run through can be recorded is
+ * one the behavior may well draw a boundary on and this cannot show a row to have met. Folded into
+ * one {@code false}, the second becomes silence that reads like the first.
  *
- * <p>What tells the passes apart is a position for what is passed. A step applied once per element
- * of a container the input walk names is passed once per element of that container, and the row's
- * own values there say which pass came out which way — so that one is a line, and it is the same
- * comparison, written the same way, as the one below it whose container the walk names nothing at.
- * The two stand together here because the difference between them is the whole of the reason.
+ * <p>What a comparison is written inside is no part of this. A step a combinator applies once per
+ * element is passed as many times as there are elements, and the two written here stand together to
+ * say that the policy admits both: what each of them comes to is settled by the arithmetic, over
+ * the container the input walk names and over the one written in the body alike.
  */
 class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
 
@@ -106,12 +103,19 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
     }
 
     /**
-     * The same comparison over a container the input walk names nothing at is a boundary nothing can
-     * measure a row against.
+     * The same comparison over a container the input walk names nothing at is a boundary all the
+     * same, and what it comes to is the reading's answer.
+     *
+     * <p>How many times a run passes it is not one of these reasons. A comparison this admits bears
+     * a line where the arithmetic reads one, and a reading comes to a line over positions of the
+     * input and nothing else — so every pass of a comparison that bears one reads what the row
+     * holds. This one is read over the elements of a list written {@code [1, 2, 3]}, which state
+     * three different numbers and therefore state none; that is said where a rule that could not be
+     * read is said, and not here.
      */
     @Test
-    void aTruthOneRunReachesMoreThanOnceIsOneNothingCanMeasure() {
-        assertEquals(NotABoundary.REPEATED_IN_ONE_RUN, whyOf(standingAt(11)));
+    void aTruthOneRunReachesMoreThanOnceIsStillOneThisPolicyAdmits() {
+        assertEquals(BoundaryPolicy.Standing.DrawsALine.class, standingAt(11).getClass());
     }
 
     private static NotABoundary whyOf(BoundaryPolicy.Standing standing) {

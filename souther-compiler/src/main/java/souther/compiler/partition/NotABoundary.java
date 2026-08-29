@@ -5,14 +5,18 @@ package souther.compiler.partition;
  *
  * <p>An answer and never an absence. What these are told apart for is that a reader has to do
  * opposite things about them: one says the behavior draws no boundary here and a report saying
- * nothing is right, and the other two say it may well draw one that this could not be shown a row
- * against. Folded into one {@code false}, the second and third arrive downstream as the same silence
- * as the first — and whoever widens the measurement later has to work out again why anything was
- * left out.
+ * nothing is right, and the other says it may well draw one that this could not be shown a row
+ * against. Folded into one {@code false}, the second arrives downstream as the same silence as the
+ * first — and whoever widens the measurement later has to work out again why anything was left out.
  *
- * <p>One is said where more than one holds, and it is the one about the model. A reader told that a
+ * <p>The first is said where both hold, because it is the one about the model. A reader told that a
  * comparison's outcome cannot be attributed to a row would go looking for a way to attribute it,
  * when the behavior's answer does not turn on the comparison at all.
+ *
+ * <p>Nothing here is about what a rule was written in. Whether a comparison this policy admits comes
+ * to a line is the reading's answer and is said in the reading's words
+ * ({@link souther.compiler.inputs.BlockReason}); the two vocabularies stay apart, and a comparison
+ * this admits and no arithmetic reads is reported by that one rather than by a third word here.
  */
 public enum NotABoundary {
 
@@ -37,21 +41,5 @@ public enum NotABoundary {
      * arm a condition never comes out the way of, is one no run gets to — and meeting a line takes
      * getting the comparison to answer, so a border there would owe a row nothing can measure.
      */
-    NOTHING_RECORDS_IT,
-
-    /**
-     * One run passes the comparison more than once, so an outcome recorded at it belongs to no one
-     * row.
-     *
-     * <p>A boundary the behavior may well draw. What stops it is the shape of the recording rather
-     * than anything about the model: a recording holds that a place was passed and not how many
-     * times, so a comparison inside a function value a combinator applies per element leaves two
-     * outcomes in one run that cannot be told from two rows' outcomes. {@code Plan.mayRepeat} is
-     * what says so.
-     *
-     * <p>Kept apart from the others for the day the measurement grows. A reading that could attribute
-     * an outcome to the element it came from would make these lines, and nothing else about the
-     * policy would have to change.
-     */
-    REPEATED_IN_ONE_RUN
+    NOTHING_RECORDS_IT
 }
