@@ -15,60 +15,55 @@ import java.util.Map;
  * from whatever reading each had reached: the same comparison under a binding was a number to one of
  * them and nothing to the other, and what came of that is a decision named for a way nobody held.
  *
- * <p><b>Scoped like the reading it is made of.</b> What a name reads is not a fact about the node
- * that reads it, so this narrows at each binder the way the reading of the input does, and a reader
- * that walks into a body walks this in with it.
+ * <p><b>Fixed for the body, and not walked into it.</b> What is here is one reading of the input,
+ * the module's names, and what each comparison came to — none of which changes as a reader goes
+ * under a binding. What a name reads there does change, so it arrives with the comparison
+ * ({@link #of}) from whichever reader is asking, which is already standing at the node.
+ *
+ * <p>Narrowed with the walk instead, this would copy the reading of the input into every step and
+ * leave two scoped values — the reader's own and this one — that answer correctly only while they
+ * are at the same node.
  *
  * <p>One comparison is read under one environment. A node occurs once in a body and what is in
  * scope at it is what the walk had when it got there, so a second reading of one node under a
  * different environment is two readers disagreeing about where they are — said as that rather than
- * answered.
+ * answered, which is what the environment kept beside each answer is for.
  */
 public final class ComparedNumbers {
 
-    // Beside the module's names and for the same reason: one body is read against one reading of
-    // the input, while what a name stands for is whatever the walk has got to.
     private final InputDomain inputs;
-    private final InputReads reads;
     private final Symbols symbols;
 
-    /** What each comparison came to and what it was read under, shared by every scope of one body. */
+    /** What each comparison came to and what it was read under, shared by every reader of one
+     *  body. */
     private final Map<Core.Binary, Read> said;
 
     private record Read(InputReads under, ComparedNumber said) { }
 
-    private ComparedNumbers(InputDomain inputs, InputReads reads, Symbols symbols,
-                            Map<Core.Binary, Read> said) {
+    private ComparedNumbers(InputDomain inputs, Symbols symbols, Map<Core.Binary, Read> said) {
         this.inputs = inputs;
-        this.reads = reads;
         this.symbols = symbols;
         this.said = said;
     }
 
-    /** The comparisons of a body whose names read {@code reads}, against {@code inputs}. */
-    public static ComparedNumbers of(InputDomain inputs, InputReads reads, Symbols symbols) {
-        return new ComparedNumbers(inputs, reads, symbols, new IdentityHashMap<>());
+    /** The comparisons of one body, read against {@code inputs}. */
+    public static ComparedNumbers of(InputDomain inputs, Symbols symbols) {
+        return new ComparedNumbers(inputs, symbols, new IdentityHashMap<>());
     }
 
-    /** What a name reads inside a body that binds {@code binder} to {@code value}. */
-    public ComparedNumbers under(Core.Binder binder, Core value) {
-        InputReads inside = reads.and(binder, value);
-        return inside.equals(reads) ? this : new ComparedNumbers(inputs, inside, symbols, said);
-    }
-
-    /** What a name reads inside {@code arm} of {@code match}, where the arm's name stands for the
-     *  value matched read as the case the arm selects. The other of the two scope transitions the
-     *  reading of the input has, and this has both for the same reason it is scoped at all. */
-    public ComparedNumbers insideArm(Core.Match match, Core.Case arm) {
-        InputReads inside = reads.insideArm(match, arm, symbols);
-        return inside.equals(reads) ? this : new ComparedNumbers(inputs, inside, symbols, said);
-    }
-
-    /** The reading of {@code comparison}, or null where it names no number of this input. */
-    public ComparedNumber of(Core.Binary comparison) {
+    /**
+     * The reading of {@code comparison} where its names read {@code at}, or null where it names no
+     * number of this input.
+     *
+     * <p>{@code at} comes with the question rather than being held here, because it is what the
+     * asking reader is standing at. Two readers meet one comparison at one node, so the second
+     * finds the first's answer — and finds it under the environment the first was at, which is
+     * what the check below is comparing.
+     */
+    public ComparedNumber of(Core.Binary comparison, InputReads at) {
         Read had = said.get(comparison);
         if (had != null) {
-            if (!had.under().equals(reads)) {
+            if (!had.under().equals(at)) {
                 throw new IllegalStateException(
                         "one comparison read under two environments, at " + comparison.pos()
                                 + ": what a name reads there is settled by the walk, and two"
@@ -76,8 +71,8 @@ public final class ComparedNumbers {
             }
             return had.said();
         }
-        ComparedNumber read = ComparedNumber.of(comparison, inputs, reads, symbols);
-        said.put(comparison, new Read(reads, read));
+        ComparedNumber read = ComparedNumber.of(comparison, inputs, at, symbols);
+        said.put(comparison, new Read(at, read));
         return read;
     }
 }

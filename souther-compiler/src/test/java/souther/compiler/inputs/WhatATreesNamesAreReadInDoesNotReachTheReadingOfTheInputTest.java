@@ -4,22 +4,23 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.classfile.Attributes;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
-import java.lang.classfile.FieldModel;
-import java.lang.classfile.MethodModel;
-import java.lang.classfile.attribute.RecordAttribute;
-import java.lang.classfile.attribute.RecordComponentInfo;
-import java.lang.classfile.attribute.SignatureAttribute;
-import java.lang.classfile.constantpool.ClassEntry;
-import java.lang.classfile.constantpool.NameAndTypeEntry;
 import java.lang.classfile.constantpool.PoolEntry;
+import java.lang.classfile.constantpool.StringEntry;
+import java.lang.classfile.constantpool.Utf8Entry;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -36,12 +37,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the environment explains, so a reading put on it is a reading back inside the walk one step
  * further out.
  *
- * <p><b>What this checks is a symbolic reference and not reachability.</b> A class file names the
- * types and members it links against — supertypes, field and method descriptors, generic
- * signatures, record components, annotations, and everything the code refers to — and none of those
- * may name the reading. A class name written as a string constant is not one of them, so a route
- * through reflection would not be found here. The check is as wide as Java's linking and no wider,
- * which is the whole of what it says.
+ * <p><b>Every way a class file names a type is one spelling.</b> A class name, a field or method
+ * descriptor, a generic signature, an annotation's type or element, a method type, the arguments a
+ * bootstrap is given — each of them is held as a {@code Utf8} of the constant pool, whatever
+ * attribute points at it. So this reads the pool rather than a list of the attributes there happen
+ * to be today, which is what a list would have to be kept in step with as the class file format
+ * grows.
+ *
+ * <p><b>The one thing left out is a string constant</b>, taken out by which pool entry it is and
+ * not by what it says, so a descriptor that happens to equal one is still read. This is therefore a
+ * claim about what Java links against and not about what is reachable: a class named as text and
+ * found by reflection would not be seen here.
+ *
+ * <p>It over-approximates in the other direction — a member or attribute name that spelled the
+ * reading would be reported too — which for something being forbidden is the side to be wrong on.
  */
 class WhatATreesNamesAreReadInDoesNotReachTheReadingOfTheInputTest {
 
@@ -58,73 +67,119 @@ class WhatATreesNamesAreReadInDoesNotReachTheReadingOfTheInputTest {
     }
 
     /**
-     * The check reads a class file at all.
+     * What is above passes on the empty set, which is also what a class file nothing could read
+     * produces. So each way of naming a type that the prohibition covers is put through the same
+     * walk on a class that names the reading that way.
      *
-     * <p>Both tests above pass on an empty set of mentions, which is what a class file that could
-     * not be read produces. So one type that does name the reading is put through the same walk:
-     * {@link InputNumber} is handed both — the environment for where a name stands and the reading
-     * for what stands there — so its own methods name it.
+     * <p>What each witness settles is that the way it names the reading does put a spelling in the
+     * pool — which is what the walk rests on. Six of them name it that way and no other; the
+     * bootstrap one cannot, because the method type a lambda's bootstrap is given is the same
+     * spelling as the method it points at.
      */
     @Test
-    void andTheWalkFindsAMentionWhereThereIsOne() throws IOException {
-        assertTrue(!mentionsOfTheReadingIn(InputNumber.class).isEmpty(),
-                "a type that names the reading is found to name it");
+    void andEachWayOfNamingATypeIsFound() throws IOException {
+        assertFinds(InAMethodDescriptor.class, "a method's descriptor");
+        assertFinds(InAFieldDescriptor.class, "a field's descriptor");
+        assertFinds(InAnInstruction.class, "an instruction's operand");
+        assertFinds(InAClassSignature.class, "a class's generic signature");
+        assertFinds(InAMethodSignature.class, "a method's generic signature");
+        assertFinds(InAnAnnotation.class, "an annotation's element");
+        assertFinds(InABootstrapArgument.class, "a bootstrap method's argument");
     }
 
-    /** Every place {@code of}'s class file names the reading, as the kind of reference each is. */
+    /** And each witness is the shape it is named for, which is also what keeps its members read. */
+    @Test
+    void andEachWitnessIsTheShapeItIsNamedFor() {
+        assertNull(InAMethodDescriptor.none());
+        assertTrue(InAFieldDescriptor.isNull());
+        assertFalse(InAnInstruction.isOne("not one"));
+        assertTrue(new InAClassSignature().isEmpty());
+        assertNull(InAMethodSignature.none());
+        assertEquals(InputDomain.class, InAnAnnotation.class.getAnnotation(Names.class).value());
+        assertNull(InABootstrapArgument.none().get());
+    }
+
+    private static void assertFinds(Class<?> of, String how) throws IOException {
+        assertFalse(mentionsOfTheReadingIn(of).isEmpty(),
+                () -> "the reading named in " + how + " is found");
+    }
+
+    /** Every spelling in {@code of}'s class file that names the reading. */
     private static Set<String> mentionsOfTheReadingIn(Class<?> of) throws IOException {
         ClassModel model = parsed(of);
+        // By which entry it is and not by what it says: a descriptor that reads the same as some
+        // string constant is still a descriptor.
+        Set<Integer> constants = new HashSet<>();
+        for (PoolEntry entry : model.constantPool()) {
+            if (entry instanceof StringEntry text) {
+                constants.add(text.utf8().index());
+            }
+        }
         Set<String> found = new LinkedHashSet<>();
         for (PoolEntry entry : model.constantPool()) {
-            if (entry instanceof ClassEntry named && names(named.asInternalName())) {
-                found.add("class reference " + named.asInternalName());
+            if (entry instanceof Utf8Entry spelling
+                    && !constants.contains(spelling.index())
+                    && spelling.stringValue().contains(READING)) {
+                found.add(spelling.stringValue());
             }
-            if (entry instanceof NameAndTypeEntry member && names(member.type().stringValue())) {
-                found.add("member of type " + member.type().stringValue());
-            }
-        }
-        for (FieldModel field : model.fields()) {
-            take("field " + field.fieldName().stringValue(),
-                    field.fieldType().stringValue(), found);
-            field.findAttribute(Attributes.signature()).ifPresent(each ->
-                    take("field signature " + field.fieldName().stringValue(),
-                            each.signature().stringValue(), found));
-        }
-        for (MethodModel method : model.methods()) {
-            take("method " + method.methodName().stringValue(),
-                    method.methodType().stringValue(), found);
-            method.findAttribute(Attributes.signature()).ifPresent(each ->
-                    take("method signature " + method.methodName().stringValue(),
-                            each.signature().stringValue(), found));
-        }
-        for (RecordComponentInfo component : model.findAttribute(Attributes.record())
-                .map(RecordAttribute::components).orElse(java.util.List.of())) {
-            take("record component " + component.name().stringValue(),
-                    component.descriptor().stringValue(), found);
-            component.findAttribute(Attributes.signature())
-                    .map(SignatureAttribute::signature)
-                    .ifPresent(each -> take("record component signature "
-                            + component.name().stringValue(), each.stringValue(), found));
         }
         return found;
     }
 
-    private static void take(String where, String descriptor, Set<String> found) {
-        if (names(descriptor)) {
-            found.add(where + " : " + descriptor);
+    /** The compiled class as the run time reads it, and not a path a build laid it out at. */
+    private static ClassModel parsed(Class<?> of) throws IOException {
+        String binary = of.getName();
+        String resource = binary.substring(binary.lastIndexOf('.') + 1) + ".class";
+        try (InputStream in = of.getResourceAsStream(resource)) {
+            assertNotNull(in, () -> "the compiled " + binary + " is on the class path");
+            return ClassFile.of().parse(in.readAllBytes());
         }
     }
 
-    private static boolean names(String descriptor) {
-        return descriptor.contains(READING);
+    @Retention(RetentionPolicy.RUNTIME)
+    private @interface Names {
+        Class<?> value();
     }
 
-    /** The compiled class as the run time reads it, and not a path a build laid it out at. */
-    private static ClassModel parsed(Class<?> of) throws IOException {
-        String resource = of.getSimpleName() + ".class";
-        try (InputStream in = of.getResourceAsStream(resource)) {
-            assertNotNull(in, () -> "the compiled " + of.getName() + " is on the class path");
-            return ClassFile.of().parse(in.readAllBytes());
+    private static final class InAMethodDescriptor {
+        static InputDomain none() {
+            return null;
+        }
+    }
+
+    private static final class InAFieldDescriptor {
+        private static InputDomain none;
+
+        /** Answered without naming the reading, so the field's own descriptor is the one spelling
+         *  this witness has. */
+        static boolean isNull() {
+            return none == null;
+        }
+    }
+
+    private static final class InAnInstruction {
+        static boolean isOne(Object what) {
+            return what instanceof InputDomain;
+        }
+    }
+
+    private static final class InAClassSignature extends ArrayList<InputDomain> {
+        private static final long serialVersionUID = 1L;
+    }
+
+    private static final class InAMethodSignature {
+        static ArrayList<InputDomain> none() {
+            return null;
+        }
+    }
+
+    @Names(InputDomain.class)
+    private static final class InAnAnnotation {
+    }
+
+    private static final class InABootstrapArgument {
+        static Supplier<InputDomain> none() {
+            return () -> null;
         }
     }
 }

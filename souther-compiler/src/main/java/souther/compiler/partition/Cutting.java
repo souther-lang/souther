@@ -107,7 +107,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // left to try. Read the other way round, a spelling that produced a line took the
             // comparison before the canonical form was consulted at all.
             case AffineReading.OfAComparison.Cuts cuts ->
-                    realized(behavior, cuts.read(), inputs, reads, symbols, quantities);
+                    realized(behavior, cuts.read(), inputs, symbols, quantities);
             // And only here does how it was written decide anything. The arithmetic stopped, which
             // is what a date against a written date and a case of an enumeration do: the values are
             // ones it cannot count, and the comparison still states a line.
@@ -146,8 +146,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * again — what each of them is handed is the form the reading already came to.
      */
     private static Read realized(String behavior, AffineReading read,
-                                 souther.compiler.inputs.InputDomain inputs, InputReads reads,
-                                 Symbols symbols,
+                                 souther.compiler.inputs.InputDomain inputs, Symbols symbols,
                                  souther.compiler.inputs.Quantities quantities) {
         Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, inputs, symbols),
                 quantities);
@@ -158,7 +157,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (drawn != null) {
             return new Read.Cuts(drawn);
         }
-        Cutting form = overAForm(behavior, read, inputs, reads, symbols, quantities);
+        Cutting form = overAForm(behavior, read, inputs, symbols, quantities);
         if (form != null) {
             return new Read.Cuts(form);
         }
@@ -261,8 +260,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * the form is right here.
      */
     private static Cutting overAForm(String behavior, AffineReading read,
-                                     souther.compiler.inputs.InputDomain inputs, InputReads reads,
-                                     Symbols symbols,
+                                     souther.compiler.inputs.InputDomain inputs, Symbols symbols,
                                      souther.compiler.inputs.Quantities quantities) {
         if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
             return null;
