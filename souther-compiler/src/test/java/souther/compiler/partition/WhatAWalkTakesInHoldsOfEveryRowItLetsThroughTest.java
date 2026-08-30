@@ -96,7 +96,8 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         souther.compiler.inputs.InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        InputReads reads = InputReads.of(inputs, checked.elementBindings().get(behavior));
+        InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
+                checked.elementBindings().get(behavior));
         return ReachingCuts.stating(Condition.of(body, reads), inputs, holding, symbols);
     }
 

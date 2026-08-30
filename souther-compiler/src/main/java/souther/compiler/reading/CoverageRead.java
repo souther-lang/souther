@@ -148,7 +148,8 @@ public final class CoverageRead {
     /** What the walk over {@code behavior}'s {@code body} reads. */
     public static Read of(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
                           Symbols symbols) {
-        InputReads reads = InputReads.of(inputs);
+        InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
+                souther.compiler.check.ElementBindings.NONE);
         // One reading of this body's comparisons, handed to both readers of them. What a way is
         // admitted by and what a decision is said of are two questions about one comparison, and
         // each reading it for itself is how they came to be about different numbers.

@@ -56,8 +56,9 @@ public final class UnreachableClaims {
             return NONE;
         }
         List<Claim> found = new ArrayList<>();
-        claimedUnder(body, InputReads.of(read), symbols, plan, NormalReturn.ofBody(body), true,
-                found);
+        claimedUnder(body, InputReads.ofParameters(read.parameterReads(),
+                        souther.compiler.check.ElementBindings.NONE),
+                symbols, plan, NormalReturn.ofBody(body), true, found);
         return found.isEmpty() ? NONE : new UnreachableClaims(found);
     }
 

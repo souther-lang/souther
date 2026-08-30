@@ -148,7 +148,8 @@ public final class GuardThresholds {
         // whether a line may be drawn on it and what it came to are five questions about one
         // position, and one walk answers them about one position.
         ComparisonReadings read = ComparisonReadings.of(behavior, body, plan, inputs,
-                InputReads.of(inputs, elements), symbols, quantities, arrives);
+                InputReads.ofParameters(inputs.parameterReads(), elements), symbols, quantities,
+                arrives);
         for (ComparisonReadings.Reading each : read.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->

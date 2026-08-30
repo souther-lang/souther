@@ -214,7 +214,9 @@ public final class PathReachability {
             reading.entry = in.known();
             reading.entered = in.at();
             reading.walk(body, in.known(), in.at(),
-                            InputReads.of(read == null ? InputDomain.NONE : read), List.of(), true);
+                            InputReads.ofParameters(reading.read.parameterReads(),
+                                    souther.compiler.check.ElementBindings.NONE),
+                            List.of(), true);
             walked = true;
         } catch (RuntimeException why) {
             // The run-time check is the backstop for the analysis this borrows, and it is the

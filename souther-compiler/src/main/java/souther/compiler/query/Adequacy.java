@@ -752,7 +752,7 @@ public final class Adequacy {
         for (souther.compiler.core.Contract.Param param : stated.params()) {
             parameters.putIfAbsent(param.binding(), param.name());
         }
-        souther.compiler.inputs.InputPaths names =
+        souther.compiler.inputs.InputReads names =
                 souther.compiler.inputs.InputReads.ofWhatIsDeclared(parameters);
         souther.compiler.inputs.InputDemand out = demand;
         for (souther.compiler.check.StatedContract.StatedRule rule : stated.rules()) {
