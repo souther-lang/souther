@@ -8,6 +8,7 @@ import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.NarrowedBounds;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
@@ -320,7 +321,10 @@ public final class Partitions {
             BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
                 came = BodyCutInspection.outranking(came,
-                        keep(new ArrayList<>(), axis, null, rulesWithoutALine));
+                        cameTo(axis.term(), axis.path(), rulesWithoutALine));
+            }
+            if (at.axes().isEmpty()) {
+                came = cameTo(null, at.position().path(), rulesWithoutALine);
             }
             settled.add(at.measuredAt(at.axes(), came));
         }
@@ -345,33 +349,32 @@ public final class Partitions {
                 quantities.emptiness().orElse(null));
     }
 
-    /** The axis, and the body's answer about it — a line it drew, nothing, or a rule about it that
-     *  it drew no line from, with which of the two ways that happened. Answered where the axis is
-     *  made, so that what the rules came to travels to the position holding the axis rather than
-     *  being looked up afterwards by how a path is spelled. */
-    private static BodyCutInspection keep(List<Axis> out, Axis axis,
-                                          BodyCutInspection drew, List<RuleWithoutALine> rules) {
-        out.add(axis);
-        if (drew != null) {
-            return drew;
-        }
-        // Whether this phase left anything at the position with no line, and not which limit it was.
-        // A limit belongs to the rule it stopped, and the findings carry it there; taken as the
-        // position's, the first rule of however many were stopped alike was the one a report named.
-        //
-        // The number and not the path. A `String` is measured more than one way, and an axis is one
-        // of them: a rule about a length that nothing could read leaves the length blocked and says
-        // nothing about the string's own values. Matched by path alone, either axis answered for
-        // both.
-        //
-        // A finding the reading did not name a number for is at the position, and answers for every
-        // axis on it: what number it was about is what was not read, so an axis cannot be excused by
-        // it naming another.
+    /**
+     * What the rules this phase drew no line from leave at one number of a position, or at the
+     * position itself where nothing measures it.
+     *
+     * <p>Whether this phase left anything with no line, and not which limit it was. A limit belongs
+     * to the rule it stopped, and the findings carry it there; taken as the position's, the first
+     * rule of however many were stopped alike was the one a report named.
+     *
+     * <p>The number where there is one. A {@code String} is measured more than one way: a rule
+     * about a length that nothing could read leaves the length blocked and says nothing about the
+     * string's own values, and matched by path alone either measure answered for both. So where
+     * nothing was measured, a rule naming a number is not what the location is left with either —
+     * it is about that number, which is not the location's own values.
+     *
+     * <p>A finding the reading did not name a number for is at the position, and answers for every
+     * measure on it: what number it was about is what was not read, so a measure cannot be excused
+     * by it naming another.
+     */
+    private static BodyCutInspection cameTo(NumericTerm.FromOnePosition term,
+                                            souther.compiler.inputs.TermPath path,
+                                            List<RuleWithoutALine> rules) {
         LeftAtThePosition left = LeftAtThePosition.of(rules.stream().filter(one -> switch (one.at()) {
             case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
-                    it.term().equals(axis.term());
+                    term != null && it.term().equals(term);
             case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
-                    it.path().equals(axis.path());
+                    it.path().equals(path);
         }).toList());
         // Which of the two this phase was left with, and not merely that it was left with
         // something. The verdict below tells a reading that stopped from a rule read to the end,
@@ -399,25 +402,27 @@ public final class Partitions {
      * are in the order an author wrote them.
      */
     private static List<NumericTerm.FromOnePosition> numbersMeasuring(
-            Axis axis, List<LineEvidence> evidence, EvidenceAccount account) {
-        NumericTerm.FromOnePosition declared = axis.term();
+            PositionMeasurements at, List<LineEvidence> evidence, EvidenceAccount account) {
+        souther.compiler.inputs.TermPath path = at.position().path();
         List<LineEvidence> here = evidence.stream()
-                .filter(each -> each.at().position().equals(axis.path())).toList();
+                .filter(each -> each.at().position().equals(path)).toList();
         List<NumericTerm.FromOnePosition> numbers = new ArrayList<>();
         for (LineEvidence each : here) {
             if (!numbers.contains(each.at())) {
                 numbers.add(each.at());
             }
         }
-        // A position the declarations already divide keeps the measure they gave it. What a body
+        // A position the declarations already divide keeps the measures they gave it. What a body
         // says about another number of such a position is not taken up as a second measure, and
         // this is where that is said: an account with no entry could not tell a policy from a loss.
-        if (axis.measurable()) {
-            here.stream().filter(each -> !each.at().equals(declared))
+        if (at.measured()) {
+            List<NumericTerm.FromOnePosition> declared =
+                    at.axes().stream().map(Axis::term).toList();
+            here.stream().filter(each -> !declared.contains(each.at()))
                     .forEach(each -> account.disposedOf(each,
                             new EvidenceAccount.Disposition.ThePositionIsAlreadyMeasured(
-                                    axis.id())));
-            return numbers.contains(declared) ? List.of(declared) : List.of();
+                                    at.axes().get(0).id())));
+            return numbers.stream().filter(declared::contains).toList();
         }
         return numbers;
     }
@@ -429,11 +434,14 @@ public final class Partitions {
      * a position by are two ways to arrive at a number and one thing to do with it, and a second
      * route through this would be a second answer to what a rule about a number comes to.
      */
-    private static BodyCutInspection measureAt(List<Axis> out, Axis axis,
+    private static BodyCutInspection measureAt(List<Axis> out, PositionMeasurements at, Axis axis,
                                   NumericTerm.FromOnePosition term, List<LineEvidence> evidence,
                                   souther.compiler.inputs.Quantities reading, Symbols symbols,
                                   ReadingPolicy policy,
                                   List<RuleWithoutALine> rules, EvidenceAccount account) {
+        AxisId id = axis != null ? axis.id()
+                : AxisId.of(at.position().behavior(), term);
+        Type type = at.position().type();
         List<LineEvidence> mine = evidence.stream()
                 .filter(each -> each.at().equals(term)).toList();
         List<Threshold> here = LineEvidence.linesIn(mine);
@@ -442,16 +450,16 @@ public final class Partitions {
         // the record it sits in says about it. Reading the type again here would put a threshold
         // back inside a range the record has no values in.
         NumericDomain.Bounds domain = domainOf(reading, term);
-        Carrier carrier = term.answeredOn(axis.type(), symbols);
+        Carrier carrier = term.answeredOn(type, symbols);
         if (here.isEmpty() && !points.isEmpty()) {
             // Nothing orders this position, so its classes are the values singled out and
             // everything else. Ranges here would ask the rows for a distinction between the two
             // sides of a value the behavior treats alike.
-            mine.forEach(each -> account.measured(each, axis.id()));
-            return keep(out, refine(axis,
-                    () -> singledClasses(points, term, axis.type(), domain, symbols),
-                    mergedPoints(axis.cuts(), points, carrier),
-                    axis.parted()),
+            mine.forEach(each -> account.measured(each, id));
+            return made(out, at, id, term, type,
+                    classesOf(axis, () -> singledClasses(points, term, type, domain, symbols)),
+                    mergedPoints(cutsOf(axis), points, carrier),
+                    partedOf(axis), narrowedOf(axis),
                     new BodyCutInspection.Evidence(), rules);
         }
         // Filtered once, and both answers read the filtered list. A line outside what the
@@ -465,7 +473,7 @@ public final class Partitions {
                 // A value singled out beside an ordering. The model has drawn the further
                 // distinction itself, so the value is one more line among the ranges and it is
                 // merged with them below.
-                account.measured(each, axis.id());
+                account.measured(each, id);
                 continue;
             }
             // Asked of the place the line falls at, which the position need not hold a value at.
@@ -480,7 +488,7 @@ public final class Partitions {
             if (domain != null && !admits(domain, line.parts())) {
                 continue;
             }
-            account.measured(each, axis.id());
+            account.measured(each, id);
             reachable.add(line);
         }
         // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
@@ -491,18 +499,79 @@ public final class Partitions {
         // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
         // written about the position rather than everything that came to nothing.
         NumericDomain.Bounds within = domain;
-        return keep(out, refine(axis,
-                () -> Intervals.classesOf(
+        return made(out, at, id, term, type,
+                classesOf(axis, () -> Intervals.classesOf(
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
-                        term, axis.type(), policy, symbols,
+                        term, type, policy, symbols,
                         within == null ? null : within.min(),
-                        within == null ? null : within.max()),
-                mergedPoints(merged(axis.cuts(), reachable, carrier), points, carrier),
+                        within == null ? null : within.max())),
+                mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier),
                 reachable.stream()
                         .map(each -> Parting.by(each.parts(), each.origin().authoredLine()))
-                        .toList()),
+                        .toList(),
+                narrowedOf(axis),
                 reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
+    }
+
+    /**
+     * The measure the rules about one number came to, kept where it measures something.
+     *
+     * <p>A run of classes, the lines cut on the number, or where the rules part it: with none of
+     * the three the rules measured the number at nothing, and what there is to say is about the
+     * location rather than about a measure of it. Kept anyway, the location would be counted among
+     * the measures — which is what a measure of nothing was.
+     */
+    private static BodyCutInspection made(List<Axis> out, PositionMeasurements at, AxisId id,
+                                          NumericTerm.FromOnePosition term, Type type,
+                                          List<PartitionClass> classes, List<Cut> cuts,
+                                          List<Parting> parted, NarrowedBounds narrowed,
+                                          BodyCutInspection drew, List<RuleWithoutALine> rules) {
+        if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
+            return cameTo(term, at.position().path(), rules);
+        }
+        out.add(new Axis(id, term, type, classes, cuts, parted, narrowed));
+        return drew != null ? drew : cameTo(term, at.position().path(), rules);
+    }
+
+    /**
+     * What a number is already divided into, or what the rules now read about it divide it into.
+     *
+     * <p>Refinement and not replacement. What a body draws is evidence arriving after the model's
+     * own, and evidence only ever tells a position's values apart more finely — so where the model
+     * already divides the number, the lines a body draws are lines among those classes and the
+     * classes stay as they are. Rebuilt from the lines, a position the model divides three ways
+     * would come back divided two ways, and the loss reads as the model never having stated the
+     * third.
+     *
+     * <p>Which is a rule about the classes and not about the carrier. A position whose rules name
+     * the values it holds is divided just as finely, so a {@code guard} over it replaced what the
+     * model states. The two agree wherever this fires, and by construction rather than by luck: an
+     * enumeration's cases are its classes, and a crossing never leaves a position whose type states
+     * classes without any ({@code LocalInspection}'s {@code constructibleAt}).
+     *
+     * @param otherwise the classes to use where nothing divides the number yet, asked for only
+     *                  there — a number that already has classes has no use for them, and working
+     *                  them out would be a reading whose answer is thrown away
+     */
+    private static List<PartitionClass> classesOf(
+            Axis axis, java.util.function.Supplier<List<PartitionClass>> otherwise) {
+        return axis != null && axis.derivable() ? axis.classes() : otherwise.get();
+    }
+
+    /** The lines already cut on the number, of which there are none where nothing measured it. */
+    private static List<Cut> cutsOf(Axis axis) {
+        return axis == null ? List.of() : axis.cuts();
+    }
+
+    /** Likewise where the rules already part it. */
+    private static List<Parting> partedOf(Axis axis) {
+        return axis == null ? List.of() : axis.parted();
+    }
+
+    /** And where the rules leave its ends, which is an answer about this number and no other. */
+    private static NarrowedBounds narrowedOf(Axis axis) {
+        return axis == null ? NarrowedBounds.NOTHING : axis.narrowed();
     }
 
     /**
@@ -640,20 +709,29 @@ public final class Partitions {
             // about are both measures of it, and which of the two answers a report is owed is
             // `outranking`'s to settle rather than the order this happens to walk them in.
             BodyCutInspection came = null;
+            List<NumericTerm.FromOnePosition> numbers = numbersMeasuring(at, evidence, account);
+            for (NumericTerm.FromOnePosition term : numbers) {
+                // The measure of this number where the declarations made one, and nothing where a
+                // body's rules are the first to name it. What such a measure starts from is what
+                // the location is, which is where this reads it from.
+                Axis measured = at.axes().stream()
+                        .filter(each -> each.term().equals(term)).findFirst().orElse(null);
+                came = BodyCutInspection.outranking(came,
+                        measureAt(here, at, measured, term, evidence, reading,
+                                symbols, policy, rules, account));
+            }
+            // The measures nothing new was said about, kept as they are, and what they were left
+            // with folded in beside the rest.
             for (Axis axis : at.axes()) {
-                List<NumericTerm.FromOnePosition> numbers =
-                        numbersMeasuring(axis, evidence, account);
-                if (numbers.isEmpty()) {
-                    came = BodyCutInspection.outranking(came, keep(here, axis, null, rules));
+                if (numbers.contains(axis.term())) {
                     continue;
                 }
-                for (NumericTerm.FromOnePosition term : numbers) {
-                    AxisId id = term.equals(axis.term()) ? axis.id()
-                            : AxisId.of(axis.id().behavior(), term);
-                    came = BodyCutInspection.outranking(came,
-                            measureAt(here, axis.measuredAt(id, term), term, evidence, reading,
-                                    symbols, policy, rules, account));
-                }
+                here.add(axis);
+                came = BodyCutInspection.outranking(came,
+                        cameTo(axis.term(), axis.path(), rules));
+            }
+            if (came == null) {
+                came = cameTo(null, at.position().path(), rules);
             }
             measurements.add(at.measuredAt(here, came));
         }
@@ -713,38 +791,6 @@ public final class Partitions {
         return out;
     }
 
-    /**
-     * The same position, with what a body's rules add to it.
-     *
-     * <p>Refinement and not replacement. What a body draws is evidence arriving after the model's
-     * own, and evidence only ever tells a position's values apart more finely — so where the model
-     * already divides the position, the lines a body draws are lines among those classes and the
-     * classes stay as they are. Rebuilt from the lines, a position the model divides three ways
-     * would come back divided two ways, and the loss reads as the model never having stated the
-     * third.
-     *
-     * <p>Which is a rule about the classes and not about the carrier. It stood as a test for an
-     * enumeration, being where it was first noticed; a position whose rules name the values it
-     * holds is divided just as finely and had no such test, so a {@code guard} over it replaced
-     * what the model states.
-     *
-     * <p>The two agree wherever the old one fired, and they agree by construction rather than by
-     * luck: an enumeration's cases are its classes, and a crossing never leaves a position whose
-     * type states classes without any ({@code LocalInspection}'s {@code constructibleAt}). So there
-     * is no position with an ordered carrier for these to be about, and ranges over the count an
-     * enumeration's cases are ordered by are never rebuilt into a partition of them.
-     *
-     * <p>The lines are taken either way. A line is still a line where it divides nothing new, and
-     * still owes its rows.
-     *
-     * @param otherwise the classes to use where the model divides the position no way, asked for
-     *                  only there — a position that already has classes has no use for them, and
-     *                  working them out would be a reading whose answer is thrown away
-     */
-    private static Axis refine(Axis axis, java.util.function.Supplier<List<PartitionClass>> otherwise,
-                               List<Cut> cuts, List<Parting> parted) {
-        return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts, parted);
-    }
 
     /**
      * The classes a position divided only by equalities has: each value singled out, and the rest.
@@ -1017,10 +1063,14 @@ public final class Partitions {
                     // position that the local reading could not take in, which is what keeps the
                     // position from completing as one the model divides no way.
                     case StructuralInspection.Retained retained -> {
-                        PositionAccount at = PositionAccount.of(behavior, position,
-                                retained.continuation(), leftAt(position));
-                        measurements.add(new PositionMeasurements(at,
-                                List.of(Axis.pendingAt(id, term, at.type())), null));
+                        // The position and no measure of it. Nothing local divided the number the
+                        // declarations name, and a measure with nothing in it would be a location
+                        // counted among the measures — what is still to be answered for here is
+                        // the position's to carry.
+                        measurements.add(new PositionMeasurements(
+                                PositionAccount.of(behavior, position, retained.continuation(),
+                                        leftAt(position)),
+                                List.of(), null));
                     }
                 }
             }

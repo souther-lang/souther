@@ -62,7 +62,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         return new PositionMeasurements(
                 new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
                         unread == null ? null : LeftAtThePosition.of(unread)),
-                List.of(axis), null);
+                axis == null ? List.of() : List.of(axis), null);
     }
 
     /** What is still to be answered for at this position. */
@@ -78,7 +78,10 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      *  in — which is a second way a position can be left unable to reach an absence. */
     private static PositionMeasurements pending(StructuralInspection.Continuation found,
                                                 BlockReason.RuleWithoutLineReason unread) {
-        return at(Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL), found, unread);
+        return new PositionMeasurements(
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
+                        unread == null ? null : LeftAtThePosition.of(unread)),
+                List.of(), null);
     }
 
     /**

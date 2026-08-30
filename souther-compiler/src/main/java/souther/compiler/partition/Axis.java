@@ -66,6 +66,16 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
         if (type == null) {
             throw new IllegalArgumentException("an axis of a value of nothing");
         }
+        // A measure is what the rules divided a number into, cut on it, or parted it at, and one
+        // with none of the three measured nothing. Such a one used to stand for a position still to
+        // be answered for — which is a fact about the location and is held there
+        // ({@link PositionMeasurements}), so a reader counting what a behavior is measured at was
+        // counting locations among the measures.
+        if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "`" + id + "` measures " + term + " at nothing: no class, no line and no"
+                            + " parting, which is a position nothing measures and not a measure");
+        }
         for (PartitionClass one : classes) {
             subjectHeld(term, one);
             // A line is a place on the number's order and falls in whichever class holds that
@@ -110,37 +120,6 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
     public Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
                 List<PartitionClass> classes, List<Cut> cuts) {
         this(id, term, type, classes, cuts, List.of(), NarrowedBounds.NOTHING);
-    }
-
-    /**
-     * A position nothing has answered for yet, and what the readings of it found.
-     *
-     * <p>Not a position the model does not divide. A rule a body writes may still draw a line on it,
-     * and only where none does is what was found here what a report says — an absence where every
-     * reading ran to the end and found nothing, and what stopped one where it did not.
-     */
-    public static Axis pendingAt(AxisId id, NumericTerm.FromOnePosition term, Type type) {
-        return new Axis(id, term, type, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
-    }
-
-    /**
-     * The same position, measured at another number.
-     *
-     * <p>A transition rather than a constructor at the call site. What a body's rules add is a term,
-     * classes and cuts; what the position came to was settled by the reading that made this one,
-     * and a caller rebuilding an axis from its parts drops whatever it does not think to name. What
-     * the position came to is one field, so a rebuild names it or does not compile.
-     *
-     * <p>Everything answered about the number goes where the number goes: the classes it was
-     * divided into, the lines cut on it, where the rules part it and where they leave its ends. At
-     * another number they answer a question nobody asked, and carried over they would be answers
-     * about one number on an axis of another. What is kept is the one thing here that is the
-     * position's, {@link #type}. What that leaves the axis short of is what the reading measuring
-     * it at the new number puts there.
-     */
-    public Axis measuredAt(AxisId id, NumericTerm.FromOnePosition term) {
-        return term.equals(this.term) ? new Axis(id, term, type, classes, cuts, parted, narrowed)
-                : new Axis(id, term, type, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */

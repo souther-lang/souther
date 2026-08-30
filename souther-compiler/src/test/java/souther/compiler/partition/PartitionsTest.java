@@ -219,10 +219,15 @@ class PartitionsTest {
 
     @Test
     void aTypeTheModelDrawsNoLineThroughIsNotDerivable() {
-        Axis note = axis(partitioningOf(KINDS, "submit"), "request.note");
+        Partitions.Partitioning partitioning = partitioningOf(KINDS, "submit");
+        PositionMeasurements note = partitioning.measurements().stream()
+                .filter(each -> each.position().path().toString().equals("request.note"))
+                .findFirst().orElseThrow();
 
-        assertFalse(note.measurable());
-        assertEquals(List.of(), classIds(note));
+        assertEquals(List.of(), note.axes(), "a plain string is measured at nothing");
+        assertTrue(partitioning.undivided().stream()
+                        .anyMatch(each -> each.at().toString().equals("request.note")),
+                "and the position says so, which is where a report reads it");
     }
 
     @Test
@@ -248,7 +253,7 @@ class PartitionsTest {
      */
     @Test
     void aProductIsTakenApartFieldByField() {
-        List<String> paths = partitioningOf(KINDS, "submit").axes().stream()
+        List<String> paths = partitioningOf(KINDS, "submit").positions().stream()
                 .map(a -> a.path().toString()).toList();
 
         assertEquals(List.of("request.kind", "request.cost", "request.urgent", "request.memo",

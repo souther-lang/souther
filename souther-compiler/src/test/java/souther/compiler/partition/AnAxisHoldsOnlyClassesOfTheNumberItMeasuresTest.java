@@ -187,30 +187,31 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
     }
 
     /**
-     * The same position measured at another number keeps the position and none of the old number's
-     * answers.
+     * A position measured at a number taken of it holds that measure and no other.
      *
-     * <p>What the classes and the lines are is how the rules divided one number and where they cut
-     * it, so the position measured at a second number starts with none of them and is given what the
-     * rules leave that number. Carried over, they would be the classes of one number on an axis of
-     * another, which is the thing above that cannot be built.
+     * <p>Which is what keeps the classes of one number off an axis of another: a measure is made
+     * from the rules about one number and holds what they gave it, so there is nothing for a second
+     * number to inherit. A string the body compares the length of has one measure, of the length —
+     * and none of the string's own value, which no rule here divides.
      */
     @Test
-    void thePositionMeasuredAtAnotherNumberCarriesNoneOfTheFirstsClasses() {
+    void aPositionHoldsTheMeasuresTheRulesNameOfItAndNoOthers() {
         Partitions.Partitioning read = divided();
-        Axis length = axisOf(read, "gate/String.length(slot.c)");
-        Axis count = axisOf(read, "gate/slot.n");
-        assertFalse(length.classes().isEmpty(), "there is something to be carried or dropped");
 
-        Axis elsewhere = length.measuredAt(count.id(), count.term());
+        assertEquals(List.of("gate/String.length(slot.c)"), idsAt(read, "slot.c"));
+        assertEquals(List.of("gate/slot.n"), idsAt(read, "slot.n"));
+        assertFalse(axisOf(read, "gate/String.length(slot.c)").classes().isEmpty(),
+                "and the one measure is the rules' own division of that number");
+    }
 
-        assertEquals(List.of(), elsewhere.classes());
-        assertEquals(List.of(), elsewhere.cuts());
-        assertEquals(List.of(), elsewhere.parted());
-        assertSame(souther.compiler.check.NarrowedBounds.NOTHING, elsewhere.narrowed(),
-                "where the rules leave the first number's ends is an answer about that number");
-        assertSame(length.type(), elsewhere.type(),
-                "and what stands at the position is what stands there, whichever number is read");
+    /** What one position of the model is measured at, named as a report names it. */
+    private static List<String> idsAt(Partitions.Partitioning read, String path) {
+        PositionMeasurements at = read.measurements().stream()
+                .filter(each -> each.position().path().toString().equals(path))
+                .findFirst().orElse(null);
+        assertNotNull(at, "the behavior takes " + path + ", among " + read.measurements().stream()
+                .map(each -> each.position().path().toString()).toList());
+        return at.axes().stream().map(each -> each.id().toString()).toList();
     }
 
     /**
@@ -343,9 +344,12 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         assertNotNull(again, "the length of a string is a number this compiler names");
         assertNotSame(length.term(), again, "a second naming, built here");
         assertEquals(length.term(), again, "of the number the reading already named");
-        assertSame(again, length.measuredAt(length.id(), again).term(),
+
+        Axis measuring = new Axis(length.id(), again, length.type(),
+                length.classes(), length.cuts());
+
+        assertSame(again, measuring.term(),
                 "so the classes of that number are the classes of an axis measuring it");
-        assertEquals(length.classes(),
-                length.measuredAt(length.id(), again).classes());
+        assertEquals(length.classes(), measuring.classes());
     }
 }
