@@ -750,6 +750,52 @@
           } ]
         } ],
         "obligations" : [ {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.catalog",
+                "declaredOn" : "Weight",
+                "clause" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "1"
+            },
+            "point" : "in",
+            "region" : {
+              "kind" : "beside",
+              "stops" : {
+                "kind" : "at_a_line",
+                "line" : {
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.shipping",
+                    "behavior" : "出荷する",
+                    "ordinal" : 13,
+                    "lowered" : 0
+                  },
+                  "conjunct" : 0,
+                  "facts" : {
+                    "valueBelongsBelow" : true,
+                    "holdsAtTheValue" : true,
+                    "singles" : false
+                  },
+                  "narrowedWithin" : [ ]
+                },
+                "where" : "30000|30001"
+              }
+            }
+          },
           "point" : "in",
           "rule" : "invariant Weight #1",
           "ruleId" : {
@@ -773,6 +819,30 @@
             "hit" : true
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "behavior" : "出荷する",
+                "ordinal" : 13,
+                "lowered" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "30000"
+            },
+            "point" : "on"
+          },
           "point" : "on",
           "rule" : "comparison@1:78:17",
           "ruleId" : {
@@ -797,6 +867,30 @@
             "hit" : true
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "behavior" : "出荷する",
+                "ordinal" : 13,
+                "lowered" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "30000"
+            },
+            "point" : "off"
+          },
           "point" : "off",
           "rule" : "comparison@1:78:17",
           "ruleId" : {
@@ -821,6 +915,43 @@
             "hit" : true
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "behavior" : "出荷する",
+                "ordinal" : 13,
+                "lowered" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "30000"
+            },
+            "point" : "in",
+            "region" : {
+              "kind" : "beside",
+              "stops" : {
+                "kind" : "at_the_domain",
+                "at" : {
+                  "kind" : "on_a_carrier",
+                  "carrier" : "Whole[]",
+                  "at" : "1"
+                },
+                "per" : "1",
+                "inclusive" : true
+              }
+            }
+          },
           "point" : "in",
           "rule" : "comparison@1:78:17",
           "ruleId" : {
@@ -845,6 +976,37 @@
             "hit" : true
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "behavior" : "出荷する",
+                "ordinal" : 13,
+                "lowered" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "30000"
+            },
+            "point" : "out",
+            "region" : {
+              "kind" : "beside",
+              "stops" : {
+                "kind" : "at_the_order_end",
+                "towards" : "above"
+              }
+            }
+          },
           "point" : "out",
           "rule" : "comparison@1:78:17",
           "ruleId" : {
@@ -869,6 +1031,30 @@
             "hit" : false
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "behavior" : "出荷する",
+                "ordinal" : 5,
+                "lowered" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "12"
+            },
+            "point" : "on"
+          },
           "point" : "on",
           "rule" : "comparison@1:57:50",
           "ruleId" : {
@@ -893,6 +1079,30 @@
             "hit" : false
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "behavior" : "出荷する",
+                "ordinal" : 5,
+                "lowered" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "12"
+            },
+            "point" : "off"
+          },
           "point" : "off",
           "rule" : "comparison@1:57:50",
           "ruleId" : {
@@ -917,6 +1127,43 @@
             "hit" : false
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "behavior" : "出荷する",
+                "ordinal" : 5,
+                "lowered" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "12"
+            },
+            "point" : "in",
+            "region" : {
+              "kind" : "beside",
+              "stops" : {
+                "kind" : "at_the_domain",
+                "at" : {
+                  "kind" : "on_a_carrier",
+                  "carrier" : "Whole[]",
+                  "at" : "0"
+                },
+                "per" : "1",
+                "inclusive" : true
+              }
+            }
+          },
           "point" : "in",
           "rule" : "comparison@1:57:50",
           "ruleId" : {
@@ -941,6 +1188,43 @@
             "hit" : true
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "behavior" : "出荷する",
+                "ordinal" : 5,
+                "lowered" : 0
+              },
+              "conjunct" : 0,
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : "Whole[]",
+              "at" : "12"
+            },
+            "point" : "out",
+            "region" : {
+              "kind" : "beside",
+              "stops" : {
+                "kind" : "at_the_domain",
+                "at" : {
+                  "kind" : "on_a_carrier",
+                  "carrier" : "Whole[]",
+                  "at" : "23"
+                },
+                "per" : "1",
+                "inclusive" : true
+              }
+            }
+          },
           "point" : "out",
           "rule" : "comparison@1:57:50",
           "ruleId" : {
@@ -1020,16 +1304,95 @@
         "kind" : "domain_point_uncovered",
         "disposition" : "refused",
         "subject" : "OUT point beside 30000 of comparison@1:78:17",
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "comparison",
+              "declaredIn" : "conformance.shipping",
+              "behavior" : "出荷する",
+              "ordinal" : 13,
+              "lowered" : 0
+            },
+            "conjunct" : 0,
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : "Whole[]",
+            "at" : "30000"
+          },
+          "point" : "out",
+          "region" : {
+            "kind" : "beside",
+            "stops" : {
+              "kind" : "at_the_order_end",
+              "towards" : "above"
+            }
+          }
+        },
         "code" : "E1917"
       }, {
         "kind" : "boundary_unmet",
         "disposition" : "refused",
         "subject" : "ON point at 11 of comparison@1:57:50",
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "comparison",
+              "declaredIn" : "conformance.shipping",
+              "behavior" : "出荷する",
+              "ordinal" : 5,
+              "lowered" : 0
+            },
+            "conjunct" : 0,
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : "Whole[]",
+            "at" : "12"
+          },
+          "point" : "on"
+        },
         "code" : "E1916"
       }, {
         "kind" : "boundary_unmet",
         "disposition" : "refused",
         "subject" : "OFF point at 12 of comparison@1:57:50",
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "comparison",
+              "declaredIn" : "conformance.shipping",
+              "behavior" : "出荷する",
+              "ordinal" : 5,
+              "lowered" : 0
+            },
+            "conjunct" : 0,
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : "Whole[]",
+            "at" : "12"
+          },
+          "point" : "off"
+        },
         "code" : "E1916"
       }, {
         "kind" : "partition_not_derivable",

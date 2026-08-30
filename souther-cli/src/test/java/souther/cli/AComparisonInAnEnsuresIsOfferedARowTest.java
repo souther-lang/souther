@@ -119,17 +119,17 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
     void aClausesLineBetweenTwoPositionsIsMetByWritingBothValues() throws Exception {
         List<String> gaps = boundaryGaps(reportOf(A_LINE_BETWEEN_TWO_POSITIONS));
 
-        assertTrue(gaps.stream().anyMatch(line -> line.contains("point at to (")
+        assertTrue(gaps.stream().anyMatch(line -> line.contains("point at 0 (")
                         && line.contains("comparison@")),
                 () -> "no row got the fork's comparison to answer on the line: " + gaps);
-        assertFalse(gaps.stream().anyMatch(line -> line.contains("point at to (")
+        assertFalse(gaps.stream().anyMatch(line -> line.contains("point at 0 (")
                         && line.contains("ensures")),
                 () -> "the row puts one count in both positions, which is what the clause wants: "
                         + gaps);
         // The point one step from the line is a different pair, and this row is not at it. Matched
         // on the point rather than on the border it belongs to: read as a substring of the line,
         // the point beside it answered for the point the row does meet.
-        assertTrue(gaps.stream().anyMatch(line -> line.contains("point at to - 1 (")
+        assertTrue(gaps.stream().anyMatch(line -> line.contains("point at -1 (")
                         && line.contains("ensures")),
                 () -> "the pair one step from the line is owed and no row is at it: " + gaps);
     }

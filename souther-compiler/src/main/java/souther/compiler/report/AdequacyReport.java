@@ -1968,6 +1968,93 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What tells one thing a row is owed for from every other, written the way {@code ruleId} is:
+     * every part of the identity and nothing that merely reads well.
+     *
+     * <p>A key within this document, and the one a boundary finding joins to its obligation by.
+     * Written out rather than left to the words beside it, because those do not tell them apart: a
+     * guard on a name two cases spread whose cases stop the run in different places owes two
+     * {@code IN} points, and both are the same role of the same rule at the same level — what
+     * differs is where the run stops, which is {@code region} here and is in no sentence.
+     *
+     * <p>Every part, for the reason a rule's identity is written whole. Which line of the rule is
+     * {@code conjunct}: one clause places as many lines as it has ends. What the line says about
+     * its own value is {@code facts}: {@code value >= 5 && value <= 5} puts a minimum and a maximum
+     * at one place and they are two lines. Which declarations took an end in is
+     * {@code narrowedWithin}: a bound another type narrowed is not the bound it narrows.
+     */
+    private static void obligationId(ObjectNode into,
+                                     souther.compiler.partition.BorderObligationPoint point) {
+        authoredLineId(into.putObject("line"), point.line().line());
+        level(into.putObject("level"), point.line().at());
+        into.put("point", word(point.role()));
+        // Absent for a point against the line, which is at a value and has no run to be stopped.
+        if (point instanceof souther.compiler.partition.BorderObligationPoint.InRegion region) {
+            ObjectNode beside = into.putObject("region");
+            switch (region.region()) {
+                case souther.compiler.partition.RegionBasis.Beside(var farEnd) -> {
+                    beside.put("kind", "beside");
+                    farEnd(beside.putObject("stops"), farEnd);
+                }
+                // What a rule naming one value leaves, which carries nothing: which value is left
+                // out is the line's, and the line is above.
+                case souther.compiler.partition.RegionBasis.TheRest _ ->
+                        beside.put("kind", "everything_but_the_value");
+            }
+        }
+    }
+
+    /** One line of the model, by the rule that drew it and which of that rule's lines it is. */
+    private static void authoredLineId(ObjectNode into,
+                                       souther.compiler.partition.AuthoredLine line) {
+        ruleId(into.putObject("rule"), line.rule());
+        into.put("conjunct", line.conjunct());
+        ObjectNode facts = into.putObject("facts");
+        facts.put("valueBelongsBelow", line.facts().valueBelongsBelow());
+        facts.put("holdsAtTheValue", line.facts().holdsAtTheValue());
+        facts.put("singles", line.facts().singles());
+        ArrayNode within = into.putArray("narrowedWithin");
+        line.narrowedWithin().forEach(each -> within.add(each.module() + "." + each.name()));
+    }
+
+    /** A level, as the thing it is a level of writes it: a place on a carrier, or a number. */
+    private static void level(ObjectNode into, souther.compiler.partition.Level at) {
+        switch (at) {
+            case souther.compiler.partition.Level.OnACarrier on -> {
+                into.put("kind", "on_a_carrier");
+                into.put("carrier", on.of().toString());
+                into.put("at", on.at().key());
+            }
+            case souther.compiler.partition.Level.ACount count -> {
+                into.put("kind", "a_count");
+                into.put("at", count.at().key());
+            }
+        }
+    }
+
+    /** Where the run beside a line stops, which is one of the three things that can have stopped
+     *  it. */
+    private static void farEnd(ObjectNode into, souther.compiler.partition.FarEnd end) {
+        switch (end) {
+            case souther.compiler.partition.FarEnd.AtALine(var line, var where) -> {
+                into.put("kind", "at_a_line");
+                authoredLineId(into.putObject("line"), line);
+                into.put("where", where.key());
+            }
+            case souther.compiler.partition.FarEnd.AtTheDomain(var reaches) -> {
+                into.put("kind", "at_the_domain");
+                level(into.putObject("at"), reaches.at().written());
+                into.put("per", reaches.at().per().toPlainString());
+                into.put("inclusive", reaches.inclusive());
+            }
+            case souther.compiler.partition.FarEnd.AtTheOrderEnd(var towards) -> {
+                into.put("kind", "at_the_order_end");
+                into.put("towards", word(towards));
+            }
+        }
+    }
+
+    /**
      * What tells one rule of the model from another, as this document carries it.
      *
      * <p>The parts that are the identity and no more. A rule is a clause of an invariant, a
@@ -2442,6 +2529,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ArrayNode obligations = out.putArray("obligations");
         for (BorderObligationPointAssessment point : account) {
             ObjectNode o = obligations.addObject();
+            // The identity first, because it is what a finding joins on. The words below are what
+            // a person reads, and two obligations can share every one of them.
+            obligationId(o.putObject("obligationId"), point.point());
             o.put("point", word(point.role()));
             o.put("rule", point.describe(sources::written, null));
             ruleId(o.putObject("ruleId"), point.id().provenance());
@@ -2634,6 +2724,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // identical in every field with nothing to join them by.
             if (finding.about() instanceof About.OfARule about) {
                 ruleId(f.putObject("ruleId"), about.rule());
+            }
+            // And which thing a row is owed for, where the finding is about one. The words in
+            // `subject` do not tell two of them apart — a rule read at one level in one role owes
+            // two points where two cases stop the run in different places — so a consumer joining
+            // a finding to its `partition.obligations` entry joins on this.
+            if (finding.about() instanceof About.ABorderObligation owed) {
+                obligationId(f.putObject("obligationId"), owed.obligation().point());
             }
             // And which limit stopped it, where the finding is about one being in the way. Two
             // conjuncts of one clause about one position can stop for two different limits, so

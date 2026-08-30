@@ -375,7 +375,30 @@ class EverySchemaWordIsAccountedForTest {
                             "properties", "readings", "items", "properties", "reason"),
                     Set.of("no_arm_witnesses_it"),
                     ItemAssessment.Coverage.NotAsked.class,
-                    ItemAssessment.Coverage.CouldNotAsk.class));
+                    ItemAssessment.Coverage.CouldNotAsk.class),
+            // What tells one thing a row is owed for from another. Which of the four points it is
+            // comes off the role, as everywhere else; the rest are constants, the way the grounds
+            // above are — what a consumer must handle is a decision about the contract, and what
+            // this compiler calls the arms of a sum to itself is not.
+            new Vocabulary("obligationId.point",
+                    List.of("$defs", "obligationId", "properties", "point"),
+                    souther.compiler.partition.PointRole.class),
+            new Vocabulary("obligationId.region.kind",
+                    List.of("$defs", "obligationId", "properties", "region", "properties", "kind"),
+                    List.of(souther.compiler.partition.RegionBasis.class),
+                    Set.of("beside", "everything_but_the_value"), Set.of()),
+            new Vocabulary("obligationId.region.stops.kind",
+                    List.of("$defs", "obligationId", "properties", "region", "properties", "stops",
+                            "properties", "kind"),
+                    List.of(souther.compiler.partition.FarEnd.class),
+                    Set.of("at_a_line", "at_the_domain", "at_the_order_end"), Set.of()),
+            new Vocabulary("obligationId.region.stops.towards",
+                    List.of("$defs", "obligationId", "properties", "region", "properties", "stops",
+                            "properties", "towards"),
+                    souther.compiler.numeric.Towards.class),
+            new Vocabulary("level.kind", List.of("$defs", "level", "properties", "kind"),
+                    List.of(souther.compiler.partition.Level.class),
+                    Set.of("on_a_carrier", "a_count"), Set.of()));
 
     /** The grounds a document may name, spelled by the one writer of the field. */
     private static Set<String> groundWords() {

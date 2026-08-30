@@ -471,12 +471,23 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * beside the line asks for a run, so what places it is the line's own value, which the run is
      * bounded by. What a row here has to do is {@link #against}, on a quantity the caller has a
      * word for.
+     *
+     * <p>Written by the level itself ({@link souther.compiler.partition.Level#written}) and never
+     * by a quantity, which is a reading's. A distance writes its levels as how far the row stands
+     * from the other position, and which position that is differs between the readings — over
+     * {@code crm} one point of one line has twenty-five such spellings — so a level written on one
+     * of them would be this point named after wherever a walk arrived first.
      */
     public String level() {
-        souther.compiler.partition.BorderQuantity of =
-                met.firstEntry().getValue().border().cut().of();
-        return role().againstTheLine() ? demand.criterion().written(of)
-                : of.writtenAt(point.line().at());
+        souther.compiler.partition.Level at = role().againstTheLine()
+                ? demand.criterion().against() : point.line().at();
+        if (at == null) {
+            // A point beside the line asks for a run, and the line's own value is what bounds it,
+            // which the point holds. A point against the line names a level and the criterion has
+            // it. Neither is a shape with no level at all.
+            throw new IllegalStateException("a point against the line with no level: " + point);
+        }
+        return at.written();
     }
 
     /**
@@ -530,7 +541,23 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * reading standing in for the rest; it is the one answer they all give.
      */
     public String against(String axis) {
-        return demand.criterion().written(met.firstEntry().getValue().border().cut().of(), axis);
+        // Every reading asked, and refused where they disagree rather than resolved. What a row
+        // here has to do is the point's, so a spelling that differs between the readings is a
+        // spelling only one of them can give — and taking one would name this point after the
+        // place a walk reached first. Where they agree, which reading answered is immaterial and
+        // no representative was chosen.
+        String written = null;
+        for (BorderAssessment reading : met.values()) {
+            String also = demand.criterion().written(reading.border().cut().of(), axis);
+            if (written == null) {
+                written = also;
+            } else if (!written.equals(also)) {
+                throw new IllegalStateException("a point whose readings write what it asks for"
+                        + " differently, so it has no words of its own: " + point + " is " + written
+                        + " and " + also);
+            }
+        }
+        return written;
     }
 
     /**

@@ -157,10 +157,13 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
     /**
      * One coverage item of one border, for a reader that walks the items rather than the borders.
      *
-     * <p>One place turns borders into items, so that a count, a document, a finding and the rows a
-     * tool offers are four readings of one list. Flattened separately by each of them, a reader that
-     * forgot a role would silently be short by it — which is the shape this whole measure was in
-     * before the border owed its four.
+     * <p>One place turns a border into its items, so that a reader walking them is never short of
+     * one: all four are here, and a role the rule owes nothing in says so rather than being left
+     * out. What is <em>not</em> read off this list is what anybody is owed — a count, a finding and
+     * a verdict work in obligations, which are what the readings of a line come to together
+     * ({@link BorderObligationPointAssessment}), and a line is owed once however many positions
+     * read it. This list has one entry per reading of each point, so anything counting it counts
+     * the walk.
      */
     public record Point(BorderAssessment border, PointRole role, ItemAssessment item) {
 

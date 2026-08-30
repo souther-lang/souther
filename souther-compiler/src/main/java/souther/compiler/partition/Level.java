@@ -71,6 +71,25 @@ public sealed interface Level {
     }
 
     /**
+     * This level in the words of what it is a level of, which is all it takes to write one.
+     *
+     * <p>Reading-independent, and that is what it is for. A quantity writes a level in the terms of
+     * where it was read — a distance says how far the row stands from the other position, and which
+     * position that is is the reading's ({@link BorderQuantity.Apart#writtenAt}) — so a value owed
+     * once wherever it is read cannot take its words from one. What the level holds is a carrier
+     * and a place on it, or a number, and neither asks where anybody met it.
+     *
+     * <p>So this is the level and never the sentence. What a row at a point has to do is the
+     * criterion's, on a quantity whoever is writing has a word for.
+     */
+    default String written() {
+        return switch (this) {
+            case OnACarrier on -> on.of().written(on.at());
+            case ACount count -> count.at().key();
+        };
+    }
+
+    /**
      * This level as the number it is.
      *
      * <p>Only where it is one. A level on a carrier is a value of that carrier and may be a string,
