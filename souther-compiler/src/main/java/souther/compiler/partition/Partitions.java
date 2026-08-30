@@ -242,7 +242,7 @@ public final class Partitions {
          * this with a filter of its own was one that could be written without it.
          */
         public List<Axis> partitionAxes() {
-            return axes().stream().filter(Axis::derivable).toList();
+            return measurements.stream().flatMap(each -> each.partitionAxes().stream()).toList();
         }
     }
 
@@ -434,8 +434,7 @@ public final class Partitions {
                     at.axes().stream().map(Axis::term).toList();
             here.stream().filter(each -> !declared.contains(each.at()))
                     .forEach(each -> account.disposedOf(each,
-                            new EvidenceAccount.Disposition.ThePositionIsAlreadyMeasured(
-                                    at.axes().get(0).id())));
+                            new EvidenceAccount.Disposition.ThePositionIsAlreadyMeasured(path)));
             return numbers.stream().filter(declared::contains).toList();
         }
         return numbers;

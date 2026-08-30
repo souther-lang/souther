@@ -62,7 +62,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         return new PositionMeasurements(
                 new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
                         unread == null ? null : LeftAtThePosition.of(unread)),
-                axis == null ? List.of() : List.of(axis), null);
+                List.of(axis), null);
     }
 
     /** What is still to be answered for at this position. */

@@ -9,14 +9,16 @@ import souther.compiler.types.Type;
 import java.util.List;
 
 /**
- * One input position that a model distinguishes values at, and the classes it distinguishes them into.
+ * One measure a model makes of a number of its input: the classes it divides that number into, and
+ * the lines it draws on it.
  *
  * <p>The model's own distinctions, not invented ones. A type with two cases has two classes; a
  * {@code guard}'s comparison divides what a position holds into the two sides it treats differently.
  * A position the model says nothing about — a plain {@code String}, an {@code Int} with no invariant
- * — has no classes, and that is reported as not derivable rather than filled in with values nobody
- * asked for. The choice matters: a made-up partition measures a rule the model does not have, and
- * reports coverage of it.
+ * — is measured at nothing and has no measure at all, which the position says
+ * ({@link PositionMeasurements}) and a report names as not derivable, rather than being filled in
+ * with values nobody asked for. The choice matters: a made-up partition measures a rule the model
+ * does not have, and reports coverage of it.
  *
  * <p>A bound is not one of them. An invariant's bound gives a boundary and no partition: everything
  * outside it is refused at construction, so there is no class on the far side to cover (ADR-0090),

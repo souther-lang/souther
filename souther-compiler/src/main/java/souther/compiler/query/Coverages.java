@@ -165,7 +165,10 @@ final class Coverages {
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
-        Readings readings = Readings.of(rows, where, partitioning.axes(),
+        // The measures that divide their number, which are the ones a row is placed at. Handed
+        // every measure, this asks a classifier about numbers there are no classes to place a value
+        // in, and the count it comes back with is over a set no answer here is about.
+        Readings readings = Readings.of(rows, where, partitioning.partitionAxes(),
                 observed.gaps().stream()
                         .filter(gap -> gap.code().leftNoRowRead()).toList());
         // A position at a time, because what one of its measures is owed to say includes what the
@@ -197,7 +200,7 @@ final class Coverages {
                 // no axis came back for still has whatever was written about it.
                 partitioning.notSeparated(), unansweredIn(partitioning),
                 whyUnclassified(readings.byRow(),
-                        partitioning.axes().stream().map(Axis::id).toList()));
+                        partitioning.partitionAxes().stream().map(Axis::id).toList()));
     }
 
     /**
