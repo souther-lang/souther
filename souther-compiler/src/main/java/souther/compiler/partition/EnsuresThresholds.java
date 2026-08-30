@@ -218,7 +218,7 @@ public final class EnsuresThresholds {
         // reader, and a case added to an assessment had to be answered in both.
         assessed.whyTheLineReadingDrewNone().ifPresent(why ->
                 reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), why,
-                        assessed.filedAt(comparison, reads, symbols), out.rulesWithoutALine()));
+                        assessed.filedAt(), out.rulesWithoutALine()));
         // And the geometry, which is this reader's own. Only the two arms that draw something have
         // anything to add here.
         switch (assessed) {

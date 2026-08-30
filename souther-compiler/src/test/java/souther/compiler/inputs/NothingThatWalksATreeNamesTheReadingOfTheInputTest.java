@@ -14,8 +14,10 @@ import java.lang.classfile.MethodModel;
 import java.lang.classfile.attribute.RecordAttribute;
 import java.lang.classfile.attribute.RecordComponentInfo;
 import java.lang.classfile.attribute.RuntimeInvisibleAnnotationsAttribute;
+import java.lang.classfile.attribute.RuntimeInvisibleParameterAnnotationsAttribute;
 import java.lang.classfile.attribute.RuntimeInvisibleTypeAnnotationsAttribute;
 import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
+import java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute;
 import java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.classfile.constantpool.ClassEntry;
@@ -169,6 +171,8 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
         assertFinds(InAMethodSignature.class, "a method's generic signature");
         assertFinds(InARecordComponent.class, "a record component");
         assertFinds(InAnAnnotation.class, "an annotation's element");
+        assertFinds(InAParameterAnnotation.class, "an annotation on a parameter");
+        assertFinds(InACodeTypeAnnotation.class, "an annotation on a type inside a body");
         assertFinds(InAMethodType.class, "a method type a bootstrap is handed");
         assertFinds(SharedWithAStringConstant.class,
                 "a descriptor sharing its spelling with a string constant");
@@ -191,6 +195,8 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
         assertNull(InAMethodSignature.none());
         assertNull(new InARecordComponent(null).held());
         assertEquals(InputDomain.class, InAnAnnotation.class.getAnnotation(Names.class).value());
+        assertEquals("held", InAParameterAnnotation.none("held"));
+        assertEquals("held", InACodeTypeAnnotation.none("held"));
         assertNull(InAMethodType.none().get());
         assertTrue(SharedWithAStringConstant.isNull());
         assertEquals("Lsouther/compiler/inputs/InputDomain;", SharedWithAStringConstant.SPELLED);
@@ -254,6 +260,13 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
      * erasure left out, on a class, a method, a field or a record component. A method type carries
      * what a bootstrap is handed. And an annotation carries its own type and any class it was given
      * as an element.
+     *
+     * <p>Where the annotations are is gone after rather than listed. A class file hangs them off
+     * everything that has attributes of its own — the class, its fields, its methods, its record
+     * components, and a method's body — and off a method's parameters, which have nothing of their
+     * own to hang them on and so are carried as an attribute of the method. Listed by hand, the
+     * declarations were read and the body and the parameters were not, and a class named on either
+     * was named nowhere.
      */
     private static Set<String> namesOfTypesIn(ClassModel of) {
         Set<String> out = new LinkedHashSet<>();
@@ -276,6 +289,12 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
             out.add(method.methodType().stringValue());
             out.add(signatureOf(method));
             annotationsOf(method, out);
+            // What a method carries besides itself. Its parameters hold their own annotations,
+            // which are an attribute of the method rather than something with attributes of its
+            // own; and its body is an element with attributes, where an annotation written on a
+            // type inside it goes.
+            parametersOf(method, out);
+            method.code().ifPresent(body -> annotationsOf(body, out));
         }
         for (RecordComponentInfo component : of.findAttribute(Attributes.record())
                 .map(RecordAttribute::components).orElse(List.of())) {
@@ -305,6 +324,15 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
                 .map(RuntimeInvisibleTypeAnnotationsAttribute::annotations)
                 .ifPresent(each -> each.forEach(one -> written.add(one.annotation())));
         written.forEach(one -> take(one, out));
+    }
+
+    private static void parametersOf(MethodModel of, Set<String> out) {
+        of.findAttribute(Attributes.runtimeVisibleParameterAnnotations())
+                .map(RuntimeVisibleParameterAnnotationsAttribute::parameterAnnotations)
+                .ifPresent(each -> each.forEach(one -> one.forEach(written -> take(written, out))));
+        of.findAttribute(Attributes.runtimeInvisibleParameterAnnotations())
+                .map(RuntimeInvisibleParameterAnnotationsAttribute::parameterAnnotations)
+                .ifPresent(each -> each.forEach(one -> one.forEach(written -> take(written, out))));
     }
 
     private static void take(java.lang.classfile.Annotation written, Set<String> out) {
@@ -351,7 +379,17 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
     }
 
     @Retention(RetentionPolicy.RUNTIME)
+    @java.lang.annotation.Target({java.lang.annotation.ElementType.TYPE,
+        java.lang.annotation.ElementType.TYPE_USE})
     private @interface Names {
+        Class<?> value();
+    }
+
+    /** The same, where a type may not carry it, so a parameter's own attribute is the only place
+     *  it can go. */
+    @Retention(RetentionPolicy.RUNTIME)
+    @java.lang.annotation.Target(java.lang.annotation.ElementType.PARAMETER)
+    private @interface NamesOnAParameter {
         Class<?> value();
     }
 
@@ -396,6 +434,27 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
 
     @Names(InputDomain.class)
     private static final class InAnAnnotation {
+    }
+
+    /**
+     * On a parameter, which the method's own descriptor says nothing about and which is an
+     * attribute of the method rather than of anything with attributes of its own.
+     *
+     * <p>Written with an annotation a type may not carry, so this is the parameter's attribute and
+     * not the method's list of annotations on types: one that could be written on a type would be
+     * in both, and would be found by a walk that read only the second.
+     */
+    private static final class InAParameterAnnotation {
+        static Object none(@NamesOnAParameter(InputDomain.class) Object value) {
+            return value;
+        }
+    }
+
+    /** On a type written inside a body, which is an attribute of the code and not of the method. */
+    private static final class InACodeTypeAnnotation {
+        static String none(Object value) {
+            return (@Names(InputDomain.class) String) value;
+        }
     }
 
     private static final class InAMethodType {

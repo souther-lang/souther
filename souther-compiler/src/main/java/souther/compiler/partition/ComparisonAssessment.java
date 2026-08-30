@@ -375,9 +375,12 @@ sealed interface ComparisonAssessment {
      * <p>Answered here so that no caller chooses. Chosen at the two producers, one of them reached
      * for the walk's positions because that was the helper in hand, and a rule read from end to end
      * was filed at a position its arithmetic had cancelled.
+     *
+     * <p>Asked of nothing. Each case was filed where it was read and holds where; a comparison, an
+     * environment and the module's names are what it takes to work that out, and working it out is
+     * not what happens here.
      */
-    default List<FilingCoordinate> filedAt(Core.Binary comparison, InputReads reads,
-                                                Symbols symbols) {
+    default List<FilingCoordinate> filedAt() {
         return switch (this) {
             case AcrossPositions over -> over.cutting().over();
             case OutsideTheDomain outside -> outside.cutting().over();

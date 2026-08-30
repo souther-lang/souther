@@ -153,7 +153,7 @@ public final class GuardThresholds {
         for (ComparisonReadings.Reading each : read.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
-                        lineAt(behavior, each.comparison(), plan, each.reads(), symbols,
+                        lineAt(behavior, each.comparison(), plan, symbols,
                                 admitted.read(), found, between, withoutALine);
                 // Not a rule with no line here: its outcome is about no row, whichever of the
                 // reasons refused it ({@link NotABoundary}), so there is nothing for a report to
@@ -366,7 +366,7 @@ public final class GuardThresholds {
      * settled ({@code read}). Nothing here reads the comparison again.
      */
     private static void lineAt(String behavior, Core.Binary each, CoverageSites.Plan plan,
-                               InputReads reads, Symbols symbols, ComparisonAssessment read,
+                               Symbols symbols, ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<RuleWithoutALine> withoutALine) {
@@ -376,7 +376,7 @@ public final class GuardThresholds {
         // is made of.
         souther.compiler.coverage.ComparisonOccurrence site =
                 plan.requireComparisonAt(each);
-        publish(behavior, each, plan, reads, symbols, read, withoutALine);
+        publish(behavior, each, plan, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
                 OriginRef.ComparisonOrigin origin = originOf(behavior, each, site, plan,
@@ -451,23 +451,21 @@ public final class GuardThresholds {
      * missing a border.
      */
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
-                                InputReads reads, Symbols symbols, ComparisonAssessment read,
-                                List<RuleWithoutALine> out) {
+                                ComparisonAssessment read, List<RuleWithoutALine> out) {
         read.whyTheLineReadingDrewNone().ifPresent(why ->
-                publish(behavior, comparison, plan, reads, symbols, read, out, why));
+                publish(behavior, comparison, plan, read, out, why));
     }
 
     /** The same, once there is something to say. */
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
-                                InputReads reads, Symbols symbols, ComparisonAssessment read,
-                                List<RuleWithoutALine> out,
+                                ComparisonAssessment read, List<RuleWithoutALine> out,
                                 BlockReason.RuleWithoutLineReason why) {
         RuleRef.Comparison rule = new RuleRef.Comparison(behavior, comparison.origin());
         souther.compiler.check.RuleCitation cited = citationOf(comparison, plan.comparisons());
         // Whose positions these are is the assessment's answer, not this reader's: a rule that was
         // read is filed at its quantity's coordinates and one that stopped at the positions the
         // walk met.
-        List<FilingCoordinate> named = read.filedAt(comparison, reads, symbols);
+        List<FilingCoordinate> named = read.filedAt();
         for (FilingCoordinate at : named) {
             RuleWithoutALine said = new RuleWithoutALine(rule, cited, at, why);
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
