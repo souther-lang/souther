@@ -364,11 +364,16 @@ public final class Partitions {
      * to the rule it stopped, and the findings carry it there; taken as the position's, the first
      * rule of however many were stopped alike was the one a report named.
      *
-     * <p>The number where there is one. A {@code String} is measured more than one way: a rule
-     * about a length that nothing could read leaves the length blocked and says nothing about the
-     * string's own values, and matched by path alone either measure answered for both. So where
-     * nothing was measured, a rule naming a number is not what the location is left with either —
-     * it is about that number, which is not the location's own values.
+     * <p>The number where a measure was made of it. A {@code String} is measured more than one
+     * way: a rule about a length that nothing could read leaves the length blocked and says
+     * nothing about the string's own values, and matched by path alone either measure answered for
+     * both.
+     *
+     * <p>Where nothing measures the location, every rule filed anywhere in it is one the location
+     * is left with — filed by where its coordinate sits, and not by which number the reading
+     * happened to name. How exactly a rule was filed is how far its reading got, which is what the
+     * finding says and not a claim about what the rule divides; a location with no measure has no
+     * number for such a rule to be left at instead.
      *
      * <p>A finding the reading did not name a number for is at the position, and answers for every
      * measure on it: what number it was about is what was not read, so a measure cannot be excused
@@ -377,12 +382,14 @@ public final class Partitions {
     private static BodyCutInspection cameTo(NumericTerm.FromOnePosition term,
                                             souther.compiler.inputs.TermPath path,
                                             List<RuleWithoutALine> rules) {
-        LeftAtThePosition left = LeftAtThePosition.of(rules.stream().filter(one -> switch (one.at()) {
-            case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
-                    term != null && it.term().equals(term);
-            case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
-                    it.path().equals(path);
-        }).toList());
+        LeftAtThePosition left = LeftAtThePosition.of(rules.stream().filter(one -> term == null
+                ? one.at().path().equals(path)
+                : switch (one.at()) {
+                    case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
+                            it.term().equals(term);
+                    case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
+                            it.path().equals(path);
+                }).toList());
         // Which of the two this phase was left with, and not merely that it was left with
         // something. The verdict below tells a reading that stopped from a rule read to the end,
         // and answered here with one word it read every rule this phase understood as one it could
