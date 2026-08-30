@@ -301,31 +301,15 @@ public final class GuardThresholds {
     /**
      * What a rule filed at {@code at} is about, as this reader knows it.
      *
-     * <p>The values at a position where a whole side of the comparison is that position and nothing
-     * else. {@code s < Won} states something about the values of {@code s}, whatever the reading
-     * made of the other side; {@code n < l1.l2.leaf.x} states nothing about the values of
-     * {@code l1.l2.leaf}, which is where the walk happened to meet a position on its way through an
-     * expression it could not take apart.
-     *
-     * <p>And of the position's own value, not of a number taken of it. A rule about a length is
-     * filed at the length, and what strings are ordered on is no part of what it says.
-     *
-     * <p>Which is the same question the reading of clauses answers of its own coordinates, put in
-     * this reader's names. Answered from the coordinate alone, {@code s < Won} came out as a rule
-     * about something other than {@code s}: the coordinate says the reading named no number there,
-     * and there is no number to name — the values of a case of a sum are not counted.
+     * <p>What this reader supplies is where the coordinate sits. Whether the rule states anything
+     * about the values standing there is the same question the reading of clauses is held to, and
+     * is answered where both readers meet it. Answered from the coordinate alone, {@code s < Won}
+     * came out as a rule about something other than {@code s}: the coordinate says the reading
+     * named no number there, and there was no number to name — the values of a case of a sum are
+     * not counted.
      */
     private static RuleAt<TermPath> ruleAt(FilingCoordinate at, Names left, Names right) {
-        TermPath here = at instanceof FilingCoordinate.OfTerm it
-                && !(it.term() instanceof NumericTerm.ValueOf) ? null : at.path();
-        return here != null && (isExactly(left.origin(), here) || isExactly(right.origin(), here))
-                ? new RuleAt.AboutOwnValues<>(at.path())
-                : new RuleAt.NotAboutOwnValues<>(at.path());
-    }
-
-    /** Whether a whole side of the comparison is the position at {@code path} and nothing else. */
-    private static boolean isExactly(ValueOrigin<TermPath> side, TermPath path) {
-        return side instanceof ValueOrigin.IsAPosition<TermPath> one && one.at().equals(path);
+        return UnreadComparison.subjectAt(at.path(), left.origin(), right.origin());
     }
 
     /**

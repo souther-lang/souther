@@ -266,7 +266,28 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.Stopped stopped -> stopped.why().isEmpty()
                     ? aboutNoPosition(comparison, reads, symbols)
                     : new Unread(stopped.why());
+            // And where the quantity was read and no line could be built on it, the carrier is
+            // what a reader is owed — at the quantity's own coordinates, because the quantity is
+            // what such a rule is about.
+            case Cutting.Read.NoLineOnTheQuantity over -> over.over().isEmpty()
+                    ? aboutNoPosition(comparison, reads, symbols)
+                    : new Unread(atEachOf(over.over(),
+                            new BlockReason.UnreadComparisonDomain()));
         };
+    }
+
+    /**
+     * One answer at every one of {@code places}, kept in the order they were given.
+     *
+     * <p>Sound where the places are one subject: the coordinates of one quantity, or the places a
+     * statement nothing read at all names. A reading that stopped has no such subject, and its
+     * places are answered one at a time where it stopped.
+     */
+    static <R extends BlockReason.RuleWithoutLineReason> java.util.SequencedMap<FilingCoordinate, R>
+            atEachOf(List<FilingCoordinate> places, R why) {
+        java.util.SequencedMap<FilingCoordinate, R> out = new java.util.LinkedHashMap<>();
+        places.forEach(each -> out.putIfAbsent(each, why));
+        return out;
     }
 
     /**
@@ -465,19 +486,10 @@ sealed interface ComparisonAssessment {
         };
     }
 
-    /**
-     * The same answer at every place this is filed at.
-     *
-     * <p>Sound here and nowhere else: these are the coordinates of one quantity, and the quantity
-     * is what the rule is about. A reading that stopped has no such subject, and its places are
-     * answered one at a time where it stopped.
-     */
+    /** The same answer at every place this is filed at, which are one quantity's coordinates. */
     private java.util.SequencedMap<FilingCoordinate, BlockReason.RuleWithoutLineReason>
             sameAtEachPlace(BlockReason.RuleWithoutLineReason why) {
-        java.util.SequencedMap<FilingCoordinate, BlockReason.RuleWithoutLineReason> out =
-                new java.util.LinkedHashMap<>();
-        filedAt().forEach(each -> out.putIfAbsent(each, why));
-        return out;
+        return atEachOf(filedAt(), why);
     }
 
     /**

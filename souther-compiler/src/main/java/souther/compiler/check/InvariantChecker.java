@@ -1668,24 +1668,12 @@ public final class InvariantChecker {
     /**
      * What a rule filed at {@code where} is about, as this reader knows it.
      *
-     * <p>The values at the position where a whole side of the comparison is that position and
-     * nothing else, and where the coordinate met there is the position's own value rather than a
-     * number an operation answered of it. Everything else the walk meets it met on the way through
-     * an expression — inside a call read through to its body, or under a field access this reading
-     * does not take apart — and what the rule says about the values at such a place is exactly the
-     * part that went unread.
+     * <p>What this reader supplies is what it calls the place. Whether the rule states anything
+     * about the values standing there is the same question a body's comparison is held to, and is
+     * answered where both readers meet it.
      */
     private static RuleAt<String> ruleAt(Coordinate where, Places left, Places right) {
-        boolean ownValue = where.at().kind() instanceof FieldDomains.CoordinateKind.OfItsOwnValue;
-        boolean aWholeSide = isExactly(left.origin(), where.path())
-                || isExactly(right.origin(), where.path());
-        return ownValue && aWholeSide ? new RuleAt.AboutOwnValues<>(where.path())
-                : new RuleAt.NotAboutOwnValues<>(where.path());
-    }
-
-    /** Whether a whole side of the comparison is the position at {@code path} and nothing else. */
-    private static boolean isExactly(ValueOrigin<String> side, String path) {
-        return side instanceof ValueOrigin.IsAPosition<String> one && one.at().equals(path);
+        return UnreadComparison.subjectAt(where.path(), left.origin(), right.origin());
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */

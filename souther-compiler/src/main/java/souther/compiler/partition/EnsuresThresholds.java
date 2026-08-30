@@ -200,12 +200,11 @@ public final class EnsuresThresholds {
             // One answer at every one of them, and not a copy of a decision made elsewhere: nothing
             // here was read, so no place is one the rule is known to be about the values at, and
             // the form is what each of them is left with.
-            java.util.SequencedMap<FilingCoordinate, BlockReason.RuleWithoutLineReason> left =
-                    new java.util.LinkedHashMap<>();
-            GuardThresholds.mentionedIn(e, reads, symbols).forEach(each ->
-                    left.putIfAbsent(FilingCoordinate.at(each),
-                            new BlockReason.UnreadComparisonForm()));
-            reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(), left,
+            reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
+                    ComparisonAssessment.atEachOf(
+                            GuardThresholds.mentionedIn(e, reads, symbols).stream()
+                                    .map(FilingCoordinate::at).toList(),
+                            new BlockReason.UnreadComparisonForm()),
                     out.rulesWithoutALine());
             return line + 1;
         }

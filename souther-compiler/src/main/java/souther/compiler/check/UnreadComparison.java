@@ -64,11 +64,7 @@ public final class UnreadComparison {
          * - b + c <= 10} is {@code a + c <= 10}, and a note at {@code b} would say the rule relates
          * a position it does not mention.
          */
-        sealed interface Read<K> extends Quantity<K> {
-
-            /** The positions the quantity runs over, which may be none. */
-            Set<K> support();
-        }
+        sealed interface Read<K> extends Quantity<K> {}
 
         /**
          * The quantity this comparison cuts is over several positions, so it divides none of them.
@@ -90,11 +86,6 @@ public final class UnreadComparison {
                             "a quantity over several positions is over at least two");
                 }
             }
-
-            @Override
-            public Set<K> support() {
-                return positions;
-            }
         }
 
         /**
@@ -114,11 +105,6 @@ public final class UnreadComparison {
                     throw new IllegalArgumentException("a quantity over one position names it");
                 }
             }
-
-            @Override
-            public Set<K> support() {
-                return Set.of(position);
-            }
         }
 
         /**
@@ -134,13 +120,7 @@ public final class UnreadComparison {
          * file at, and what makes the rule worth saying at all is that the model names a position
          * there and cuts nothing — so this alone is filed where the comparison names.
          */
-        record CutsNothing<K>() implements Read<K> {
-
-            @Override
-            public Set<K> support() {
-                return Set.of();
-            }
-        }
+        record CutsNothing<K>() implements Read<K> {}
 
         /**
          * The arithmetic read no form here, and what it was looking at when it stopped.
@@ -178,16 +158,53 @@ public final class UnreadComparison {
      * states something at the positions it names and cuts none of them.
      */
     public static <K> List<K> filedAt(Quantity.Read<K> read, List<K> met) {
-        if (read instanceof Quantity.CutsNothing<K>) {
-            return List.copyOf(met);
-        }
+        return switch (read) {
+            case Quantity.CutsNothing<K> _ -> List.copyOf(met);
+            case Quantity.OverOne<K> one -> over(met, one.position()::equals);
+            case Quantity.OverSeveral<K> several -> over(met, several.positions()::contains);
+        };
+    }
+
+    /** The places of {@code met} the quantity runs over, in the order the walk met them. */
+    private static <K> List<K> over(List<K> met, Predicate<K> runsOver) {
         List<K> out = new ArrayList<>();
         for (K each : met) {
-            if (read.support().contains(each)) {
+            if (runsOver.test(each)) {
                 out.add(each);
             }
         }
         return out;
+    }
+
+    /**
+     * What a rule filed at {@code position} is about, for the reader that chose to file it there.
+     *
+     * <p><b>The law both readers are held to.</b> Whether the rule states something about the
+     * values standing at a place is settled by the comparison — a whole side of it is that position
+     * and nothing else — and a reader answering that for itself is how a clause and a body's
+     * comparison of one shape came to different words. What a reader supplies is what it calls the
+     * place, which is the part only it knows.
+     *
+     * <p>{@code s < Won} is about the values of {@code s} whatever the reading made of the other
+     * side. {@code n < l1.l2.leaf.x} says nothing about the values of {@code l1.l2.leaf}, which is
+     * where a walk met a position on its way through an expression it could not take apart.
+     *
+     * <p>A number taken of the position needs nothing here. Where a reader files at one, the
+     * carrier it goes on to ask about is that number's and not the position's underneath —
+     * {@code String.length(s)} is asked what lengths are counted on — so the two answers this could
+     * give come to the same word. Written as a case of its own, it would be a branch nothing can
+     * make a difference to.
+     */
+    public static <K> RuleAt<K> subjectAt(K position, ValueOrigin<K> left, ValueOrigin<K> right) {
+        return isExactly(left, position) || isExactly(right, position)
+                ? new RuleAt.AboutOwnValues<>(position)
+                : new RuleAt.NotAboutOwnValues<>();
+    }
+
+    /** Whether a whole side of the comparison is the position at {@code position}, and nothing
+     *  else. */
+    private static <K> boolean isExactly(ValueOrigin<K> side, K position) {
+        return side instanceof ValueOrigin.IsAPosition<K> one && one.at().equals(position);
     }
 
     /**

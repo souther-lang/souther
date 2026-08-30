@@ -74,7 +74,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
 
         /**
-         * The reading drew no line, and this is what it leaves at each place it is filed at.
+         * The arithmetic stopped, and this is what it leaves at each place it is filed at.
          *
          * <p>A map and not one reason, because the places are not one subject. Where the arithmetic
          * stopped, each place the walk met is a separate question — a position met inside an
@@ -87,6 +87,26 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             public Stopped {
                 why = java.util.Collections.unmodifiableSequencedMap(
                         new java.util.LinkedHashMap<>(why));
+            }
+        }
+
+        /**
+         * The quantity was read and no line could be built on it: a position with no order to be
+         * counted on, or an order whose values this draws no line against.
+         *
+         * <p>Its own answer and not {@link Stopped}. Nothing about the form fell short — it is
+         * right here, and it is the carrier that stopped this — so the quantity is the subject and
+         * the places are its own, which is what every read comparison's are. Said as a reading that
+         * stopped, the places would come from a walk over the operands, and which of two authorities
+         * a comparison's places came from would turn on which producer built the answer.
+         *
+         * @param over the coordinates of the quantity, which is where a reader is sent
+         */
+        record NoLineOnTheQuantity(
+                java.util.List<souther.compiler.inputs.FilingCoordinate> over) implements Read {
+
+            public NoLineOnTheQuantity {
+                over = java.util.List.copyOf(over);
             }
         }
     }
@@ -170,28 +190,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (form != null) {
             return new Read.Cuts(form);
         }
-        // The quantity was read and no line could be built on it: a position with no order to be
-        // counted on, or an order whose values this draws no line against. Its own answer and not
-        // the form's — the form is right here, and it is the carrier that stopped this.
-        //
-        // Filed at the quantity, because the quantity is what the rule is about. One answer for all
-        // of them for the same reason: they are one subject, and what stopped this is a fact about
-        // the order that subject is on.
-        return new Read.Stopped(sameAt(
-                AffineReading.filedAt(read.form().coefs().keySet()),
-                new souther.compiler.inputs.BlockReason.UnreadComparisonDomain()));
-    }
-
-    /** One answer at every one of {@code places}, for a reading whose subject is one quantity. */
-    private static java.util.SequencedMap<souther.compiler.inputs.FilingCoordinate,
-            souther.compiler.inputs.BlockReason.RuleReadingStopped> sameAt(
-            java.util.List<souther.compiler.inputs.FilingCoordinate> places,
-            souther.compiler.inputs.BlockReason.RuleReadingStopped why) {
-        java.util.SequencedMap<souther.compiler.inputs.FilingCoordinate,
-                souther.compiler.inputs.BlockReason.RuleReadingStopped> out =
-                new java.util.LinkedHashMap<>();
-        places.forEach(each -> out.putIfAbsent(each, why));
-        return out;
+        // The quantity was read and no line could be built on it. Filed at the quantity, because
+        // the quantity is what the rule is about.
+        return new Read.NoLineOnTheQuantity(
+                AffineReading.filedAt(read.form().coefs().keySet()));
     }
 
     /**

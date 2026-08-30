@@ -1,17 +1,18 @@
 package souther.compiler.check;
 
 /**
- * What a rule filed at one place is about, said by the reader that filed it there.
+ * What a rule filed at one place is about.
  *
  * <p>Asked only where a reading stopped. A comparison the arithmetic read to the end has a subject
  * already — the quantity it cuts — and nothing here would add to it; where it stopped there is no
  * subject, and this is what stands in its place.
  *
- * <p>The one question a classifier of comparisons cannot answer for itself. Whether a rule
- * constrains the values at a position, or something taken from them, is not readable off the
- * expression: {@link ValueOrigin} reads a call through to its body, so {@code describe(a) > 0}
- * arrives as arithmetic holding the position and carries no operation to recognise. What settles it
- * is what the reader knew when it chose the place to file at.
+ * <p>Made by {@link UnreadComparison#subjectAt}, so the law is one. Which side of a comparison a
+ * position stands as is the same question for a clause of a declaration and for a body's
+ * comparison, and each reader answering it in its own names is how the two came to disagree about
+ * one shape of rule in the first place. What a reader is asked for is the part only it knows: what
+ * the place it chose is called, and whether that place is the position's own value or a number
+ * taken of it.
  *
  * <p>Two cases, and the second is named for what it denies because there is nothing the members of
  * it hold in common besides that. A length taken of a string, a value a call answered of a field,
@@ -24,14 +25,11 @@ package souther.compiler.check;
  */
 public sealed interface RuleAt<K> {
 
-    /** The position this stands for, in the reader's own names. */
-    K position();
-
     /**
      * The rule constrains the values that stand at the position.
      *
      * <p>So what the position carries is the rule's own subject, and whether a line can be drawn on
-     * it is a question about this rule.
+     * it is a question about this rule. The position is here because that question is asked of it.
      */
     record AboutOwnValues<K>(K position) implements RuleAt<K> {
 
@@ -49,13 +47,10 @@ public sealed interface RuleAt<K> {
      * answers about something the author did not write. A rule about {@code String.length(s)} told
      * that no line is drawn on a string sends its author to the values of {@code s}, which the rule
      * never mentions.
+     *
+     * <p>Carrying nothing, because there is nothing to ask of the position here. Held with the
+     * place it was filed at, this would be a position beside an answer that is not about it, which
+     * is the reading the whole type exists to stop.
      */
-    record NotAboutOwnValues<K>(K position) implements RuleAt<K> {
-
-        public NotAboutOwnValues {
-            if (position == null) {
-                throw new IllegalArgumentException("a rule filed at a position names it");
-            }
-        }
-    }
+    record NotAboutOwnValues<K>() implements RuleAt<K> {}
 }
