@@ -1623,6 +1623,12 @@ public final class InvariantChecker {
      * <p>Which limit stopped it is {@link UnreadComparison}'s, so a {@code guard} of this shape
      * cannot come to a different answer. What is read here is only what each side of the comparison
      * came to, which is this reader's own way of looking a coordinate up.
+     *
+     * <p><b>And which positions there are findings for is the quantity's where there is one.</b>
+     * The walk says what each place the comparison mentions is called and which came first; the
+     * quantity says which of them the rule is about. Taken from the walk, {@code x + y - y <= 20}
+     * left a finding at {@code y} of a rule its own canonical form had cancelled — and the word
+     * left there was the word for {@code x}.
      */
     private void noLineDrawn(Core.Binary comparison, RuleRef.Invariant from, int conjunct,
                             Denotations at,
@@ -1633,15 +1639,63 @@ public final class InvariantChecker {
         }
         Places left = placesIn(comparison.left(), at, byName);
         Places right = placesIn(comparison.right(), at, byName);
-        BlockReason.RuleWithoutLineReason why = UnreadComparison.why(left.origin(), right.origin(),
-                read.quantity(),
-                place -> carrierAt(place, left, right) != null);
+        Predicate<String> ordered = place -> carrierAt(place, left, right) != null;
+        Map<String, Coordinate> met = new LinkedHashMap<>();
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
-            FieldDomains.NoLine said =
-                    new FieldDomains.NoLine(each.at(), from, comparison, conjunct, why);
-            if (!out.contains(said)) {
-                out.add(said);
+            met.putIfAbsent(each.path(), each);
+        }
+        switch (read.quantity()) {
+            case UnreadComparison.Quantity.Read<String> quantity -> {
+                BlockReason.RuleWithoutLineReason why =
+                        UnreadComparison.ofTheQuantity(quantity, ordered);
+                for (String path : UnreadComparison.filedAt(quantity, List.copyOf(met.keySet()))) {
+                    file(met.get(path), from, comparison, conjunct, why, out);
+                }
             }
+            // Where the reading stopped there is no quantity to be a subject, so every place the
+            // walk met is asked, and asked for itself.
+            case UnreadComparison.Quantity.NotRead<String> notRead -> {
+                for (Coordinate each : met.values()) {
+                    file(each, from, comparison, conjunct,
+                            UnreadComparison.whereItStopped(ruleAt(each, left, right), notRead,
+                                    ordered),
+                            out);
+                }
+            }
+        }
+    }
+
+    /**
+     * What a rule filed at {@code where} is about, as this reader knows it.
+     *
+     * <p>The values at the position where a whole side of the comparison is that position and
+     * nothing else, and where the coordinate met there is the position's own value rather than a
+     * number an operation answered of it. Everything else the walk meets it met on the way through
+     * an expression — inside a call read through to its body, or under a field access this reading
+     * does not take apart — and what the rule says about the values at such a place is exactly the
+     * part that went unread.
+     */
+    private static RuleAt<String> ruleAt(Coordinate where, Places left, Places right) {
+        boolean ownValue = where.at().kind() instanceof FieldDomains.CoordinateKind.OfItsOwnValue;
+        boolean aWholeSide = isExactly(left.origin(), where.path())
+                || isExactly(right.origin(), where.path());
+        return ownValue && aWholeSide ? new RuleAt.AboutOwnValues<>(where.path())
+                : new RuleAt.NotAboutOwnValues<>(where.path());
+    }
+
+    /** Whether a whole side of the comparison is the position at {@code path} and nothing else. */
+    private static boolean isExactly(ValueOrigin<String> side, String path) {
+        return side instanceof ValueOrigin.IsAPosition<String> one && one.at().equals(path);
+    }
+
+    /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
+    private static void file(Coordinate where, RuleRef.Invariant from, Core.Binary comparison,
+                             int conjunct, BlockReason.RuleWithoutLineReason why,
+                             List<FieldDomains.NoLine> out) {
+        FieldDomains.NoLine said =
+                new FieldDomains.NoLine(where.at(), from, comparison, conjunct, why);
+        if (!out.contains(said)) {
+            out.add(said);
         }
     }
 

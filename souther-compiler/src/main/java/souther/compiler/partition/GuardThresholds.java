@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.RuleAt;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.check.ValueOrigin;
@@ -274,18 +275,57 @@ public final class GuardThresholds {
      * environment it was being read in come back together, so the sides are not read again in
      * whatever the caller happens to hold.
      */
-    static BlockReason.RuleReadingStopped whyItStopped(Core.Binary comparison,
-                                                   AffineReading.OfAComparison.Stopped stopped,
-                                                   InputReads reads, Symbols symbols) {
+    static java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped>
+            whatEachPlaceIsLeftWith(Core.Binary comparison,
+                                    AffineReading.OfAComparison.Stopped stopped,
+                                    InputDomain inputs, InputReads reads, Symbols symbols) {
         Names left = namesIn(comparison.left(), reads, symbols);
         Names right = namesIn(comparison.right(), reads, symbols);
         Names here = namesIn(stopped.node(), stopped.at(), symbols);
         java.util.Map<TermPath, Type> met = new java.util.LinkedHashMap<>(left.met());
         right.met().forEach(met::putIfAbsent);
         here.met().forEach(met::putIfAbsent);
-        return UnreadComparison.whatStopped(left.origin(), right.origin(),
-                new UnreadComparison.Quantity.NotRead<>(here.origin()),
-                at -> met.containsKey(at) && orderable(met.get(at), symbols));
+        UnreadComparison.Quantity.NotRead<TermPath> notRead =
+                new UnreadComparison.Quantity.NotRead<>(here.origin());
+        java.util.function.Predicate<TermPath> ordered =
+                at -> met.containsKey(at) && orderable(met.get(at), symbols);
+        java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
+                new java.util.LinkedHashMap<>();
+        for (FilingCoordinate at : filedAt(comparison, inputs, reads, symbols)) {
+            out.putIfAbsent(at,
+                    UnreadComparison.whereItStopped(ruleAt(at, left, right), notRead, ordered));
+        }
+        return out;
+    }
+
+    /**
+     * What a rule filed at {@code at} is about, as this reader knows it.
+     *
+     * <p>The values at a position where a whole side of the comparison is that position and nothing
+     * else. {@code s < Won} states something about the values of {@code s}, whatever the reading
+     * made of the other side; {@code n < l1.l2.leaf.x} states nothing about the values of
+     * {@code l1.l2.leaf}, which is where the walk happened to meet a position on its way through an
+     * expression it could not take apart.
+     *
+     * <p>And of the position's own value, not of a number taken of it. A rule about a length is
+     * filed at the length, and what strings are ordered on is no part of what it says.
+     *
+     * <p>Which is the same question the reading of clauses answers of its own coordinates, put in
+     * this reader's names. Answered from the coordinate alone, {@code s < Won} came out as a rule
+     * about something other than {@code s}: the coordinate says the reading named no number there,
+     * and there is no number to name — the values of a case of a sum are not counted.
+     */
+    private static RuleAt<TermPath> ruleAt(FilingCoordinate at, Names left, Names right) {
+        TermPath here = at instanceof FilingCoordinate.OfTerm it
+                && !(it.term() instanceof NumericTerm.ValueOf) ? null : at.path();
+        return here != null && (isExactly(left.origin(), here) || isExactly(right.origin(), here))
+                ? new RuleAt.AboutOwnValues<>(at.path())
+                : new RuleAt.NotAboutOwnValues<>(at.path());
+    }
+
+    /** Whether a whole side of the comparison is the position at {@code path} and nothing else. */
+    private static boolean isExactly(ValueOrigin<TermPath> side, TermPath path) {
+        return side instanceof ValueOrigin.IsAPosition<TermPath> one && one.at().equals(path);
     }
 
     /**
@@ -443,7 +483,7 @@ public final class GuardThresholds {
      * of the input, or about what the behavior answers, was never about a position for anything to
      * be left at.
      *
-     * <p>Which of them it is, is {@link ComparisonAssessment#whyTheLineReadingDrewNone}'s and not
+     * <p>Which of them it is, is {@link ComparisonAssessment#whatEachPlaceIsLeftWith}'s and not
      * this reader's. The same table stood here and in the clause reader, so a case added to an
      * assessment had to be answered twice; and worked out from the comparison afterwards rather
      * than where the reading stopped, one whose carrier stopped the reading came back as a rule
@@ -452,26 +492,18 @@ public final class GuardThresholds {
      */
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
                                 ComparisonAssessment read, List<RuleWithoutALine> out) {
-        read.whyTheLineReadingDrewNone().ifPresent(why ->
-                publish(behavior, comparison, plan, read, out, why));
-    }
-
-    /** The same, once there is something to say. */
-    private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
-                                ComparisonAssessment read, List<RuleWithoutALine> out,
-                                BlockReason.RuleWithoutLineReason why) {
         RuleRef.Comparison rule = new RuleRef.Comparison(behavior, comparison.origin());
         souther.compiler.check.RuleCitation cited = citationOf(comparison, plan.comparisons());
-        // Whose positions these are is the assessment's answer, not this reader's: a rule that was
-        // read is filed at its quantity's coordinates and one that stopped at the positions the
-        // walk met.
-        List<FilingCoordinate> named = read.filedAt();
-        for (FilingCoordinate at : named) {
+        // What each place is left with, and which places there are, are the assessment's one
+        // answer. A rule that was read is filed at its quantity's coordinates and says one thing
+        // there, because the quantity is one subject; a reading that stopped has none, and each
+        // place says what stopped it there.
+        read.whatEachPlaceIsLeftWith().forEach((at, why) -> {
             RuleWithoutALine said = new RuleWithoutALine(rule, cited, at, why);
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
             }
-        }
+        });
     }
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes

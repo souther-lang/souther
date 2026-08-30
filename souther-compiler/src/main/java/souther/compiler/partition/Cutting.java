@@ -73,11 +73,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
         }
 
-        /** The reading stopped, and this is what it stopped on. */
-        record Stopped(souther.compiler.inputs.BlockReason.RuleReadingStopped why) implements Read {
+        /**
+         * The reading drew no line, and this is what it leaves at each place it is filed at.
+         *
+         * <p>A map and not one reason, because the places are not one subject. Where the arithmetic
+         * stopped, each place the walk met is a separate question — a position met inside an
+         * expression this did not take apart says nothing about what that position carries — and
+         * one answer handed to all of them told a position about the carrier of another.
+         */
+        record Stopped(java.util.SequencedMap<souther.compiler.inputs.FilingCoordinate,
+                souther.compiler.inputs.BlockReason.RuleReadingStopped> why) implements Read {
 
             public Stopped {
-                java.util.Objects.requireNonNull(why, "a reading that stopped says why");
+                why = java.util.Collections.unmodifiableSequencedMap(
+                        new java.util.LinkedHashMap<>(why));
             }
         }
     }
@@ -164,7 +173,25 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // The quantity was read and no line could be built on it: a position with no order to be
         // counted on, or an order whose values this draws no line against. Its own answer and not
         // the form's — the form is right here, and it is the carrier that stopped this.
-        return new Read.Stopped(new souther.compiler.inputs.BlockReason.UnreadComparisonDomain());
+        //
+        // Filed at the quantity, because the quantity is what the rule is about. One answer for all
+        // of them for the same reason: they are one subject, and what stopped this is a fact about
+        // the order that subject is on.
+        return new Read.Stopped(sameAt(
+                AffineReading.filedAt(read.form().coefs().keySet()),
+                new souther.compiler.inputs.BlockReason.UnreadComparisonDomain()));
+    }
+
+    /** One answer at every one of {@code places}, for a reading whose subject is one quantity. */
+    private static java.util.SequencedMap<souther.compiler.inputs.FilingCoordinate,
+            souther.compiler.inputs.BlockReason.RuleReadingStopped> sameAt(
+            java.util.List<souther.compiler.inputs.FilingCoordinate> places,
+            souther.compiler.inputs.BlockReason.RuleReadingStopped why) {
+        java.util.SequencedMap<souther.compiler.inputs.FilingCoordinate,
+                souther.compiler.inputs.BlockReason.RuleReadingStopped> out =
+                new java.util.LinkedHashMap<>();
+        places.forEach(each -> out.putIfAbsent(each, why));
+        return out;
     }
 
     /**
@@ -189,7 +216,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return new Read.Cuts(drawn);
         }
         return new Read.Stopped(
-                GuardThresholds.whyItStopped(comparison, canonical, reads, symbols));
+                GuardThresholds.whatEachPlaceIsLeftWith(comparison, canonical, inputs, reads,
+                        symbols));
     }
 
     /** One position's own values, cut where the reading found the line, or null where that reading
