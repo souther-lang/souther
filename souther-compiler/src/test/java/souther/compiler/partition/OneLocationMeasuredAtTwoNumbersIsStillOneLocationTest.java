@@ -134,12 +134,11 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     @Test
     void twoClassesOfOneLocationWantingDifferentValuesComposeNoRow() {
         Symbols symbols = symbolsOf();
-        Axis hour = new Axis(new AxisId("f", "Time.hour(a)"),
-                new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
-                List.of(number("early", 1)), List.of());
-        Axis minute = new Axis(new AxisId("f", "Time.minute(a)"),
-                new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
-                List.of(number("late", 40)), List.of());
+        NumericTerm.ValueOf at = new NumericTerm.ValueOf(TermPath.of("a"));
+        Axis hour = new Axis(new AxisId("f", "Time.hour(a)"), at, Type.INT,
+                List.of(number("early", 1).ofTheNumber(at)), List.of());
+        Axis minute = new Axis(new AxisId("f", "Time.minute(a)"), at, Type.INT,
+                List.of(number("late", 40).ofTheNumber(at)), List.of());
         Generator.Subject subject = new Generator.Subject("f",
                 new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

@@ -34,8 +34,19 @@ public interface Naming<P> {
      */
     P join(P held, P more);
 
-    /** The naming inside a {@code let}, which may have words for the name it binds. */
+    /**
+     * The naming inside a {@code let}, which may have words for the name it binds.
+     *
+     * <p>One of the two places what a name means changes, with {@link #insideArm}. The two are the
+     * reading of the input's ({@code InputPaths}), and a naming has both or is not scoped like it —
+     * a naming with one of them answers under a binding and stays outside an arm, which is a name
+     * meaning one thing to the reading that found the positions and another to this.
+     */
     Naming<P> under(Core.Binder binder, Core value);
+
+    /** The naming inside {@code arm} of {@code match}, which may have words for the name the arm
+     *  binds to the case it selects. */
+    Naming<P> insideArm(Core.Match match, Core.Case arm);
 
     /**
      * That {@code value} came out {@code held}, or null where this naming has no words for it.

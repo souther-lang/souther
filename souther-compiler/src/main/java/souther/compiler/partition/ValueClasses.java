@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
@@ -40,7 +41,8 @@ final class ValueClasses {
                             + " value this cannot write; the two readings of one position disagree"
                             + " about what stands at it");
         }
-        Recognition is = Recognition.Under.of(worn, new Recognition.AtAValue(value));
+        Recognition is = Recognition.Under.of(worn,
+                new Recognition.AtAValue(value, placeOf(value, view.declared(), symbols)));
         FixtureTemplate stands = Witnesses.wrapped(view.declared(), bare, symbols);
         return (stands == null
                 // A name the position wears that nothing here writes. The class is the position's
@@ -52,6 +54,42 @@ final class ValueClasses {
                         RepresentativeSource.of(stands)))
                 // The one value it was made from, which is the whole of what it holds.
                 .holding(ValueSet.just(value));
+    }
+
+    /**
+     * Where the value sits on the order of what stands at the position, or null where nothing places
+     * it there.
+     *
+     * <p>Made here because this is where both halves are: the value the rules named, and the type
+     * whose order it has to be placed on. A class that carried the value alone would leave every
+     * reader holding a place to place it, each reaching for whichever carrier it had — and a day
+     * count compared against a model's own number is what a carrier is for stopping.
+     *
+     * <p>Null wherever the carrier cannot place what the value is: a type with no order at all, and
+     * a value written in a shape that order does not hold. Both are answers about this class rather
+     * than reasons to stop building it — the class is still what a row is read against.
+     */
+    private static souther.compiler.numeric.Place placeOf(Value value, Type type, Symbols symbols) {
+        return placeOf(switch (value) {
+            case Value.Text text -> new ObservedValue.Text(text.value());
+            case Value.Truth truth -> new ObservedValue.Bool(truth.value());
+            case Value.Number number -> new ObservedValue.Decimal(number.value());
+            case Value.Case one -> new ObservedValue.Unit(one.data());
+        }, type, symbols);
+    }
+
+    /**
+     * Where {@code value} sits on the order a position of {@code type} is counted on, or null where
+     * the type has no order or the value is not on it.
+     *
+     * <p>The one place a class is given its place, for every kind of class that has one. Asked here
+     * with the position's type rather than with a carrier, so that no builder of a class picks the
+     * order: which order a case of an enumeration is placed on is the enumeration's, and a unit data
+     * that is a case of two sums is at a different place in each.
+     */
+    static souther.compiler.numeric.Place placeOf(ObservedValue value, Type type, Symbols symbols) {
+        souther.compiler.check.Carrier carrier = souther.compiler.check.Carrier.ofValue(type, symbols);
+        return carrier == null ? null : carrier.placeOf(value);
     }
 
     /**

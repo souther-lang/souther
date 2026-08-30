@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.values.Value;
 
@@ -61,6 +62,39 @@ public final class Recognitions {
                                       java.util.function.Predicate<ObservedValue> holds) {
         Membership.Incomplete unread = Membership.unread(value);
         return unread != null ? unread : Membership.of(holds.test(value));
+    }
+
+    /**
+     * Whether {@code what} holds the number at {@code place}.
+     *
+     * <p>The other way a class is asked, and the one for a reader that has a number rather than a
+     * row. A line is a place on the order of the number the rules cut, and finding which class it
+     * falls in is what says which side of it a condition admits — asked with a value instead, the
+     * question is about what stands at the position, which for a number taken of it is a different
+     * thing entirely and never the one that was drawn.
+     *
+     * <p>No carrier and no term. Which order the place is on is settled by the axis it came from:
+     * the classes of an axis are classes of the number it measures ({@link Axis}), so a place on
+     * that number's order and the class are already about one thing, and a reader that named either
+     * of them here could name a different one.
+     *
+     * <p>Exhaustive over {@link Recognition} with no {@code default}. A class about what stands at
+     * the position answers from where that value sits, which is written down when the class is made;
+     * one about nothing that is placed anywhere holds no place.
+     */
+    public static boolean holdsTheNumberAt(Recognition what, Place place) {
+        return switch (what) {
+            case Recognition.OfACount count -> holds(count.is(), place, count.carrier());
+            // The names a value is written under are how a row spells it, and a place wears none.
+            case Recognition.Under under -> holdsTheNumberAt(under.inner(), place);
+            case Recognition.AtAValue one -> one.at() != null && one.at().sameAs(place);
+            case Recognition.Truth ignored -> false;
+            case Recognition.Held ignored -> false;
+            // A case of an ordered enumeration sits at a place on that order, written down when the
+            // class was built; a case of a sum with no order sits nowhere and is asked nothing.
+            case Recognition.OfCase one -> one.at() != null && one.at().sameAs(place);
+            case Recognition.Nothing ignored -> false;
+        };
     }
 
     /**

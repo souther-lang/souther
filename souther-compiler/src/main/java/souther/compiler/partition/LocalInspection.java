@@ -39,8 +39,12 @@ final class LocalInspection {
      */
     static LocalPartition of(Position position, Symbols symbols,
                              souther.compiler.check.ReadingPolicy policy) {
+        // Said to be classes of this position's own measure as they are built. What a class means is
+        // the same wherever it stands; which number's values it divides is this reading's answer,
+        // and a reader working it back out of the meaning would be answering it again.
         List<PartitionClass> classes =
-                PartitionClasses.of(position.obligationCases(), position.view(), symbols, policy);
+                PartitionClasses.of(position.obligationCases(), position.view(), symbols, policy)
+                        .stream().map(each -> each.ofTheNumber(position.term())).toList();
         DeclaredBounds.Bounds axis = position.nothingExists() ? null
                 : axisBounds(position.ownEnds(), position.rangeLeft());
         List<Cut> cuts = position.nothingExists() ? List.of()

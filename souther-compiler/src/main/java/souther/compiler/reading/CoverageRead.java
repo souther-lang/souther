@@ -148,8 +148,15 @@ public final class CoverageRead {
     /** What the walk over {@code behavior}'s {@code body} reads. */
     public static Read of(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
                           Symbols symbols) {
-        CoverageNaming naming = new CoverageNaming(plan, symbols, InputReads.of(inputs));
-        ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming);
+        InputReads reads = InputReads.of(inputs);
+        // One reading of this body's comparisons, handed to both readers of them. What a way is
+        // admitted by and what a decision is said of are two questions about one comparison, and
+        // each reading it for itself is how they came to be about different numbers.
+        souther.compiler.inputs.ComparedNumbers numbers =
+                souther.compiler.inputs.ComparedNumbers.of(reads, symbols);
+        CoverageNaming naming = new CoverageNaming(plan, symbols, reads, numbers);
+        ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming,
+                new NumberWays(numbers, inputs.quantities(symbols)));
         Meetings meetings = new Meetings(plan, reading);
         Arms arms = new Arms(plan);
         new CoverageRead(reading, meetings, arms)
@@ -230,7 +237,8 @@ public final class CoverageRead {
                             ? new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED)
                             : under(reach, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     arms.at(match, part, into);
-                    walk(match.cases().get(part).body(), naming, into, observed);
+                    Core.Case arm = match.cases().get(part);
+                    walk(arm.body(), naming.insideArm(match, arm), into, observed);
                 }
             }
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
