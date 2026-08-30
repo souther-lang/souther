@@ -5,6 +5,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.diag.Citation;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
@@ -138,7 +139,8 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * nothing and an arm nothing could be read of are the two answers a walk has to tell apart, and
      * a silence is both of them.
      */
-    static OnTheWay entering(Core.Match match, Core.Case arm, InputReads reads, Symbols symbols) {
+    static OnTheWay entering(Core.Match match, Core.Case arm, InputDomain inputs, InputReads reads,
+                             Symbols symbols) {
         Citation at = Citation.of(arm.pos());
         if (arm.caseTypes().size() != 1) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
@@ -148,7 +150,10 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
         // nothing under it and this reading holds no position there, which is what it is for; what
         // has to exist is the position the case is a case of, since that is what a row writes a
         // value at and what a requirement on the way is keyed by.
-        if (scrutinee == null || reads.read().at(scrutinee) == null) {
+        //
+        // Two values and not one: where the name stands is what the environment answers, and
+        // whether the input's rules hold a position there is the reading's.
+        if (scrutinee == null || inputs.at(scrutinee) == null) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
         return new OnTheWay.Narrowed(at,

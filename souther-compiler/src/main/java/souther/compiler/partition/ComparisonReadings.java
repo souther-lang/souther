@@ -82,10 +82,16 @@ final class ComparisonReadings {
 
     /**
      * What is the same at every comparison of one body: whose body it is, what the plan numbered,
-     * the module's names, what the input's rules leave each quantity, and what the paths leave
-     * arriving at each comparison.
+     * the module's names, the reading of the input, what the input's rules leave each quantity, and
+     * what the paths leave arriving at each comparison.
+     *
+     * <p>Where the reading belongs, and it is not in the environment the walk carries. That
+     * environment is a function of the program point — a binding met, an arm entered — and the
+     * reading is one value for the whole of this walk. Put in it, the reading would be copied at
+     * every step and asked of whichever copy a reader happened to hold.
      */
     private record Body(String behavior, CoverageSites.Plan plan, Symbols symbols,
+                        souther.compiler.inputs.InputDomain inputs,
                         souther.compiler.inputs.Quantities quantities,
                         souther.compiler.check.PathReachability.Answers arrives) {}
 
@@ -97,12 +103,13 @@ final class ComparisonReadings {
      * in here because this is where a comparison is read, and a reading of it is made once.
      */
     static ComparisonReadings of(String behavior, Core body, CoverageSites.Plan plan,
+                                 souther.compiler.inputs.InputDomain inputs,
                                  InputReads reads, Symbols symbols,
                                  souther.compiler.inputs.Quantities quantities,
                                  souther.compiler.check.PathReachability.Answers arrives) {
         List<Reading> readings = new ArrayList<>();
-        walk(body, new Body(behavior, plan, symbols, quantities, arrives), reads, LiveFlow.of(body),
-                List.of(), true, readings);
+        walk(body, new Body(behavior, plan, symbols, inputs, quantities, arrives), reads,
+                LiveFlow.of(body), List.of(), true, readings);
         return new ComparisonReadings(readings);
     }
 
@@ -182,7 +189,7 @@ final class ComparisonReadings {
                 walk(match.scrutinee(), in, reads, flow, assumed, live, out);
                 for (Core.Case arm : match.cases()) {
                     walk(arm.body(), in, reads.insideArm(match, arm, symbols), flow,
-                            entering(match, arm, reads, assumed, symbols), live, out);
+                            entering(match, arm, in.inputs(), reads, assumed, symbols), live, out);
                 }
             }
             default -> Core.forEachChild(e, child ->
@@ -208,10 +215,12 @@ final class ComparisonReadings {
 
     /** The same, for what standing inside one arm of a fork establishes ({@link
      *  ReachingCuts#entering}). */
-    private static List<OnTheWay> entering(Core.Match match, Core.Case arm, InputReads reads,
-                                           List<OnTheWay> assumed, Symbols symbols) {
+    private static List<OnTheWay> entering(Core.Match match, Core.Case arm,
+                                           souther.compiler.inputs.InputDomain inputs,
+                                           InputReads reads, List<OnTheWay> assumed,
+                                           Symbols symbols) {
         List<OnTheWay> out = new ArrayList<>(assumed);
-        out.add(ReachingCuts.entering(match, arm, reads, symbols));
+        out.add(ReachingCuts.entering(match, arm, inputs, reads, symbols));
         return List.copyOf(out);
     }
 }

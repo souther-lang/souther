@@ -147,7 +147,7 @@ public final class GuardThresholds {
         // comparison is written, what its names point at, what a row had satisfied to get there,
         // whether a line may be drawn on it and what it came to are five questions about one
         // position, and one walk answers them about one position.
-        ComparisonReadings read = ComparisonReadings.of(behavior, body, plan,
+        ComparisonReadings read = ComparisonReadings.of(behavior, body, plan, inputs,
                 InputReads.of(inputs, elements), symbols, quantities, arrives);
         for (ComparisonReadings.Reading each : read.all()) {
             switch (each.standing()) {
