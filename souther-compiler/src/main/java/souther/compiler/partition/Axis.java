@@ -73,25 +73,24 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
      *
      * <p>Held where an axis is built, so that a reader crossing the classes with anything else the
      * axis holds is crossing two answers about one number. A line is a place on the term's order and
-     * a class about another number is answered by reading a value of it, so a mixed axis leaves the
-     * two with nothing to compare — and what comes of asking anyway is that the class is not found,
-     * which reads as the rules dividing the position nowhere.
+     * a class of another number is answered by reading a value of that one, so a mixed axis leaves
+     * the two with nothing to compare — and what comes of asking anyway is that the class is not
+     * found, which reads as the rules dividing the position nowhere.
      *
-     * <p>A class of the value standing at the position is one of these where the number is what
-     * stands there, and is not where the number is taken of it: no value of a time is a minute of
-     * one, and a class about times has nothing to say about which run a minute falls in.
+     * <p>Which number a class is of is said where the class is built and is never worked out from
+     * what it means. A {@code true} is a truth wherever it stands: whether it is one of the classes
+     * this position's own value is divided into is what the reading that built it decided, and an
+     * axis reading that off the class would be deciding it a second time — which is how a class of
+     * one position's truth would pass as a class of another's.
      */
     private static void subjectHeld(NumericTerm.FromOnePosition term, PartitionClass one) {
-        NumericTerm.FromOnePosition about = one.subject();
-        if (about == null) {
-            if (term instanceof NumericTerm.TakenOf) {
-                throw new IllegalArgumentException("`" + one.id() + "` is a class of the value at "
-                        + term.position() + ", and this axis measures " + term);
-            }
-            return;
+        if (one.of() == null) {
+            throw new IllegalArgumentException("`" + one.id() + "` is a class of no measure, and"
+                    + " this axis measures " + term + "; a class is put on an axis by whatever"
+                    + " built it for one");
         }
-        if (!about.equals(term)) {
-            throw new IllegalArgumentException("`" + one.id() + "` is a class of " + about
+        if (!one.of().equals(term)) {
+            throw new IllegalArgumentException("`" + one.id() + "` is a class of " + one.of()
                     + ", and this axis measures " + term);
         }
     }

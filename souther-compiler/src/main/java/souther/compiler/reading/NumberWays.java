@@ -1,11 +1,10 @@
 package souther.compiler.reading;
 
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.flow.ComparisonWays;
 import souther.compiler.inputs.ComparedNumber;
-import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -27,39 +26,42 @@ import java.util.function.Function;
  * way was never held, the decision was never named, and no row was ever steered into the arm behind
  * it. The number is what varies, and the number is what is asked about here.
  *
- * <p>Where no number is named — two positions compared with each other, a value this reading cannot
- * place on any order — the body's own text answers as it did before. That is not a second answer to
- * this question: it is the answer for the comparisons this one has nothing to say about.
+ * <p>The same reading the decision is named from ({@link ComparedNumbers}). Admitting a way and
+ * saying which decision it settles are two questions about one comparison, and answering them from
+ * two readings is how a way came to be held for a number the naming could not find.
+ *
+ * <p>Where the comparison draws no line — a number over a run of values, one position against
+ * another, a value no order writes — the body's own text answers as it did before. That is not a
+ * second answer to this question: it is the answer for the comparisons this one has nothing to say
+ * about.
  */
 final class NumberWays implements ComparisonWays {
 
-    private final InputReads reads;
-    private final Symbols symbols;
+    private final ComparedNumbers numbers;
     private final Quantities quantities;
 
-    NumberWays(InputReads reads, Symbols symbols, Quantities quantities) {
-        this.reads = reads;
-        this.symbols = symbols;
+    NumberWays(ComparedNumbers numbers, Quantities quantities) {
+        this.numbers = numbers;
         this.quantities = quantities;
     }
 
     @Override
     public ComparisonWays under(Core.Binder binder, Core value) {
-        return new NumberWays(reads.and(binder, value), symbols, quantities);
+        return new NumberWays(numbers.under(binder, value), quantities);
     }
 
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
-        ComparedNumber drawn = e instanceof Core.Binary comparison
-                ? ComparedNumber.asWritten(comparison, reads, symbols) : null;
-        return drawn == null ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
+        ComparedNumber drawn = e instanceof Core.Binary comparison ? numbers.of(comparison) : null;
+        return drawn == null || !drawn.drawsALine()
+                ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
                 : leaves(drawn, want);
     }
 
     /** Whether the values the rules leave the number include one the comparison comes out
      *  {@code want} at. */
     private boolean leaves(ComparedNumber drawn, boolean want) {
-        NumericDomain.Bounds runs = quantities.runsBetween(drawn.term());
+        NumericDomain.Bounds runs = quantities.runsBetween(drawn.atOnePosition());
         return switch (drawn.claim()) {
             case ComparisonClaim.Cut cut -> {
                 // Which side the way needs, from the two facts the claim carries: which side of the
@@ -73,6 +75,7 @@ final class NumberWays implements ComparisonWays {
             // and nothing else.
             case ComparisonClaim.Singled singled -> singled.holdsAtTheValue() == want
                     ? holds(runs, drawn.at()) : notOnlyOneValue(runs, drawn.at());
+            // Refused before this: a comparison claiming nothing draws no line.
             case ComparisonClaim.Nothing ignored -> false;
         };
     }

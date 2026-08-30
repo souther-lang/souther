@@ -42,30 +42,32 @@ import souther.compiler.values.ValueSet;
  */
 public record PartitionClass(String id, String label, Recognition recognises,
                              RepresentativeSource representatives, ValueSet denotes,
-                             Refinement selects) {
+                             Refinement selects,
+                             souther.compiler.inputs.NumericTerm.FromOnePosition of) {
 
     public static PartitionClass of(String id, String label, Recognition recognises,
                                     RepresentativeSource representatives) {
-        return new PartitionClass(id, label, recognises, representatives, null, null);
+        return new PartitionClass(id, label, recognises, representatives, null, null, null);
     }
 
     /** A class nothing can produce a value for, and why. */
     public static PartitionClass ungeneratable(String id, String label,
                                                Recognition recognises, String why) {
         return new PartitionClass(id, label, recognises,
-                new RepresentativeSource.Ungeneratable(why), null, null);
+                new RepresentativeSource.Ungeneratable(why), null, null, null);
     }
 
     /**
-     * The number this class is about, or null where it is about the value standing at the position.
+     * The same class, said to be a class of {@code number}.
      *
-     * <p>Read off what the class means, as {@link #classifier()} is. Which number a class is of is
-     * part of the meaning and not something a holder of one says on its behalf: an axis takes this
-     * to refuse a class of a different number, and a class that answered from anywhere else would
-     * be checked against whatever its holder believed.
+     * <p>Which number's values a class divides is not the class's meaning and is not read off it: a
+     * {@code true} means what it means wherever it stands, and whether it is one of the classes a
+     * position's own value is divided into is the producer's to say. Written by whoever builds the
+     * classes of a measure, and required by the measure ({@link Axis}) — so a class of one number
+     * cannot be put among another's, and a class built for no measure at all cannot be put on one.
      */
-    public souther.compiler.inputs.NumericTerm.FromOnePosition subject() {
-        return recognises.subject();
+    public PartitionClass ofTheNumber(souther.compiler.inputs.NumericTerm.FromOnePosition number) {
+        return new PartitionClass(id, label, recognises, representatives, denotes, selects, number);
     }
 
     /**
@@ -101,7 +103,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
      * whole, which is the safe direction — the class stays.
      */
     public PartitionClass holding(ValueSet values) {
-        return new PartitionClass(id, label, recognises, representatives, values, selects);
+        return new PartitionClass(id, label, recognises, representatives, values, selects, of);
     }
 
     /**
@@ -112,7 +114,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
      * requirements of its position and no more.
      */
     public PartitionClass selecting(Refinement refinement) {
-        return new PartitionClass(id, label, recognises, representatives, denotes, refinement);
+        return new PartitionClass(id, label, recognises, representatives, denotes, refinement, of);
     }
 
     /**

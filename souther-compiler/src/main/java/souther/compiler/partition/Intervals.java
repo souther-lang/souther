@@ -213,7 +213,8 @@ final class Intervals {
                     : PartitionClass.of(id, label, is,
                             RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
         }
-        return List.copyOf(classes);
+        // Classes of the number the runs are runs of, said here because here is where that is known.
+        return classes.stream().map(each -> each.ofTheNumber(of)).toList();
     }
 
     /** What the range is a range of, in the words a reader of the report has: the operation where

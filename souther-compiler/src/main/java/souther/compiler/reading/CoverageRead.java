@@ -149,9 +149,14 @@ public final class CoverageRead {
     public static Read of(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
                           Symbols symbols) {
         InputReads reads = InputReads.of(inputs);
-        CoverageNaming naming = new CoverageNaming(plan, symbols, reads);
+        // One reading of this body's comparisons, handed to both readers of them. What a way is
+        // admitted by and what a decision is said of are two questions about one comparison, and
+        // each reading it for itself is how they came to be about different numbers.
+        souther.compiler.inputs.ComparedNumbers numbers =
+                souther.compiler.inputs.ComparedNumbers.of(reads, symbols);
+        CoverageNaming naming = new CoverageNaming(plan, symbols, reads, numbers);
         ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming,
-                new NumberWays(reads, symbols, inputs.quantities(symbols)));
+                new NumberWays(numbers, inputs.quantities(symbols)));
         Meetings meetings = new Meetings(plan, reading);
         Arms arms = new Arms(plan);
         new CoverageRead(reading, meetings, arms)

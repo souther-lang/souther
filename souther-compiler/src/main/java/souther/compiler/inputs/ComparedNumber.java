@@ -8,75 +8,86 @@ import souther.compiler.numeric.Place;
 import souther.compiler.types.BinOp;
 
 /**
- * One comparison of a body, said as the number it is about, the place it names on that number's
- * order, and what it claims either side of it.
+ * One comparison of a body, said as the number it is about and what it claims of that number.
  *
- * <p>The form every reader of a comparison works from. Which number is compared is
- * {@link InputNumber}'s answer, and where the other side falls is read on the order that number is
- * counted on — so a rule written {@code 100000 >= cost} and one written {@code cost <= 100000} come
- * to one value here, and a reader downstream never sees which side of the operator the number was
- * written on.
+ * <p>The one reading of a comparison. Which number is compared, which side of it the comparison
+ * keeps, and where the other side falls on that number's order are one answer and not three — a
+ * reader that worked out any of them for itself would be reading the comparison a second time, and
+ * two readings of one comparison are two answers as soon as they are asked under different bindings.
  *
- * <p><b>The place and not the operand.</b> {@code Time.minute(slot.at) >= 30} names thirty on the
- * order minutes are counted on, which is not the order the position is written on: what stands at
- * {@code slot.at} is a time. A reader taking the literal as written would hold a number belonging to
- * neither, and one taking it on the position's order would hold half past midnight.
+ * <p><b>The place is on the number's order, and never on the position's.</b>
+ * {@code Time.minute(slot.at) >= 30} names thirty on the order minutes are counted on; what stands
+ * at {@code slot.at} is a time, and half past midnight is what that thirty would be there. The two
+ * coincide only where the number is what the position holds.
  *
- * @param term    the number the comparison is about, answered by one position of the input
- * @param at      where the other side falls on that number's order
- * @param orders  the order the number is written on and the one it is counted on, which differ
- *                wherever the number is taken of what stands at the position
- * @param claim   what the comparison says of the values either side of {@link #at}, with the
- *                operator already turned round where the number was written on the right
+ * @param term   the number the comparison is about. A number over a run of values is one of these
+ *               too: it is what the comparison is about, and it is answered by no single position
+ * @param orders the order the number is written on and the one it is counted on, or null where
+ *               nothing puts an order under it
+ * @param claim  what the comparison says of the values either side of {@link #at}, with the operator
+ *               turned round where the number was written on the right
+ * @param at     where the other side falls on the number's order, or null where it is not a value
+ *               that order writes — another position, a value this compiler does not place
  */
-public record ComparedNumber(NumericTerm.FromOnePosition term, Place at, TermOrders orders,
-                             ComparisonClaim claim) {
+public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonClaim claim, Place at) {
 
     /**
-     * What {@code comparison} says, or null where it says nothing this reads.
+     * What {@code comparison} says, or null where it names no number of this input at all.
      *
      * <p>The number-bearing side is read first and the comparison is turned round where the number
-     * is on the right. Null where neither side names a number one position answers, or where the
-     * other side is not a value that number's order writes — which is a rule this compiler did not
-     * read rather than a rule the model does not state, and is reported as one where a report is
-     * being made.
+     * is on the right. What is answered here is layered: the number always, and the place and the
+     * side only where the other operand is a value the number's order writes. A reader wanting a
+     * line asks for one ({@link #drawsALine}); a reader wanting to know what the decision is about
+     * takes the number and needs no more.
      */
-    public static ComparedNumber asWritten(Core.Binary comparison, InputReads reads,
-                                           Symbols symbols) {
+    public static ComparedNumber of(Core.Binary comparison, InputReads reads, Symbols symbols) {
         BinOp op = comparison.op();
         Named named = namedBy(comparison.left(), reads, symbols);
-        Place at = named == null ? null : named.order().literalOf(comparison.right(), symbols);
-        if (named == null || at == null) {
+        Core other = comparison.right();
+        if (named == null) {
             named = namedBy(comparison.right(), reads, symbols);
-            at = named == null ? null : named.order().literalOf(comparison.left(), symbols);
+            other = comparison.left();
             op = mirrored(op);
         }
-        NumericTerm.FromOnePosition term = named == null ? null : named.term().atOnePosition();
-        if (term == null || at == null) {
+        if (named == null) {
             return null;
         }
-        ComparisonClaim claim = ComparisonClaim.of(op);
-        return claim instanceof ComparisonClaim.Nothing ? null
-                : new ComparedNumber(term, at, named.orders(), claim);
+        Carrier order = named.orders() == null ? null : named.orders().answered();
+        return new ComparedNumber(named.term(), named.orders(), ComparisonClaim.of(op),
+                order == null ? null : order.literalOf(other, symbols));
+    }
+
+    /** The number this is about where one position answers it, and null where none does. */
+    public NumericTerm.FromOnePosition atOnePosition() {
+        return term.atOnePosition();
+    }
+
+    /**
+     * Whether this says where a line falls: a number one position answers, on an order, cut at a
+     * place of it.
+     *
+     * <p>The three together, because a line is all three. A comparison naming a number over a run
+     * divides no position; one whose other side is another position states how far two of them
+     * stand apart and is read elsewhere; one whose other side is a value the order does not write
+     * is a rule this compiler did not read.
+     */
+    public boolean drawsALine() {
+        return at != null && orders != null && atOnePosition() != null
+                && !(claim instanceof ComparisonClaim.Nothing);
     }
 
     /** The number an expression names together with the orders it is read and counted on, or null
-     *  where it names none this can put an order under. */
+     *  where it names none. */
     private static Named namedBy(Core e, InputReads reads, Symbols symbols) {
         NumericTerm term = InputNumber.of(e, reads, symbols);
         if (term == null) {
             return null;
         }
         TermOrders orders = reads.read().ordersOf(term, symbols);
-        return orders.answered() == null ? null : new Named(term, orders);
+        return new Named(term, orders == null || orders.answered() == null ? null : orders);
     }
 
-    private record Named(NumericTerm term, TermOrders orders) {
-
-        Carrier order() {
-            return orders.answered();
-        }
-    }
+    private record Named(NumericTerm term, TermOrders orders) { }
 
     private static BinOp mirrored(BinOp op) {
         return switch (op) {

@@ -91,13 +91,52 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Axis truth = axisOf(read, "gate/slot.on");
 
         assertEquals(List.of(length.term()), length.classes().stream()
-                .map(PartitionClass::subject).distinct().toList(),
+                .map(PartitionClass::of).distinct().toList(),
                 "every class of the length is a class of the length");
         assertEquals(List.of(count.term()), count.classes().stream()
-                .map(PartitionClass::subject).distinct().toList());
-        assertTrue(truth.classes().stream().allMatch(each -> each.subject() == null),
-                "a truth is told by looking at the value, so its classes are of no number");
-        assertFalse(truth.classes().isEmpty(), "and there are some to be of nothing");
+                .map(PartitionClass::of).distinct().toList());
+        assertEquals(List.of(truth.term()), truth.classes().stream()
+                .map(PartitionClass::of).distinct().toList(),
+                "and a truth is a class of the value standing at the position it was read for");
+        assertFalse(truth.classes().isEmpty(), "of which this model has some");
+    }
+
+    /**
+     * A class of one position's value is not a class of another's.
+     *
+     * <p>The two are told apart by the measure they were built for and never by what they mean: a
+     * truth means the same thing at every position, and a rule reading which number a class is of
+     * out of its meaning has nothing to read here — so both positions' classes would answer alike
+     * and either would pass for the other.
+     */
+    @Test
+    void aClassOfAnotherPositionsValueIsRefused() {
+        Partitions.Partitioning read = divided();
+        Axis count = axisOf(read, "gate/slot.n");
+        Axis truth = axisOf(read, "gate/slot.on");
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> count.carrying(truth.classes(), List.of(), List.of()));
+
+        assertTrue(refused.getMessage().contains("slot.on")
+                        && refused.getMessage().contains("slot.n"),
+                refused.getMessage());
+    }
+
+    /** And a class built for no measure at all is not one either, whichever axis is offered it. */
+    @Test
+    void aClassBuiltForNoMeasureIsRefused() {
+        Partitions.Partitioning read = divided();
+        Axis count = axisOf(read, "gate/slot.n");
+        List<PartitionClass> unstamped = count.classes().stream()
+                .map(each -> PartitionClass.of(each.id(), each.label(), each.recognises(),
+                        each.representatives()))
+                .toList();
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> count.carrying(unstamped, List.of(), List.of()));
+
+        assertTrue(refused.getMessage().contains("no measure"), refused.getMessage());
     }
 
     /** A class of one number is not a class of another, whichever position both are read from. */
