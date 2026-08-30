@@ -1,10 +1,12 @@
 package souther.compiler.reading;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.flow.ComparisonWays;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -39,25 +41,33 @@ final class NumberWays implements ComparisonWays {
 
     private final ComparedNumbers numbers;
     private final Quantities quantities;
+    // Where this reader stands, which is its own and not the naming's. The two walk the same body
+    // and meet each comparison at the same node, and the reading they share says so rather than
+    // taking it on trust ({@link ComparedNumbers#of}).
+    private final InputReads reads;
+    private final Symbols symbols;
 
-    NumberWays(ComparedNumbers numbers, Quantities quantities) {
+    NumberWays(ComparedNumbers numbers, Quantities quantities, InputReads reads, Symbols symbols) {
         this.numbers = numbers;
         this.quantities = quantities;
+        this.reads = reads;
+        this.symbols = symbols;
     }
 
     @Override
     public ComparisonWays under(Core.Binder binder, Core value) {
-        return new NumberWays(numbers.under(binder, value), quantities);
+        return new NumberWays(numbers, quantities, reads.and(binder, value), symbols);
     }
 
     @Override
     public ComparisonWays insideArm(Core.Match match, Core.Case arm) {
-        return new NumberWays(numbers.insideArm(match, arm), quantities);
+        return new NumberWays(numbers, quantities, reads.insideArm(match, arm, symbols), symbols);
     }
 
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
-        ComparedNumber drawn = e instanceof Core.Binary comparison ? numbers.of(comparison) : null;
+        ComparedNumber drawn =
+                e instanceof Core.Binary comparison ? numbers.of(comparison, reads) : null;
         return drawn == null || !drawn.drawsALine()
                 ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
                 : leaves(drawn, want);

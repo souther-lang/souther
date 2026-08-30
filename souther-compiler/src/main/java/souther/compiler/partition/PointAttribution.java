@@ -44,9 +44,10 @@ public sealed interface PointAttribution {
      * {@code Sku} is the same question wherever a {@code Sku} goes — so one row anywhere in the
      * module settles it, and the behaviors carrying the type have nothing to add.
      *
-     * @param owners every declaration that owes a row here, in the order they contributed. Never
-     *               empty: an arm saying the declarations owe it and naming none of them would be a
-     *               debt with nobody to answer for it
+     * @param owners every declaration that owes a row here, in the declarations' own order and
+     *               never in the order they were met: who owes a point is a set, and the order it
+     *               was gathered in is the walk's. Never empty: an arm saying the declarations owe
+     *               it and naming none of them would be a debt with nobody to answer for it
      */
     record TheDeclarations(List<TypeSymbol.AtModule> owners) implements PointAttribution {
 

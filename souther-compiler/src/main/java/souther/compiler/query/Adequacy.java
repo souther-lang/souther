@@ -754,7 +754,7 @@ public final class Adequacy {
         for (souther.compiler.core.Contract.Param param : stated.params()) {
             parameters.putIfAbsent(param.binding(), param.name());
         }
-        souther.compiler.inputs.InputPaths names =
+        souther.compiler.inputs.InputReads names =
                 souther.compiler.inputs.InputReads.ofWhatIsDeclared(parameters);
         souther.compiler.inputs.InputDemand out = demand;
         for (souther.compiler.check.StatedContract.StatedRule rule : stated.rules()) {
@@ -1302,7 +1302,7 @@ public final class Adequacy {
             // Counted with nothing a body claims in scope. What was claimed travels beside the
             // numbers rather than into them ({@link Claimed}), and the two meet where a report
             // is written.
-            return Coverages.of(spec, domainOf(readInputs, spec), sig, scope,
+            return Coverages.of(spec, sig, scope,
                     db.ask(new Front.Reading()).value(), divided, seen, level,
                     db.ask(new Front.Adequacy()).value().measures());
         }
@@ -2027,8 +2027,7 @@ public final class Adequacy {
             Level level = levelOf(db);
             Symbols symbols = scope.value();
             return Answer.of(assess(spec, sig, symbols, db.ask(new Front.Reading()).value(),
-                    divided, Rows.readingFor(db.ask(new Rows(name)).value(), behavior), level,
-                    domainOf(db.ask(new Inputs(name)).value(), spec)));
+                    divided, Rows.readingFor(db.ask(new Rows(name)).value(), behavior), level));
         }
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
@@ -2036,7 +2035,7 @@ public final class Adequacy {
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
                 souther.compiler.check.ReadingPolicy policy,
                 souther.compiler.partition.Partitions.Partitioning divided, RowReading observed,
-                Level level, InputDomain domain) {
+                Level level) {
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),

@@ -149,7 +149,7 @@ final class Coverages {
      *                   ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes
      *                   measure reads none of it
      */
-    static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
+    static PartitionEvidence of(Hir.SpecBehavior behavior, Sig sig,
                                 Symbols symbols, ReadingPolicy policy,
                                 Partitions.Partitioning partitioning,
                                 souther.compiler.query.Adequacy.RowReading observed,

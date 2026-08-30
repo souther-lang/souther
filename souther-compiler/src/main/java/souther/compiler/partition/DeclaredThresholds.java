@@ -77,8 +77,8 @@ public final class DeclaredThresholds {
         // there is nothing a behavior answered for it to be about.
         // And no arrival: a declaration's clause stands in no body for anything to be on the way
         // to, which reads as an arrival that restricts nothing.
-        ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison,
-                InputReads.ofADeclaredClause(inputs, roots), symbols, quantities, null, true,
+        ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison, inputs,
+                InputReads.ofADeclaredClause(roots), symbols, quantities, null, true,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
