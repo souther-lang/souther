@@ -62,6 +62,38 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
         if (at == null) {
             throw new IllegalArgumentException("an axis of no position");
         }
+        for (PartitionClass one : classes) {
+            subjectHeld(term, one);
+        }
+    }
+
+    /**
+     * That {@code one} is a class of the number this axis measures, which is what an axis is a run
+     * of classes over.
+     *
+     * <p>Held where an axis is built, so that a reader crossing the classes with anything else the
+     * axis holds is crossing two answers about one number. A line is a place on the term's order and
+     * a class about another number is answered by reading a value of it, so a mixed axis leaves the
+     * two with nothing to compare — and what comes of asking anyway is that the class is not found,
+     * which reads as the rules dividing the position nowhere.
+     *
+     * <p>A class of the value standing at the position is one of these where the number is what
+     * stands there, and is not where the number is taken of it: no value of a time is a minute of
+     * one, and a class about times has nothing to say about which run a minute falls in.
+     */
+    private static void subjectHeld(NumericTerm.FromOnePosition term, PartitionClass one) {
+        NumericTerm.FromOnePosition about = one.subject();
+        if (about == null) {
+            if (term instanceof NumericTerm.TakenOf) {
+                throw new IllegalArgumentException("`" + one.id() + "` is a class of the value at "
+                        + term.position() + ", and this axis measures " + term);
+            }
+            return;
+        }
+        if (!about.equals(term)) {
+            throw new IllegalArgumentException("`" + one.id() + "` is a class of " + about
+                    + ", and this axis measures " + term);
+        }
     }
 
     public Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
@@ -104,9 +136,16 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
      * classes and cuts; what the position came to was settled by the reading that made this one,
      * and a caller rebuilding an axis from its parts drops whatever it does not think to name. What
      * the position came to is one field, so a rebuild names it or does not compile.
+     *
+     * <p>The classes and the lines go where the number goes. They are what the rules divided one
+     * number into and where they cut it, so at another number they answer a question nobody asked —
+     * and carried over they would be classes of one number on an axis of another. What is kept is
+     * the position's: where it is, what stands there, and what its own reading came to. What that
+     * leaves the axis short of is what the reading measuring it at the new number puts there.
      */
     public Axis measuredAt(AxisId id, NumericTerm.FromOnePosition term) {
-        return new Axis(id, term, at, classes, cuts, parted, narrowed);
+        return term.equals(this.term) ? new Axis(id, term, at, classes, cuts, parted, narrowed)
+                : new Axis(id, term, at, List.of(), List.of(), List.of(), narrowed);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */

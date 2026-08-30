@@ -9,6 +9,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Membership;
+import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -107,8 +108,8 @@ class PartitionsTest {
         assertEquals(List.of(), classIds(cost));
         assertFalse(cost.derivable());
         assertTrue(cost.measurable(), "there is still an edge to reach");
-        assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(1000L)),
-                cost.cuts().stream().map(Cut::value).toList());
+        assertEquals(List.of(Count.of(0L), Count.of(1000L)),
+                cost.cuts().stream().map(Cut::at).toList());
     }
 
     /**
@@ -144,10 +145,10 @@ class PartitionsTest {
                 let classify (span) = Ok { at = "x" }
                 """, "classify");
 
-        assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(1439L)),
-                axis(span, "span.from").cuts().stream().map(Cut::value).toList());
-        assertEquals(List.of(new ObservedValue.Integer(1L), new ObservedValue.Integer(1440L)),
-                axis(span, "span.to").cuts().stream().map(Cut::value).toList());
+        assertEquals(List.of(Count.of(0L), Count.of(1439L)),
+                axis(span, "span.from").cuts().stream().map(Cut::at).toList());
+        assertEquals(List.of(Count.of(1L), Count.of(1440L)),
+                axis(span, "span.to").cuts().stream().map(Cut::at).toList());
         assertEquals(List.of("invariant Minute (withinDay)", "invariant Minute (withinDay) within Span"),
                 axis(span, "span.from").cuts().stream()
                         .map(c -> c.origins().get(0).named()).toList(),
@@ -183,8 +184,8 @@ class PartitionsTest {
                 """, "classify");
         Axis o = axis(wrapped, "o");
 
-        assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(10L)),
-                o.cuts().stream().map(Cut::value).toList());
+        assertEquals(List.of(Count.of(0L), Count.of(10L)),
+                o.cuts().stream().map(Cut::at).toList());
         assertEquals(List.of("invariant Outer (outerMin)", "invariant Inner (innerMin)"),
                 o.cuts().get(0).origins().stream().map(OriginRef::named).toList(),
                 "one value, two rules, and a row is owed to each");
@@ -211,9 +212,10 @@ class PartitionsTest {
                 let classify (s) = Ok { at = "x" }
                 """, "classify");
 
-        assertEquals(List.of(new ObservedValue.Decimal(java.math.BigDecimal.ZERO),
-                        new ObservedValue.Decimal(java.math.BigDecimal.ONE)),
-                axis(share, "s").cuts().stream().map(Cut::value).toList(),
+        assertEquals(List.of(Count.of(java.math.BigDecimal.ZERO).canonical(),
+                        Count.of(java.math.BigDecimal.ONE).canonical()),
+                axis(share, "s").cuts().stream().map(Cut::at)
+                        .map(souther.compiler.numeric.Place::canonical).toList(),
                 "how many places a literal was written to is not where the line is");
     }
 

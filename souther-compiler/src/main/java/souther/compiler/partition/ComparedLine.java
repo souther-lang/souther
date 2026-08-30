@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
@@ -53,29 +52,25 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      * depending on which reading a rule happens to fall into.
      */
     static ComparedLine asWritten(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        BinOp op = comparison.op();
-        GuardThresholds.Named named = GuardThresholds.namedBy(comparison.left(), reads, symbols);
-        Place value = named == null ? null : named.order().literalOf(comparison.right(), symbols);
-        if (named == null || value == null) {
-            named = GuardThresholds.namedBy(comparison.right(), reads, symbols);
-            value = named == null ? null : named.order().literalOf(comparison.left(), symbols);
-            op = mirrored(op);
-        }
-        NumericTerm.FromOnePosition term = named == null ? null : named.term().atOnePosition();
-        souther.compiler.inputs.TermOrders orders = named == null ? null : named.orders();
-        if (term == null || value == null) {
-            // Nothing here is a position against a value this carrier writes, and there is nothing
-            // else for a spelling to try: which quantity a rule cuts is the arithmetic's answer,
-            // and this reading is reached only where the arithmetic had none.
+        // Read once, where every reader of a comparison reads it. Nothing here is a number against
+        // a value its order writes where that reading comes to nothing, and there is nothing else
+        // for a spelling to try: which quantity a rule cuts is the arithmetic's answer, and this
+        // reading is reached only where the arithmetic had none.
+        return of(souther.compiler.inputs.ComparedNumber.asWritten(comparison, reads, symbols));
+    }
+
+    /** The same comparison as a line, or null where it says nothing a line is drawn from. */
+    private static ComparedLine of(souther.compiler.inputs.ComparedNumber drawn) {
+        if (drawn == null) {
             return null;
         }
-        return switch (ComparisonClaim.of(op)) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, orders,
-                    cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
+        return switch (drawn.claim()) {
+            case ComparisonClaim.Cut cut -> new ComparedLine(drawn.term(), drawn.at(),
+                    drawn.orders(), cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
             // A value singled out has no low side of its own — the values either side of it are one
             // class — so the side is written down as one answer and read by nobody.
-            case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, orders, true, singled.holdsAtTheValue(), true);
+            case ComparisonClaim.Singled singled -> new ComparedLine(drawn.term(), drawn.at(),
+                    drawn.orders(), true, singled.holdsAtTheValue(), true);
             case ComparisonClaim.Nothing _ -> null;
         };
     }
@@ -117,13 +112,4 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         };
     }
 
-    private static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case LE -> BinOp.GE;
-            case GT -> BinOp.LT;
-            case GE -> BinOp.LE;
-            default -> op;
-        };
-    }
 }

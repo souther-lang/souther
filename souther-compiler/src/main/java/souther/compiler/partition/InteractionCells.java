@@ -525,12 +525,18 @@ public final class InteractionCells {
         return null;
     }
 
-    /** Which class of the axis holds the value the line is drawn at. */
+    /**
+     * Which class of the axis holds the number the line is drawn at, or -1 where none does.
+     *
+     * <p>Asked with the place the line is at, on the order of the number the axis measures. The
+     * classes of that axis are classes of that number, so the two meet as they stand — asked with a
+     * value of the position instead, a class about something taken of it is handed the taken number
+     * where it expects what stands there, and every class says no.
+     */
     private static int holding(Axis axis, Cut line) {
         List<PartitionClass> classes = axis.classes();
         for (int c = 0; c < classes.size(); c++) {
-            if (classes.get(c).classifier().membershipOf(line.value())
-                    instanceof souther.compiler.inputs.Membership.Match) {
+            if (classes.get(c).holdsTheNumberAt(line.at())) {
                 return c;
             }
         }

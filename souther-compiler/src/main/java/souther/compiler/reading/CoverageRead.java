@@ -148,8 +148,10 @@ public final class CoverageRead {
     /** What the walk over {@code behavior}'s {@code body} reads. */
     public static Read of(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
                           Symbols symbols) {
-        CoverageNaming naming = new CoverageNaming(plan, symbols, InputReads.of(inputs));
-        ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming);
+        InputReads reads = InputReads.of(inputs);
+        CoverageNaming naming = new CoverageNaming(plan, symbols, reads);
+        ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming,
+                new NumberWays(reads, symbols, inputs.quantities(symbols)));
         Meetings meetings = new Meetings(plan, reading);
         Arms arms = new Arms(plan);
         new CoverageRead(reading, meetings, arms)

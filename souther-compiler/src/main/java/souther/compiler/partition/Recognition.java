@@ -41,8 +41,19 @@ public sealed interface Recognition {
     /** One case of a sum, told by the construction the row wrote. */
     record OfCase(TypeSymbol leaf) implements Recognition {}
 
-    /** The one value a reading singled out, told by reading the value itself. */
-    record AtAValue(Value value) implements Recognition {}
+    /**
+     * The one value a reading singled out, told by reading the value itself.
+     *
+     * @param value what the class holds, which is what a row is read against
+     * @param at    where that value sits on the order of what stands at the position, or null where
+     *              nothing places it there. The one crossing between the two ways a class is asked
+     *              about, made where the position's type and the value are both in hand: a reader
+     *              holding a place on that order has no value to read, and one that placed the value
+     *              itself would be placing it on whatever order it had reached for. Null is "nothing
+     *              placed it" and never "it is nowhere" — a position with no order has no places to
+     *              be asked about at all
+     */
+    record AtAValue(Value value, Place at) implements Recognition {}
 
     /**
      * Where a count sits, read out of the row through the carrier that says how its values step.
@@ -109,4 +120,30 @@ public sealed interface Recognition {
 
     /** A class that exists and cannot be told from another by looking. */
     record Nothing() implements Recognition {}
+
+    /**
+     * The number this class is about, or null where it is about the value standing at a position.
+     *
+     * <p>The two things a class can be of, told apart here and nowhere else. A class about a count
+     * says which number it counts and is answered by a place on that number's order; every other
+     * class is about what stands at the position and is answered by looking at the value. A reader
+     * holding a place has an answer only for the first, and one holding a value only for the
+     * second, so which of the two a class is has to be a question a class answers.
+     *
+     * <p>Exhaustive with no {@code default}: a class added later says which of the two it is rather
+     * than arriving as one about a value because nothing here mentioned it.
+     */
+    default NumericTerm.FromOnePosition subject() {
+        return switch (this) {
+            case OfACount count -> count.term();
+            // The names a position writes its value under say nothing about which number the class
+            // inside is of, so the question goes through them.
+            case Under under -> under.inner().subject();
+            case Truth ignored -> null;
+            case Held ignored -> null;
+            case OfCase ignored -> null;
+            case AtAValue ignored -> null;
+            case Nothing ignored -> null;
+        };
+    }
 }

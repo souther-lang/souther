@@ -57,6 +57,31 @@ public record PartitionClass(String id, String label, Recognition recognises,
     }
 
     /**
+     * The number this class is about, or null where it is about the value standing at the position.
+     *
+     * <p>Read off what the class means, as {@link #classifier()} is. Which number a class is of is
+     * part of the meaning and not something a holder of one says on its behalf: an axis takes this
+     * to refuse a class of a different number, and a class that answered from anywhere else would
+     * be checked against whatever its holder believed.
+     */
+    public souther.compiler.inputs.NumericTerm.FromOnePosition subject() {
+        return recognises.subject();
+    }
+
+    /**
+     * Whether this class holds the number at {@code place}, which is on the order of the number the
+     * axis this is a class of measures.
+     *
+     * <p>Beside {@link #classifier()} and not through it. That one is handed a row's value and reads
+     * the class's number out of it; this one is handed the number, which is what a line is. Answered
+     * by turning the place back into a value, a class about a minute of a time would be handed the
+     * minute where it expects a time, and no class would hold the line at all.
+     */
+    public boolean holdsTheNumberAt(souther.compiler.numeric.Place place) {
+        return Recognitions.holdsTheNumberAt(recognises, place);
+    }
+
+    /**
      * This class as something to ask of a row.
      *
      * <p>Derived and not held. What the class means is {@link #recognises}, and a way of asking it

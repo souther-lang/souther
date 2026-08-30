@@ -73,16 +73,32 @@ public final class ValueArrivals<P> {
     private final Set<Core> walked =
             java.util.Collections.newSetFromMap(new IdentityHashMap<>());
 
-    private ValueArrivals(Naming<P> naming, ValueArrivals<AnonymousPath> semantics) {
+    /** Which ways a comparison has a value behind it, which is not this reading's to work out. */
+    private final ComparisonWays ways;
+
+    private ValueArrivals(Naming<P> naming, ComparisonWays ways,
+                          ValueArrivals<AnonymousPath> semantics) {
         this.naming = naming;
+        this.ways = ways;
         this.semantics = semantics;
     }
 
-    /** The reading of {@code body}, with every occurrence in it settled under what binds it. */
+    /** The reading of {@code body} against what the body's own text says of its comparisons. */
     public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming) {
+        return ofBody(body, naming, ComparisonWays.OF_THE_TREE);
+    }
+
+    /**
+     * The reading of {@code body}, with every occurrence in it settled under what binds it.
+     *
+     * <p>Both halves against the one {@code ways}. What the body does is the half computed with no
+     * naming, so a reading whose halves were asked different things about a comparison would answer
+     * one thing about what the body does and another about which ways it has.
+     */
+    public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways) {
         ValueArrivals<AnonymousPath> semantics =
-                naming == Anonymous.NAMING ? null : ofBody(body, Anonymous.NAMING);
-        ValueArrivals<P> reading = new ValueArrivals<>(naming, semantics);
+                naming == Anonymous.NAMING ? null : ofBody(body, Anonymous.NAMING, ways);
+        ValueArrivals<P> reading = new ValueArrivals<>(naming, ways, semantics);
         if (body != null) {
             reading.fill(body, naming, Map.of());
         }
@@ -341,8 +357,8 @@ public final class ValueArrivals<P> {
      */
     private Paths<P> comparedOut(Core value, Arrival<P> under, Naming<P> naming,
                                  java.util.function.Function<Core.Read, Core> settledBy) {
-        boolean holds = Witnessed.comesOut(value, true, settledBy);
-        boolean fails = Witnessed.comesOut(value, false, settledBy);
+        boolean holds = ways.comesOut(value, true, settledBy);
+        boolean fails = ways.comesOut(value, false, settledBy);
         if (!holds && !fails) {
             return null;
         }

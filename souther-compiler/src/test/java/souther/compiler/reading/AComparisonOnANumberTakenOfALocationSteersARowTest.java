@@ -1,0 +1,233 @@
+package souther.compiler.reading;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.check.Symbols;
+import souther.compiler.core.Core;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.Generator;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Scopes;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A comparison on a number taken of a location settles a decision, and a row is steered by it.
+ *
+ * <p>Whether a value brings a comparison out a given way is a question about the number it compares:
+ * the rules leave that number a run of values, and a way stands where some value of the run falls on
+ * the side the way needs. Read off the shape of the operands instead, {@code String.length(slot.c)
+ * <= 3} is a call against a literal and nothing about it varies — so no way was held, no decision was
+ * named, and the arm behind the guard was left with no row and nothing saying why.
+ *
+ * <p>What a row for such an arm needs beside the decision is a value to write, and that is a separate
+ * capability with a separate answer. The last case below is the one where the decision is settled and
+ * the value cannot be written: the combination is asked for and comes back as one nothing composes,
+ * which is what an author can act on. Run together, the way to get there would be to leave the
+ * decision unnamed, which is where this started.
+ */
+class AComparisonOnANumberTakenOfALocationSteersARowTest {
+
+    private static final String TAKEN = """
+            module example.taken
+
+            data Yes
+            data No
+            data Answer = Yes | No
+
+            data Slot = { c: String }
+            data Flag = Off | On
+
+            let base = Slot { c = "abcde" }
+
+            behavior gate : (slot: Slot, a: Flag, b: Flag) -> Answer
+
+            let one (f: Flag): Int =
+                match f with
+                    | Off -> 0
+                    | On -> 1
+
+            let gate (slot, a, b) = {
+                guard String.length(slot.c) <= 3 else No
+                guard one(a) + one(b) >= 2 else No
+                Yes
+            }
+
+            example gate
+                | "wide" : (base, Off, Off) -> No
+            """;
+
+    /** The same body with the number written at the position itself, which is where a row was always
+     *  steered. */
+    private static final String OWN = TAKEN
+            .replace("module example.taken", "module example.own")
+            .replace("data Slot = { c: String }", "data Slot = { n: Int }")
+            .replace("let base = Slot { c = \"abcde\" }", "let base = Slot { n = 5 }")
+            .replace("guard String.length(slot.c) <= 3", "guard slot.n <= 3");
+
+    /** A number a row cannot be written for: no fixture here writes a time by its minute. */
+    private static final String MINUTE = TAKEN
+            .replace("module example.taken", "module example.minute")
+            .replace("data Slot = { c: String }", "data Slot = { at: Time }")
+            .replace("let base = Slot { c = \"abcde\" }", "let base = Slot { at = Time(\"09:00\") }")
+            .replace("guard String.length(slot.c) <= 3", "guard Time.minute(slot.at) >= 30");
+
+    /**
+     * The comparison is a decision the reading names, said of the number it is about.
+     *
+     * <p>The first thing the arms below stand on: a way in that names no decision steers no row, so
+     * this is what would be missing if the comparison were read off its operands' shapes.
+     */
+    @Test
+    void aComparisonOnATakenNumberIsADecisionTheReadingNames() {
+        List<Condition.Side> sides = sidesIn(TAKEN);
+
+        assertEquals(List.of("String.length(slot.c)"),
+                sides.stream().map(each -> each.at().toString()).distinct().toList(),
+                "the number the comparison is about, and the decision is said of it");
+        assertEquals(2, sides.size(), "both ways of it: the guard holds, and the guard fails");
+    }
+
+    /** And a row is offered for an arm behind it, the way one is where the number stands at the
+     *  position. */
+    @Test
+    void aRowIsOfferedForAnArmBehindSuchAComparison() {
+        assertFalse(armsAnsweredIn(TAKEN).isEmpty(),
+                "the arms behind the guard are answered by rows");
+        assertEquals(armsAnsweredIn(OWN), armsAnsweredIn(TAKEN),
+                "the same body reading a number of the position answers the same arms");
+    }
+
+    /**
+     * A number nothing writes a value for is narrowed all the same, and what is missing is said.
+     *
+     * <p>Both halves. The combination asked for settles the guard's number together with the flags
+     * the second guard reads, which is a cell and so a decision the reading named; and what comes
+     * back is that nothing composes a value for it, which is the generator's answer about writing a
+     * time by its minute. Asked of the minute's class alone, this would pass on the class search,
+     * which reaches that class whether or not the comparison was ever a decision.
+     */
+    @Test
+    void aNumberNothingComposesAValueForIsStillNarrowed() {
+        Adequacy.Filling filling = generated(MINUTE);
+
+        List<Generator.UnresolvedCombination> cells = filling.composed().unresolved().stream()
+                .filter(each -> each.classes().stream()
+                                .anyMatch(cls -> cls.contains("30 <= x <= 59"))
+                        && each.classes().stream().anyMatch(cls -> cls.startsWith("a=")))
+                .toList();
+
+        assertFalse(cells.isEmpty(),
+                () -> "the guard's number is settled beside the flags: "
+                        + filling.composed().unresolved());
+        assertTrue(cells.stream().allMatch(each -> each.reason()
+                        == Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                () -> "and what is short is the value, not the decision: " + cells);
+    }
+
+    /**
+     * A rule over a number no one position answers is no decision of any position, as before.
+     *
+     * <p>The other side of what admission is now asked of. {@code Date.daysBetween} is a number of
+     * two locations, so no position holds the value it varies over and no class of one is what a row
+     * would be steered to. Nothing here widened that: what a comparison is about is the same reading
+     * it always was, and this is the case where that reading answers with nothing.
+     */
+    @Test
+    void aRuleOverANumberNoOnePositionAnswersIsNoDecision() {
+        String spread = """
+                module example.spread
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                data Slot = { from: Date, to: Date }
+
+                behavior gate : (slot: Slot) -> Answer
+                let gate (slot) = {
+                    guard Date.daysBetween(slot.from, slot.to) >= 3 else No
+                    Yes
+                }
+                """;
+
+        assertEquals(List.of(), sidesOn(spread, "Date.daysBetween"),
+                "no position answers the number, so no decision is said of one");
+    }
+
+    /** Which arms rows were offered for, by the number the plan gave each. */
+    private static List<Integer> armsAnsweredIn(String source) {
+        return generated(source).composed().rows().stream()
+                .flatMap(row -> row.purposes().stream())
+                .filter(Generator.Purpose.ForAnArm.class::isInstance)
+                .map(each -> ((Generator.Purpose.ForAnArm) each).probe())
+                .sorted().toList();
+    }
+
+    private static Adequacy.Filling generated(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, Adequacy.Filling> all =
+                Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
+        assertNotNull(all, "the model under test compiles");
+        Adequacy.Filling filling = all.get("gate");
+        assertNotNull(filling, "the behavior under test is generated for");
+        return filling;
+    }
+
+    /** The comparisons the reading named on a number spelled {@code about}, over every way in to
+     *  every arm. */
+    private static List<Condition.Side> sidesIn(String source) {
+        return sidesOn(source, "String.length");
+    }
+
+    private static List<Condition.Side> sidesOn(String source, String about) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        assertNotNull(checked, "the model under test compiles");
+        Core body = checked.behaviorBodies().get("gate");
+        assertNotNull(body, "the behavior under test has a body");
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate");
+        CoverageRead.Read read = CoverageRead.of("gate", body,
+                CoverageSites.of(checked.behaviorBodies(), checked.decisions(), checked.supplied()),
+                inputs, symbols);
+        return read.arms().values().stream()
+                .filter(PathAccess.Ways.class::isInstance)
+                .flatMap(access -> ((PathAccess.Ways) access).ways().stream())
+                .flatMap(way -> way.decisions().stream())
+                .map(Decision::constrains)
+                .filter(Condition.Side.class::isInstance)
+                .map(Condition.Side.class::cast)
+                .filter(side -> side.at().toString().startsWith(about))
+                .distinct().toList();
+    }
+
+    /** What a row for such an arm is written as, which is the value the class asks for. */
+    @Test
+    void theRowOfferedForTheArmHoldsAValueTheGuardAdmits() {
+        List<String> rows = generated(TAKEN).composed().rows().stream()
+                .filter(row -> row.purposes().stream()
+                        .anyMatch(Generator.Purpose.ForAnArm.class::isInstance))
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList();
+
+        assertFalse(rows.isEmpty(), "an arm behind the guard is offered a row");
+        assertTrue(rows.stream().allMatch(row -> row.contains("c = \"\"")),
+                () -> "each holds a string the guard lets through: " + rows);
+    }
+}

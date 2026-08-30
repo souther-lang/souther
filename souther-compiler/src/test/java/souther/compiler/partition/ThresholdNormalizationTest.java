@@ -11,7 +11,6 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -343,10 +342,10 @@ class ThresholdNormalizationTest {
 
         Axis level = axis(read.partitioning(), "level");
         Cut at20 = level.cuts().stream()
-                .filter(c -> new ObservedValue.Integer(20).equals(c.value())).findFirst()
+                .filter(c -> c.at().sameAs(Count.of(20L))).findFirst()
                 .orElseThrow();
         Cut at10 = level.cuts().stream()
-                .filter(c -> new ObservedValue.Integer(10).equals(c.value())).findFirst()
+                .filter(c -> c.at().sameAs(Count.of(10L))).findFirst()
                 .orElseThrow();
 
         assertEquals(1, at10.origins().size(), "the declaration's own end");
@@ -387,7 +386,7 @@ class ThresholdNormalizationTest {
 
         Axis level = axis(read.partitioning(), "level");
         Cut at10 = level.cuts().stream()
-                .filter(c -> new ObservedValue.Integer(10).equals(c.value())).findFirst()
+                .filter(c -> c.at().sameAs(Count.of(10L))).findFirst()
                 .orElseThrow();
 
         assertEquals(2, at10.origins().size(),
