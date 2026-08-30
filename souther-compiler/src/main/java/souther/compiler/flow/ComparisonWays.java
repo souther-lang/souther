@@ -33,6 +33,19 @@ public interface ComparisonWays {
     boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy);
 
     /**
+     * The same, inside a body that binds {@code binder} to {@code value}.
+     *
+     * <p>Scoped like the naming and for the same reason: what a name reads is not a fact about the
+     * node that reads it. A comparison written under {@code let len = String.length(c)} is about the
+     * length, and a reading that stayed outside the binding would find no number named there —
+     * leaving the way unheld under a binding and held without one, which is a {@code let} changing
+     * what the body does.
+     */
+    default ComparisonWays under(Core.Binder binder, Core value) {
+        return this;
+    }
+
+    /**
      * What the body's own text says, for a reading with no input to ask about.
      *
      * <p>Under-reading: what it is sure of is the primitives' ranges, and a way it cannot place a

@@ -2,16 +2,20 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
+import souther.compiler.types.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -90,12 +94,36 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
      */
     @Test
     void aComparisonOnATakenNumberIsADecisionTheReadingNames() {
-        List<Condition.Side> sides = sidesIn(TAKEN);
+        Read read = read(TAKEN);
+        List<Condition.Side> sides = read.sides();
 
-        assertEquals(List.of("String.length(slot.c)"),
-                sides.stream().map(each -> each.at().toString()).distinct().toList(),
+        assertEquals(List.of(read.lengthOf("slot", "c")),
+                sides.stream().map(Condition.Side::at).distinct().toList(),
                 "the number the comparison is about, and the decision is said of it");
         assertEquals(2, sides.size(), "both ways of it: the guard holds, and the guard fails");
+    }
+
+    /**
+     * The same decision where the location is reached through a name the body bound.
+     *
+     * <p>What a name reads is not a fact about the node that reads it, so the reading admitting the
+     * comparison is scoped like the one naming it: inside {@code let s = slot.c} the length of
+     * {@code s} is the length of {@code slot.c}, and a reading that stayed outside the binding finds
+     * no number named there. Held to the body's root, this comparison went unheld while the same one
+     * written without the binding was held — a {@code let} changing what the body does.
+     */
+    @Test
+    void aNumberReachedThroughABindingIsTheSameDecision() {
+        String bound = TAKEN
+                .replace("module example.taken", "module example.bound")
+                .replace("    guard String.length(slot.c) <= 3 else No", """
+                            let s = slot.c
+                            guard String.length(s) <= 3 else No""");
+        Read read = read(bound);
+
+        assertEquals(List.of(read.lengthOf("slot", "c")),
+                read.sides().stream().map(Condition.Side::at).distinct().toList(),
+                "the number is the location's, whichever name the body reached it through");
     }
 
     /** And a row is offered for an arm behind it, the way one is where the number stands at the
@@ -161,7 +189,7 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
                 }
                 """;
 
-        assertEquals(List.of(), sidesOn(spread, "Date.daysBetween"),
+        assertEquals(List.of(), read(spread).sides(),
                 "no position answers the number, so no decision is said of one");
     }
 
@@ -186,13 +214,32 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         return filling;
     }
 
-    /** The comparisons the reading named on a number spelled {@code about}, over every way in to
-     *  every arm. */
-    private static List<Condition.Side> sidesIn(String source) {
-        return sidesOn(source, "String.length");
+    /** One model read, with the symbols a term named here is built against. */
+    private record Read(CoverageRead.Read read, Symbols symbols) {
+
+        /** Every comparison the reading named, over every way in to every arm. */
+        List<Condition.Side> sides() {
+            return read.arms().values().stream()
+                    .filter(PathAccess.Ways.class::isInstance)
+                    .flatMap(access -> ((PathAccess.Ways) access).ways().stream())
+                    .flatMap(way -> way.decisions().stream())
+                    .map(Decision::constrains)
+                    .filter(Condition.Side.class::isInstance)
+                    .map(Condition.Side.class::cast)
+                    .distinct().toList();
+        }
+
+        /** The number a string's length is, built here rather than matched by how it is written. */
+        NumericTerm lengthOf(String parameter, String field) {
+            NumericTerm.TakenOf taken = NumericTerm.TakenOf.of(
+                    NumericMeasures.takenOf(Type.STRING, symbols),
+                    TermPath.of(parameter).then(field), Type.STRING, symbols);
+            assertNotNull(taken, "the length of a string is a number this compiler names");
+            return taken;
+        }
     }
 
-    private static List<Condition.Side> sidesOn(String source, String about) {
+    private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -202,18 +249,9 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         assertNotNull(body, "the behavior under test has a body");
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate");
-        CoverageRead.Read read = CoverageRead.of("gate", body,
+        return new Read(CoverageRead.of("gate", body,
                 CoverageSites.of(checked.behaviorBodies(), checked.decisions(), checked.supplied()),
-                inputs, symbols);
-        return read.arms().values().stream()
-                .filter(PathAccess.Ways.class::isInstance)
-                .flatMap(access -> ((PathAccess.Ways) access).ways().stream())
-                .flatMap(way -> way.decisions().stream())
-                .map(Decision::constrains)
-                .filter(Condition.Side.class::isInstance)
-                .map(Condition.Side.class::cast)
-                .filter(side -> side.at().toString().startsWith(about))
-                .distinct().toList();
+                inputs, symbols), symbols);
     }
 
     /** What a row for such an arm is written as, which is the value the class asks for. */

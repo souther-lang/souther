@@ -212,10 +212,8 @@ class PartitionsTest {
                 let classify (s) = Ok { at = "x" }
                 """, "classify");
 
-        assertEquals(List.of(Count.of(java.math.BigDecimal.ZERO).canonical(),
-                        Count.of(java.math.BigDecimal.ONE).canonical()),
-                axis(share, "s").cuts().stream().map(Cut::at)
-                        .map(souther.compiler.numeric.Place::canonical).toList(),
+        assertEquals(List.of(Count.of(java.math.BigDecimal.ZERO), Count.of(java.math.BigDecimal.ONE)),
+                axis(share, "s").cuts().stream().map(Cut::at).toList(),
                 "how many places a literal was written to is not where the line is");
     }
 

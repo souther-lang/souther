@@ -44,6 +44,11 @@ final class NumberWays implements ComparisonWays {
     }
 
     @Override
+    public ComparisonWays under(Core.Binder binder, Core value) {
+        return new NumberWays(reads.and(binder, value), symbols, quantities);
+    }
+
+    @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
         ComparedNumber drawn = e instanceof Core.Binary comparison
                 ? ComparedNumber.asWritten(comparison, reads, symbols) : null;
