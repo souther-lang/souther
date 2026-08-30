@@ -100,6 +100,11 @@ public sealed interface BorderQuantity {
         }
 
         @Override
+        public String behavior() {
+            return axis.behavior();
+        }
+
+        @Override
         public String named() {
             return axis.toString();
         }
@@ -665,8 +670,18 @@ public sealed interface BorderQuantity {
     /** What a search has to solve to put a row at one item. */
     Standing standingAt(Criterion where);
 
+    /**
+     * Which behavior's input this quantity is of.
+     *
+     * <p>Every quantity is some behavior's: a coordinate is a position of one, and a distance or a
+     * form is over positions of one. Asked here so that a reading of a line has one answer to which
+     * behavior read it, rather than a second copy of this beside the target that nothing checks
+     * agrees with it.
+     */
+    String behavior();
+
     /** The left of the {@code left = right} a report names a border on this by, qualified by the
-     *  behavior it is an input of. */
+     *  behavior it is an input of ({@link #behavior}). */
     String named();
 
     /** The same, as the bare term a generated row is labelled with. */

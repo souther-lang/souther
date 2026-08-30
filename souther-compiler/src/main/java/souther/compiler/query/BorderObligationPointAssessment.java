@@ -73,17 +73,26 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * and this cannot come apart: they are one equivalence written once, rather than two that agree
      * while every quantity has one position.
      */
-    public record Reading(String behavior, souther.compiler.partition.BoundaryTarget target) {
+    public record Reading(souther.compiler.partition.BoundaryTarget target) {
 
         public Reading {
-            if (behavior == null || target == null) {
-                throw new IllegalArgumentException("a reading is some behavior's, somewhere in it");
+            if (target == null) {
+                throw new IllegalArgumentException("a reading is of some line, somewhere");
             }
         }
 
-        /** The reading a behavior made where it met {@code line}. */
-        public static Reading of(String behavior, souther.compiler.partition.Border line) {
-            return new Reading(behavior, line.cut());
+        /** The reading made where {@code line} was met. */
+        public static Reading of(souther.compiler.partition.Border line) {
+            return new Reading(line.cut());
+        }
+
+        /**
+         * Which behavior read it. The target's answer and not a second field: a quantity is some
+         * behavior's input, so a reading holding the behavior beside it would hold one fact twice
+         * and check nowhere that the two agree.
+         */
+        public String behavior() {
+            return target.behavior();
         }
 
         /**
@@ -93,7 +102,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
          */
         @Override
         public String toString() {
-            return behavior + "/" + target.label();
+            return behavior() + "/" + target.label();
         }
     }
 
@@ -144,7 +153,14 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 new LinkedHashMap<>();
         byBehavior.forEach((behavior, readings) -> {
             for (BorderAssessment reading : readings) {
-                Reading where = Reading.of(behavior, reading.border());
+                Reading where = Reading.of(reading.border());
+                // The map's key and the line's own answer are one fact said twice, so they are
+                // held to each other: a line filed under a behavior it is not an input of would
+                // otherwise be carried by that behavior's account under the other's name.
+                if (!where.behavior().equals(behavior)) {
+                    throw new IllegalStateException("a line of " + where.behavior()
+                            + " handed in as " + behavior + "'s: " + where);
+                }
                 // Every arm answered, for the reason the readings are: a point whose arm nothing
                 // names is a point gathered nowhere, and everything downstream would go on
                 // compiling.

@@ -152,8 +152,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void twoReadingsInOneBehaviorAreTwoReadings() {
-        Reading first = new Reading("one", aLineAt("one", "x.a"));
-        Reading second = new Reading("one", aLineAt("one", "x.b"));
+        Reading first = new Reading(aLineAt("one", "x.a"));
+        Reading second = new Reading(aLineAt("one", "x.b"));
         SearchCoverage coverage = coverageOf(Map.of(
                         first, new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
                         second, new SearchCoverage.ReadingSearch.Attempted(refused())),
@@ -266,7 +266,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** A reading of the line: one behavior at its one position carrying the type. */
     private static Reading at(String behavior) {
-        return new Reading(behavior, aLineAt(behavior, behavior + ".value"));
+        return new Reading(aLineAt(behavior, behavior + ".value"));
     }
 
     /** Where a line was read: one position of one behavior, cut at one value. */

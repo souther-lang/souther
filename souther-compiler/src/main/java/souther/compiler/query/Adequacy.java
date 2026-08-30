@@ -3077,8 +3077,8 @@ public final class Adequacy {
                             // met the line, the answer would be one reading's — and a point read at
                             // two positions has as many of those as it has readings.
                             case About.APointOfABorder(var point) -> account.outcomeAtTheReading(
-                                    point.owed(), BorderObligationPointAssessment.Reading.of(
-                                            spec.name(), point.line()));
+                                    point.owed(),
+                                    BorderObligationPointAssessment.Reading.of(point.line()));
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                                     atCase(input, missing, composed, spec);
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
