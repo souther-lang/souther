@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.classfile.Attributes;
 import java.lang.classfile.AttributedElement;
+import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.FieldModel;
@@ -19,6 +19,7 @@ import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
 import java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.classfile.constantpool.ClassEntry;
+import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.MethodTypeEntry;
 import java.lang.classfile.constantpool.NameAndTypeEntry;
 import java.lang.classfile.constantpool.PoolEntry;
@@ -48,12 +49,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * every step and each reader asks whichever copy it is holding, which is how a reader comes to take
  * an answer off a value that is only carrying it.
  *
- * <p><b>Which values those are is worked out and not listed.</b> A value that walks a tree is
- * {@link InputReads} and anything that keeps one — {@link Denotation} keeps one so a value can say
- * what it was read in, and so do the records a reader files a comparison under. Written as a list,
- * this checked the two types that had just been edited and passed while a third kept both, which is
- * the defect it exists to find. So the subject is every class of this compiler whose fields hold an
- * environment, and the list below only says the walk found the ones already known.
+ * <p><b>Two prohibitions, because there are two ways to be walk state.</b> A value is walk state by
+ * being the environment, and a value is walk state by moving one along as it goes. What is neither
+ * — a value that keeps an environment to say where something was read, and does not move it — is
+ * not forbidden anything here: holding a reading beside the place a fact came from is an ordinary
+ * thing for an answer to do, and this is about what a walk carries rather than about what an answer
+ * records.
+ *
+ * <p>Which is why the second subject is worked out from moving and not from holding. Keeping an
+ * environment is what an answer and a cursor have in common, so a check on that would forbid a
+ * shape it was never about.
  *
  * <p><b>What counts as naming a type is a role and not an entry.</b> A class file spells a type in a
  * class reference, a field or method descriptor, a generic signature, a method type, the type of a
@@ -71,57 +76,83 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
     private static final String ENVIRONMENT = "souther/compiler/inputs/InputReads";
     private static final String READING = "souther/compiler/inputs/InputDomain";
 
-    /** The environment itself, which holds no environment of its own to be found by. */
-    private static final String ROOT = ENVIRONMENT;
-
+    /** What a name in a tree stands for, which is where the two were held together. */
     @Test
-    void noValueThatWalksATreeNamesTheReading() throws IOException, URISyntaxException {
+    void theEnvironmentNamesTheReadingNowhere() throws IOException {
+        assertEquals(Set.of(), mentionsIn(InputReads.class));
+    }
+
+    /** And the value an environment travels with, which would be the reading one step further
+     *  out. */
+    @Test
+    void andNeitherDoesTheValueAnEnvironmentTravelsWith() throws IOException {
+        assertEquals(Set.of(), mentionsIn(Denotation.class));
+    }
+
+    /**
+     * And nothing that moves an environment along as it walks owns a reading.
+     *
+     * <p>The other way of being walk state. Such a value is at a program point the way the
+     * environment is, so a reading kept in it is copied into every step and asked of whichever copy
+     * a reader is holding — which is the same defect as the one above, one container out.
+     */
+    @Test
+    void andNothingThatMovesOneAlongOwnsAReading() throws IOException, URISyntaxException {
         Map<String, Set<String>> named = new LinkedHashMap<>();
         for (ClassModel each : compiled()) {
-            String name = each.thisClass().asInternalName();
-            if (!name.equals(ROOT) && !holdsAnEnvironment(each)) {
+            if (!movesAnEnvironmentAlong(each)) {
                 continue;
             }
-            Set<String> mentions = namesOfTypesIn(each).stream()
-                    .filter(spelling -> spelling.contains(READING))
-                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            Set<String> mentions = new LinkedHashSet<>();
+            for (String spelling : namesOfTypesIn(each)) {
+                if (spelling.contains(READING)) {
+                    mentions.add(spelling);
+                }
+            }
             if (!mentions.isEmpty()) {
-                named.put(name, mentions);
+                named.put(each.thisClass().asInternalName(), mentions);
             }
         }
         assertEquals(Map.of(), named);
     }
 
     /**
-     * And the subject is the values that walk a tree, which is what makes the emptiness above mean
-     * anything.
+     * And moving one is what that subject is, which is what keeps it off the values that only keep
+     * an environment.
      *
-     * <p>Both halves. A walk that found none of them would report every class clean; one that found
-     * only what was named here would be the list this exists not to be.
+     * <p>Both sides. A walk that found nothing to check would report every class clean, and one
+     * that took keeping for moving would be forbidding an answer to hold what it is an answer
+     * about.
      */
     @Test
-    void andTheSubjectIsEveryValueThatKeepsAnEnvironment() throws IOException, URISyntaxException {
-        List<String> found = new ArrayList<>();
+    void andMovingAnEnvironmentIsWhatTellsWalkStateFromAnAnswer()
+            throws IOException, URISyntaxException {
+        List<String> moves = new ArrayList<>();
+        List<String> keeps = new ArrayList<>();
         for (ClassModel each : compiled()) {
-            if (holdsAnEnvironment(each)) {
-                found.add(each.thisClass().asInternalName());
+            if (!keepsAnEnvironment(each)) {
+                continue;
             }
+            (movesAnEnvironmentAlong(each) ? moves : keeps)
+                    .add(each.thisClass().asInternalName());
         }
-        assertTrue(found.containsAll(List.of(
+        assertEquals(List.of(
+                        "souther/compiler/reading/CoverageNaming",
+                        "souther/compiler/reading/NumberWays"),
+                moves.stream().sorted().toList());
+        assertTrue(keeps.containsAll(List.of(
                         "souther/compiler/inputs/Denotation",
                         "souther/compiler/inputs/ComparedNumbers$Read",
                         "souther/compiler/partition/AffineReading$OfAComparison$Stopped",
                         "souther/compiler/partition/ComparisonReadings$Reading",
-                        "souther/compiler/partition/Condition$Compares",
-                        "souther/compiler/reading/CoverageNaming",
-                        "souther/compiler/reading/NumberWays")),
-                () -> "the walk reaches the values known to keep an environment, and found " + found);
+                        "souther/compiler/partition/Condition$Compares")),
+                () -> "what records where something was read is not walk state, and found " + keeps);
     }
 
     /**
      * And each way a class file spells a type is one the walk reads.
      *
-     * <p>The check above passes on the empty set, which is also what a walk that read nothing
+     * <p>The checks above pass on the empty set, which is also what a walk that read nothing
      * produces. So each role is put through it on a class that names the reading that way.
      *
      * <p>The last of them is where subtracting by entry went wrong: a field of the reading's type
@@ -180,11 +211,33 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
         return out;
     }
 
-    /** Whether {@code of} keeps an environment, which is what makes it walk a tree. */
-    private static boolean holdsAnEnvironment(ClassModel of) {
+    /** Whether {@code of} keeps an environment, which an answer and a cursor both do. */
+    private static boolean keepsAnEnvironment(ClassModel of) {
         for (FieldModel field : of.fields()) {
             if (field.fieldType().stringValue().equals("L" + ENVIRONMENT + ";")
                     || signatureOf(field).contains(ENVIRONMENT)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code of} moves an environment along as it goes, which is what makes it walk state.
+     *
+     * <p>It keeps one and it asks one for the environment inside a binding or inside an arm, which
+     * are the two things that change what a name stands for. A value that keeps one and asks it
+     * neither is standing where it was made and is an answer about that place.
+     */
+    private static boolean movesAnEnvironmentAlong(ClassModel of) {
+        if (!keepsAnEnvironment(of)) {
+            return false;
+        }
+        for (PoolEntry entry : of.constantPool()) {
+            if (entry instanceof MemberRefEntry member
+                    && member.owner().asInternalName().equals(ENVIRONMENT)
+                    && (member.name().stringValue().equals("and")
+                            || member.name().stringValue().equals("insideArm"))) {
                 return true;
             }
         }
@@ -275,8 +328,7 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
 
     /** Every class this compiler was built into, found from where one of them is loaded from. */
     private static List<ClassModel> compiled() throws IOException, URISyntaxException {
-        Path from = Path.of(InputReads.class.getResource("InputReads.class").toURI());
-        Path root = from;
+        Path root = Path.of(InputReads.class.getResource("InputReads.class").toURI());
         for (int up = 0; up <= ENVIRONMENT.chars().filter(each -> each == '/').count(); up++) {
             root = root.getParent();
         }
