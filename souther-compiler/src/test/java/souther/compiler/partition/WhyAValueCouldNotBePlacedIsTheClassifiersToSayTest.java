@@ -113,7 +113,23 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 read.row().stage(), read.row().disposition(), read.row().failurePhase(),
                 read.row().expectedArm(), read.row().resultArm(), read.row().inputCases(),
                 List.of(new ObservedValue.Constructed(request.type(), fields)),
-                read.row().statement(), read.row().run());
+                statingTheSame(read.row(),
+                        List.of(new ObservedValue.Constructed(request.type(), fields))),
+                read.row().run());
+    }
+
+    /**
+     * What a row with {@code inputs} states, which is not always what the row it came from stated.
+     *
+     * <p>A row whose input the observation stopped in states no values — it states that one of them
+     * could not be carried — so a fixture that changed the values while keeping what the original
+     * stated would be a row saying two different things about what it handed over.
+     */
+    private static souther.compiler.observe.RowStatement statingTheSame(RowOutcome row,
+                                                                        List<ObservedValue> inputs) {
+        return row.statement() instanceof souther.compiler.observe.RowStatement.Stated stated
+                ? souther.compiler.observe.RowStatement.of(inputs, stated.expects())
+                : row.statement();
     }
 
     /** The newtype the row wrote at {@code cost}, holding {@code inner} where its number was. */

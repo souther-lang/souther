@@ -168,7 +168,13 @@ class InputClassificationsTest {
         RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.identity(), row.stage(),
                 row.disposition(), row.failurePhase(), row.expectedArm(), row.resultArm(),
                 row.inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), broken)), row.statement(),
+                List.of(new ObservedValue.Constructed(request.type(), broken)),
+                // A row whose input the observation stopped in states no values, which is what the
+                // one place that decides answers for these. Kept as the row's own, the fixture
+                // would say two different things about what it handed over.
+                souther.compiler.observe.RowStatement.of(
+                        List.of(new ObservedValue.Constructed(request.type(), broken)),
+                        ((souther.compiler.observe.RowStatement.Stated) row.statement()).expects()),
                 row.run());
 
         Map<AxisId, Classification> classes =

@@ -1355,10 +1355,17 @@ public final class ExampleVerifier {
                 // What the row states is read from what the worker published before it was given up
                 // on, which for a row that never got its values read is that this compile did not
                 // come away with them.
+                // The inputs are the ones the statement holds, where the worker got as far as
+                // saying what the row states: it says that only once every input has been read, and
+                // what it holds is a copy taken then. Read off the worker's own list instead, this
+                // row would say it handed over nothing while the statement beside it says what it
+                // handed over.
+                RowStatement stated = evaluation.state.statement;
                 rows.add(new RowOutcome(row.pos(), target.name(),
                         row.identity(), reached.stage(), Disposition.INCOMPLETE,
-                        FailurePhase.TIMEOUT, null, null, List.of(), List.of(),
-                        evaluation.state.statement, ran(reached, new Counting.Unread())));
+                        FailurePhase.TIMEOUT, null, null, List.of(),
+                        stated instanceof RowStatement.Stated values ? values.inputs() : List.of(),
+                        stated, ran(reached, new Counting.Unread())));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The evaluated code stopped itself, having gone through more than it was allowed.

@@ -107,6 +107,15 @@ public record RowOutcome(SourcePos at,
 
     public RowOutcome {
         java.util.Objects.requireNonNull(statement, "a row states something");
+        if (statement instanceof RowStatement.Stated values
+                && !values.inputs().equals(inputs)) {
+            // One fact with two places to be read from, held to being one. A row that states values
+            // states the ones it handed over, and a reader taking them from either side gets the
+            // same values — where a measure reads them here and an output reads them there, two
+            // lists that could differ are two answers about what a row is about.
+            throw new IllegalArgumentException("a row states the values it handed over: " + inputs
+                    + " against " + values.inputs());
+        }
         if (stage.reached(Stage.FIXTURES_VALIDATED)
                 == statement instanceof RowStatement.StoppedBeforeItsValues) {
             // The two are one evaluation read apart, and they are written a line from each other:
