@@ -68,6 +68,11 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "gate")).value();
     }
 
+    /** The same measure, offered another run of classes and another set of lines. */
+    private static Axis carrying(Axis axis, List<PartitionClass> classes, List<Cut> cuts) {
+        return new Axis(axis.id(), axis.term(), axis.type(), classes, cuts);
+    }
+
     private static Axis axisOf(Partitions.Partitioning read, String id) {
         Axis found = read.axes().stream().filter(each -> each.id().toString().equals(id))
                 .findFirst().orElse(null);
@@ -116,7 +121,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Axis truth = axisOf(read, "gate/slot.on");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> count.carrying(truth.classes(), List.of(), List.of()));
+                () -> carrying(count, truth.classes(), List.of()));
 
         assertTrue(refused.getMessage().contains("slot.on")
                         && refused.getMessage().contains("slot.n"),
@@ -134,7 +139,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
                 .toList();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> count.carrying(unstamped, List.of(), List.of()));
+                () -> carrying(count, unstamped, List.of()));
 
         assertTrue(refused.getMessage().contains("no measure"), refused.getMessage());
     }
@@ -147,7 +152,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Axis count = axisOf(read, "gate/slot.n");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> length.carrying(count.classes(), List.of(), List.of()));
+                () -> carrying(length, count.classes(), List.of()));
 
         assertTrue(refused.getMessage().contains("slot.n")
                         && refused.getMessage().contains("String.length(slot.c)"),
@@ -167,7 +172,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Axis truth = axisOf(read, "gate/slot.on");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> length.carrying(truth.classes(), List.of(), List.of()));
+                () -> carrying(length, truth.classes(), List.of()));
 
         assertTrue(refused.getMessage().contains("String.length(slot.c)"), refused.getMessage());
     }
@@ -181,7 +186,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Partitions.Partitioning read = divided();
         Axis truth = axisOf(read, "gate/slot.on");
 
-        Axis again = truth.carrying(truth.classes(), List.of(), List.of());
+        Axis again = carrying(truth, truth.classes(), List.of());
 
         assertEquals(truth.classes(), again.classes());
     }
@@ -233,10 +238,10 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
                 .toList();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> count.carrying(placeless, count.cuts(), List.of()));
+                () -> carrying(count, placeless, count.cuts()));
 
         assertTrue(refused.getMessage().contains("lines"), refused.getMessage());
-        assertEquals(placeless, count.carrying(placeless, List.of(), List.of()).classes(),
+        assertEquals(placeless, carrying(count, placeless, List.of()).classes(),
                 "while with no line to hold, such classes are what a position with no order has");
     }
 

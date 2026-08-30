@@ -122,10 +122,6 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
         this(id, term, type, classes, cuts, List.of(), NarrowedBounds.NOTHING);
     }
 
-    /** The same position, with what a body's rules divided it into and the lines they drew. */
-    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted) {
-        return new Axis(id, term, type, classes, cuts, parted, narrowed);
-    }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
      * read off it. Not what the axis is: two terms can be taken of one location, and {@link #id()}
