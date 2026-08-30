@@ -2,6 +2,8 @@ package souther.compiler.observe;
 
 import souther.compiler.types.TypeSymbol;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +26,12 @@ import java.util.Map;
  * <p>Here rather than beside whatever reads a source text, because what a text stated is a fact
  * about the text and not about the reading: an output outside this compiler is handed one of these
  * for a row it did not read, and holds the same value the compile held.
+ *
+ * <p>Being a record is not being immutable. The parts that hold a collection copy what they are
+ * given, so what a text stated cannot be changed by whoever built it or by whoever was handed it —
+ * which is the same guarantee {@link ObservedValue} gives, and for a sharper reason here: this is
+ * what a comparison is made against, so a value that could be reached into is one whose answer
+ * moves after it was compared.
  */
 public sealed interface Asserted {
 
@@ -33,8 +41,19 @@ public sealed interface Asserted {
      */
     record Value(ObservedValue value) implements Asserted {}
 
-    /** A construction, under the name the text wrote and with the parts it wrote. */
-    record Built(TypeSymbol type, Map<String, Asserted> fields) implements Asserted {}
+    /**
+     * A construction, under the name the text wrote and with the parts it wrote.
+     *
+     * <p>The order the fields were written in is kept, because a comparison reports the first place
+     * two values part and that is the order it walks them in. A copy that did not keep it would
+     * report a different field of the same disagreement between two runs of one compiler.
+     */
+    record Built(TypeSymbol type, Map<String, Asserted> fields) implements Asserted {
+
+        public Built {
+            fields = Collections.unmodifiableMap(new LinkedHashMap<>(fields));
+        }
+    }
 
     /**
      * A sequence, and which sequence the text said it was.
@@ -43,10 +62,20 @@ public sealed interface Asserted {
      * answers for it, which is the one thing a position may answer. {@code Set.fromList([ 1 ])},
      * {@code Set.empty} and a helper answering with a set say it themselves.
      */
-    record Elements(Container stated, List<Asserted> elements) implements Asserted {}
+    record Elements(Container stated, List<Asserted> elements) implements Asserted {
+
+        public Elements {
+            elements = List.copyOf(elements);
+        }
+    }
 
     /** A map's entries, in the order they were written, which is not part of the value. */
-    record Entries(boolean stated, List<Entry> entries) implements Asserted {}
+    record Entries(boolean stated, List<Entry> entries) implements Asserted {
+
+        public Entries {
+            entries = List.copyOf(entries);
+        }
+    }
 
     record Entry(Asserted key, Asserted value) {}
 

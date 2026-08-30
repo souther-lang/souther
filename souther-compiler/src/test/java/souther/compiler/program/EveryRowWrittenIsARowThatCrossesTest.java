@@ -68,6 +68,22 @@ class EveryRowWrittenIsARowThatCrossesTest {
                 | "a long list" : ([ %s ]) -> Count(65)
             """.formatted(sixtyFive());
 
+    /**
+     * The rows of the same behaviors, written where they outgrew the model.
+     *
+     * <p>A behavior's rows are written across its own file and any number of attached files, and
+     * which of them a row is in is a fact about the row rather than something a reader picks
+     * between. A count that read one source would be a count of some of them with nothing in it to
+     * say so.
+     */
+    private static final String BESIDE = """
+            examples for demo
+
+            example billFor
+                | "beside the model" : (Amount(3)) -> Receipt { total = Amount(3) }
+                | (Amount(4)) -> Receipt { total = Amount(4) }
+            """;
+
     private static String sixtyFive() {
         StringBuilder written = new StringBuilder();
         for (int i = 0; i < 65; i++) {
@@ -84,7 +100,18 @@ class EveryRowWrittenIsARowThatCrossesTest {
                 "a row the compile read is a row an output is handed");
     }
 
-    /** And the count is of something, so the comparison above is not two zeroes. */
+    /** And the rows a module writes beside itself are among them. */
+    @Test
+    void andSoIsEveryRowWrittenInAnAttachedFile() {
+        List<String> both = List.of(MODULE, BESIDE);
+
+        assertEquals(written(both), crossed(both),
+                "a row written in an attached file is a row an output is handed");
+        assertEquals(written(List.of(MODULE)) + 2, written(both),
+                "and the attached file's rows are two more than the model's own");
+    }
+
+    /** And the count is of something, so the comparisons above are not two zeroes. */
     @Test
     void andThereAreRowsToCount() {
         assertTrue(written(List.of(MODULE)) >= 4,

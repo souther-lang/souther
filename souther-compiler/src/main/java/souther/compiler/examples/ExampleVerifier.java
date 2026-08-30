@@ -27,7 +27,6 @@ import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.Incompleteness;
@@ -1200,13 +1199,15 @@ public final class ExampleVerifier {
          * What the row states, written once the values it states have been read.
          *
          * <p>Until then, what this compile came away with is nothing: a row it refused before
-         * reading the values, and one whose reading did not finish, both leave it here. Written by
-         * the row's own worker and read after it has finished, as everything but {@link #reached}
-         * is — except that a row given up on is read while the worker still holds it, and what it
-         * says then is what it said before the row began.
+         * reading the values, and one whose reading did not finish, both leave it here. Why is not
+         * said here — the stage, the disposition and the phase beside it are that answer, and this
+         * one says the thing they do not, which is that the row's values are not here.
+         *
+         * <p>Written by the row's own worker and read after it has finished, as everything but
+         * {@link #reached} is — except that a row given up on is read while the worker still holds
+         * it, and what it says then is what it said before the row began.
          */
-        private volatile RowStatement statement = new RowStatement.Incomplete(
-                new RowStatement.Side.TheReading(), Incompleteness.Code.ROW_UNDECIDED);
+        private volatile RowStatement statement = new RowStatement.NotRead();
         /** What this row was seen to do, where the classes it ran were generated to say. Empty
          * otherwise, and empty for a row that did not finish — a snapshot read from a row still
          * running would be some of what it did rather than what it did. */
@@ -1287,23 +1288,11 @@ public final class ExampleVerifier {
             }
             return new RowStatement.RequiresStandIns(dependencies);
         }
-        for (int i = 0; i < inputs.size(); i++) {
-            Incompleteness.Code stopped = Limits.UNBOUNDED.stoppedBy(inputs.get(i));
-            if (stopped != null) {
-                return new RowStatement.Incomplete(new RowStatement.Side.AnInput(i), stopped);
-            }
-        }
-        // What the row states of the answer is read whole, so that the comparison is made against
-        // what was written; whether it may be carried is asked of the limits an input was already
-        // observed under, so that one row's two halves are held to one size.
-        Incompleteness.Code stopped = switch (stated) {
-            case Expectation.TheValue(Asserted value) -> Limits.DEFAULT.stoppedBy(value);
-            // A case is a name. Nothing about it can be too large or fail to be read.
-            case Expectation.TheCase _ -> null;
-        };
-        return stopped != null
-                ? new RowStatement.Incomplete(new RowStatement.Side.TheExpectation(), stopped)
-                : new RowStatement.Stated(inputs, stated);
+        // What a statement of values is, is not decided here: whether these are values a reader can
+        // be given is one question with one answer, and the limits are what that answer is made
+        // under. The row's inputs were observed under the same ones, so its two halves are held to
+        // one size.
+        return RowStatement.of(inputs, stated, Limits.DEFAULT);
     }
 
     /** What the row turned out to be, from the state its worker left. */
@@ -1531,15 +1520,12 @@ public final class ExampleVerifier {
         // Build the expected value before running: a row whose expectation cannot be built states no
         // expectation, and comparing a result against a value nothing built reported a mismatch
         // against an empty expected value — a wrong answer for a row that was right.
-        // What the row states of the answer, at the grain it states it: the value it wrote, or the
-        // case it named and nothing under it.
+        //
+        // At the grain the row states it — the value it wrote, or the case it named and nothing
+        // under it — and read once. What a declaration is held to is read from that grain below
+        // rather than worked out beside it: two readings of which grain a row wrote can disagree,
+        // and then a row is compared as one thing and held to a clause as another.
         Expectation stated;
-        // What the row states of the answer, which is not always the answer. A bare case name
-        // asserts the arm, and whether that is also the answer is decided by whether the name
-        // determines a value: a unit case has one, so a row naming it has written the whole answer
-        // and not a name standing for values it did not write. Where the name determines none, the
-        // row has stated the case and nothing under it, which is weaker evidence and still
-        // evidence.
         Evidence evidence;
         try {
             TypeSymbol only = fixtures.caseOnly(row.expected());
@@ -1547,10 +1533,7 @@ public final class ExampleVerifier {
                     only != null ? null : fixtures.assertedExpected(row.expected(), sig.out());
             stated = only != null ? new Expectation.TheCase(only)
                     : new Expectation.TheValue(expected.asserted());
-            evidence = only == null ? new Evidence.Answer(expected.live())
-                    : symbols.declarations().declaration(only) instanceof Hir.UnitData
-                            ? new Evidence.Answer(fixtures.buildFixture(row.expected(), sig.out()).value())
-                            : new Evidence.Case(only);
+            evidence = evidenceOf(fixtures, stated, expected, row, sig);
         } catch (FixtureException fe) {
             out.add(Diagnostic.at(row.pos())
                     .say(new ExampleMessage.TheExpectedValueCouldNotBeBuilt(target.name(),
@@ -1714,6 +1697,29 @@ public final class ExampleVerifier {
             }
         }
         return result;
+    }
+
+    /**
+     * What the behavior's declaration is held to, read off the grain the row stated at.
+     *
+     * <p>The grain is settled once, where the row's expectation is read, and this takes it as it
+     * stands. What it adds is the one thing a clause needs and a comparison does not: a case that
+     * determines a value is a whole answer, so the value it determines is built and the clause is
+     * run against it — a name standing for values a row did not write is not.
+     *
+     * @param expected the row's own value where it wrote one, which was computed by running the
+     *     module's code and is not asked for again
+     */
+    private Evidence evidenceOf(FixtureReader fixtures, Expectation stated,
+                                FixtureReader.ExpectedValue expected, Hir.ExampleRow row, Sig sig) {
+        return switch (stated) {
+            case Expectation.TheValue _ -> new Evidence.Answer(expected.live());
+            case Expectation.TheCase(TypeSymbol only) ->
+                    symbols.declarations().declaration(only) instanceof Hir.UnitData
+                            ? new Evidence.Answer(
+                                    fixtures.buildFixture(row.expected(), sig.out()).value())
+                            : new Evidence.Case(only);
+        };
     }
 
     /**

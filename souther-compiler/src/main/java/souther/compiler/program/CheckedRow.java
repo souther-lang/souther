@@ -17,38 +17,27 @@ import souther.compiler.observe.Verdict;
  * apply the behavior — and what it can do with it is apply its own emission and ask whether the row
  * holds.
  *
- * <p>Asking is {@link #holds}, and it is asked here rather than answered by the reader. Whether an
- * answer is the value a row states is a question the language settles — a written
- * {@code Set.fromList([1])} at a {@code List} is not the sequence a list is, and two values differ
- * when their types differ as much as when their contents do. An output free to answer it for itself
- * would be a second reading of what a row means, and two outputs of one program would then agree
- * about it only as far as whoever wrote the second one agreed with the first.
- *
- * <p>What it carries to answer that is the question and not the answerer: what this program's
- * declarations say stands inside a value, and where this behavior's answer stands. It holds no
- * program, no module and no declaration of its own — a row is a row of the program it was read
- * from, and it is that program's reading of the declarations that it asks.
+ * <p>Asking is {@link Reproducible#holds}, and it is asked of the language rather than answered by
+ * the reader. Whether an answer is the value a row states is a decision the language makes — a
+ * written {@code Set.fromList([1])} at a {@code List} is not the sequence a list is, and two values
+ * differ when their types differ as much as when their contents do. An output free to answer it for
+ * itself would be a second reading of what a row means, and two outputs of one program would then
+ * agree about it only as far as whoever wrote the second one agreed with the first.
  */
 public final class CheckedRow {
 
     private final RowIdentity identity;
     private final SourcePos at;
-    private final RowStatement statement;
-    private final ValueTypes types;
-    private final Position answers;
+    private final Statement statement;
 
-    CheckedRow(RowIdentity identity, SourcePos at, RowStatement statement, ValueTypes types,
-               Position answers) {
-        if (identity == null || at == null || statement == null || types == null
-                || answers == null) {
+    CheckedRow(RowIdentity identity, SourcePos at, Statement statement) {
+        if (identity == null || at == null || statement == null) {
             throw new IllegalArgumentException("a row is what it names itself, where it is written,"
-                    + " what it states, and what reads the values it is about");
+                    + " and what it states");
         }
         this.identity = identity;
         this.at = at;
         this.statement = statement;
-        this.types = types;
-        this.answers = answers;
     }
 
     /**
@@ -68,27 +57,89 @@ public final class CheckedRow {
         return at;
     }
 
-    /** What the row states, which is not always values ({@link RowStatement}). */
-    public RowStatement statement() {
+    /** What the row states, and whether an answer can be held against it. */
+    public Statement statement() {
         return statement;
     }
 
     /**
-     * Whether {@code answered} is what this row states the behavior answers.
+     * What a row states, as a reader of a checked program may act on it.
      *
-     * @throws IllegalStateException where the row states no values to hold an answer to. What it
-     *     states says so in advance ({@link #statement()}), so a reader that asked without looking
-     *     is told rather than given a verdict about a row that made no claim about a value
+     * <p>Two arms, because there are two things a reader can do. A row that hands over values can be
+     * asked whether an answer keeps it; one that does not says why, and there is nothing to ask.
+     * Said as arms rather than as a question that refuses to be asked, so that a reader which never
+     * looked cannot get a verdict about a row that stated no values — the type is what stops it,
+     * rather than a rule it has to have read.
      */
-    public Verdict holds(ObservedValue answered) {
-        if (!(statement instanceof RowStatement.Stated stated)) {
-            throw new IllegalStateException("this row states no values to hold an answer to: "
-                    + statement);
+    public sealed interface Statement {
+
+        /** What the row states, whichever of the two this is. */
+        RowStatement states();
+    }
+
+    /**
+     * A row an output can put to its own emission: the inputs it hands over, and what it states of
+     * the answer.
+     *
+     * <p>What it carries to answer {@link #holds} is the question and not an answerer: what this
+     * program's declarations say stands inside a value, and where this behavior's answer stands.
+     * It holds no program, no module and no declaration of its own — a row is a row of the program
+     * it was read from, and it is that program's reading of the declarations that it asks.
+     */
+    public static final class Reproducible implements Statement {
+
+        private final RowStatement.Stated stated;
+        private final ValueTypes types;
+        private final Position answers;
+
+        Reproducible(RowStatement.Stated stated, ValueTypes types, Position answers) {
+            if (stated == null || types == null || answers == null) {
+                throw new IllegalArgumentException("a row that can be asked states values, and is"
+                        + " read with what the declarations say and where its answer stands");
+            }
+            this.stated = stated;
+            this.types = types;
+            this.answers = answers;
         }
-        if (answered == null) {
-            throw new IllegalArgumentException("a row is held against an answer");
+
+        @Override
+        public RowStatement.Stated states() {
+            return stated;
         }
-        return stated.expects().compare(answered, types, answers);
+
+        /** Whether {@code answered} is what this row states the behavior answers. */
+        public Verdict holds(ObservedValue answered) {
+            if (answered == null) {
+                throw new IllegalArgumentException("a row is held against an answer");
+            }
+            return stated.expects().compare(answered, types, answers);
+        }
+
+        @Override
+        public String toString() {
+            return stated.toString();
+        }
+    }
+
+    /**
+     * A row that hands over no values, and what it says instead.
+     *
+     * <p>Here rather than left out. A row an output cannot reproduce is still a row someone wrote,
+     * and one arriving as no row at all would have a reader count a set it never walked as one it
+     * walked and found empty.
+     */
+    public record NotReproducible(RowStatement.NotStated why) implements Statement {
+
+        public NotReproducible {
+            if (why == null) {
+                throw new IllegalArgumentException("a row that states no values says why");
+            }
+        }
+
+        @Override
+        public RowStatement states() {
+            return why;
+        }
     }
 
     @Override

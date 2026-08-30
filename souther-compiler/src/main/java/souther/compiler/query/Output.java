@@ -841,12 +841,28 @@ public final class Output {
         /**
          * What was read, by the behavior each row is of.
          *
+         * <p>A reason belongs to one behavior or to more than one, and the two are kept apart here
+         * rather than merged into each entry. Merged, the same reason is in the answer twice — once
+         * under every behavior it counts against and once as itself — and a reader adding up what
+         * it was told would count a source nobody could evaluate once per behavior in it.
+         *
          * @param everywhere what stopped a reading in a way larger than one behavior, which counts
-         *     against all of them — carried beside the entries as well as in them, so a reader
-         *     asking about a behavior nothing was seen of is told the same thing
+         *     against every behavior of the module, including the ones no entry names
          */
         public record Of(Map<String, ReadRows> byBehavior,
                          List<souther.compiler.observe.Incompleteness> everywhere) {
+
+            /** What counts against {@code behavior}: what stopped a reading of its own rows, and
+             *  what stopped one larger than any behavior. */
+            public List<souther.compiler.observe.Incompleteness> gapsFor(String behavior) {
+                List<souther.compiler.observe.Incompleteness> gaps =
+                        new java.util.ArrayList<>(everywhere);
+                ReadRows its = byBehavior.get(behavior);
+                if (its != null) {
+                    gaps.addAll(its.gaps());
+                }
+                return List.copyOf(gaps);
+            }
 
             public Of {
                 // Ordered, because what is read out of it is read in an order: a module's behaviors
@@ -858,7 +874,13 @@ public final class Output {
             }
         }
 
-        /** One behavior's rows, and what a reading of them went without. */
+        /**
+         * One behavior's rows, and what stopped a reading of that behavior's own.
+         *
+         * <p>Its own, and not everything that counts against it. What stopped a reading of the
+         * whole source is larger than any behavior in it and is said once, beside these; a reader
+         * that wants both asks {@link Of#gapsFor}.
+         */
         public record ReadRows(List<souther.compiler.observe.RowOutcome> rows,
                                List<souther.compiler.observe.Incompleteness> gaps) {
 
@@ -875,7 +897,65 @@ public final class Output {
 
         @Override
         public Answer<Of> compute(Db db) {
-            return Answer.of(Adequacy.rowsRead(db, name));
+            java.util.SequencedSet<SourceId> origins =
+                    db.ask(new Front.ExampleSources(name)).value();
+            if (origins == null) {
+                return Answer.of(new Of(Map.of(), List.of()));
+            }
+            Map<String, List<souther.compiler.observe.RowOutcome>> rows = new LinkedHashMap<>();
+            Map<String, List<souther.compiler.observe.Incompleteness>> stopped =
+                    new LinkedHashMap<>();
+            List<souther.compiler.observe.Incompleteness> everywhere = new ArrayList<>();
+            for (SourceId sourceId : origins) {
+                Examples.Of observed = db.ask(Examples.asked(db, name, sourceId)).value();
+                if (observed == null) {
+                    // The source was not evaluated at all. Which behaviors it wrote rows for is
+                    // exactly what cannot be read, so it counts against every one of them.
+                    everywhere.add(souther.compiler.observe.Incompleteness.ofSource(
+                            souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
+                            sourceId));
+                    continue;
+                }
+                for (souther.compiler.observe.RowOutcome row : observed.rows()) {
+                    rows.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
+                }
+                for (souther.compiler.observe.Incompleteness gap : observed.incompleteness()) {
+                    java.util.Optional<String> one = gap.behavior();
+                    if (one.isPresent()) {
+                        stopped.computeIfAbsent(one.get(), _ -> new ArrayList<>()).add(gap);
+                    } else {
+                        everywhere.add(gap);   // larger than a behavior, so about all of them
+                    }
+                }
+            }
+            // Every behavior of the module, and not only the ones something was seen of. A gap
+            // larger than a behavior counts against all of them, and keying this on what was seen
+            // gave it to exactly the behaviors it was least about: one with no row at all is the
+            // case a source nobody could evaluate matters most for, and it was the one that got
+            // nothing.
+            Set<String> named = new LinkedHashSet<>(rows.keySet());
+            named.addAll(stopped.keySet());
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            if (prepared.present() && prepared.value() != null) {
+                prepared.value().behaviors().forEach(each -> named.add(each.name()));
+            }
+            Map<String, ReadRows> out = new LinkedHashMap<>();
+            for (String behavior : named) {
+                out.put(behavior, new ReadRows(rows.getOrDefault(behavior, List.of()),
+                        stopped.getOrDefault(behavior, List.of())));
+            }
+            return Answer.of(new Of(out, distinct(everywhere)));
+        }
+
+        /** One entry per reason. A module's classes failing to be instrumented is one fact, and
+         * looking for them once per source is not three facts. */
+        private static List<souther.compiler.observe.Incompleteness> distinct(
+                List<souther.compiler.observe.Incompleteness> gaps) {
+            Map<Object, souther.compiler.observe.Incompleteness> byIdentity = new LinkedHashMap<>();
+            for (souther.compiler.observe.Incompleteness gap : gaps) {
+                byIdentity.putIfAbsent(gap.identity(), gap);
+            }
+            return List.copyOf(byIdentity.values());
         }
     }
 

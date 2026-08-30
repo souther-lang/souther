@@ -12,9 +12,12 @@ import java.util.List;
  * the behavior. So what a row states is a fact about the model, and this is that fact taken once —
  * where the row was read — rather than a source text something else would have to read again.
  *
- * <p>Three arms, because a row that cannot be handed over as values must not arrive as no row. A
- * reader given nothing for it would count a row it never saw among the rows it walked and found
- * empty, and report a behavior as having nothing to say about an input someone wrote down.
+ * <p>Two arms, and the second is three. A row hands over values or it does not, which is the one
+ * thing a reader has to know before it can do anything with the row; why it does not is the second
+ * question, and each answer to it has a different owner — what the behavior requires, what a limit
+ * keeps, and how far this compile got. A row that cannot be handed over must not arrive as no row
+ * all the same: a reader given nothing for it would count a row it never saw among the ones it
+ * walked and found nothing wrong with.
  *
  * <p>What it is not: running the row. Nothing here applies anything, and what a reader does with a
  * row it was given is the reader's.
@@ -24,34 +27,64 @@ public sealed interface RowStatement {
     /**
      * The inputs the row hands over and what it states of the answer.
      *
-     * <p>Every value here is whole. A row whose input or expectation could not be held in full is
-     * {@link Incomplete}, never this — so a reader that has one of these has the values the row was
-     * written with and not as much of them as fit.
+     * <p>Every value here is whole and is one these limits keep. Made by {@link #of}, which is what
+     * decides that: a value read whole is not always one a snapshot may carry, and the two
+     * questions answered in two places would be a {@code Stated} that means one thing where it was
+     * built and another where it was read.
+     *
+     * <p>A class and not a record, so that the only way to have one is to have had a row read. Its
+     * canonical constructor would otherwise be as public as it is, and a value nothing read could
+     * be written straight past the reading that decides what a row states.
+     *
+     * <p>A value all the same, and it says so itself. What a query stops work on is whether an
+     * answer equals the one before it, and this rides inside one — so a statement that answered
+     * only for itself would make every compile that read a row look like a compile that changed it.
+     * The parts it is are the parts it is equal by.
      */
-    record Stated(List<ObservedValue> inputs, Expectation expects) implements RowStatement {
+    final class Stated implements RowStatement {
 
-        public Stated {
-            inputs = List.copyOf(inputs);
-            if (expects == null) {
-                throw new IllegalArgumentException("a row states something of the answer");
-            }
-            // Both halves, and whole rather than small enough: how much of a value may be kept
-            // somewhere is a limit's to say and is applied where a statement is made, while what
-            // this refuses is a value that is not all there — which no reader of one could be given
-            // anything true about.
-            for (ObservedValue input : inputs) {
-                if (!Limits.UNBOUNDED.admits(input)) {
-                    throw new IllegalArgumentException("a stated row's values are there in full;"
-                            + " a row holding one that is not is Incomplete");
-                }
-            }
-            if (expects instanceof Expectation.TheValue(Asserted value)
-                    && !Limits.UNBOUNDED.admits(value)) {
-                throw new IllegalArgumentException("a stated row's expectation is there in full;"
-                        + " a row holding one that is not is Incomplete");
-            }
+        private final List<ObservedValue> inputs;
+        private final Expectation expects;
+
+        private Stated(List<ObservedValue> inputs, Expectation expects) {
+            this.inputs = List.copyOf(inputs);
+            this.expects = expects;
+        }
+
+        /** What the row hands the behavior, in the order it takes them. */
+        public List<ObservedValue> inputs() {
+            return inputs;
+        }
+
+        /** What the row states of the answer. */
+        public Expectation expects() {
+            return expects;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Stated it && inputs.equals(it.inputs)
+                    && expects.equals(it.expects);
+        }
+
+        @Override
+        public int hashCode() {
+            return inputs.hashCode() * 31 + expects.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return inputs + " -> " + expects;
         }
     }
+
+    /**
+     * A row that hands over no values, and why.
+     *
+     * <p>Three ways, and a reader that has to tell them apart says so as a {@code switch} over this
+     * rather than as a test for one of them.
+     */
+    sealed interface NotStated extends RowStatement {}
 
     /**
      * The behavior takes something injected, so the row states more than values.
@@ -65,7 +98,7 @@ public sealed interface RowStatement {
      * <p>So the row crosses as itself and says what is missing. Which dependencies those are is what
      * the behavior requires, in the order it takes them.
      */
-    record RequiresStandIns(List<ValueName.Behavior> dependencies) implements RowStatement {
+    record RequiresStandIns(List<ValueName.Behavior> dependencies) implements NotStated {
 
         public RequiresStandIns {
             dependencies = List.copyOf(dependencies);
@@ -77,34 +110,45 @@ public sealed interface RowStatement {
     }
 
     /**
-     * A value the row states could not be held in full, and which one.
+     * A value the row states is not one that could be carried, and which one.
      *
-     * <p>The first thing that stopped the row from being stated, in the order the row is read:
-     * whether anything has to stand in, then the inputs as they were written, then the expectation.
-     * So this says what the statement could not be made of and not everything that is wrong with the
-     * row — a reader meeting one has been told the row states values it cannot be given, not that
-     * everything else about it is fine.
+     * <p>The first such value in the order the row is read: its inputs as they were written, then
+     * the expectation. So this says what stopped the statement being made and not everything that
+     * is wrong with the row.
      */
-    record Incomplete(Side side, Incompleteness.Code why) implements RowStatement {
+    record Incomplete(Side side, Incompleteness.Code why) implements NotStated {
 
         public Incomplete {
-            if (side == null || why == null) {
-                throw new IllegalArgumentException("a row that states no values says what and why");
+            if (side == null) {
+                throw new IllegalArgumentException("a value that could not be carried is one of"
+                        + " the values the row states");
             }
-            // The two are one fact read two ways, so they are held to each other where they are
-            // written: a value stops for a reason a value stops for, and a reading that did not
-            // finish stopped for the one reason a reading stops for. Kept apart, a reader would meet
-            // a value that ran out of time and a reading that was too large to keep.
-            boolean aValue = side instanceof Side.AnInput || side instanceof Side.TheExpectation;
-            boolean stopped = why == Incompleteness.Code.VALUE_TRUNCATED
-                    || why == Incompleteness.Code.VALUE_UNREADABLE;
-            if (aValue != stopped) {
-                throw new IllegalArgumentException(side + " does not stop for " + why);
+            if (why != Incompleteness.Code.VALUE_TRUNCATED
+                    && why != Incompleteness.Code.VALUE_UNREADABLE) {
+                // What is said here is about a value: it was larger than what is kept, or it could
+                // not be read. A reading that did not finish is not about any of the row's values
+                // and is `NotRead`, which says so without a word for a value beside it.
+                throw new IllegalArgumentException(why + " is not something that happens to a value");
             }
         }
     }
 
-    /** What a row states that could not be held. */
+    /**
+     * This compile did not come away with the row's values.
+     *
+     * <p>Carries no reason. How far the evaluation got is what the outcome around this already says
+     * — the stage it reached, how it ended, and where it stopped — and a word for it here would be
+     * that fact restated in a vocabulary that says less: a row refused before its values were read
+     * and a row whose reading ran out of time would be spelled the same, or be spelled apart by a
+     * word about values that neither is about.
+     *
+     * <p>A program the language accepted holds none of these. Every way of reaching one is a way a
+     * compile refuses the program, so what an output is handed never says this — which is what
+     * makes it a state of the compile rather than something about the model.
+     */
+    record NotRead() implements NotStated {}
+
+    /** Which of the values a row states. */
     sealed interface Side {
 
         /** The input at {@code at}, counted from zero, in the order the behavior takes them. */
@@ -119,14 +163,40 @@ public sealed interface RowStatement {
 
         /** What the row states of the answer. */
         record TheExpectation() implements Side {}
+    }
 
-        /**
-         * Not one of the row's values: this compile did not finish reading them.
-         *
-         * <p>A row whose evaluation ran out of time or spent its budget was written and states what
-         * it states; what is missing is the reading of it, and a reader told that one of its values
-         * was too large would have been told something about the model that nobody established.
-         */
-        record TheReading() implements Side {}
+    /**
+     * What a row with these values states, under the limits a reader of it is held to.
+     *
+     * <p>The one place a statement is made of values, so that what {@link Stated} means is decided
+     * once. A value that is not there in full, and one larger than {@code kept} keeps, are both
+     * values a reader cannot be given — the first because nothing here has it, the second because
+     * carrying it would carry a value nobody wrote — and both come back as {@link Incomplete}
+     * saying which and why.
+     *
+     * @param kept how much of a value whoever holds this may carry. Not what the values mean: these
+     *     limits decide whether a value is carried whole, and no value means anything else under
+     *     one set of them than under another
+     */
+    static RowStatement of(List<ObservedValue> inputs, Expectation expects, Limits kept) {
+        if (expects == null) {
+            throw new IllegalArgumentException("a row states something of the answer");
+        }
+        for (int i = 0; i < inputs.size(); i++) {
+            Incompleteness.Code stopped = kept.stoppedBy(inputs.get(i));
+            if (stopped != null) {
+                return new Incomplete(new Side.AnInput(i), stopped);
+            }
+        }
+        // What the row states of the answer is read whole, so that a comparison is made against what
+        // was written; whether it may be carried is asked of the same limits an input is held to, so
+        // that one row's two halves are held to one size.
+        Incompleteness.Code stopped = switch (expects) {
+            case Expectation.TheValue(Asserted value) -> kept.stoppedBy(value);
+            // A case is a name. Nothing about it can be too large or fail to be read.
+            case Expectation.TheCase _ -> null;
+        };
+        return stopped != null ? new Incomplete(new Side.TheExpectation(), stopped)
+                : new Stated(inputs, expects);
     }
 }

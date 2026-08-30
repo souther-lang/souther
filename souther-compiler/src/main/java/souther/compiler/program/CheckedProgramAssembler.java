@@ -17,6 +17,7 @@ import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowStatement;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
@@ -287,10 +288,30 @@ final class CheckedProgramAssembler {
                                            CheckedSignature signature) {
         List<CheckedRow> rows = new ArrayList<>();
         for (RowOutcome row : read) {
-            rows.add(new CheckedRow(row.identity(), row.at(), row.statement(), types,
-                    Position.at(signature.answers())));
+            rows.add(new CheckedRow(row.identity(), row.at(), statementOf(row, types, signature)));
         }
         return rows;
+    }
+
+    /**
+     * What the row states, as a reader of a checked program may act on it.
+     *
+     * <p>A row that stated values is given what asking takes — how a value's parts are read here,
+     * and where this behavior's answer stands — and the reading it is given is this program's. The
+     * one the compile read the text with is not carried: it is a way of reaching this compiler's
+     * answers rather than one of them, and a snapshot holding it would hold the compilation it came
+     * from.
+     *
+     * <p>A switch, so a way of stating a row added later is written down here rather than falling
+     * into whichever arm it happens to reach.
+     */
+    private static CheckedRow.Statement statementOf(RowOutcome row, ValueTypes types,
+                                                    CheckedSignature signature) {
+        return switch (row.statement()) {
+            case RowStatement.Stated stated -> new CheckedRow.Reproducible(stated, types,
+                    Position.at(signature.answers()));
+            case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
+        };
     }
 
     /**

@@ -26,7 +26,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -78,6 +77,11 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         return of.behavior(new ValueName.Behavior(module, name));
     }
 
+    /** A row that hands over values, which is the arm an answer can be held against. */
+    private static CheckedRow.Reproducible reproducible(CheckedRow row) {
+        return assertInstanceOf(CheckedRow.Reproducible.class, row.statement());
+    }
+
     /** Every row a behavior has, in the order they are written. */
     @Test
     void everyRowRecordedForABehaviorCrosses() {
@@ -104,10 +108,9 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         CheckedRow row = behavior(CheckedProgram.of(List.of(MODULE)), "demo", "receiptFor")
                 .rows().get(0);
 
-        RowStatement.Stated stated = assertInstanceOf(RowStatement.Stated.class, row.statement());
         assertEquals(List.of(newtype(NAME, new ObservedValue.Text("ada")),
                         newtype(AMOUNT, new ObservedValue.Integer(3))),
-                stated.inputs());
+                reproducible(row).states().inputs());
     }
 
     /**
@@ -123,9 +126,9 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         CheckedRow row = behavior(CheckedProgram.of(List.of(MODULE)), "demo", "receiptFor")
                 .rows().get(0);
 
-        assertEquals(new Verdict.Held(), row.holds(receipt("ada", 3)));
+        assertEquals(new Verdict.Held(), reproducible(row).holds(receipt("ada", 3)));
 
-        Mismatch differs = notHeld(row.holds(receipt("ada", 4)));
+        Mismatch differs = notHeld(reproducible(row).holds(receipt("ada", 4)));
         assertEquals(Mismatch.Reason.VALUE, differs.reason());
         assertEquals(List.of(new PathElement.Field("total"), new PathElement.Field("value")),
                 differs.path(), "and where inside the two values they part");
@@ -146,7 +149,8 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         fields.put("name", newtype(NAME, new ObservedValue.Text("ada")));
         fields.put("total", new ObservedValue.Integer(3));
 
-        Mismatch differs = notHeld(row.holds(new ObservedValue.Constructed(RECEIPT, fields)));
+        Mismatch differs =
+                notHeld(reproducible(row).holds(new ObservedValue.Constructed(RECEIPT, fields)));
         assertEquals(Mismatch.Reason.TYPE, differs.reason());
         assertEquals(List.of(new PathElement.Field("total")), differs.path());
     }
@@ -162,14 +166,14 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         CheckedRow row = behavior(CheckedProgram.of(List.of(MODULE)), "demo", "receiptFor")
                 .rows().get(1);
 
-        RowStatement.Stated stated = assertInstanceOf(RowStatement.Stated.class, row.statement());
-        assertEquals(new Expectation.TheCase(REFUSED), stated.expects());
+        assertEquals(new Expectation.TheCase(REFUSED), reproducible(row).states().expects());
 
         Map<String, ObservedValue> why = ObservedValue.fields();
         why.put("why", new ObservedValue.Text("anything at all"));
-        assertEquals(new Verdict.Held(), row.holds(new ObservedValue.Constructed(REFUSED, why)));
+        assertEquals(new Verdict.Held(),
+                reproducible(row).holds(new ObservedValue.Constructed(REFUSED, why)));
         assertEquals(Mismatch.Reason.TYPE,
-                notHeld(row.holds(receipt("ada", 3))).reason());
+                notHeld(reproducible(row).holds(receipt("ada", 3))).reason());
     }
 
     /**
@@ -185,7 +189,8 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
                 .rows().get(0);
 
         assertEquals(Mismatch.Reason.UNREADABLE,
-                notHeld(row.holds(new ObservedValue.Unknown("the output could not read it")))
+                notHeld(reproducible(row)
+                        .holds(new ObservedValue.Unknown("the output could not read it")))
                         .reason());
     }
 
@@ -218,11 +223,13 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
                 """));
 
         CheckedRow row = behavior(program, "demo", "priceOf").rows().get(0);
+        // And there is nothing to ask it: what a row states says which of the two it is, and only
+        // the one that hands over values answers whether an answer keeps it.
+        CheckedRow.NotReproducible states =
+                assertInstanceOf(CheckedRow.NotReproducible.class, row.statement());
         assertEquals(new RowStatement.RequiresStandIns(
                         List.of(new ValueName.Behavior("demo", "rateNow"))),
-                row.statement());
-        assertThrows(IllegalStateException.class, () -> row.holds(new ObservedValue.Integer(1)),
-                "a row that states no values has no answer to be held against");
+                states.why());
     }
 
     /**
@@ -253,10 +260,82 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
                 """.formatted(elements)));
 
         CheckedRow row = behavior(program, "demo", "countOf").rows().get(0);
+        CheckedRow.NotReproducible states =
+                assertInstanceOf(CheckedRow.NotReproducible.class, row.statement());
         assertEquals(new RowStatement.Incomplete(new RowStatement.Side.AnInput(0),
                         souther.compiler.observe.Incompleteness.Code.VALUE_TRUNCATED),
-                row.statement(),
+                states.why(),
                 "the row is there, and says which of its values was not kept");
+    }
+
+    /**
+     * What a field holds is read from what declares it, all the way from the program.
+     *
+     * <p>A row writing {@code [ 1, 2 ]} says which elements and not which order they are in, and
+     * what says whether the order is part of the value is the field's declared type. So a
+     * comparison made without the program's declarations would hold an answer to an order nobody
+     * wrote — which is the one thing the reading handed to a row has to carry, end to end.
+     */
+    @Test
+    void andWhatAFieldHoldsIsReadFromWhatThisProgramDeclares() {
+        CheckedProgram program = CheckedProgram.of(List.of("""
+                module demo
+
+                data Tags = { of: Set<Int> }
+
+                behavior tagsOf : (xs: List<Int>) -> Tags constructs Tags
+
+                let tagsOf (xs) = Tags { of = Set.fromList(xs) }
+
+                example tagsOf
+                    | "a set of two" : ([ 1, 2 ]) -> Tags { of = [ 1, 2 ] }
+                """));
+
+        CheckedRow.Reproducible row = reproducible(
+                behavior(program, "demo", "tagsOf").rows().get(0));
+        Map<String, ObservedValue> of = ObservedValue.fields();
+        of.put("of", new ObservedValue.Sequence(List.of(new ObservedValue.Integer(2),
+                new ObservedValue.Integer(1))));
+
+        assertEquals(new Verdict.Held(),
+                row.holds(new ObservedValue.Constructed(declared("Tags"), of)),
+                "the field is declared a set, so the order the answer stands in is not part of it");
+    }
+
+    /**
+     * A row naming a case that carries nothing is held to that case.
+     *
+     * <p>A unit case is a name, and its value is the name. What an answer's case is has to be read
+     * for it as well as for a case with fields under it, or a row naming one would be held to a
+     * case nothing answers with.
+     */
+    @Test
+    void aRowNamingACaseThatCarriesNothingIsHeldToIt() {
+        CheckedProgram program = CheckedProgram.of(List.of("""
+                module demo
+
+                data Missing
+                data Found = { name: String }
+
+                behavior lookUp : (there: Bool) -> Found | Missing constructs Found
+
+                let lookUp (there) = if there then Found { name = "ada" } else Missing
+
+                example lookUp
+                    | "not there" : (false) -> Missing
+                """));
+
+        CheckedRow.Reproducible row = reproducible(
+                behavior(program, "demo", "lookUp").rows().get(0));
+        assertEquals(new Expectation.TheCase(declared("Missing")), row.states().expects());
+        assertEquals(new Verdict.Held(),
+                row.holds(new ObservedValue.Unit(declared("Missing"))));
+
+        Map<String, ObservedValue> found = ObservedValue.fields();
+        found.put("name", new ObservedValue.Text("ada"));
+        assertEquals(Mismatch.Reason.TYPE,
+                notHeld(row.holds(new ObservedValue.Constructed(declared("Found"), found)))
+                        .reason());
     }
 
     /** And a behavior nobody exampled has no rows, which is not the same as one whose rows were
@@ -318,7 +397,7 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
             }
         }
         assertEquals(3, every.size(), () -> "the rows that crossed are " + every);
-        assertTrue(every.stream().anyMatch(row -> row.statement()
+        assertTrue(every.stream().anyMatch(row -> row.statement().states()
                         instanceof RowStatement.RequiresStandIns),
                 "including the one that needs something stood in for");
     }

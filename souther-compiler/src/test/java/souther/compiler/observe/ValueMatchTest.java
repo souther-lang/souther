@@ -102,6 +102,29 @@ class ValueMatchTest {
         return position == null ? Position.UNREAD : Position.at(position);
     }
 
+    /**
+     * What a text stated cannot be changed after it was read.
+     *
+     * <p>What this is compared against is what was written down once, and a value whose parts could
+     * be reached into is one whose answer moves after it was compared — by whoever built it, or by
+     * whoever it was handed to.
+     */
+    @Test
+    void whatWasStatedIsNotChangedByWhoeverHoldsIt() {
+        List<Asserted> given = new java.util.ArrayList<>();
+        given.add(said(n(1)));
+        Asserted.Elements stated = new Asserted.Elements(Asserted.Container.LIST, given);
+        given.add(said(n(2)));
+        assertEquals(1, stated.elements().size(), "a list handed over is copied");
+
+        java.util.Map<String, Asserted> fields = new java.util.LinkedHashMap<>();
+        fields.put("lines", said(n(1)));
+        Asserted.Built built = new Asserted.Built(RECEIPT, fields);
+        fields.put("other", said(n(2)));
+        assertEquals(java.util.Set.of("lines"), built.fields().keySet(),
+                "and so is a construction's parts");
+    }
+
     @Test
     void aListIsItsElementsInOrder() {
         holds(wrote(n(1), n(2)), seq(n(1), n(2)), LIST);
