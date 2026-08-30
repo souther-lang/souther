@@ -154,25 +154,29 @@ public sealed interface Recognition {
     }
 
     /**
-     * The number this meaning is intrinsically about, or null where it is about a value.
+     * Whether a class meaning this can be a class of {@code number}.
      *
      * <p>Not which measure a class of this divides — that is said where the class is built and is
      * never read off a meaning, because a truth means the same thing at every position. What this
-     * answers is narrower: a class about a count carries the number it counts inside its meaning,
-     * and a class said to divide some other number would answer membership about one number while
-     * being owed to another. So this is only ever held against what the class was said to be of.
+     * answers is whether the two are in one vocabulary. A meaning about a count carries the number
+     * it counts, and is a class of that number and of no other. Every other meaning is about the
+     * value standing at the position — a case, a truth, a value the rules named, and the place any
+     * of them was given is on the order that value is written on — so it is a class of the
+     * position's own value and of nothing taken of it. Said to be of a number taken of the
+     * position, such a class would hold a place on one order and be asked about places on another,
+     * which a {@code Place} on its own cannot tell apart.
      *
-     * <p>Exhaustive with no {@code default}: a meaning added later says whether it carries a number.
+     * <p>Exhaustive with no {@code default}: a meaning added later says which vocabulary it is in.
      */
-    default NumericTerm.FromOnePosition numberInside() {
+    default boolean canBeAClassOf(NumericTerm.FromOnePosition number) {
         return switch (this) {
-            case OfACount count -> count.term();
-            case Under under -> under.inner().numberInside();
-            case Truth ignored -> null;
-            case Held ignored -> null;
-            case OfCase ignored -> null;
-            case AtAValue ignored -> null;
-            case Nothing ignored -> null;
+            case OfACount count -> count.term().equals(number);
+            case Under under -> under.inner().canBeAClassOf(number);
+            case Truth ignored -> number instanceof NumericTerm.ValueOf;
+            case Held ignored -> number instanceof NumericTerm.ValueOf;
+            case OfCase ignored -> number instanceof NumericTerm.ValueOf;
+            case AtAValue ignored -> number instanceof NumericTerm.ValueOf;
+            case Nothing ignored -> number instanceof NumericTerm.ValueOf;
         };
     }
 }

@@ -46,12 +46,13 @@ public record PartitionClass(String id, String label, Recognition recognises,
                              souther.compiler.inputs.NumericTerm.FromOnePosition of) {
 
     public PartitionClass {
-        // A meaning that carries a number is a class of that number and of no other. Said to divide
-        // some other one, the class would answer membership about the number inside it while being
-        // owed to the one it was said to be of — the two readers an axis exists to keep together.
-        souther.compiler.inputs.NumericTerm.FromOnePosition inside = recognises.numberInside();
-        if (of != null && inside != null && !inside.equals(of)) {
-            throw new IllegalArgumentException("`" + id + "` is about " + inside
+        // The meaning and the number it is said to be of are in one vocabulary. A meaning about a
+        // count is a class of that count and of no other; a meaning about the value at the position
+        // is a class of the position's own value and of nothing taken of it. Let them differ and the
+        // class answers membership on one order while being owed on another — the two readers an
+        // axis exists to keep together.
+        if (of != null && !recognises.canBeAClassOf(of)) {
+            throw new IllegalArgumentException("`" + id + "` means " + recognises
                     + " and was said to be a class of " + of);
         }
     }

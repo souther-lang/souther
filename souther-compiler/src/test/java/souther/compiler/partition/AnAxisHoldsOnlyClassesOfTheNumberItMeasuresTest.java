@@ -262,6 +262,38 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
     }
 
     /**
+     * A class about the value at a position is not a class of a number taken of it, whatever place
+     * it was given.
+     *
+     * <p>The place a case or a named value carries is on the order the position's value is written
+     * on; a number taken of the position is counted on an order of its own. A {@code Place} does
+     * not say which order it is on, so a class of the first kind said to be of the second would be
+     * asked about lines in a vocabulary it was never in — and answer, where the two orders happen to
+     * count alike.
+     */
+    @Test
+    void aClassAboutTheValueAtAPositionIsNotSaidToBeOfANumberTakenOfIt() {
+        Partitions.Partitioning read = divided();
+        Axis length = axisOf(read, "gate/String.length(slot.c)");
+        PartitionClass named = PartitionClass.of("three", "three",
+                new Recognition.AtAValue(souther.compiler.values.Value.number(
+                        java.math.BigDecimal.valueOf(3)), souther.compiler.numeric.Count.of(3L)),
+                RepresentativeSource.of(FixtureTemplate.integer(3)));
+        PartitionClass ofACase = PartitionClass.of("Won", "Won",
+                new Recognition.OfCase(souther.compiler.types.TypeSymbols.declared(
+                        new souther.compiler.types.TypeKey("example.subject", "Won")),
+                        souther.compiler.numeric.Count.of(3L)),
+                RepresentativeSource.of(FixtureTemplate.integer(3)));
+
+        assertThrows(IllegalArgumentException.class, () -> named.ofTheNumber(length.term()),
+                "a value the rules named is on the position's order");
+        assertThrows(IllegalArgumentException.class, () -> ofACase.ofTheNumber(length.term()),
+                "and so is a case");
+        assertNotNull(named.ofTheNumber(new NumericTerm.ValueOf(TermPath.of("slot").then("n"))),
+                "while either is a class of a position's own value");
+    }
+
+    /**
      * A meaning that carries a number is a class of that number and of no other.
      *
      * <p>A class about a count reads that count out of a row, and it is owed to whichever number it
