@@ -2756,12 +2756,31 @@ public final class Adequacy {
      * is settled.
      */
     static Map<String, RowReading> rowsOf(Db db, String module) {
+        Output.RowsRead.Of read = db.ask(new Output.RowsRead(module)).value();
+        if (read == null) {
+            return Map.of();
+        }
+        Map<String, RowReading> out = new LinkedHashMap<>();
+        read.byBehavior().forEach((behavior, its) ->
+                out.put(behavior, RowReading.of(its.rows(), its.gaps())));
+        return new WithFallback(out, read.everywhere());
+    }
+
+    /**
+     * The rows themselves, gathered out of the module's sources.
+     *
+     * <p>What {@link Output.RowsRead} answers, and the one walk over the sources there is. Here
+     * beside the reading made of it because the two are read together and the second is written in
+     * terms of the first; what tells them apart is that this one is about what was written and read,
+     * and says nothing about what a measurement makes of it.
+     */
+    static Output.RowsRead.Of rowsRead(Db db, String module) {
         java.util.SequencedSet<SourceId> origins = db.ask(new Front.ExampleSources(module)).value();
         Map<String, List<RowOutcome>> rows = new LinkedHashMap<>();
         Map<String, List<Incompleteness>> stopped = new LinkedHashMap<>();
         List<Incompleteness> everywhere = new ArrayList<>();
         if (origins == null) {
-            return Map.of();
+            return new Output.RowsRead.Of(Map.of(), List.of());
         }
         for (SourceId sourceId : origins) {
             Output.Examples.Of observed = db.ask(Output.Examples.asked(db, module, sourceId)).value();
@@ -2797,13 +2816,14 @@ public final class Adequacy {
         if (prepared.present() && prepared.value() != null) {
             prepared.value().behaviors().forEach(each -> named.add(each.name()));
         }
-        Map<String, RowReading> out = new LinkedHashMap<>();
+        Map<String, Output.RowsRead.ReadRows> out = new LinkedHashMap<>();
         for (String behavior : named) {
             List<Incompleteness> gaps = new ArrayList<>(everywhere);
             gaps.addAll(stopped.getOrDefault(behavior, List.of()));
-            out.put(behavior, RowReading.of(rows.getOrDefault(behavior, List.of()), gaps));
+            out.put(behavior, new Output.RowsRead.ReadRows(
+                    rows.getOrDefault(behavior, List.of()), gaps));
         }
-        return new WithFallback(out, everywhere);
+        return new Output.RowsRead.Of(out, everywhere);
     }
 
     /** One entry per reason. A module's classes failing to be instrumented is one fact, and looking

@@ -823,6 +823,63 @@ public final class Output {
     }
 
     /**
+     * What each behavior of one module wrote down, and what stopped a source being read.
+     *
+     * <p>The one place a module's sources are gathered. A behavior's rows are written across its own
+     * file and any number of attached {@code examples for} files, so which rows it has is an answer
+     * over all of them together — and a caller assembling that again decides for itself what a
+     * source that did not answer means, which is a decision made here once: it counts against every
+     * behavior, because which behaviors it wrote rows for is exactly what could not be read.
+     *
+     * <p>What is here are the rows as they were read and the reasons a reading fell short, and
+     * nothing made of either. What a measurement makes of them is {@link Adequacy.Rows}, which is
+     * asked only where a build measures; what a behavior owes is a fact about the model, and an
+     * output holding a checked program reads it whether or not anything was measured.
+     */
+    public record RowsRead(String name) implements Key<RowsRead.Of> {
+
+        /**
+         * What was read, by the behavior each row is of.
+         *
+         * @param everywhere what stopped a reading in a way larger than one behavior, which counts
+         *     against all of them — carried beside the entries as well as in them, so a reader
+         *     asking about a behavior nothing was seen of is told the same thing
+         */
+        public record Of(Map<String, ReadRows> byBehavior,
+                         List<souther.compiler.observe.Incompleteness> everywhere) {
+
+            public Of {
+                // Ordered, because what is read out of it is read in an order: a module's behaviors
+                // are shown in the order they were gathered, and a map keyed by a hash would show
+                // one nothing decided, which can differ between two runs of one compiler.
+                byBehavior = java.util.Collections.unmodifiableMap(
+                        new java.util.LinkedHashMap<>(byBehavior));
+                everywhere = List.copyOf(everywhere);
+            }
+        }
+
+        /** One behavior's rows, and what a reading of them went without. */
+        public record ReadRows(List<souther.compiler.observe.RowOutcome> rows,
+                               List<souther.compiler.observe.Incompleteness> gaps) {
+
+            public ReadRows {
+                rows = List.copyOf(rows);
+                gaps = List.copyOf(gaps);
+            }
+        }
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Of> compute(Db db) {
+            return Answer.of(Adequacy.rowsRead(db, name));
+        }
+    }
+
+    /**
      * The examples of one module, evaluated. Every module's examples are evaluated before any
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.
