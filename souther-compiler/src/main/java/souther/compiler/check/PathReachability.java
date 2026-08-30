@@ -208,14 +208,16 @@ public final class PathReachability {
                 in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
                         p.getValue().type(), body.pos()), in.known(), in.at());
             }
+            // A behavior with no reading reads as one whose declarations leave nothing said, which
+            // is what every question below is answered against. Settled once here, since the walk
+            // and the environment it walks with are both about the same reading.
+            InputDomain of = read == null ? InputDomain.NONE : read;
             PathReachability reading =
-                    new PathReachability(engine, plan, read == null ? InputDomain.NONE : read,
-                            symbols, out, arriving);
+                    new PathReachability(engine, plan, of, symbols, out, arriving);
             reading.entry = in.known();
             reading.entered = in.at();
             reading.walk(body, in.known(), in.at(),
-                            InputReads.ofParameters(reading.read.parameterReads(),
-                                    souther.compiler.check.ElementBindings.NONE),
+                            InputReads.ofParameters(of.parameterReads(), ElementBindings.NONE),
                             List.of(), true);
             walked = true;
         } catch (RuntimeException why) {

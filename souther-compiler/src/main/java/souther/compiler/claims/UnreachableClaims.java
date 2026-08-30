@@ -1,5 +1,6 @@
 package souther.compiler.claims;
 
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
@@ -56,8 +57,7 @@ public final class UnreachableClaims {
             return NONE;
         }
         List<Claim> found = new ArrayList<>();
-        claimedUnder(body, InputReads.ofParameters(read.parameterReads(),
-                        souther.compiler.check.ElementBindings.NONE),
+        claimedUnder(body, InputReads.ofParameters(read.parameterReads(), ElementBindings.NONE),
                 symbols, plan, NormalReturn.ofBody(body), true, found);
         return found.isEmpty() ? NONE : new UnreachableClaims(found);
     }
