@@ -73,9 +73,9 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
 
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
         for (ComparisonReadings.Reading each
-                : ComparisonReadings.of(body, plan,
+                : ComparisonReadings.of("read", body, plan,
                         InputReads.of(inputs, checked.elementBindings().get("read")),
-                        symbols).all()) {
+                        symbols, inputs.quantities(symbols)).all()) {
             byLine.put(each.comparison().pos().line(), each.standing());
         }
         return byLine;
@@ -84,7 +84,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
     /** A truth a fork below reads is a line. */
     @Test
     void aTruthSomethingReadsBearsALine() {
-        assertEquals(BoundaryPolicy.Standing.DrawsALine.class,
+        assertEquals(BoundaryPolicy.Standing.Admitted.class,
                 standingAt(8).getClass());
     }
 
@@ -97,7 +97,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
     /** A truth one run reaches once per element of an input bears a line at that element. */
     @Test
     void aTruthReachedOncePerElementOfAnInputBearsALine() {
-        assertEquals(BoundaryPolicy.Standing.DrawsALine.class,
+        assertEquals(BoundaryPolicy.Standing.Admitted.class,
                 standingAt(10).getClass(),
                 "each pass is one occurrence of a position, so a row can be read at it");
     }
@@ -115,10 +115,10 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
      */
     @Test
     void aTruthOneRunReachesMoreThanOnceIsStillOneThisPolicyAdmits() {
-        assertEquals(BoundaryPolicy.Standing.DrawsALine.class, standingAt(11).getClass());
+        assertEquals(BoundaryPolicy.Standing.Admitted.class, standingAt(11).getClass());
     }
 
     private static NotABoundary whyOf(BoundaryPolicy.Standing standing) {
-        return standing instanceof BoundaryPolicy.Standing.DrawsNone none ? none.why() : null;
+        return standing instanceof BoundaryPolicy.Standing.Refused none ? none.why() : null;
     }
 }
