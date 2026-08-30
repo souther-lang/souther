@@ -76,6 +76,18 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
         // carries — reached off the program itself rather than through a body.
         assertTrue(reached.contains("souther.compiler.core.KernelSignature"),
                 () -> "no kernel signature in " + reached);
+        // And what a behavior's rows said: the row, what it states, the values it states them with,
+        // and what asking whether an answer keeps one comes to. Each is reached through the arm
+        // that carries it, which is the walk going down into a behavior rather than reading the top
+        // of it.
+        assertTrue(reached.contains("souther.compiler.program.CheckedRow"),
+                () -> "no row in " + reached);
+        assertTrue(reached.contains("souther.compiler.observe.RowStatement$Stated"),
+                () -> "no stated row in " + reached);
+        assertTrue(reached.contains("souther.compiler.observe.Asserted"),
+                () -> "nothing a row stated in " + reached);
+        assertTrue(reached.contains("souther.compiler.observe.Mismatch"),
+                () -> "nowhere two values part in " + reached);
         assertTrue(reached.size() > 50, () -> "the walk reached only " + reached.size());
     }
 

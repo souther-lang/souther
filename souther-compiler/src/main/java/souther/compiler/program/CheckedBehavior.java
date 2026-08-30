@@ -3,14 +3,15 @@ package souther.compiler.program;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.ValueName;
 
+import java.util.List;
+
 /**
  * One behavior of a checked module: what it is called, what it takes and answers, and where its
  * implementation comes from.
  *
  * <p>A class and not a record. What a checked behavior is known to be will grow — what it requires,
- * what it declares cannot arrive, what its examples said — and each of those is something a reader
- * asks for rather than a place in a constructor every existing reader would have to be recompiled
- * against.
+ * what it declares cannot arrive — and each of those is something a reader asks for rather than a
+ * place in a constructor every existing reader would have to be recompiled against.
  */
 public final class CheckedBehavior {
 
@@ -18,9 +19,11 @@ public final class CheckedBehavior {
     private final CheckedSignature signature;
     private final CheckedImplementation implementation;
     private final EnsuresEnforcement ensures;
+    private final List<CheckedRow> rows;
 
     CheckedBehavior(ValueName.Behavior name, CheckedSignature signature,
-                    CheckedImplementation implementation, EnsuresEnforcement ensures) {
+                    CheckedImplementation implementation, EnsuresEnforcement ensures,
+                    List<CheckedRow> rows) {
         // The one place the two readings of what a behavior takes meet, and so the one place they
         // are held to each other. A signature says the inputs as types and a body says the bindings
         // they arrive in; a reader is offered them as one parameter at each index, and lists of
@@ -34,6 +37,7 @@ public final class CheckedBehavior {
         this.signature = signature;
         this.implementation = implementation;
         this.ensures = ensures;
+        this.rows = List.copyOf(rows);
     }
 
     /**
@@ -75,6 +79,26 @@ public final class CheckedBehavior {
      */
     public EnsuresEnforcement ensures() {
         return ensures;
+    }
+
+    /**
+     * What its {@code example} rows say it answers, in the order they are written.
+     *
+     * <p>Every row recorded for it, whichever source wrote it: a behavior may be exampled in its
+     * own module and in any number of attached {@code examples for} files, and which file a row is
+     * in is a fact about the row ({@link CheckedRow#at}) rather than something a reader picks
+     * between before it can ask what the behavior owes.
+     *
+     * <p>Every row and not the ones that could be handed over as values. A row this compile could
+     * not read whole is here saying so, because a reader given nothing for it would count a row it
+     * never saw among the ones it walked and found nothing wrong with — and a behavior would read
+     * as having said nothing about an input someone wrote down.
+     *
+     * <p>Empty where the behavior is exampled nowhere, which is a behavior nothing says what it
+     * owes.
+     */
+    public List<CheckedRow> rows() {
+        return rows;
     }
 
     @Override

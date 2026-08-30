@@ -23,6 +23,12 @@ import java.util.Objects;
  * recover a body from source, resolve a callee, or infer a type a second time; two compilers that
  * did would disagree about a decision that is the language's and was made once.
  *
+ * <p>What a behavior's rows said crosses with it ({@link CheckedBehavior#rows}). Those are what the
+ * language says a behavior answers rather than a test of this compiler — a program whose rows do not
+ * hold is not accepted — so an output emitting from this can hold what it emitted to what the model
+ * owes, instead of to a test it wrote itself over inputs it picked itself. Whether an answer keeps a
+ * row is asked of the language ({@link CheckedRow#holds}) and not decided by whoever reads it.
+ *
  * <p>How this compiler works out its answers is not here. There is no {@code Db} on this object and
  * none behind it: what a query was asked, and which key held which answer, is how
  * {@code souther-compiler} computes and invalidates, not part of the contract with another

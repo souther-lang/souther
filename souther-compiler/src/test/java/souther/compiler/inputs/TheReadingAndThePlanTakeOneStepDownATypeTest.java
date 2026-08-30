@@ -53,6 +53,11 @@ class TheReadingAndThePlanTakeOneStepDownATypeTest {
      * different things, and a check reading the prose as well cannot tell them apart — it would go
      * red on the sentence that says what the rule is, which is a check that gets harder to satisfy
      * the better the writing around it gets.
+     *
+     * <p>Of a shape's fields and not of every product's. {@code product.fields()} is a variable's
+     * name and the language declares in products elsewhere — what a checked program publishes of a
+     * declaration is one — so a file has to name the shape as well to be reading this one. A check
+     * spelled by a name alone answers about whatever else was named that.
      */
     @Test
     void theFieldsOfAProductShapeAreReadInOnePlace() throws IOException {
@@ -63,7 +68,8 @@ class TheReadingAndThePlanTakeOneStepDownATypeTest {
 
         List<String> readers = new ArrayList<>();
         for (Path source : sources) {
-            if (code(source).contains("product.fields()")) {
+            String code = code(source);
+            if (code.contains("product.fields()") && code.contains("Shape.Product")) {
                 readers.add(where(source));
             }
         }

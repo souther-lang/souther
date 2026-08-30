@@ -15,6 +15,9 @@ import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.Position;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.ValueTypes;
 import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -22,6 +25,7 @@ import souther.compiler.query.Compositions;
 import souther.compiler.query.Db;
 import souther.compiler.query.Front;
 import souther.compiler.query.Names;
+import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ReachName;
@@ -59,11 +63,27 @@ final class CheckedProgramAssembler {
         // output built on it would ship an artifact for what another output refuses to build.
         Acceptance.of(compilation);
         Db db = compilation.db();
-        List<CheckedModule> modules = new ArrayList<>();
+        List<CheckedData> language = languageDataOf(db);
+        List<CheckedData> onThePath = declaredOnThePath(db);
+        // What each module was checked to be, read before anything is made of it. Every declaration
+        // this compile resolved has to be in hand before a row can be written down, because what a
+        // row states may hold a value of a data another module declares — and a comparison that
+        // could not read that data would read its parts as whatever they happen to look like.
+        List<ModuleReading> read = new ArrayList<>();
         for (String module : compilation.modules()) {
-            modules.add(moduleOf(db, module));
+            read.add(readingOf(db, module));
         }
-        return new CheckedProgram(modules, languageDataOf(db), declaredOnThePath(db),
+        List<CheckedData> everyDeclaration = new ArrayList<>(language);
+        everyDeclaration.addAll(onThePath);
+        for (ModuleReading module : read) {
+            everyDeclaration.addAll(module.data());
+        }
+        ValueTypes types = DeclaredFields.over(everyDeclaration);
+        List<CheckedModule> modules = new ArrayList<>();
+        for (ModuleReading module : read) {
+            modules.add(moduleOf(module, types));
+        }
+        return new CheckedProgram(modules, language, onThePath,
                 libraryOf(db).kernelSignatures());
     }
 
@@ -153,7 +173,47 @@ final class CheckedProgramAssembler {
         return declared;
     }
 
-    private static CheckedModule moduleOf(Db db, String module) {
+    /**
+     * What this compiler answered about one module, and what those answers were made into.
+     *
+     * <p>Read in one pass so that what a module declares is in hand before what its rows state is
+     * written down: the two are made in that order and not in the order the modules were given.
+     *
+     * @param rows what each of the module's behaviors' rows turned out to be, by behavior name, in
+     *             the order the sources were read and the rows written
+     */
+    private record ModuleReading(String name, Hir.Module bodies, Bodies.Elaborated checked,
+                                 Map<String, Sig> signatures,
+                                 Map<String, BehaviorImplementation> implementations,
+                                 Map<ValueName.Behavior, Composition> compositions,
+                                 Map<ValueName.Behavior, EnsuresEnforcement> checks,
+                                 List<CheckedData> data,
+                                 Map<String, List<RowOutcome>> rows) {}
+
+    /**
+     * The rows this compile read for {@code module}, by the behavior each is a row of.
+     *
+     * <p>Asked for rather than gathered. Which rows a behavior has is an answer over every source
+     * the module's rows are written in, and it is one answer: a caller assembling it again decides
+     * for itself what a source that did not answer means, and what it decided would be a second
+     * statement of one fact. It is also what says a row was not read at all rather than not written.
+     *
+     * <p>Nothing is evaluated by asking. Running a row applies the helpers its fixtures name, and a
+     * second run would apply them again — counted twice against the row and doing whatever they do
+     * twice. What comes back is what the compile already answered.
+     */
+    private static Map<String, List<RowOutcome>> rowsOf(Db db, String module) {
+        Output.RowsRead.Of read = db.ask(new Output.RowsRead(module)).value();
+        if (read == null) {
+            throw new IllegalStateException("`" + module + "` was taken as checked and its rows"
+                    + " were not read");
+        }
+        Map<String, List<RowOutcome>> byBehavior = new LinkedHashMap<>();
+        read.byBehavior().forEach((behavior, its) -> byBehavior.put(behavior, its.rows()));
+        return byBehavior;
+    }
+
+    private static ModuleReading readingOf(Db db, String module) {
         Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
         Lower.Lowered lowering = db.ask(new Bodies.Lowering(module)).value();
         Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
@@ -188,16 +248,49 @@ final class CheckedProgramAssembler {
         // agree with the checker only for as long as lowering left declarations alone.
         Hir.Module declarations = lowering.settled();
         Hir.Module bodies = lowering.lowered();
+        return new ModuleReading(module, bodies, checked, signatures, implementations, compositions,
+                checks, dataOf(declarations, symbols, shapes), rowsOf(db, module));
+    }
+
+    /**
+     * The module, made from what was read of it.
+     *
+     * <p>{@code types} is how a value's parts are read wherever one is compared, and it is the whole
+     * program's rather than this module's: a row written here may state a value of a data declared
+     * elsewhere.
+     */
+    private static CheckedModule moduleOf(ModuleReading read, ValueTypes types) {
         List<CheckedBehavior> behaviors = new ArrayList<>();
-        for (Hir.BehaviorDef declared : bodies.behaviors()) {
-            ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
-            behaviors.add(new CheckedBehavior(named, signatureOf(signatures.get(declared.name())),
-                    implementationOf(named, declared, bodies, implementations, checked,
-                            compositions),
-                    EnsuresEnforcement.in(checks, module, named)));
+        for (Hir.BehaviorDef declared : read.bodies().behaviors()) {
+            ValueName.Behavior named = new ValueName.Behavior(read.name(), declared.name());
+            CheckedSignature signature = signatureOf(read.signatures().get(declared.name()));
+            behaviors.add(new CheckedBehavior(named, signature,
+                    implementationOf(named, declared, read.bodies(), read.implementations(),
+                            read.checked(), read.compositions()),
+                    EnsuresEnforcement.in(read.checks(), read.name(), named),
+                    rowsOf(read.rows().getOrDefault(declared.name(), List.of()), types,
+                            signature)));
         }
-        return new CheckedModule(module, behaviors, helpersOf(module, bodies, checked),
-                dataOf(declarations, symbols, shapes));
+        return new CheckedModule(read.name(), behaviors,
+                helpersOf(read.name(), read.bodies(), read.checked()), read.data());
+    }
+
+    /**
+     * One behavior's rows, as an output reads them.
+     *
+     * <p>Written down rather than worked out: what each row states was read where the row was read,
+     * and what is made here is the handle a reader holds it by. Each is given what answering
+     * {@link CheckedRow#holds} takes — how a value's parts are read, and where this behavior's
+     * answer stands — so that asking is not a question about the program the row came from.
+     */
+    private static List<CheckedRow> rowsOf(List<RowOutcome> read, ValueTypes types,
+                                           CheckedSignature signature) {
+        List<CheckedRow> rows = new ArrayList<>();
+        for (RowOutcome row : read) {
+            rows.add(new CheckedRow(row.identity(), row.at(), row.statement(), types,
+                    Position.at(signature.answers())));
+        }
+        return rows;
     }
 
     /**

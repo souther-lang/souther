@@ -169,12 +169,21 @@ public final class WhatWasCompiled {
                 named.add(asClass.asInternalName().replace('/', '.'));
             }
             if (entry instanceof java.lang.classfile.constantpool.Utf8Entry asText) {
-                // Descriptors, which is where a field's or a parameter's type is written.
+                // Descriptors, which is where a field's or a parameter's type is written, and
+                // signatures, which is where a type argument is. A name ends at the `;` that closes
+                // it or at the `<` that opens what it was given, and reading to the `;` alone made
+                // `List<Foo>` one name of its own — so the type a collection was of was named
+                // nowhere, and a rule about who may name what was blind to exactly the spelling
+                // that hides one.
                 String said = asText.stringValue();
                 int at = said.indexOf('L');
                 while (at >= 0) {
-                    int ends = said.indexOf(';', at);
-                    if (ends < 0) {
+                    int ends = at + 1;
+                    while (ends < said.length() && said.charAt(ends) != ';'
+                            && said.charAt(ends) != '<') {
+                        ends++;
+                    }
+                    if (ends >= said.length()) {
                         break;
                     }
                     named.add(said.substring(at + 1, ends).replace('/', '.'));
