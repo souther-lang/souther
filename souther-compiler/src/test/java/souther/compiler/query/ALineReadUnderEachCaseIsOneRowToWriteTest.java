@@ -106,15 +106,11 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
      */
     @Test
     void theOrderTheReadingsArriveInDecidesNothing() {
-        Map<String, List<BorderAssessment>> readings = readingsOf("");
+        List<BorderAssessment> readings = readingsOf("");
         List<BorderObligationPointAssessment> forwards =
                 BorderObligationPointAssessment.across(readings);
-        Map<String, List<BorderAssessment>> reversed = new LinkedHashMap<>();
-        readings.forEach((behavior, lines) -> {
-            List<BorderAssessment> back = new ArrayList<>(lines);
-            java.util.Collections.reverse(back);
-            reversed.put(behavior, back);
-        });
+        List<BorderAssessment> reversed = new ArrayList<>(readings);
+        java.util.Collections.reverse(reversed);
         List<BorderObligationPointAssessment> backwards =
                 BorderObligationPointAssessment.across(reversed);
 
@@ -214,11 +210,11 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
                         + " is composed a second time for them: " + againstTheLine);
     }
 
-    private static Map<String, List<BorderAssessment>> readingsOf(String rows) {
+    private static List<BorderAssessment> readingsOf(String rows) {
         List<BorderAssessment> lines = compiled(rows).db()
                 .ask(new Adequacy.Boundaries("example.line", "check")).value();
         assertNotNull(lines, "the model under test compiles");
-        return Map.of("check", lines);
+        return lines;
     }
 
     private static Compilation compiled(String rows) {

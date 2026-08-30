@@ -494,6 +494,12 @@ final class Terms {
             }
 
             @Override
+            public java.util.List<AffineForms.ReadThrough<Denotations>> alternativesOf(
+                    Core.Read read, Denotations where) {
+                return affineReading.alternativesOf(read, where);
+            }
+
+            @Override
             public boolean readsThrough(Core.FieldAccess fa, Denotations where) {
                 return affineReading.readsThrough(fa, where);
             }
@@ -531,6 +537,21 @@ final class Terms {
                 public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
                                                                         Denotations at) {
                     return Terms.this.readThrough(read, at);
+                }
+
+                /**
+                 * No name here stands for several values.
+                 *
+                 * <p>What this reads is a clause a declaration wrote, whose names are the fields of
+                 * the declaration and the bindings a body gave values to. An operation that hands a
+                 * closure the elements of a container is what puts several values under one name,
+                 * and the elements a rule of a declaration is written over are not bound by one:
+                 * such a clause is read once for the value in front of it.
+                 */
+                @Override
+                public java.util.List<AffineForms.ReadThrough<Denotations>> alternativesOf(
+                        Core.Read read, Denotations at) {
+                    return null;
                 }
 
                 @Override
@@ -1449,7 +1470,8 @@ final class Terms {
             return false;
         }
         for (int i = 0; i < a.size(); i++) {
-            if (a.get(i).rel() != b.get(i).rel() || !sameForm(a.get(i).form(), b.get(i).form())) {
+            if (a.get(i).rel() != b.get(i).rel()
+                    || !AffineForms.sameForm(a.get(i).form(), b.get(i).form())) {
                 return false;
             }
         }
@@ -1463,7 +1485,7 @@ final class Terms {
 
         @Override
         public boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {
-            return sameForm(a, b);
+            return AffineForms.sameForm(a, b);
         }
 
         @Override
@@ -1484,14 +1506,6 @@ final class Terms {
             return a == b;
         }
         return a.inclusive() == b.inclusive() && a.at().sameAs(b.at());
-    }
-
-    private static boolean sameForm(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {
-        if (a.constant().compareTo(b.constant()) != 0 || !a.coefs().keySet().equals(b.coefs().keySet())) {
-            return false;
-        }
-        return a.coefs().entrySet().stream()
-                .allMatch(one -> one.getValue().compareTo(b.coefs().get(one.getKey())) == 0);
     }
 
     /**

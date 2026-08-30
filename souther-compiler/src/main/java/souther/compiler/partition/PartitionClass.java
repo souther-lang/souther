@@ -151,7 +151,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
      */
     public boolean leftAnythingBy(ValueSet admitted, java.util.function.Predicate<Value> holds) {
         if (denotes != null) {
-            return !denotes.meet(admitted).isEmpty();
+            return denotes.sharesAnythingWith(admitted);
         }
         return !(admitted instanceof ValueSet.Finite finite)
                 || finite.values().stream().anyMatch(holds);

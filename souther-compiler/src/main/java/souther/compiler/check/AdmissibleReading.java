@@ -2,8 +2,14 @@ package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
-import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.AdmittedPlan;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.PlannedValues;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -34,7 +40,7 @@ import java.util.Set;
  * the values can be written out ({@link ValueUniverse}) and is kept as a denial where they cannot,
  * so nothing reaches emptiness except through values this had in hand.
  */
-final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubject>> {
+final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject>> {
 
     private final Terms terms;
     private final Denotations at;
@@ -45,29 +51,44 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
     private final Symbols symbols;
     /** How a choice holds what it leaves, settled for the whole declaration before it was read. */
     private final Alternatives alternatives;
+    /**
+     * What puts two sets together, and what it is allowed to build doing it.
+     *
+     * <p>One of these for the whole of what is read into one answer, because that is what the
+     * allowance is about: every rule reaching a position pays into the machine that position finally
+     * admits. It is the reading's and not a leaf's, so a clause read here and a rule met with it
+     * afterwards ({@code InvariantChecker}) spend from the same purse.
+     */
+    private final Allowance<FactSubject> allowed;
 
     private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                              Symbols symbols, Alternatives alternatives) {
+                              Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
         this.terms = terms;
         this.at = at;
         this.byName = byName;
         this.symbols = symbols;
         this.alternatives = alternatives;
+        this.allowed = allowed;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
     static AdmissibleReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                                Symbols symbols, Alternatives alternatives) {
-        return new AdmissibleReading(terms, at, byName, symbols, alternatives);
+                                Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
+        return new AdmissibleReading(terms, at, byName, symbols, alternatives, allowed);
+    }
+
+    /** What this reading is spending, for whoever meets its answer with the next rule's. */
+    Allowance<FactSubject> allowed() {
+        return allowed;
     }
 
     @Override
-    public AdmissibleValues<FactSubject> nothingSaid() {
-        return AdmissibleValues.top();
+    public PlannedValues<FactSubject> nothingSaid() {
+        return PlannedValues.top();
     }
 
     @Override
-    public AdmissibleValues<FactSubject> both(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
+    public PlannedValues<FactSubject> both(PlannedValues<FactSubject> one, PlannedValues<FactSubject> other) {
         return one.meet(other);
     }
 
@@ -79,24 +100,84 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * a model written two ways would be read two ways.
      */
     @Override
-    public AdmissibleValues<FactSubject> either(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
-        return alternatives == Alternatives.APART ? one.joinApart(other) : one.join(other);
+    public PlannedValues<FactSubject> either(PlannedValues<FactSubject> one, PlannedValues<FactSubject> other) {
+        return alternatives == Alternatives.APART
+                ? one.joinApart(other) : one.join(other);
     }
 
-    /** An equality names a value and a denial leaves the rest; nothing else here is read. */
+    /**
+     * An equality names a value, a denial leaves the rest, and a pattern names the strings it
+     * accepts; nothing else here is read.
+     *
+     * <p>A pattern is the third because a format is a third kind of answer and not because it is a
+     * call. What {@code String.matches} says about a position is which strings stand there, which
+     * is the question this reading asks — read as a call nobody follows, the rule said nothing and
+     * a position an author had written a format for came out admitting every string there is.
+     */
     @Override
-    public AdmissibleValues<FactSubject> leaf(Core e, boolean positive) {
+    public PlannedValues<FactSubject> leaf(Core e, boolean positive) {
         if (e instanceof Core.Binary b && (b.op() == BinOp.EQ || b.op() == BinOp.NE)) {
             // Which of the two it states, once the denials above have been counted: `/=` denied
             // states the equality, and `==` denied denies it.
             return comparison(b, (b.op() == BinOp.EQ) == positive);
         }
-        return unreadable(e);
+        PlannedValues<FactSubject> matched = pattern(e, positive);
+        return matched != null ? matched : unreadable(e);
+    }
+
+    /**
+     * What a pattern says about the position it is asked of, or null where the leaf is not one.
+     *
+     * <p>Read whichever way it is stated. Denied, what stands is every string the pattern does not
+     * accept, which is a set the same way — and reading only the stated form would leave a denial
+     * as a form this cannot take apart, which of this very form would not be true.
+     *
+     * <p>Null and not {@link AdmissibleValues#unreadable} for the leaves that are not this, so that
+     * the one place a reading gives up stays where it is: what a rule this could not read costs is
+     * worked out there, and a second answer to it here would be a second account of the same thing.
+     */
+    private PlannedValues<FactSubject> pattern(Core e, boolean states) {
+        if (!(e instanceof Core.PreservedCall call) || call.args().size() != 2
+                || !(call.operation() instanceof ValueName.Stdlib.Operation operation)
+                || symbols.kernelOf(operation) != Kernel.STRING_MATCHES) {
+            return null;
+        }
+        // The subject is written last and the pattern first, which is the operation's own order.
+        FactSubject position = positionIn(call.args().get(1));
+        if (position == null
+                || !(Terms.folded(call.args().get(0), symbols) instanceof String written)) {
+            return null;
+        }
+        // A pattern is what it accepts, and what it is written out of is the author's. Read through
+        // the fold above, so a format built out of pieces the model names — a shared tail joined to
+        // a prefix — is the one pattern it comes to rather than an expression nobody followed.
+        PatternRead said = PatternParser.read(written);
+        // Written more deeply than this reads is a limit of the reading and not a shape it has no
+        // word for, so it is said as itself. Left to fall through, it would go out as a form
+        // nothing here takes apart — and an author would go looking for the construct that was the
+        // trouble, when every construct in it is one this reads.
+        if (said instanceof PatternRead.NotRead it
+                && it.why() == souther.compiler.regex.PatternRead.Unsupported.NESTED_TOO_DEEPLY) {
+            return PlannedValues.unreadable(Set.of(position),
+                    UnreadReason.PATTERN_TOO_DEEPLY_NESTED);
+        }
+        if (!(said instanceof PatternRead.Read read)) {
+            return null;
+        }
+        // Named and not built. What the position finally admits is met out of every rule that
+        // reached it, and a pattern met with three written strings is a question about three
+        // strings — built here, it would be a machine nobody needed and the position would have
+        // that much less for the meet it does need. So what is said is which machine would answer
+        // this rule, and whether one is ever made of it is settled where the position's plan is
+        // worked out under its allowance.
+        return PlannedValues.at(position, new AdmittedPlan.Pattern(
+                states ? souther.compiler.regex.PatternPlan.of(read.syntax())
+                        : souther.compiler.regex.PatternPlan.notMatching(read.syntax())));
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */
-    private AdmissibleValues<FactSubject> comparison(Core.Binary b, boolean states) {
-        AdmissibleValues<FactSubject> read = sided(b.left(), b.right(), states);
+    private PlannedValues<FactSubject> comparison(Core.Binary b, boolean states) {
+        PlannedValues<FactSubject> read = sided(b.left(), b.right(), states);
         if (read == null) {
             // `"A" == value` says what `value == "A"` says.
             read = sided(b.right(), b.left(), states);
@@ -120,8 +201,8 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * ordering comparison and an equality answer alike — written per shape, {@code <} fell through
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
-    private AdmissibleValues<FactSubject> unreadable(Core e) {
-        return AdmissibleValues.unreadable(names(e), relatesTwoPositions(e)
+    private PlannedValues<FactSubject> unreadable(Core e) {
+        return PlannedValues.unreadable(names(e), relatesTwoPositions(e)
                 ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
     }
 
@@ -139,11 +220,12 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
      * where they are not those. */
-    private AdmissibleValues<FactSubject> sided(Core where, Core what, boolean states) {
+    private PlannedValues<FactSubject> sided(Core where, Core what, boolean states) {
         FactSubject position = positionIn(where);
         Type type = position == null ? null : byName.get(position);
         Value value = type == null ? null : valueOf(what);
-        return value == null ? null : AdmissibleValues.at(position, admits(value, states, type));
+        return value == null ? null
+                : PlannedValues.at(position, AdmittedPlan.of(admits(value, states, type)));
     }
 
     /** The position {@code e} is, or null where it is not one of the positions being read for. */

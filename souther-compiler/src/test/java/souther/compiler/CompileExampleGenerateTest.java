@@ -619,7 +619,7 @@ class CompileExampleGenerateTest {
                 data Flag = Yes | No
 
                 data Req = { %sflag: Flag }
-                    invariant String.matches("y+", a.value)
+                    invariant String.startsWith("y", a.value)
 
                 data Ok = { n: Int }
 

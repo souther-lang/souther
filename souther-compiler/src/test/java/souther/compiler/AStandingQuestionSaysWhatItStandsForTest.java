@@ -66,18 +66,19 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     /**
-     * A rule admitting values by a pattern, which is what raised this.
+     * A rule admitting values by a pattern, which is what raised this, and which is now answered.
      *
-     * <p>The reading that turns a clause into a set of values has no word for a pattern and the
-     * reading of ends is not asked — the rule places no end — so the question about which values
-     * may stand there is one nothing answered. What the report is owed is which of those it is, and
-     * the answer is that a form went unread rather than that anything about the model is missing.
+     * <p>The line this used to hold to is gone, and going was what it was for: it said the question
+     * stood because the reading of values had no word for a pattern, and the reading has one. What
+     * is asserted is the going — the rule raises a question about which values may stand at the
+     * position, and nothing is left standing on it.
      *
-     * <p>This is what the report says while nothing reads a pattern. The day something does, the
-     * question is answered and the line goes; it is not a line whose wording changes.
+     * <p>Held on the report rather than on the reading, because that is where a line would come
+     * back. A pattern read into a set of values and then not carried to the answer would leave this
+     * question standing again, and it would stand with a different reason and the same hole.
      */
     @Test
-    void aPatternInvariantSaysThatItsFormWentUnread() {
+    void aPatternInvariantIsAnsweredAndLeavesNothingStanding() {
         String report = reportOf("""
                 module probe.regex
 
@@ -89,17 +90,18 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 behavior read : (h: Held) -> Ok
                 """);
 
-        assertEquals("      · not accounted for: invariant Number #1"
-                        + " — which values may stand at h.n:"
-                        + " written in a form this compiler does not read",
-                about(report, "invariant Number #1"));
+        assertEquals(List.of(), report.lines()
+                        .filter(line -> line.contains("not accounted for: invariant Number #1"))
+                        .toList(),
+                "the pattern says which values stand there, so nothing is left to answer:\n"
+                        + report);
     }
 
     /**
      * Two parts of one clause stopped in two ways, and the line says both.
      *
      * <p>{@code a /= b} relates the position to another, which this reading recognised and has no
-     * set of one position's values for; {@code String.matches} is a form it does not take apart.
+     * set of one position's values for; {@code String.startsWith} is a form it does not take apart.
      * The two are lifted by different work, so an author told only one of them lifts it and finds
      * the question still standing.
      *
@@ -116,7 +118,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = a /= b && String.matches("x+", a)
+                            invariant both = a /= b && String.startsWith("x", a)
 
                         behavior read : (p: Pair) -> Ok
                         """), "invariant Pair (both)"));
@@ -129,7 +131,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = String.matches("x+", a) && a /= b
+                            invariant both = String.startsWith("x", a) && a /= b
 
                         behavior read : (p: Pair) -> Ok
                         """), "invariant Pair (both)"),
@@ -212,7 +214,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 module probe.regex
 
                 data Number = String
-                    invariant String.matches("T[0-9]{13}", value)
+                    invariant String.startsWith("T", value)
 
                 data Held = { n: Number }
 
@@ -224,7 +226,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = a /= b && String.matches("x+", a)
+                            invariant both = a /= b && String.startsWith("x", a)
 
                         behavior read : (p: Pair) -> Ok
                         """));
@@ -234,7 +236,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = String.matches("x+", a) && a /= b
+                            invariant both = String.startsWith("x", a) && a /= b
 
                         behavior read : (p: Pair) -> Ok
                         """),

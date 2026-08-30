@@ -95,8 +95,8 @@ public final class InputNumber {
                     || !(where.meaningOf(read, symbols) instanceof ReadMeaning.Through through)) {
                 return null;
             }
-            walk = through.value();
-            where = through.at();
+            walk = through.denotes().value();
+            where = through.denotes().at();
         }
         souther.compiler.types.BindingId element =
                 souther.compiler.core.GrowingFold.elementBindingOf(walk);

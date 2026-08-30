@@ -27,7 +27,8 @@ import java.util.List;
  * record relates positions at any depth it can name, and rebuilding the reading at each record is
  * how {@code interval.startsAt < cap} stopped reaching {@code interval.startsAt}.
  */
-record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoReaching) {
+record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoReaching,
+                   souther.compiler.values.Allowance<TermPath> sets) {
 
     /**
      * The value this case was narrowed out of, whose rules name some of the same positions.
@@ -104,7 +105,13 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     static PlacedRules of(TermPath root, Type type, Symbols symbols, ReadingPolicy policy,
                           Reaching alsoReaching) {
         TypeSymbol read = readAs(type, symbols);
-        return new PlacedRules(root, read, Rules.of(read, symbols, policy), alsoReaching);
+        // One composer for this reading, made where the reading is. What {@link #admits} builds is
+        // the set a position of this value finally admits, met out of the rules here and the rules
+        // of the value this was narrowed from — one answer, however many paths are asked about it.
+        // Made per call instead, every ask would get its own allowance and the whole of what a
+        // reading costs would be bounded by nothing.
+        return new PlacedRules(root, read, Rules.of(read, symbols, policy), alsoReaching,
+                souther.compiler.values.Allowance.ofAdmittedValues());
     }
 
     /**
@@ -229,8 +236,29 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // value above refuses stands nowhere, and a rule either of them could not read leaves the
         // set wider than the rules are however completely the other was read.
         AdmissibleSet outer = alsoReaching.outer().admits(above);
-        return new AdmissibleSet(here.approximation().meet(outer.approximation()),
-                bothRead(here.completeness(), outer.completeness()));
+        // Spent from this reading's own allowance, which is what every position of it is met out
+        // of. The two sides were read from two declarations and each was read in full where it was
+        // written; what is being built here is a third set, the one this position finally admits.
+        souther.compiler.values.Allowance.Composed made =
+                sets.meet(path, here.approximation(), outer.approximation());
+        AdmissibleSet.Completeness read = bothRead(here.completeness(), outer.completeness());
+        // And where it was not built, that is not a rule going unread. Both rules were read; what
+        // was not worked out is what they leave between them, and a reader told a rule went unread
+        // would go looking for one to change.
+        return new AdmissibleSet(made.set(), made.gaveUp()
+                ? alsoWidened(read, new AdmissibleSet.Widening.ExactValuesTooCostly())
+                : read);
+    }
+
+    /** The same completeness, and one more thing standing between the set and the rules. */
+    private static AdmissibleSet.Completeness alsoWidened(AdmissibleSet.Completeness read,
+                                                          AdmissibleSet.Widening also) {
+        java.util.Set<AdmissibleSet.Widening> why = new java.util.LinkedHashSet<>();
+        if (read instanceof AdmissibleSet.Completeness.Wider it) {
+            why.addAll(it.why());
+        }
+        why.add(also);
+        return new AdmissibleSet.Completeness.Wider(why);
     }
 
     /** What two readings of one position come to: read in full only where both were. */

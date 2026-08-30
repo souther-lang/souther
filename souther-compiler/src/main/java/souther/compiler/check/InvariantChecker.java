@@ -687,26 +687,64 @@ public final class InvariantChecker {
             long expansion = policy.expansionOf(written.stream().map(Written::clause).toList());
             Alternatives alternatives = policy.holdsApart(expansion)
                     ? Alternatives.APART : Alternatives.MERGED;
+            // What puts two sets of values together, and what it is allowed to build doing it. One
+            // for the whole of this value and not one per clause: what a position finally admits is
+            // met from every rule that reached it, so a pattern in one clause and a pattern in
+            // another pay into the same machine. Made per position inside — a complicated rule at
+            // one position may not spend what a plain one at another was going to need, or which of
+            // the two went unanswered would turn on the order they were written in.
+            souther.compiler.values.Allowance<FactSubject> allowed =
+                    souther.compiler.values.Allowance.ofAdmittedValues();
             Map<RuleRef, Map<Core, Set<FactSubject>>> adoptedBy = new LinkedHashMap<>();
+            // One reader for this value's positions, used over however many clauses reach it, and
+            // the one that decides the choices in what they came to.
+            StatedByClauses.Reading reader = StatedByClauses
+                    .readingOf(c.terms, at, positions, symbols, alternatives, allowed);
+            // What each clause said and what each part of it said, kept as they were read and
+            // asked afterwards. Which branch of a choice anybody can take turns on machines nobody
+            // has made at this point, and every one of these questions has a different answer for a
+            // branch that survives and one that does not — a clause's adoption included. Asked
+            // here, a reading answered from what it happened to hold, and an account named a rule
+            // of a branch nothing satisfies.
+            //
+            // Kept in the order they were read and not in a map keyed by what a node happens to be,
+            // because the order these are worked out in is the order the allowance is spent in: a
+            // walk over an identity map would make what a declaration can be told exactly turn on
+            // where its clauses landed in a table.
+            StatedByClauses.Asked<Written> asked = new StatedByClauses.Asked<>();
             for (Written each : written) {
-                // A reading of its own per clause, so what it says it adopted is this clause's and not
-                // everything before it. Recorded per clause because that is the granularity a question
-                // has: a clause the readings took in whole sat beside one they could not, and the
-                // position-wide account said both had gone unread.
-                StatedByClauses one = StatedByClauses
-                        .readingOf(c.terms, at, positions, symbols, alternatives)
-                        .read(each.clause(), true,
-                                (part, said) -> adoptedBy
-                                        .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>())
-                                        .put(part, said.adopted()));
-                // Both of what this clause came to, taken before it is met with the rest. What the
-                // meet holds is a set of values, and every clause's reasons meet into it — so a
-                // caller asking the whole what stopped it at a position is asking about the
-                // position and hearing whichever clause reached it.
-                one.adopted().forEach(position -> took.record(each.from(), position));
-                took.stoppedBy(each.from(), one.values());
-                stated = stated.meet(one);
+                stated = stated.meet(asked.read(reader, each, each.clause()));
             }
+            // And now that every rule about this value has been said, what its positions admit is
+            // worked out — and with it what each clause and each part of it took in, since a branch
+            // decided is what every one of those turns on. Once, and here: a position's answer is
+            // met out of every clause that reached it, so anything built before the last of them
+            // arrived would be built out of less than the rules say — and which of two ways of
+            // writing the same rules was affordable would be a fact about the writing.
+            StatedByClauses.Answered<Written> answered = asked.resolve(reader, stated, allowed);
+            // What the answer has left, before a word of the account is read.
+            Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
+            AdmissibleValues<FactSubject> values = answered.whole().values();
+            answered.perClause().forEach((each, one) -> {
+                one.adopted().forEach(position -> took.record(each.from(), position));
+                took.stoppedBy(each.from(), one.aboutARule());
+            });
+            answered.perPart().forEach((each, parts) -> {
+                Map<Core, Set<FactSubject>> out = adoptedBy
+                        .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>());
+                parts.forEach(part -> out.put(part.getKey(), part.getValue().adopted()));
+            });
+            // And the same after it. Reading the account is reading an answer: the whole was worked
+            // out once above, and what each clause and each part of it took in is looked up in
+            // that. Worked out again per clause instead, asking what a rule adopted bought machines
+            // the answer had no use for — so how exactly the rest of the declaration could be
+            // answered depended on how much of its own account somebody had read.
+            //
+            // An assertion because it is about this compiler and not about any model, and here
+            // rather than in one test because every declaration a corpus holds goes through it.
+            // What comes after this line is the answer being carried on with, which may spend.
+            assert unspent.equals(leftOf(allowed, positions.keySet()))
+                    : "reading the account of " + named.name() + " spent its allowance";
             // What was counted bounds what was built, which is the whole of why counting before
             // reading is enough. It is an induction and its steps are held where they are taken —
             // a leaf is one alternative, a choice holds at most the sum and a conjunction at most
@@ -718,16 +756,16 @@ public final class InvariantChecker {
             // assertion because it is about this compiler and not about the model, and because a
             // throw would be caught by the fail-open above and leave the reading silently dropped.
             assert alternatives == Alternatives.MERGED
-                    || heldApart(stated.values()) <= expansion
-                    : "a reading of " + named.name() + " expanded to " + heldApart(stated.values())
+                    || heldApart(values) <= expansion
+                    : "a reading of " + named.name() + " expanded to " + heldApart(values)
                             + " alternatives past a counted " + expansion;
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
                     new PartsRead(readBy, adoptedBy));
             ConstraintState<FactSubject> constraints = k.constraints()
-                    .takingValuesRead(stated.values())
-                    .taking(stated.ordered());
+                    .takingValuesRead(values, allowed)
+                    .taking(answered.whole().ordered());
             // How each atom's values are spaced, kept so that settling one afterwards states the
             // equality the same way this does. A count is a whole number of things whatever the
             // things are spaced by; a position's own value is spaced by its type.
@@ -928,6 +966,16 @@ public final class InvariantChecker {
     /** One clause reaching a value, rebased onto the positions of that value, and which clause it
      * is. */
     private record Written(RuleRef.Invariant from, Core clause) {}
+
+    /** What each of {@code positions} has left of its allowance, for holding an answer to what it
+     *  spent between two moments. */
+    private static Map<FactSubject, Integer> leftOf(
+            souther.compiler.values.Allowance<FactSubject> allowed,
+            Set<FactSubject> positions) {
+        Map<FactSubject, Integer> out = new LinkedHashMap<>();
+        positions.forEach(each -> out.put(each, allowed.left(each)));
+        return out;
+    }
 
     /**
      * Whether the value a stop left unread is one every value of what is being read has.

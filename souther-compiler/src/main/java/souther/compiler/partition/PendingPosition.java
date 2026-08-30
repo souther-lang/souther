@@ -169,6 +169,12 @@ sealed interface PendingPosition {
             // known and named there. What is written here is the other one: a position whose rules
             // this never arrived at, which names no rule because none was seen.
             case BlockReason.RuleReadingStopped _ -> null;
+            // And an answer nobody could work out is not written here either, for the reason the
+            // one above is not: what is reported here names a rule or names a position whose rules
+            // were never reached, and this is neither. It qualifies what the classes are and is
+            // carried with them ({@code AdmissibleSet.Widening}), where a reader meets it beside
+            // the values it is about rather than as a rule that was never read.
+            case BlockReason.AnswerRealizationStopped _ -> null;
             case BlockReason.AboutThePosition why ->
                     new souther.compiler.inputs.PositionReadingBlocked(at(), why);
         };

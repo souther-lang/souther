@@ -223,7 +223,13 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * conjunctions firing on a side that read nothing, and lifting it is about which rules went
      * unread rather than about how the alternatives are held.
      */
-    ConstraintState<A> takingValuesRead(AdmissibleValues<A> read) {
+    ConstraintState<A> takingValuesRead(AdmissibleValues<A> read,
+                                        souther.compiler.values.Allowance<A> sets) {
+        // The allowance the reading was worked out under, and not a fresh one. What this state
+        // holds is that reading, and what a later reader builds out of it is more of the same
+        // answer at the same positions — given an allowance of its own, a position would be allowed
+        // its machine again for every phase that touched it, and the bound would be on a phase
+        // rather than on what the model is finally told.
         // Said once, and what stands here until it is said is what nothing read leaves. Saying it
         // twice would keep the second reading and drop the first without a word, which is the one
         // way this can be got wrong now that it cannot combine two of them. An assertion because a
@@ -235,7 +241,20 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // declaration's clauses — so it is worked out here and the conjunction takes what it comes
         // to. Written the other way round, a factor would be a reading nobody had met with top.
         return new ConstraintState<>(numbers, facts,
-                ConjoinedAdmissibleValues.of(AdmissibleValues.<A>top().meet(read)), ordered, shown);
+                ConjoinedAdmissibleValues.of(AdmissibleValues.<A>top().meet(read, sets), sets),
+                ordered, shown);
+    }
+
+    /**
+     * The same state, its values spending what {@code sets} allows.
+     *
+     * <p>For a caller building one answer out of several. Two states read from two declarations
+     * were each put together under their own allowance, and what they come to met is a third
+     * admitted set that neither of them paid for — so the caller that is building it says where
+     * that is charged, and the states are taken under it before they are met.
+     */
+    public ConstraintState<A> under(souther.compiler.values.Allowance<A> sets) {
+        return new ConstraintState<>(numbers, facts, values.under(sets), ordered, shown);
     }
 
     /** This, with {@code bounded} taken as holding of the positions it bounds. */

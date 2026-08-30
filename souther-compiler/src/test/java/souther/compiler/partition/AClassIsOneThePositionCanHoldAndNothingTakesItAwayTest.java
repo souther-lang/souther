@@ -367,7 +367,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
 
                 data Code = String
                     invariant enumerated = value == "a" || value == "b"
-                    invariant shape = String.matches("[a-z]", value)
+                    invariant shape = String.startsWith("a", value)
 
                 data Accepted = { at: String }
                 data Refused = { at: String }

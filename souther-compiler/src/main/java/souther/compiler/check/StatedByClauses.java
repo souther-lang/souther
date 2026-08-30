@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.Emptiness;
 
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -33,65 +34,170 @@ import java.util.Set;
  * A branch impossible only by an arithmetic relation between two positions is one nothing here can
  * drop, and giving those two a reading of alternatives is its own change with its own reason.
  */
-record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
-                       Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder) {
+sealed interface StatedByClauses {
+
+    /**
+     * What the clauses read so far leave, in both languages, with the account of what each took in.
+     *
+     * <p>Everything a choice could settle has been settled: what is here is one reading and not a
+     * question about which of two it turned out to be.
+     */
+    record Said(souther.compiler.values.PlannedValues<FactSubject> values,
+                OrderedIntervals<FactSubject> ordered,
+                Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
+                Map<Core, Part> parts)
+            implements StatedByClauses {
+
+        // No copy on the way in. The parts are filed by the node itself and not by what a node is
+        // equal to — two conjuncts written the same way are two places in a clause — so the map is
+        // one that compares by identity, and a copy of it would not be.
+
+        /** The same, remembering that it is what {@code e} came to. */
+        @Override
+        public StatedByClauses from(Core e) {
+            Map<Core, Part> out = new java.util.IdentityHashMap<>(parts);
+            out.put(e, new Part(byValues, byOrder, values.standing()));
+            return new Said(values, ordered, byValues, byOrder, out);
+        }
+    }
+
+    /**
+     * What one part of a clause came to, kept where the whole reading keeps everything else.
+     *
+     * <p>Carried rather than asked for. Which branch of a choice anybody can be in is settled by
+     * the rules of every clause together, and a part read again on its own is read against a tree
+     * that decision never reached — so it answers about a branch the declaration has already
+     * dropped, and it pays to find out.
+     *
+     * <p>What is here is what a reader of the account needs of a part: which positions each
+     * language took it in at, and what it wrote down about the ones it could not. What the part
+     * finally admits is not among them — that is the whole value's answer and belongs to the whole.
+     *
+     * @param standing what this part's reading recorded about positions it was short of
+     */
+    record Part(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
+                Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing) {
+
+        /** The same part, in a branch nobody can be in — see {@link Adoption#inADeadBranch}. */
+        Part inADeadBranch() {
+            // The reasons go with it too. A rule of a branch nothing satisfies is not a rule of
+            // this declaration that went unread; there is no branch for an author to look at.
+            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of());
+        }
+
+        /** This part of the branch that stands, beside the same part of one nobody can be in. */
+        Part beside(Part gone) {
+            return new Part(byValues.beside(gone.byValues()), byOrder.beside(gone.byOrder()),
+                    standing);
+        }
+
+        /** The same part of two branches, neither of which anybody can be in. */
+        Part bothDead(Part other) {
+            return new Part(byValues.bothDead(other.byValues()),
+                    byOrder.bothDead(other.byOrder()), Map.of());
+        }
+
+        /** The same part of two branches somebody can be in. */
+        Part either(Part other) {
+            return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
+                    ReadByClauses.alsoSaying(standing, other.standing()));
+        }
+    }
+
+    /**
+     * A choice whose branches this cannot tell apart yet.
+     *
+     * <p>An interpreted connective and not an unread one: the clause said {@code ||} and this is
+     * what {@code ||} means, held open only because whether either branch admits anything turns on
+     * machines nobody has made.
+     *
+     * <p><b>The whole of what was read, and not its values alone.</b> A branch is dropped, kept, or
+     * kept beside a dead one, and every part of a reading is answered differently by each of those
+     * — what the positions admit, where they stop, and which rules each language took in. Held open
+     * for the values while the rest was settled, a branch that turned out dead left its adoption
+     * behind: the account said a rule of a branch nothing satisfies had gone unread, and there was
+     * no branch for an author to go and look at.
+     */
+    record Choice(StatedByClauses left, StatedByClauses right) implements StatedByClauses {
+
+        public Choice {
+            if (left == null || right == null) {
+                throw new IllegalArgumentException("a choice is between two readings");
+            }
+        }
+
+        /** Into both branches, since which of them survives is not known yet. */
+        @Override
+        public StatedByClauses from(Core e) {
+            return new Choice(left.from(e), right.from(e));
+        }
+    }
 
     /** Nothing read, so nothing ruled out. */
     static StatedByClauses top() {
-        return new StatedByClauses(AdmissibleValues.top(), OrderedIntervals.top(),
-                Adoption.nothing(), Adoption.nothing());
+        return new Said(souther.compiler.values.PlannedValues.top(),
+                OrderedIntervals.top(),
+                Adoption.nothing(), Adoption.nothing(), Map.of());
     }
 
-    /** The positions some reading took the whole of this clause in at.
+    /**
+     * Whether anything satisfies what has been read, as far as that is settled.
      *
-     * <p>Some, and not both: the two languages are short of different things, and a bound one of
-     * them has no word for is read whole by the other. What neither took in is what is left
-     * standing. */
-    Set<FactSubject> adopted() {
-        Set<FactSubject> out = new LinkedHashSet<>();
-        // Everything either account is about, and not what it put a constraint on: a position a
-        // dead branch settled is one the reading answered for and put no constraint on, which is
-        // what `took` is asked rather than told.
-        byValues.mentions().forEach(each -> {
-            if (byValues.took(each)) {
-                out.add(each);
-            }
-        });
-        byOrder.mentions().forEach(each -> {
-            if (byOrder.took(each)) {
-                out.add(each);
-            }
-        });
-        return out;
+     * <p>Either language, because each can hold the whole answer on its own: what one of them
+     * cannot express it leaves alone. Where a language is settled that nothing satisfies it, that
+     * is the answer; where the values are a description nobody has built, the answer waits.
+     */
+    default Emptiness emptiness() {
+        return switch (this) {
+            case Choice it -> it.left().emptiness().joined(it.right().emptiness());
+            case Said it -> it.ordered().isBottom() ? Emptiness.EMPTY : it.values().emptiness();
+        };
     }
 
+    /**
+     * The same reading, remembering that it is what {@code e} came to.
+     *
+     * <p>Into every branch of a choice this could not settle, because which of them survives is not
+     * known yet and the part is in each of them until it is. Recorded on the outside instead, a part
+     * whose branch turns out dead is a part nothing transformed, and the account it gives is the one
+     * it gave before anybody knew.
+     */
+    StatedByClauses from(Core e);
+
+    /**
+     * Both holding at once, distributed over a choice this could not settle.
+     *
+     * <p>A conjunction of a choice is the choice between the conjunctions. Merged into one first,
+     * the reading would be answering about a branch that may not be there.
+     */
+    default StatedByClauses meet(StatedByClauses other) {
+        if (this instanceof Choice it) {
+            return new Choice(it.left().meet(other), it.right().meet(other));
+        }
+        if (other instanceof Choice it) {
+            return new Choice(meet(it.left()), meet(it.right()));
+        }
+        Said here = (Said) this;
+        Said there = (Said) other;
+        return new Said(here.values().meet(there.values()),
+                here.ordered().meet(there.ordered()),
+                here.byValues().both(there.byValues()), here.byOrder().both(there.byOrder()),
+                // The parts of both, since a conjunction is every clause of it holding at once and
+                // each of them is still the part it was.
+                bothParts(here.parts(), there.parts()));
+    }
 
     /** The reading of one value's positions, made once and used over however many clauses reach it.
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
     static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                             Symbols symbols, Alternatives alternatives) {
-        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, alternatives),
+                             Symbols symbols, Alternatives alternatives,
+                             souther.compiler.values.Allowance<FactSubject> allowed) {
+        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, alternatives, allowed),
                 OrderedReading.of(terms, at, byName, symbols), terms, at, byName);
     }
 
 
 
-
-    /**
-     * Whether nothing satisfies what has been read.
-     *
-     * <p>Either language, because each can hold the whole answer on its own: what one of them cannot
-     * express it leaves alone. This is the question a choice is settled by, which is why it is here
-     * and not on the two of them separately.
-     */
-    boolean holdsNothing() {
-        return values.isBottom() || ordered.isBottom();
-    }
-
-    StatedByClauses meet(StatedByClauses other) {
-        return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered),
-                byValues.both(other.byValues), byOrder.both(other.byOrder));
-    }
 
     /**
      * The two readings of one clause tree, run together so that the connectives are the clause's,
@@ -123,15 +229,16 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
          */
         @Override
         public StatedByClauses leaf(Core e, boolean positive) {
-            AdmissibleValues<FactSubject> said = values.leaf(e, positive);
+            souther.compiler.values.PlannedValues<FactSubject> said = values.leaf(e, positive);
             OrderedIntervals<FactSubject> range = ordered.leaf(e, positive);
             Set<FactSubject> mentions = mentioned(e);
-            return new StatedByClauses(said, range,
+            return new Said(said, range,
                     // Each language says whether it gave up on the leaf. The reading of values
                     // carries it; the reading of order has nothing to hand back but its ranges, and
                     // a leaf it read leaves at least one.
                     Adoption.at(mentions, said.adoptedAt(), said.dropped()),
-                    Adoption.at(mentions, range.ranges().keySet(), range.ranges().isEmpty()));
+                    Adoption.at(mentions, range.ranges().keySet(), range.ranges().isEmpty()),
+                    Map.of());
         }
 
         /**
@@ -158,6 +265,18 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
         @Override
         public StatedByClauses both(StatedByClauses one, StatedByClauses other) {
             return one.meet(other);
+        }
+
+        /**
+         * What was read, remembering that it is what {@code e} came to.
+         *
+         * <p>Kept in the reading so that the branch rules below reach it. A part is answered
+         * differently in a branch that stands and in one nobody can be in, and which of those it
+         * turned out to be is settled by every clause of the value together.
+         */
+        @Override
+        public StatedByClauses from(Core e, StatedByClauses out) {
+            return out.from(e);
         }
 
         /**
@@ -189,30 +308,335 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
          */
         @Override
         public StatedByClauses either(StatedByClauses one, StatedByClauses other) {
-            if (one.holdsNothing() && other.holdsNothing()) {
-                return new StatedByClauses(
-                        values.either(one.values.leavingNothing(), other.values.leavingNothing()),
-                        ordered.either(one.ordered.leavingNothing(),
-                                other.ordered.leavingNothing()),
-                        one.byValues.bothDead(other.byValues),
-                        one.byOrder.bothDead(other.byOrder));
+            if (one instanceof Said here && other instanceof Said there) {
+                Emptiness a = here.emptiness();
+                Emptiness b = there.emptiness();
+                if (a == Emptiness.EMPTY && b == Emptiness.EMPTY) {
+                    return bothDead(here, there);
+                }
+                if (a == Emptiness.EMPTY) {
+                    return beside(there, here);
+                }
+                if (b == Emptiness.EMPTY) {
+                    return beside(here, there);
+                }
+                if (a == Emptiness.NONEMPTY && b == Emptiness.NONEMPTY) {
+                    return live(here, there);
+                }
             }
-            // An alternative nobody can take says nothing about the positions, its unread rules
-            // included — so what it missed leaves with it, the way its evidence does. What it does
-            // leave is that the positions it named are settled: nothing satisfies it, so the choice
-            // does nothing to them, and that is an answer only a reading that got to the end of the
-            // branch could give.
-            if (one.holdsNothing()) {
-                return new StatedByClauses(other.values, other.ordered,
-                        other.byValues.beside(one.byValues), other.byOrder.beside(one.byOrder));
+            // And where whether a branch can be taken is not settled, the question waits — the
+            // whole of it, and not the values alone. Which of the four above this comes to decides
+            // what the positions admit, where they stop, and what each language is recorded as
+            // having taken in; settled for some of those and held open for the rest, a branch that
+            // turned out dead would have left an account of what it adopted behind it.
+            return new Choice(one, other);
+        }
+
+        /**
+         * What the choice comes to, with every branch of it worked out.
+         *
+         * <p>Where the question waited, this is where it is answered — once, by the rules above,
+         * on branches that are readings rather than descriptions of them. Nothing downstream is
+         * left holding a decision: what comes back has a set at every position, an account of what
+         * each language took in, and no branch anybody still has to choose between.
+         */
+        ReadByClauses resolve(StatedByClauses read,
+                              souther.compiler.values.Allowance<FactSubject> by) {
+            Said said = settled(read, by);
+            souther.compiler.values.Realized<FactSubject> made = said.values().resolve(by);
+            // And what could not be built is given up on here too. What a leaf said it adopted was
+            // said before any machine was made, so a position whose answer this did not work out is
+            // one the account still calls taken in — while the values beside it say it holds every
+            // value because nobody worked it out.
+            Map<Core, ReadByClauses.OfAPart> parts = new java.util.IdentityHashMap<>();
+            said.parts().forEach((each, part) -> parts.put(each, new ReadByClauses.OfAPart(
+                    part.byValues().unbuiltAt(made.unbuilt()),
+                    part.byOrder().unbuiltAt(made.unbuilt()),
+                    aRuleIsAnswerableFor(part, made))));
+            return new ReadByClauses(made.values(), said.ordered(),
+                    said.byValues().unbuiltAt(made.unbuilt()),
+                    said.byOrder().unbuiltAt(made.unbuilt()), parts);
+        }
+
+        /**
+         * What a rule of one part is answerable for: what its own reading wrote down, and what
+         * working the answer out could not build at a position that part is about.
+         *
+         * <p>The second half is a projection and is said as one. Which rule a machine that was too
+         * large belonged to is not something the working-out records — a position's answer is met
+         * out of every rule that reached it — so what is honest is that a part naming the position
+         * is a part the shortfall is about. A part naming no position it happened at is told
+         * nothing.
+         */
+        private Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>
+                aRuleIsAnswerableFor(Part part, souther.compiler.values.Realized<FactSubject> made) {
+            Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> out =
+                    new java.util.LinkedHashMap<>();
+            part.standing().forEach((position, why) -> {
+                java.util.List<souther.compiler.values.UnreadReason> mine = why.stream()
+                        .filter(each -> each.about()
+                                == souther.compiler.values.UnreadReason.About.A_RULE)
+                        .toList();
+                if (!mine.isEmpty()) {
+                    out.put(position, mine);
+                }
+            });
+            made.aboutARule().forEach((position, why) -> {
+                if (part.byValues().mentions().contains(position)
+                        || part.byOrder().mentions().contains(position)) {
+                    out.merge(position, why, ReadByClauses::alsoSaying);
+                }
+            });
+            return out;
+        }
+
+        /**
+         * The same reading with every choice in it decided, which is one reading.
+         *
+         * <p>The branches are worked out to decide, and then the decision is made over the
+         * descriptions rather than over what they came to: the four rules are the ones a settled
+         * reading always used, and what they are applied to is the same two branches. Joined as the
+         * worked-out readings instead, every position of the choice would be a machine made out of
+         * sets that were already machines, which is work nobody described.
+         */
+        private Said settled(StatedByClauses read,
+                             souther.compiler.values.Allowance<FactSubject> by) {
+            return switch (read) {
+                case Said it -> it;
+                case Choice it -> {
+                    Said one = settled(it.left(), by);
+                    Said other = settled(it.right(), by);
+                    souther.compiler.values.Emptiness here = emptinessOf(one, by);
+                    souther.compiler.values.Emptiness there = emptinessOf(other, by);
+                    if (here == Emptiness.EMPTY && there == Emptiness.EMPTY) {
+                        yield bothDead(one, other);
+                    }
+                    if (here == Emptiness.EMPTY) {
+                        yield beside(kept(other, there, by), one);
+                    }
+                    if (there == Emptiness.EMPTY) {
+                        yield beside(kept(one, here, by), other);
+                    }
+                    yield live(kept(one, here, by), kept(other, there, by));
+                }
+            };
+        }
+
+        /**
+         * Whether anything satisfies a branch, asked of the branch worked out.
+         *
+         * <p>Three answers. A branch whose ordering admits nothing, or whose values came out
+         * empty, is one nobody can be in; a branch every position of which was worked out and which
+         * admits something is one somebody can be in; and a branch with a position this compiler
+         * could not build is neither, whatever the widened set it came back with says.
+         */
+        private Emptiness emptinessOf(Said read,
+                                      souther.compiler.values.Allowance<FactSubject> by) {
+            if (read.ordered().isBottom()) {
+                return Emptiness.EMPTY;
             }
-            if (other.holdsNothing()) {
-                return new StatedByClauses(one.values, one.ordered,
-                        one.byValues.beside(other.byValues), one.byOrder.beside(other.byOrder));
+            // What the descriptions settle, before anything is built. A branch shown to admit
+            // nothing, or shown to admit something, is decided without a machine — and only where
+            // the descriptions leave the question open is the branch worked out to answer it.
+            Emptiness said = read.values().emptiness();
+            return said == Emptiness.UNDECIDED ? read.values().resolve(by).emptiness() : said;
+        }
+
+        /**
+         * A branch that is being kept, holding what working it out could not build.
+         *
+         * <p>Which is the whole of what the third answer means. A branch shown to admit something
+         * is kept and there is nothing more to say; a branch nothing could work out is kept for the
+         * same reason nothing was dropped — nobody showed it empty — and that is not the same fact.
+         * Kept without saying so, the branch beside it would be answered as though this one had
+         * been read, and the account would call a position open where the truth is that nobody
+         * looked.
+         *
+         * <p>Said here rather than left to the plan built afterwards. That plan need not hold the
+         * part that was refused: a choice whose branches speak about different positions joins to
+         * one the expensive part is not in, and the reason would go with it.
+         */
+        private Said kept(Said read, Emptiness known,
+                          souther.compiler.values.Allowance<FactSubject> by) {
+            if (known != Emptiness.UNDECIDED) {
+                return read;
             }
-            return new StatedByClauses(values.either(one.values, other.values),
-                    ordered.either(one.ordered, other.ordered),
-                    one.byValues.either(other.byValues), one.byOrder.either(other.byOrder));
+            souther.compiler.values.Realized<FactSubject> made = read.values().resolve(by);
+            java.util.Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> why =
+                    new java.util.LinkedHashMap<>(made.aboutARule());
+            made.aboutTheAnswer().forEach(why::putIfAbsent);
+            // The parts of it too, and for the same reason. What a part said it adopted was said
+            // before any machine was made, so a part about a position this branch could not work
+            // out is one the account still calls taken in — and the plan the whole answer builds
+            // afterwards need not reach that position at all.
+            Map<Core, Part> parts = new java.util.IdentityHashMap<>();
+            read.parts().forEach((each, part) -> parts.put(each, new Part(
+                    part.byValues().unbuiltAt(made.unbuilt()),
+                    part.byOrder().unbuiltAt(made.unbuilt()),
+                    ReadByClauses.alsoSaying(part.standing(), why))));
+            return new Said(read.values().alsoStanding(why), read.ordered(),
+                    read.byValues().unbuiltAt(made.unbuilt()),
+                    read.byOrder().unbuiltAt(made.unbuilt()),
+                    parts);
+        }
+
+        /**
+         * A choice neither branch of which anybody can take.
+         *
+         * <p>No one of them speaks for the rest: taking the first to be found impossible out of the
+         * answer would settle the proof by the order the operands were written in, and the same
+         * model written two ways would be refused two ways. So each side is taken as leaving
+         * nothing and the languages are joined as they are for any other choice — what each of them
+         * says the choice leaves empty is what <em>every</em> alternative leaves empty.
+         */
+        private Said bothDead(Said here, Said there) {
+            return new Said(
+                    // The rule for a choice nobody can take, named rather than arrived at: a join
+                    // is what two branches somebody can take come to, and neither of these is one.
+                    here.values().leavingNothing()
+                            .bothDead(there.values().leavingNothing()),
+                    ordered.either(here.ordered().leavingNothing(),
+                            there.ordered().leavingNothing()),
+                    here.byValues().bothDead(there.byValues()),
+                    here.byOrder().bothDead(there.byOrder()),
+                    branchParts(here.parts(), there.parts(), Part::bothDead,
+                            Part::inADeadBranch));
+        }
+
+        /**
+         * A choice one branch of which nobody can take, which is the other branch.
+         *
+         * <p>What the dead one said goes with it, its unread rules included: nothing satisfies it,
+         * so what it left a position is not something a value of this type is under. What it does
+         * leave is that the positions it named are settled — the choice does nothing to them — and
+         * that is an answer only a reading that got to the end of the branch could give.
+         */
+        private Said beside(Said alive, Said gone) {
+            return new Said(alive.values(), alive.ordered(),
+                    alive.byValues().beside(gone.byValues()),
+                    alive.byOrder().beside(gone.byOrder()),
+                    branchParts(alive.parts(), gone.parts(), Part::beside,
+                            Part::inADeadBranch));
+        }
+
+        /** A choice both branches of which somebody can take. */
+        private Said live(Said here, Said there) {
+            return new Said(values.either(here.values(), there.values()),
+                    ordered.either(here.ordered(), there.ordered()),
+                    here.byValues().either(there.byValues()),
+                    here.byOrder().either(there.byOrder()),
+                    branchParts(here.parts(), there.parts(), Part::either,
+                            java.util.function.UnaryOperator.identity()));
         }
     }
+
+    /** The parts of two readings held together, each of them still the part it was. */
+    private static Map<Core, Part> bothParts(Map<Core, Part> these, Map<Core, Part> those) {
+        if (those.isEmpty()) {
+            return these;
+        }
+        Map<Core, Part> out = new java.util.IdentityHashMap<>(these);
+        out.putAll(those);
+        return out;
+    }
+
+    /**
+     * The parts of the two branches of a choice, put together the way the choice was.
+     *
+     * <p><b>Every part by the same rule the whole was.</b> A node inside one branch is only that
+     * branch's, and is answered by what happened to the branch. A node above the choice — the
+     * clause itself, and every conjunct the reading distributed into both — is in each of them, and
+     * what it comes to is the two accounts put together by the rule that decided the choice. Taking
+     * one side's copy instead, a clause that mentions a position only in the branch that died came
+     * back saying nothing about it, and a question stood at a position of a branch nobody can be in.
+     *
+     * @param whole what one part of each side comes to, which is the choice's own rule
+     * @param alone what a part on one side alone comes to, since it is inside that branch
+     */
+    private static Map<Core, Part> branchParts(Map<Core, Part> here, Map<Core, Part> there,
+                                               java.util.function.BinaryOperator<Part> whole,
+                                               java.util.function.UnaryOperator<Part> alone) {
+        Map<Core, Part> out = new java.util.IdentityHashMap<>();
+        here.forEach((each, part) -> {
+            Part beside = there.get(each);
+            out.put(each, beside == null ? alone.apply(part) : whole.apply(part, beside));
+        });
+        there.forEach((each, part) -> {
+            if (!here.containsKey(each)) {
+                out.put(each, alone.apply(part));
+            }
+        });
+        return out;
+    }
+
+    /**
+     * The clauses of one value as they were read, and every part of them, waiting to be worked out.
+     *
+     * <p>Held rather than asked. What a clause adopted, and what each part of it adopted, turn on
+     * which branch of a choice anybody can be in — and that is not known until the machines are
+     * made. Asked as each clause was read, the account answered from what the reading happened to
+     * hold, and a rule of a branch nothing satisfies was written down as a rule of this declaration
+     * that went unanswered.
+     *
+     * <p><b>And worked out together, once.</b> Everything here is the same declaration's answer and
+     * draws on the same allowance, so the order they are worked out in is the order it is spent in.
+     * Kept in the order the clauses were read and the parts were reached: a walk over a table keyed
+     * by what a node happens to be would make what a declaration can be told exactly turn on where
+     * its clauses landed in it.
+     *
+     * @param <K> what a caller files each clause under
+     */
+    final class Asked<K> {
+
+        private final Map<K, Core> byClause = new java.util.LinkedHashMap<>();
+        private final Map<K, java.util.List<Core>> byPart = new java.util.LinkedHashMap<>();
+
+        /** One clause read, with the parts of it noted in the order the reading reached them. */
+        StatedByClauses read(Reading reader, K key, Core clause) {
+            java.util.List<Core> parts = new java.util.ArrayList<>();
+            StatedByClauses one = reader.read(clause, true, (part, _) -> parts.add(part));
+            byClause.put(key, clause);
+            byPart.put(key, parts);
+            return one;
+        }
+
+        /**
+         * All of it worked out, once, and every part of it looked up in that.
+         *
+         * <p>One traversal because there is one answer. A clause worked out on its own is worked
+         * out against a tree the other clauses never reached: its branches are decided by its own
+         * rules alone, so a branch another clause makes impossible is still standing in it, and the
+         * account it gives names rules of a branch nobody can be in. And it pays for that —
+         * building machines the whole answer had no use for, out of what the whole answer has left.
+         */
+        Answered<K> resolve(Reading reader, StatedByClauses whole,
+                            souther.compiler.values.Allowance<FactSubject> by) {
+            ReadByClauses said = reader.resolve(whole, by);
+            Map<K, ReadByClauses.OfAPart> clauses = new java.util.LinkedHashMap<>();
+            byClause.forEach((key, clause) -> clauses.put(key, said.parts().get(clause)));
+            Map<K, java.util.List<Map.Entry<Core, ReadByClauses.OfAPart>>> parts =
+                    new java.util.LinkedHashMap<>();
+            byPart.forEach((key, these) -> {
+                java.util.List<Map.Entry<Core, ReadByClauses.OfAPart>> out =
+                        new java.util.ArrayList<>();
+                these.forEach(each -> {
+                    ReadByClauses.OfAPart one = said.parts().get(each);
+                    if (one != null) {
+                        out.add(Map.entry(each, one));
+                    }
+                });
+                parts.put(key, out);
+            });
+            return new Answered<>(said, clauses, parts);
+        }
+    }
+
+    /**
+     * What {@link Asked} came to: the whole, each clause, and each part of each clause.
+     *
+     * <p>The second and third are looked up in the first. Reading them any number of times spends
+     * nothing, because the work was done once and what is here is what it came to.
+     */
+    record Answered<K>(ReadByClauses whole, Map<K, ReadByClauses.OfAPart> perClause,
+                       Map<K, java.util.List<Map.Entry<Core, ReadByClauses.OfAPart>>> perPart) {}
 }

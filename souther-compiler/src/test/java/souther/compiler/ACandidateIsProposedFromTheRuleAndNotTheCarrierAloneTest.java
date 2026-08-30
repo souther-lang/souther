@@ -68,7 +68,9 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream).toList(), "the model under test compiles");
+                .flatMap(List::stream).map(each -> each.diagnostic().code() + " "
+                        + each.diagnostic().titleKey()).toList(),
+                "the model under test compiles");
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the rows come back");
         return all.get("look").composed();
@@ -488,12 +490,18 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * <p>Every pair is built before any of them is tried, so the count is what this allocates and not
      * what the search walks. Where it stops short the reader is owed that: values of the shape were
      * built and refused, and more of them exist that nothing here got to.
+     *
+     * <p>The eight formats hold together — a string of eight letters clears all of them — and that
+     * is what makes this about the count rather than about the rules. Written as eight lengths no
+     * string has at once, the values reading follows them and shows the declaration admits nothing,
+     * and a model refused before a search is asked for is not one this can say anything about.
      */
     @Test
     void moreParingsThanAreBuiltIsSaidAsASearchThatStopped() {
         String formats = "";
         for (int i = 1; i <= 8; i++) {
-            formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
+            formats += "    invariant p%d = String.matches(\"[a-h]{%d,}\", value)\n"
+                    .formatted(i, i);
         }
         souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
@@ -516,7 +524,8 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 let look (t) = 1
                 """.formatted(formats, formats));
 
-        assertEquals(List.of(), filled.rows(), "no two of the eight formats hold at once");
+        assertEquals(List.of(), filled.rows(),
+                "no row, because the pairings ran out before one of them was tried");
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
                 "and the pairings this did not build are said as a search that stopped: "
@@ -540,7 +549,8 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     void aMapWhoseSearchStoppedSaysSoRatherThanCallingItARefusal() {
         String formats = "";
         for (int i = 1; i <= 8; i++) {
-            formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
+            formats += "    invariant p%d = String.matches(\"[a-h]{%d,}\", value)\n"
+                    .formatted(i, i);
         }
         souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
