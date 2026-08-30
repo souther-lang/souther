@@ -5,6 +5,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -44,8 +45,9 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * fragment, and where the comparison places nothing — an operand of a variable product is one
      * value and the rule about it is one this does not model.
      */
-    static AffineReading of(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        return read(comparison, reads, symbols) instanceof OfAComparison.Cuts cuts
+    static AffineReading of(Core.Binary comparison, InputDomain inputs, InputReads reads,
+                            Symbols symbols) {
+        return read(comparison, inputs, reads, symbols) instanceof OfAComparison.Cuts cuts
                 ? cuts.read() : null;
     }
 
@@ -102,7 +104,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     }
 
     /** The same, saying which of the three it is. */
-    static OfAComparison read(Core.Binary comparison, InputReads reads, Symbols symbols) {
+    static OfAComparison read(Core.Binary comparison, InputDomain inputs, InputReads reads,
+                              Symbols symbols) {
         if (!comparison.op().compares()) {
             return new OfAComparison.CutsNothing(java.util.Set.of());
         }
@@ -113,7 +116,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
-                    AffineForms.outcome(side, reads, reading(symbols, named));
+                    AffineForms.outcome(side, reads, reading(inputs, symbols, named));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
                 return new OfAComparison.Stopped(stopped.node(), stopped.at());
             }
@@ -178,11 +181,6 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 .distinct().toList();
     }
 
-    /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */
-    static LinearForm<NumericTerm> affine(Core e, InputReads reads, Symbols symbols) {
-        return AffineForms.of(e, reads, reading(symbols, new java.util.LinkedHashSet<>()));
-    }
-
     /**
      * What this reader answers about its own environment, which is what tells its atoms from
      * another reader's.
@@ -191,9 +189,13 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * becomes a term of the input. Collected here rather than recovered afterwards: what a rule is
      * about is what the reading of it named, and a reader working that out again from the operands
      * is a second account of it.
+     *
+     * <p>{@code inputs} is held here and not threaded through the walk. What the environment
+     * answers changes at every binding the walk goes under; the reading of the input is one value
+     * for the whole reading of one comparison, and this reader lives exactly that long.
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
-            Symbols symbols, java.util.Set<NumericTerm> named) {
+            InputDomain inputs, Symbols symbols, java.util.Set<NumericTerm> named) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
@@ -203,7 +205,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, at, symbols);
+                NumericTerm term = InputNumber.of(node, inputs, at, symbols);
                 if (term == null) {
                     return null;
                 }
@@ -365,14 +367,14 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * it: a position with no number is one a sum has nothing to add.
      */
     java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers(
-            InputReads reads, Symbols symbols) {
+            InputDomain inputs, Symbols symbols) {
         java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
                 new java.util.LinkedHashMap<>();
         for (NumericTerm term : form.coefs().keySet()) {
             // Both ends of the term, because a reader of a row wants the one it is decoded on and a
             // reader of a line wants the one the answer is measured on. Carried together so neither
             // stands in for the other (#1027).
-            souther.compiler.inputs.TermOrders here = reads.read().ordersOf(term, symbols);
+            souther.compiler.inputs.TermOrders here = inputs.ordersOf(term, symbols);
             if (here.answered() == null || !here.answered().counts()) {
                 return null;
             }

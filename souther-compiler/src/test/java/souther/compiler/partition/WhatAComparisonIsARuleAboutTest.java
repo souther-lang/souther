@@ -75,7 +75,7 @@ class WhatAComparisonIsARuleAboutTest {
         for (Contract.Param param : stated.params()) {
             roots.putIfAbsent(param.binding(), param.name());
         }
-        return ComparisonAssessment.of("f", comparison,
+        return ComparisonAssessment.of("f", comparison, inputs,
                 InputReads.ofWhatIsDeclared(inputs, roots), symbols,
                 inputs.quantities(symbols), rule.value(), false,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());

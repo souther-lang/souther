@@ -138,8 +138,8 @@ final class ComparisonReadings {
             BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(comparison, plan, live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
-                            ComparisonAssessment.of(in.behavior(), comparison, reads, symbols,
-                                    in.quantities(), null, false,
+                            ComparisonAssessment.of(in.behavior(), comparison, in.inputs(), reads,
+                                    symbols, in.quantities(), null, false,
                                     in.arrives().arrivalAt(
                                             plan.requireComparisonAt(comparison)))));
             out.add(new Reading(comparison, reads, assumed, standing));
@@ -152,21 +152,22 @@ final class ComparisonReadings {
             case Core.Binary both when both.op() == BinOp.AND -> {
                 walk(both.left(), in, reads, flow, assumed, live, out);
                 walk(both.right(), in, reads, flow,
-                        taking(both.left(), true, reads, assumed, symbols), live, out);
+                        taking(both.left(), true, in.inputs(), reads, assumed, symbols), live, out);
             }
             case Core.Binary either when either.op() == BinOp.OR -> {
                 walk(either.left(), in, reads, flow, assumed, live, out);
                 walk(either.right(), in, reads, flow,
-                        taking(either.left(), false, reads, assumed, symbols), live, out);
+                        taking(either.left(), false, in.inputs(), reads, assumed, symbols),
+                        live, out);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
             // of it. A comparison inside a condition is not below the fork: it runs to decide it.
             case Core.If iff -> {
                 walk(iff.cond(), in, reads, flow, assumed, live, out);
                 walk(iff.then(), in, reads, flow,
-                        taking(iff.cond(), true, reads, assumed, symbols), live, out);
+                        taking(iff.cond(), true, in.inputs(), reads, assumed, symbols), live, out);
                 walk(iff.els(), in, reads, flow,
-                        taking(iff.cond(), false, reads, assumed, symbols), live, out);
+                        taking(iff.cond(), false, in.inputs(), reads, assumed, symbols), live, out);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
@@ -206,10 +207,12 @@ final class ComparisonReadings {
      * written apart they would agree by having been derived alike — until one of them learned to
      * read a shape of condition the other did not.
      */
-    private static List<OnTheWay> taking(Core node, boolean holding, InputReads reads,
-                                         List<OnTheWay> assumed, Symbols symbols) {
+    private static List<OnTheWay> taking(Core node, boolean holding,
+                                         souther.compiler.inputs.InputDomain inputs,
+                                         InputReads reads, List<OnTheWay> assumed,
+                                         Symbols symbols) {
         List<OnTheWay> out = new ArrayList<>(assumed);
-        out.addAll(ReachingCuts.stating(Condition.of(node, reads), holding, symbols));
+        out.addAll(ReachingCuts.stating(Condition.of(node, reads), inputs, holding, symbols));
         return List.copyOf(out);
     }
 

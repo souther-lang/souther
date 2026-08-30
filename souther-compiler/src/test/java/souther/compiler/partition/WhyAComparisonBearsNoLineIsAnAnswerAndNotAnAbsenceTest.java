@@ -74,7 +74,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
 
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
         for (ComparisonReadings.Reading each
-                : ComparisonReadings.of("read", body, plan,
+                : ComparisonReadings.of("read", body, plan, inputs,
                         InputReads.of(inputs, checked.elementBindings().get("read")),
                         symbols, inputs.quantities(symbols),
                         // What arrives is not what this is about: read with nothing said about it,

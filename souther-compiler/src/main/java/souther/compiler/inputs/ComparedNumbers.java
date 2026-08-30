@@ -27,6 +27,9 @@ import java.util.Map;
 public final class ComparedNumbers {
 
     private final InputReads reads;
+    // Beside the module's names and for the same reason: one body is read against one reading of
+    // the input, while what a name stands for is whatever the walk has got to.
+    private final InputDomain inputs;
     private final Symbols symbols;
 
     /** What each comparison came to and what it was read under, shared by every scope of one body. */
@@ -34,21 +37,23 @@ public final class ComparedNumbers {
 
     private record Read(InputReads under, ComparedNumber said) { }
 
-    private ComparedNumbers(InputReads reads, Symbols symbols, Map<Core.Binary, Read> said) {
+    private ComparedNumbers(InputReads reads, InputDomain inputs, Symbols symbols,
+                            Map<Core.Binary, Read> said) {
         this.reads = reads;
+        this.inputs = inputs;
         this.symbols = symbols;
         this.said = said;
     }
 
-    /** The comparisons of a body whose names read {@code reads}. */
-    public static ComparedNumbers of(InputReads reads, Symbols symbols) {
-        return new ComparedNumbers(reads, symbols, new IdentityHashMap<>());
+    /** The comparisons of a body whose names read {@code reads}, against {@code inputs}. */
+    public static ComparedNumbers of(InputDomain inputs, InputReads reads, Symbols symbols) {
+        return new ComparedNumbers(reads, inputs, symbols, new IdentityHashMap<>());
     }
 
     /** What a name reads inside a body that binds {@code binder} to {@code value}. */
     public ComparedNumbers under(Core.Binder binder, Core value) {
         InputReads inside = reads.and(binder, value);
-        return inside.equals(reads) ? this : new ComparedNumbers(inside, symbols, said);
+        return inside.equals(reads) ? this : new ComparedNumbers(inside, inputs, symbols, said);
     }
 
     /** What a name reads inside {@code arm} of {@code match}, where the arm's name stands for the
@@ -56,7 +61,7 @@ public final class ComparedNumbers {
      *  reading of the input has, and this has both for the same reason it is scoped at all. */
     public ComparedNumbers insideArm(Core.Match match, Core.Case arm) {
         InputReads inside = reads.insideArm(match, arm, symbols);
-        return inside.equals(reads) ? this : new ComparedNumbers(inside, symbols, said);
+        return inside.equals(reads) ? this : new ComparedNumbers(inside, inputs, symbols, said);
     }
 
     /** The reading of {@code comparison}, or null where it names no number of this input. */
@@ -71,7 +76,7 @@ public final class ComparedNumbers {
             }
             return had.said();
         }
-        ComparedNumber read = ComparedNumber.of(comparison, reads, symbols);
+        ComparedNumber read = ComparedNumber.of(comparison, inputs, reads, symbols);
         said.put(comparison, new Read(reads, read));
         return read;
     }

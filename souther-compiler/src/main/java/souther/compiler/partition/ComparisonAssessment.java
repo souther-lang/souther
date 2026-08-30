@@ -230,7 +230,8 @@ sealed interface ComparisonAssessment {
      * form written two ways agree as arithmetic and are made of different things, so the rule they
      * state would come back as one about no input at all.
      */
-    static ComparisonAssessment of(String behavior, Core.Binary comparison, InputReads reads,
+    static ComparisonAssessment of(String behavior, Core.Binary comparison,
+                                   souther.compiler.inputs.InputDomain inputs, InputReads reads,
                                    Symbols symbols, Quantities quantities, BindingId answer,
                                    boolean drawnByAnInvariant,
                                    souther.compiler.reach.ComparisonArrival arrival) {
@@ -241,7 +242,7 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison, answer)) {
             return new AnswerDependent();
         }
-        return switch (Cutting.read(behavior, comparison, reads, symbols, quantities)) {
+        return switch (Cutting.read(behavior, comparison, inputs, reads, symbols, quantities)) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(comparison, cuts.cutting(), quantities, drawnByAnInvariant,
                             arrival);
@@ -258,7 +259,7 @@ sealed interface ComparisonAssessment {
             // is for.
             case Cutting.Read.Stopped stopped -> {
                 List<FilingCoordinate> filedAt =
-                        GuardThresholds.filedAt(comparison, reads, symbols);
+                        GuardThresholds.filedAt(comparison, inputs, reads, symbols);
                 yield filedAt.isEmpty() ? aboutNoPosition(comparison, reads, symbols)
                         : new Unread(stopped.why(), filedAt);
             }

@@ -94,10 +94,10 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, () -> "the model under test writes " + behavior);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        InputReads reads = InputReads.of(
-                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior),
-                checked.elementBindings().get(behavior));
-        return ReachingCuts.stating(Condition.of(body, reads), holding, symbols);
+        souther.compiler.inputs.InputDomain inputs =
+                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        InputReads reads = InputReads.of(inputs, checked.elementBindings().get(behavior));
+        return ReachingCuts.stating(Condition.of(body, reads), inputs, holding, symbols);
     }
 
     /** Whether {@code cut} holds where {@code x} and {@code y} stand at these values. */

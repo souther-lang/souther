@@ -61,11 +61,14 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      * nothing here has taken apart at all — the canonical form is what says a pair is a pair, and
      * it had no answer.
      */
-    static ComparedTerms asWritten(Core.Binary comparison, InputReads reads, Symbols symbols) {
+    static ComparedTerms asWritten(Core.Binary comparison,
+                                   souther.compiler.inputs.InputDomain inputs, InputReads reads,
+                                   Symbols symbols) {
         if (ordersStrictly(comparison.op())) {
-            GuardThresholds.Named on = GuardThresholds.namedBy(comparison.left(), reads, symbols);
+            GuardThresholds.Named on =
+                    GuardThresholds.namedBy(comparison.left(), inputs, reads, symbols);
             GuardThresholds.Named against =
-                    GuardThresholds.namedBy(comparison.right(), reads, symbols);
+                    GuardThresholds.namedBy(comparison.right(), inputs, reads, symbols);
             // A distance runs between two positions, so each side has to be a number one answers.
             NumericTerm.FromOnePosition here = on == null ? null : on.term().atOnePosition();
             NumericTerm.FromOnePosition there =
@@ -127,8 +130,8 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      * where they meet is not where that rule cuts — read as a line at zero it would ask for a pair
      * that proves nothing about it.
      */
-    static ComparedTerms fromTheForm(AffineReading read, InputReads reads,
-                                     Symbols symbols) {
+    static ComparedTerms fromTheForm(AffineReading read,
+                                     souther.compiler.inputs.InputDomain inputs, Symbols symbols) {
         if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
             return null;
         }
@@ -146,8 +149,8 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
         // The orders come from the reading of the declarations, the way they do above. A term the
         // arithmetic produced has no expression naming it, so there is not even a type here to take
         // one off — which is the whole of what went wrong when one was taken off the comparison.
-        souther.compiler.inputs.TermOrders hereOn = reads.read().ordersOf(two[0], symbols);
-        souther.compiler.inputs.TermOrders thereOn = reads.read().ordersOf(two[1], symbols);
+        souther.compiler.inputs.TermOrders hereOn = inputs.ordersOf(two[0], symbols);
+        souther.compiler.inputs.TermOrders thereOn = inputs.ordersOf(two[1], symbols);
         Carrier here = hereOn.answered();
         Carrier there = thereOn.answered();
         // Whether the order has a place at the number the rule wrote is the order's own answer and

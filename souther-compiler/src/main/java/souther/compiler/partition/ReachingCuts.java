@@ -99,7 +99,8 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * declined whole, at the condition rather than at an operand — neither operand is what could
      * not be carried.
      */
-    static List<OnTheWay> stating(Condition node, boolean holding, Symbols symbols) {
+    static List<OnTheWay> stating(Condition node, InputDomain inputs, boolean holding,
+                                  Symbols symbols) {
         return switch (node) {
             // A conjunction coming out true is both its operands true, and a disjunction coming out
             // false is both false. The other two ways round say a disjunction of things, which is
@@ -107,15 +108,16 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
             // them failed and names neither, and narrowing on either would exclude rows that arrive.
             // So the whole node is declined, at the whole node's place.
             case Condition.Both both -> holding
-                    ? and(stating(both.left(), true, symbols), stating(both.right(), true, symbols))
+                    ? and(stating(both.left(), inputs, true, symbols),
+                            stating(both.right(), inputs, true, symbols))
                     : List.of(new OnTheWay.Declined(Citation.of(both.at().pos()),
                             new OnTheWay.Why.OneOfTwoThings()));
             case Condition.Either either -> holding
                     ? List.of(new OnTheWay.Declined(Citation.of(either.at().pos()),
                             new OnTheWay.Why.OneOfTwoThings()))
-                    : and(stating(either.left(), false, symbols),
-                            stating(either.right(), false, symbols));
-            case Condition.Compares one -> List.of(of(one, holding, symbols));
+                    : and(stating(either.left(), inputs, false, symbols),
+                            stating(either.right(), inputs, false, symbols));
+            case Condition.Compares one -> List.of(of(one, inputs, holding, symbols));
             case Condition.NotRead not -> List.of(new OnTheWay.Declined(
                     Citation.of(not.at().pos()), new OnTheWay.Why.NoWordsForTheShape()));
         };
@@ -176,9 +178,11 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * this end's cases apart is {@link AffineReading} saying why it read nothing, which it does
      * not.
      */
-    private static OnTheWay of(Condition.Compares comparison, boolean holding, Symbols symbols) {
+    private static OnTheWay of(Condition.Compares comparison, InputDomain inputs, boolean holding,
+                               Symbols symbols) {
         Citation at = Citation.of(comparison.at().pos());
-        AffineReading read = AffineReading.of(comparison.at(), comparison.reads(), symbols);
+        AffineReading read =
+                AffineReading.of(comparison.at(), inputs, comparison.reads(), symbols);
         Rel states = read == null ? null : relOf(read.claim());
         if (states == null) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ComparisonNotRepresentedAsACut());

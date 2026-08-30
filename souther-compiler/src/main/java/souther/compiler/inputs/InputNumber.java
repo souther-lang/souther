@@ -35,18 +35,18 @@ public final class InputNumber {
      * <p>The argument of a taking has to be a location: {@code List.length(List.map(f, xs))} counts
      * something no path names, and a boundary on it could not be looked for in a row.
      */
-    public static NumericTerm of(Core e, InputReads reads, Symbols symbols) {
+    public static NumericTerm of(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
             TermPath of = reads.pathOf(measured.of(), symbols);
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of,
-                        reads.read().typeAt(of, symbols), symbols);
+                        inputs.typeAt(of, symbols), symbols);
             }
             // A location the operation is not taken of, or a value standing at none. The second is
             // a walk's answer, and a number over the values it walked is a term of its own where
             // those values are read from a place.
-            return overARun(measured, reads, symbols);
+            return overARun(measured, inputs, reads, symbols);
         }
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
@@ -82,8 +82,8 @@ public final class InputNumber {
      * ({@link RunSource#overTheOccurrencesAt}), which is the same answer for the same reason: a
      * reading short rather than a line somewhere it does not go.
      */
-    private static NumericTerm overARun(NumericMeasures.Measured measured, InputReads reads,
-                                        Symbols symbols) {
+    private static NumericTerm overARun(NumericMeasures.Measured measured, InputDomain inputs,
+                                        InputReads reads, Symbols symbols) {
         Core walk = measured.of();
         InputReads where = reads;
         // By the bindings met, so a name that came round to itself stops rather than being followed
@@ -117,7 +117,7 @@ public final class InputNumber {
         if (over == null) {
             return null;
         }
-        Type stands = where.read().typeAt(under, symbols);
+        Type stands = inputs.typeAt(under, symbols);
         return stands == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, stands, symbols);
     }

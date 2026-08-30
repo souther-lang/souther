@@ -90,9 +90,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * over the comparison and answered about the shape rather than about what this reading could do
      * with it.
      */
-    static Read read(String behavior, Core.Binary comparison, InputReads reads, Symbols symbols,
+    static Read read(String behavior, Core.Binary comparison,
+                     souther.compiler.inputs.InputDomain inputs, InputReads reads, Symbols symbols,
                      souther.compiler.inputs.Quantities quantities) {
-        AffineReading.OfAComparison canonical = AffineReading.read(comparison, reads, symbols);
+        AffineReading.OfAComparison canonical =
+                AffineReading.read(comparison, inputs, reads, symbols);
         return switch (canonical) {
             // Nothing was missing: the form was read from end to end, and the quantity in it is
             // empty. Unconditional, and before anything about how the comparison was spelled —
@@ -105,12 +107,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // left to try. Read the other way round, a spelling that produced a line took the
             // comparison before the canonical form was consulted at all.
             case AffineReading.OfAComparison.Cuts cuts ->
-                    realized(behavior, cuts.read(), reads, symbols, quantities);
+                    realized(behavior, cuts.read(), inputs, reads, symbols, quantities);
             // And only here does how it was written decide anything. The arithmetic stopped, which
             // is what a date against a written date and a case of an enumeration do: the values are
             // ones it cannot count, and the comparison still states a line.
             case AffineReading.OfAComparison.Stopped stopped ->
-                    asWritten(behavior, comparison, stopped, reads, symbols, quantities);
+                    asWritten(behavior, comparison, stopped, inputs, reads, symbols, quantities);
         };
     }
 
@@ -143,19 +145,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * values, two positions held apart, and a form over several. Nothing here reads the comparison
      * again — what each of them is handed is the form the reading already came to.
      */
-    private static Read realized(String behavior, AffineReading read, InputReads reads,
+    private static Read realized(String behavior, AffineReading read,
+                                 souther.compiler.inputs.InputDomain inputs, InputReads reads,
                                  Symbols symbols,
                                  souther.compiler.inputs.Quantities quantities) {
-        Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, reads, symbols),
+        Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, inputs, symbols),
                 quantities);
         if (drawn == null) {
-            drawn = apart(behavior, ComparedTerms.fromTheForm(read, reads, symbols), read.claim(),
+            drawn = apart(behavior, ComparedTerms.fromTheForm(read, inputs, symbols), read.claim(),
                     quantities);
         }
         if (drawn != null) {
             return new Read.Cuts(drawn);
         }
-        Cutting form = overAForm(behavior, read, reads, symbols, quantities);
+        Cutting form = overAForm(behavior, read, inputs, reads, symbols, quantities);
         if (form != null) {
             return new Read.Cuts(form);
         }
@@ -173,13 +176,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * stopped, so a spelling never answers a question the canonical form has already answered.
      */
     private static Read asWritten(String behavior, Core.Binary comparison,
-                                  AffineReading.OfAComparison.Stopped canonical, InputReads reads,
+                                  AffineReading.OfAComparison.Stopped canonical,
+                                  souther.compiler.inputs.InputDomain inputs, InputReads reads,
                                   Symbols symbols,
                                   souther.compiler.inputs.Quantities quantities) {
-        Cutting drawn = atAPosition(behavior, ComparedLine.asWritten(comparison, reads, symbols),
-                quantities);
+        Cutting drawn = atAPosition(behavior,
+                ComparedLine.asWritten(comparison, inputs, reads, symbols), quantities);
         if (drawn == null) {
-            drawn = apart(behavior, ComparedTerms.asWritten(comparison, reads, symbols),
+            drawn = apart(behavior, ComparedTerms.asWritten(comparison, inputs, reads, symbols),
                     ComparisonClaim.of(comparison.op()), quantities);
         }
         if (drawn != null) {
@@ -256,14 +260,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * rule written in a form this compiler cannot take apart — a sentence about this compiler, and
      * the form is right here.
      */
-    private static Cutting overAForm(String behavior, AffineReading read, InputReads reads,
+    private static Cutting overAForm(String behavior, AffineReading read,
+                                     souther.compiler.inputs.InputDomain inputs, InputReads reads,
                                      Symbols symbols,
                                      souther.compiler.inputs.Quantities quantities) {
         if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
             return null;
         }
         java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
-                read.carriers(reads, symbols);
+                read.carriers(inputs, symbols);
         if (on == null) {
             return null;
         }

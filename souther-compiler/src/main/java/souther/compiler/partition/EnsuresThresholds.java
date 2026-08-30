@@ -139,7 +139,8 @@ public final class EnsuresThresholds {
                 // a statement that the model has none there. It is still counted, so that which
                 // line of the clause the next one is does not move with what this reading managed.
                 line = conjunct.stated().orNull() == null ? line + 1
-                        : stated(conjunct.stated().orNull(), rule, clause, line, reads, symbols,
+                        : stated(conjunct.stated().orNull(), rule, clause, line, inputs, reads,
+                                symbols,
                                 quantities, drawn);
             }
         }
@@ -165,11 +166,13 @@ public final class EnsuresThresholds {
      *         one numbers the rest the same as a reading that could
      */
     private static int stated(Core e, StatedContract.StatedRule rule, String clause, int line,
-                              InputReads reads, Symbols symbols, souther.compiler.inputs.Quantities quantities, Drawn out) {
+                              InputDomain inputs, InputReads reads, Symbols symbols,
+                              souther.compiler.inputs.Quantities quantities, Drawn out) {
         if (e instanceof Core.Binary both && both.op() == BinOp.AND) {
             return stated(both.right(), rule, clause,
-                    stated(both.left(), rule, clause, line, reads, symbols, quantities, out),
-                    reads, symbols, quantities, out);
+                    stated(both.left(), rule, clause, line, inputs, reads, symbols, quantities,
+                            out),
+                    inputs, reads, symbols, quantities, out);
         }
         // Through what a `let` binds, which is not a choice: what the expression comes to is its
         // body, so the body states whatever the rule states. This is the shape a helper called from
@@ -177,7 +180,8 @@ public final class EnsuresThresholds {
         // parameter — and a walk that stopped here found the rule stating nothing while the model
         // plainly says something about the position.
         if (e instanceof Core.LetIn let) {
-            return stated(let.body(), rule, clause, line, reads.and(let.binder(), let.value()),
+            return stated(let.body(), rule, clause, line, inputs,
+                    reads.and(let.binder(), let.value()),
                     symbols, quantities, out);
         }
         // A disjunction was read, and what it states is not what either side of it states. Said as
@@ -206,8 +210,8 @@ public final class EnsuresThresholds {
         // No arrival either: a clause stands in no body, it is checked whenever the behavior
         // answers, so there is nothing on the way to it and what arrives is the declarations'
         // whole domain — which is what an arrival that restricts nothing reads as.
-        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, reads,
-                symbols, quantities, rule.value(), false,
+        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, inputs,
+                reads, symbols, quantities, rule.value(), false,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
