@@ -142,7 +142,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     private static Generator.BoundaryAttempt composing(Axis axis, Place at, OnTheWay.TakenIn taken) {
         return Generator.probeFixing(subject(), axis.path() + " = " + at,
                 _ -> axis.term().answeredOn(axis.type(), symbols()),
-                Map.of(axis.term(), at),
+                Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
                 new Reachability.Reaching(domain().quantities(symbols()).region(),
                         Requirements.NONE, List.of(taken)),
                 Generator.CandidateCheck.ANY);
