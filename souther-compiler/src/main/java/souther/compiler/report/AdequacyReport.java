@@ -2017,12 +2017,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         switch (at) {
             case souther.compiler.partition.Level.OnACarrier on -> {
                 into.put("kind", "on_a_carrier");
-                into.put("carrier", on.of().toString());
+                carrier(into.putObject("carrier"), on.of());
                 into.put("at", on.at().key());
             }
             case souther.compiler.partition.Level.ACount count -> {
                 into.put("kind", "a_count");
                 into.put("at", count.at().key());
+            }
+        }
+    }
+
+    /**
+     * Which order a level is counted on, in this document's own words.
+     *
+     * <p>Said by a switch over the orders there are rather than by what this compiler calls one to
+     * itself. A record's {@code toString} is a rendering of a Java class — {@code Whole[]} — and
+     * publishing it as part of an identity makes the class's shape a contract: a field added to a
+     * carrier, or a rename, would silently be a new identity for the same order.
+     */
+    private static void carrier(ObjectNode into, souther.compiler.check.Carrier of) {
+        switch (of) {
+            case souther.compiler.check.Carrier.Whole _ -> into.put("kind", "whole");
+            case souther.compiler.check.Carrier.Dense _ -> into.put("kind", "dense");
+            case souther.compiler.check.Carrier.Days _ -> into.put("kind", "days");
+            case souther.compiler.check.Carrier.Seconds _ -> into.put("kind", "seconds");
+            case souther.compiler.check.Carrier.SecondsOfDay _ ->
+                    into.put("kind", "seconds_of_day");
+            case souther.compiler.check.Carrier.Nanos _ -> into.put("kind", "nanos");
+            case souther.compiler.check.Carrier.Text _ -> into.put("kind", "text");
+            // The enumeration itself, because two enumerations are two orders however alike their
+            // cases count. Which cases it has is what the order is made of and is written with it.
+            case souther.compiler.check.Carrier.Ordinal it -> {
+                into.put("kind", "ordinal");
+                // The enumeration and the places it declares, because two enumerations are two
+                // orders however alike their cases count, and where a case comes in the
+                // declaration is what the order is.
+                into.put("enumeration", it.enumeration().name());
+                ArrayNode cases = into.putArray("cases");
+                it.cases().forEach(each -> cases.add(each.name()));
             }
         }
     }
@@ -2204,7 +2236,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // one flat list they are two identical objects, and which declaration a reader is being
             // sent to is exactly what {@link souther.compiler.query.FindingSubject} was introduced
             // to keep.
-            declarations(m.putArray("declarations"), module.declarations(), sources);
+            declarations(m.putArray("declarations"), module.declarations(), module.debts(),
+                    sources);
             ArrayNode behaviors = m.putArray("behaviors");
             for (BehaviorReport behavior : module.behaviors()) {
                 ObjectNode b = behaviors.addObject();
@@ -2521,41 +2554,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // two entries there and one here. A consumer joining a finding to what it is about joins
         // here, on the point, where on the line and the rule; and every reading is published, so
         // nothing a text report left out for room is missing from the document.
-        ArrayNode obligations = out.putArray("obligations");
-        for (BorderObligationPointAssessment point : account) {
-            ObjectNode o = obligations.addObject();
-            // The identity first, because it is what a finding joins on. The words below are what
-            // a person reads, and two obligations can share every one of them.
-            obligationId(o.putObject("obligationId"), point.point());
-            o.put("point", word(point.role()));
-            o.put("rule", point.describe(sources::written, null));
-            ruleId(o.putObject("ruleId"), point.id().provenance());
-            o.put("relation", point.operator());
-            ItemAssessment.WritabilityEvidence evidence = point.owed().writabilityEvidence();
-            o.put("knownWritable", evidence.known());
-            ArrayNode because = o.putArray("writableBecause");
-            for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
-                if (evidence.has(ground)) {
-                    because.add(wire(ground));
-                }
-            }
-            measured(o, point.owed().coverage(), (node, coverage) ->
-                    node.put("hit", ItemAssessment.Coverage.hit(coverage)));
-            // The readings, each as the position it met the line at and what a row there has to
-            // do in that position's terms. In the order the sentences sort and never the walk's;
-            // the order is not a contract, and a consumer reads these as a set.
-            ArrayNode readings = o.putArray("readings");
-            for (BorderObligationPointAssessment.ReadingSaid said : point.readingsSaid()) {
-                BorderAssessment at = point.met().get(said.where());
-                ObjectNode r = readings.addObject();
-                r.put("behavior", said.where().behavior());
-                r.put("axis", said.at());
-                r.put("relation", at.border().operator(point.role()));
-                r.put("against", at.border().against(point.role()));
-                measured(r, at.owedAt(point.role()).coverage(), (node, coverage) ->
-                        node.put("hit", ItemAssessment.Coverage.hit(coverage)));
-            }
-        }
+        obligations(out.putArray("obligations"), account, null, sources);
         ObjectNode pairs = out.putObject("pairs");
         // The size of the space is the model's and is written whether or not anybody counted. The
         // counts are the measurement's and are written only where one was made; `truncated` is gone
@@ -2675,22 +2674,103 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * What each declaration of the module is short of, under the declaration.
+     * What a set of obligations comes to, written the one way wherever they are published.
+     *
+     * <p>One writer, because a behavior's account and the declarations' are two projections of one
+     * relation and a consumer joins a finding to either by the same key. Written twice, the section
+     * edited last would carry a field the other did not, and a reader would have to know which
+     * account it was looking at to know what to expect.
+     *
+     * @param axes what each point's line is on in the words a declaration wrote, for the account
+     *             that has such words. Null for a body's own lines, which have none: a reading
+     *             names the position it met the line at and no reading can stand for the rest
+     */
+    private void obligations(ArrayNode out, List<BorderObligationPointAssessment> account,
+                             Map<souther.compiler.partition.BorderObligationPoint, String> axes,
+                             DocumentSources sources) {
+        for (BorderObligationPointAssessment point : account) {
+            ObjectNode o = out.addObject();
+            // The identity first, because it is what a finding joins on. The words below are what
+            // a person reads, and two obligations can share every one of them.
+            obligationId(o.putObject("obligationId"), point.point());
+            o.put("point", word(point.role()));
+            o.put("rule", point.describe(sources::written, null));
+            ruleId(o.putObject("ruleId"), point.id().provenance());
+            o.put("relation", point.operator());
+            // What the line is on, where the author wrote a word for it. A body's line has none,
+            // and the readings below say what each position it was met at has to hold.
+            String axis = axes == null ? null : axes.get(point.point());
+            if (axis != null) {
+                o.put("axis", axis);
+                o.put("against", point.against(axis));
+            }
+            ItemAssessment.WritabilityEvidence evidence = point.owed().writabilityEvidence();
+            o.put("knownWritable", evidence.known());
+            ArrayNode because = o.putArray("writableBecause");
+            for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
+                if (evidence.has(ground)) {
+                    because.add(wire(ground));
+                }
+            }
+            measured(o, point.owed().coverage(), (node, coverage) ->
+                    node.put("hit", ItemAssessment.Coverage.hit(coverage)));
+            // The readings, each as the position it met the line at and what a row there has to
+            // do in that position's terms. In the order the sentences sort and never the walk's;
+            // the order is not a contract, and a consumer reads these as a set.
+            ArrayNode readings = o.putArray("readings");
+            for (BorderObligationPointAssessment.ReadingSaid said : point.readingsSaid()) {
+                BorderAssessment at = point.met().get(said.where());
+                ObjectNode r = readings.addObject();
+                r.put("behavior", said.where().behavior());
+                r.put("axis", said.at());
+                r.put("relation", at.border().operator(point.role()));
+                r.put("against", at.border().against(point.role()));
+                measured(r, at.owedAt(point.role()).coverage(), (node, coverage) ->
+                        node.put("hit", ItemAssessment.Coverage.hit(coverage)));
+            }
+        }
+    }
+
+    /**
+     * What each declaration of the module is owed and is short of, under the declaration.
      *
      * <p>The grouping a human report prints, published. A finding carries which declaration it is
-     * about, so this is a rendering of that and not a second answer: read off the entries alone, the
-     * subject a finding writes is what the line asks of a row, and the declaration it belongs to
-     * would be gone.
+     * about, so that half is a rendering of the finding and not a second answer: read off the
+     * entries alone, the subject a finding writes is what the line asks of a row, and the
+     * declaration it belongs to would be gone.
      */
     private void declarations(ArrayNode out, List<Adequacy.Finding> written,
-                              DocumentSources sources) {
+                              List<Adequacy.DeclaredDebt> owed, DocumentSources sources) {
+        // What the declarations are owed, under the declaration each is owed to, and not only what
+        // they are short of. A line a row already stands at has no finding, so a section written
+        // from the findings alone publishes the gaps and nothing else — a reader could not tell a
+        // module whose declarations owe nothing from one whose every line is answered, and a
+        // finding's `obligationId` had nothing in the document to join to. The behavior blocks are
+        // written from their account for the same reason; this is the declarations' side of it.
         Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
         for (Adequacy.Finding each : written) {
             byDeclaration.computeIfAbsent(each.named(), _ -> new ArrayList<>()).add(each);
         }
-        byDeclaration.forEach((declaration, findings) -> {
+        // Every declaration that owes something or is short of something, in the order the module
+        // answered for them.
+        Map<String, List<Adequacy.Finding>> named = new LinkedHashMap<>();
+        for (Adequacy.DeclaredDebt each : owed) {
+            named.computeIfAbsent(each.subject().named(), _ -> new ArrayList<>());
+        }
+        byDeclaration.forEach((declaration, findings) ->
+                named.computeIfAbsent(declaration, _ -> new ArrayList<>()).addAll(findings));
+        named.forEach((declaration, findings) -> {
             ObjectNode one = out.addObject();
             one.put("name", declaration);
+            obligations(one.putArray("obligations"), owed.stream()
+                            .filter(each -> each.subject().named().equals(declaration))
+                            .map(Adequacy.DeclaredDebt::debt).toList(),
+                    owed.stream()
+                            .filter(each -> each.subject().named().equals(declaration))
+                            .collect(java.util.stream.Collectors.toMap(
+                                    each -> each.debt().point(), Adequacy.DeclaredDebt::axis,
+                                    (a, _) -> a)),
+                    sources);
             findings(one.putArray("findings"), findings, sources);
         });
     }

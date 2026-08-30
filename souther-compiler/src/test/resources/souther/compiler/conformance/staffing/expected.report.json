@@ -7,7 +7,313 @@
     "module" : "conformance.staffing",
     "status" : "complete",
     "incompleteness" : [ ],
-    "declarations" : [ ],
+    "declarations" : [ {
+      "name" : "WorkDays",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "invariant",
+              "declaredIn" : "conformance.staffing",
+              "declaredOn" : "WorkDays",
+              "clause" : 0
+            },
+            "conjunct" : 0,
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "point" : "on"
+        },
+        "point" : "on",
+        "rule" : "invariant WorkDays #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.staffing",
+          "declaredOn" : "WorkDays",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "1",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "readings" : [ {
+          "behavior" : "grantLeave",
+          "axis" : "grantLeave/worked",
+          "relation" : "=",
+          "against" : "1",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "invariant",
+              "declaredIn" : "conformance.staffing",
+              "declaredOn" : "WorkDays",
+              "clause" : 0
+            },
+            "conjunct" : 1,
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "7"
+          },
+          "point" : "on"
+        },
+        "point" : "on",
+        "rule" : "invariant WorkDays #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.staffing",
+          "declaredOn" : "WorkDays",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "7",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "readings" : [ {
+          "behavior" : "grantLeave",
+          "axis" : "grantLeave/worked",
+          "relation" : "=",
+          "against" : "7",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      } ],
+      "findings" : [ ]
+    }, {
+      "name" : "Rate",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "invariant",
+              "declaredIn" : "conformance.staffing",
+              "declaredOn" : "Rate",
+              "clause" : 0
+            },
+            "conjunct" : 0,
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "dense"
+            },
+            "at" : "0"
+          },
+          "point" : "on"
+        },
+        "point" : "on",
+        "rule" : "invariant Rate #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.staffing",
+          "declaredOn" : "Rate",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "0",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "readings" : [ {
+          "behavior" : "grantLeave",
+          "axis" : "grantLeave/rate",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "invariant",
+              "declaredIn" : "conformance.staffing",
+              "declaredOn" : "Rate",
+              "clause" : 0
+            },
+            "conjunct" : 1,
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "dense"
+            },
+            "at" : "1"
+          },
+          "point" : "on"
+        },
+        "point" : "on",
+        "rule" : "invariant Rate #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.staffing",
+          "declaredOn" : "Rate",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "1",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "readings" : [ {
+          "behavior" : "grantLeave",
+          "axis" : "grantLeave/rate",
+          "relation" : "=",
+          "against" : "1",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      } ],
+      "findings" : [ ]
+    }, {
+      "name" : "Hours",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "invariant",
+              "declaredIn" : "conformance.staffing",
+              "declaredOn" : "Hours",
+              "clause" : 0
+            },
+            "conjunct" : 0,
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "point" : "on"
+        },
+        "point" : "on",
+        "rule" : "invariant Hours #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.staffing",
+          "declaredOn" : "Hours",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "0",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "readings" : [ {
+          "behavior" : "judgeHours",
+          "axis" : "judgeHours/hours",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "rule" : {
+              "kind" : "invariant",
+              "declaredIn" : "conformance.staffing",
+              "declaredOn" : "Hours",
+              "clause" : 0
+            },
+            "conjunct" : 1,
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "200"
+          },
+          "point" : "on"
+        },
+        "point" : "on",
+        "rule" : "invariant Hours #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.staffing",
+          "declaredOn" : "Hours",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "200",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "readings" : [ {
+          "behavior" : "judgeHours",
+          "axis" : "judgeHours/hours",
+          "relation" : "=",
+          "against" : "200",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      } ],
+      "findings" : [ ]
+    } ],
     "behaviors" : [ {
       "name" : "grantLeave",
       "implementation" : "implemented",
@@ -268,7 +574,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "1"
             },
             "point" : "in",
@@ -336,7 +644,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "7"
             },
             "point" : "in",
@@ -405,7 +715,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "5"
             },
             "point" : "on"
@@ -452,7 +764,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "5"
             },
             "point" : "off"
@@ -499,7 +813,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "5"
             },
             "point" : "in",
@@ -509,7 +825,9 @@
                 "kind" : "at_the_domain",
                 "at" : {
                   "kind" : "on_a_carrier",
-                  "carrier" : "Whole[]",
+                  "carrier" : {
+                    "kind" : "whole"
+                  },
                   "at" : "7"
                 },
                 "per" : "1",
@@ -559,7 +877,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "5"
             },
             "point" : "out",
@@ -569,7 +889,9 @@
                 "kind" : "at_the_domain",
                 "at" : {
                   "kind" : "on_a_carrier",
-                  "carrier" : "Whole[]",
+                  "carrier" : {
+                    "kind" : "whole"
+                  },
                   "at" : "1"
                 },
                 "per" : "1",
@@ -618,7 +940,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Dense[]",
+              "carrier" : {
+                "kind" : "dense"
+              },
               "at" : "0"
             },
             "point" : "in",
@@ -686,7 +1010,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Dense[]",
+              "carrier" : {
+                "kind" : "dense"
+              },
               "at" : "1"
             },
             "point" : "in",
@@ -755,7 +1081,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Dense[]",
+              "carrier" : {
+                "kind" : "dense"
+              },
               "at" : "0.8"
             },
             "point" : "on"
@@ -802,7 +1130,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Dense[]",
+              "carrier" : {
+                "kind" : "dense"
+              },
               "at" : "0.8"
             },
             "point" : "in",
@@ -812,7 +1142,9 @@
                 "kind" : "at_the_domain",
                 "at" : {
                   "kind" : "on_a_carrier",
-                  "carrier" : "Dense[]",
+                  "carrier" : {
+                    "kind" : "dense"
+                  },
                   "at" : "1"
                 },
                 "per" : "1",
@@ -862,7 +1194,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Dense[]",
+              "carrier" : {
+                "kind" : "dense"
+              },
               "at" : "0.8"
             },
             "point" : "out",
@@ -872,7 +1206,9 @@
                 "kind" : "at_the_domain",
                 "at" : {
                   "kind" : "on_a_carrier",
-                  "carrier" : "Dense[]",
+                  "carrier" : {
+                    "kind" : "dense"
+                  },
                   "at" : "0"
                 },
                 "per" : "1",
@@ -1125,7 +1461,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "0"
             },
             "point" : "in",
@@ -1193,7 +1531,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "200"
             },
             "point" : "in",
@@ -1262,7 +1602,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "100"
             },
             "point" : "on"
@@ -1309,7 +1651,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "100"
             },
             "point" : "off"
@@ -1356,7 +1700,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "100"
             },
             "point" : "in",
@@ -1366,7 +1712,9 @@
                 "kind" : "at_the_domain",
                 "at" : {
                   "kind" : "on_a_carrier",
-                  "carrier" : "Whole[]",
+                  "carrier" : {
+                    "kind" : "whole"
+                  },
                   "at" : "200"
                 },
                 "per" : "1",
@@ -1416,7 +1764,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "100"
             },
             "point" : "out",
@@ -1486,7 +1836,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "45"
             },
             "point" : "on"
@@ -1533,7 +1885,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "45"
             },
             "point" : "off"
@@ -1580,7 +1934,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "45"
             },
             "point" : "in",
@@ -1650,7 +2006,9 @@
             },
             "level" : {
               "kind" : "on_a_carrier",
-              "carrier" : "Whole[]",
+              "carrier" : {
+                "kind" : "whole"
+              },
               "at" : "45"
             },
             "point" : "out",
@@ -1660,7 +2018,9 @@
                 "kind" : "at_the_domain",
                 "at" : {
                   "kind" : "on_a_carrier",
-                  "carrier" : "Whole[]",
+                  "carrier" : {
+                    "kind" : "whole"
+                  },
                   "at" : "0"
                 },
                 "per" : "1",

@@ -3536,7 +3536,9 @@ Named for what it counts, which is not what the syllabus calls an `+IN+` point. 
 
 *What the declarations owe.* The same word again, under the module's declarations: a line a `+data+` clause drew is owed once for the module however many behaviors carry the type, so it is counted there and no behavior is short of it. A model whose every rule is a declaration's shows borders in its blocks and its obligations under the declarations; the two counts do not overlap, and neither is a part of the other.
 
-A gap is marked per obligation, and the readings of the line are said under the mark, each as the coordinate it was read at and what a row there has to do in that coordinate's terms. The mark names no coordinate: a body's rule has no one spelling of what it is on, and a report that took one reading's would be naming a place the row is not owed at. Where the line has more readings than the report has room for, it says the first few in the order their sentences sort and how many it left out; the document (`+partition.obligations+`) carries every reading.
+A gap is marked per obligation, and the readings of the line are said under the mark, each as the coordinate it was read at and what a row there has to do in that coordinate's terms. The mark says which of the four points it is and which rule drew the line, and no more: writing where a point is takes a quantity, and a quantity belongs to the coordinate that read the line, so a mark that named one would be naming a place the row is not owed at — and one written from the level alone comes out true and unreadable, since the `+ON+` point of `+from < to+` is a distance of −1, which is no value any position holds. Where the line has more readings than the report has room for, it says the first few in the order their sentences sort and how many it left out; the document carries every reading, and where the point is is published there as identity rather than as words (`+obligationId+`).
+
+A line one of the module's declarations owns is the exception the author makes: it is on something they wrote — `+String.length(value)+` — so it is said with that word, under the declaration that owes it.
 
 [[a-border-owes-four-points]]*A border owes a row at four points, and every one of them is keyed on the border.* They are the four the syllabus names: an `+ON+` point is inside the partition the border bounds and closest to it, an `+OFF+` point is outside it and closest to it, an `+IN+` point is inside it and away from it, and an `+OUT+` point is outside it and away from it. The same value can be a different point of the border beside it, which is why none of them is a property of the value. A closed border is at its own `+ON+` point with an `+OFF+` point one step over, and an open border is at its own `+OFF+` point with the `+ON+` point one step back; the two sides run from those points outwards:
 
@@ -6218,7 +6220,7 @@ Not warned about for a case the model's own rules refuse (<<a-case-the-rules-ref
 
 [,text]
 ----
-No row is at the ON point, at 100, of the line the `guard` draws.
+No row is at the ON point of the line the `guard` draws.
 Hint: A row at the nearest value the border keeps in is what shows the border does not fall a step further in.
 Hint: Read at submit/cost, a row there is = 100.
 ----
@@ -6236,7 +6238,7 @@ The fork is named by the construct it was written as — an `+if+`, a `+guard+`,
 
 [,text]
 ----
-No row is at an IN point beside 100, away from the line the `guard` draws.
+No row is at an IN point away from the line the `guard` draws.
 Hint: A row well inside is what shows the border, and not something else about the value, is
 what divides the two.
 Hint: Read at submit/cost, a row there is in submit/cost < 100.
