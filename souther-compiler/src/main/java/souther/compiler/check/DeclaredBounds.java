@@ -324,5 +324,48 @@ public final class DeclaredBounds {
                 held == null ? Integer.MAX_VALUE : CountDomain.mostFrom(held.bounds().max()));
     }
 
+    /**
+     * How many a value of {@code type} may hold, both ends of one reading of the rules.
+     *
+     * <p>Both together, because a caller choosing how many to build needs the pair and neither end
+     * alone is safe to stand in for it. A reader holding only the floor builds the fewest a rule
+     * allows and never asks whether that many can carry what it is for; one holding only the cap
+     * never asks whether the rules leave room to go higher. The two ends are one answer about one
+     * snapshot of the rules, and a caller taking them from two calls can be handed a floor above the
+     * cap and read it as a range.
+     *
+     * <p>Empty where the rules leave no count at all, which is a value nothing holds and not a range
+     * to walk. That is the model's answer, and a caller that walked an inverted range would step
+     * over it silently.
+     */
+    public static CountRange countsHeld(Type type, Symbols symbols, FieldDomains.Held held) {
+        int least = leastCountOf(type, symbols, held);
+        int most = mostCountOf(type, symbols, held);
+        return least > most ? CountRange.NONE : new CountRange(least, most);
+    }
+
+    /**
+     * How many a value may hold, from the fewest to the most.
+     *
+     * <p>Inclusive at both ends, and counted in values. {@code Integer.MAX_VALUE} at the top is the
+     * rules capping it in no way, which is not a number to build up to — how far a search goes there
+     * is the search's own budget and is nothing this says.
+     */
+    public record CountRange(int least, int most) {
+
+        /** The rules leave no count, so no value of the type holds anything. */
+        public static final CountRange NONE = new CountRange(1, 0);
+
+        /** Whether {@code many} is a count the rules allow. */
+        public boolean admits(int many) {
+            return many >= least && many <= most;
+        }
+
+        /** Whether the rules leave no count at all. */
+        public boolean empty() {
+            return least > most;
+        }
+    }
+
     private DeclaredBounds() {}
 }

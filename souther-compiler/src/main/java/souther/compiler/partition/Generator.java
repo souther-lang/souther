@@ -2384,7 +2384,8 @@ public final class Generator {
             // in: what that limit is about is a number met by several values being asked to stand
             // beside a second position of the same item, and a position bounded on the way is one
             // this could leave to its own range without the row stopping being a row at the item.
-            Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(), fixing.size() > 1);
+            Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(),
+                    fixing.size() > 1, reaching.region());
             if (edge.values().isEmpty()) {
                 return new BoundaryAttempt.Unresolved(
                         new UnresolvedCombination(List.of(label), edge.reason()),
@@ -2710,7 +2711,8 @@ public final class Generator {
      *                      its own answer to give
      */
     private static Edge edgeAt(Subject subject, Carrier carrier, RealizationTarget target, Place at,
-                               boolean besideAnother) {
+                               boolean besideAnother,
+                               souther.compiler.inputs.SearchRegion within) {
         // A number met by several values can offer only one of them beside a second position being
         // fixed as well. Whether it is met by several is the realization's question and not the kind
         // of term's: an operation whose inverse is single-valued would be the same kind of term and
@@ -2720,7 +2722,8 @@ public final class Generator {
         }
         for (Axis axis : subject.axes()) {
             if (axis.term().equals(target.term())) {
-                return edgeOf(axis, carrier, at, subject.symbols(), subject.inputs().policy());
+                return edgeOf(axis, carrier, at, within, subject.symbols(),
+                        subject.inputs().policy());
             }
         }
         // No axis here, which a behavior whose inputs nothing bounds has none of while its body
@@ -2740,7 +2743,7 @@ public final class Generator {
         }
         souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
                 target.term().observedOn(declared, subject.symbols()), carrier);
-        return edgeFrom(TermRealizations.at(target, declared, on, at, subject.symbols(),
+        return edgeFrom(TermRealizations.at(target, declared, on, at, within, subject.symbols(),
                 subject.inputs().policy()), target, at, on);
     }
 
@@ -4169,7 +4172,8 @@ public final class Generator {
      * carries a count is {@link Witnesses}'s to answer — asked rather than decided here, so that a
      * value it learns to build is a boundary this reaches without being told again.
      */
-    private static Edge edgeOf(Axis axis, Carrier carrier, Place at, Symbols symbols,
+    private static Edge edgeOf(Axis axis, Carrier carrier, Place at,
+                               souther.compiler.inputs.SearchRegion within, Symbols symbols,
                                ReadingPolicy policy) {
         // The order the line was drawn on is the caller's — a cut carries the one the rule was read
         // on — and the order the value at the position is written on is the position's. Both, so
@@ -4177,7 +4181,7 @@ public final class Generator {
         souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
                 axis.term().observedOn(axis.type(), symbols), carrier);
         RealizationTarget target = new RealizationTarget.AtOnePosition(axis.term());
-        return edgeFrom(TermRealizations.at(target, axis.type(), on, at, symbols, policy),
+        return edgeFrom(TermRealizations.at(target, axis.type(), on, at, within, symbols, policy),
                 target, at, on);
     }
 

@@ -125,7 +125,7 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
         Standing standing = over.standingAt(
                 new Criterion.AtTheLevel(new Level.ACount(Count.of(100000))));
 
-        Realization made = new LevelRealizer().realize(standing, nothingIsKnown());
+        Realization made = new LevelRealizer().realize(standing, NothingTheRulesSay.REGION);
 
         assertEquals(new Realization.Found(
                         Map.of(new RealizationTarget.OverARun(TOTAL), Count.of(100000))),
@@ -134,35 +134,6 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
         assertEquals(TermPath.of("lines"),
                 new RealizationTarget.OverARun(TOTAL).writeRoot(),
                 "and the value it rebuilds is the sequence, which the run holds to one of them");
-    }
-
-    /** A region the rules say nothing about, so what the search does is its own answer and not the
-     *  region refusing a level. */
-    private static souther.compiler.inputs.SearchRegion nothingIsKnown() {
-        return new souther.compiler.inputs.SearchRegion() {
-
-            @Override
-            public souther.compiler.inputs.SearchRegion assuming(
-                    LinearForm<NumericTerm> form, souther.compiler.numeric.NumericDomain.Rel rel) {
-                return this;
-            }
-
-            @Override
-            public souther.compiler.inputs.SearchRegion given(Map<NumericTerm, Count> fixed) {
-                return this;
-            }
-
-            @Override
-            public souther.compiler.numeric.NumericDomain.Bounds runsBetween(
-                    LinearForm<NumericTerm> form) {
-                return souther.compiler.numeric.NumericDomain.Bounds.OPEN;
-            }
-
-            @Override
-            public java.util.Optional<souther.compiler.inputs.EmptyInput> emptiness() {
-                return java.util.Optional.empty();
-            }
-        };
     }
 
     private static ObservedValue whole(long at) {

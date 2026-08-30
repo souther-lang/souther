@@ -111,7 +111,7 @@ final class TermRealizations {
      * a {@link Realization.BuiltNone} is the second.
      */
     static Realization at(RealizationTarget target, Type sourceType, TermOrders orders,
-                          Place answer,
+                          Place answer, souther.compiler.inputs.SearchRegion within,
                           Symbols symbols, ReadingPolicy policy) {
         if (sourceType == null) {
             return new Realization.BuiltNone(
@@ -126,13 +126,10 @@ final class TermRealizations {
             case NumericTerm.ValueOf _ ->
                     oneValue(FixtureTemplate.on(orders.answered(), answer, symbols.scope()::reach),
                             sourceType, symbols);
-            case NumericTerm.TakenOf taken ->
-                    taken(taken.takenAs(), sourceType, orders, answer, symbols, policy);
-            // The values a walk was given stand at no location, so what is written is the sequence
-            // they are read from and what has to be chosen is what each of its elements holds.
-            // Nothing here does that yet, and saying so is the arm.
-            case NumericTerm.TakenOver _ -> new Realization.BuiltNone(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), target, sourceType, orders,
+                    answer, within, symbols, policy);
+            case NumericTerm.TakenOver over -> overARun(over.takenAs(), target, sourceType, orders,
+                    answer, within, symbols, policy);
         };
     }
 
@@ -145,21 +142,20 @@ final class TermRealizations {
      * agree, an operation would have gained a boundary nobody could write a row for, and the report
      * would have said only that every value tried was refused.
      */
-    private static Realization taken(TakenAs how, Type sourceType, TermOrders orders, Place answer,
+    private static Realization taken(TakenAs how, RealizationTarget target, Type sourceType,
+                                     TermOrders orders, Place answer,
+                                     souther.compiler.inputs.SearchRegion within,
                                      Symbols symbols, ReadingPolicy policy) {
         return switch (how) {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
             case TakenAs.HowManyItHolds _ -> holding(sourceType, answer, symbols, policy);
-            // Nothing here writes a container adding up to a given total, and saying so is the arm.
-            // A row would be composed by choosing how many elements and what each holds, which is a
-            // search over the elements rather than a value written at a position, and the point
-            // stays owed with `NOTHING_COMPOSES_ONE` beside it until something does it. Answered
-            // with one element carrying the whole total, the rules the elements are under would go
-            // unasked — and a row offered at an edge it does not stand on is what this file's one
-            // promise refuses.
-            case TakenAs.TheSumOfWhatItHolds _ -> new Realization.BuiltNone(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            // A container whose elements come to the total, which is what a row has to hold for
+            // this number to be there. What that takes is choosing how many elements and what each
+            // of them holds — one question whether the number is added up out of the container
+            // itself or out of a path inside its elements, and answered for both in one place.
+            case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, target, sourceType,
+                    orders, within, symbols, policy);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
             // the same mistake the reading makes in the other direction, which is why the pair
@@ -168,6 +164,32 @@ final class TermRealizations {
                     atThatPart(taken.part(), sourceType, orders.observed(), answer, symbols);
             case TakenAs.PartOfDate taken ->
                     onThatPart(taken.part(), sourceType, orders.observed(), answer, symbols);
+        };
+    }
+
+    /**
+     * The values a walk over a run answers a number at.
+     *
+     * <p>One arm per account, and no default, the way the taking of one value beside it is — the
+     * same closure the reading of a run is under ({@code NumericTerm.TakenOver.readOver}), so an
+     * account added to {@code semantics} cannot be read over a run without also being writable into
+     * one.
+     *
+     * <p>And the arms answer alike on both sides. An account of a number taken of one value says
+     * nothing about a run of them — which hour a run of times falls in is not a question — so the
+     * reading answers that this is no number of theirs, and nothing composes a container for a
+     * number nothing reads.
+     */
+    private static Realization overARun(TakenAs how, RealizationTarget target, Type sourceType,
+                                        TermOrders orders, Place answer,
+                                        souther.compiler.inputs.SearchRegion within,
+                                        Symbols symbols, ReadingPolicy policy) {
+        return switch (how) {
+            case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, target, sourceType,
+                    orders, within, symbols, policy);
+            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
+                    new Realization.BuiltNone(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         };
     }
 
