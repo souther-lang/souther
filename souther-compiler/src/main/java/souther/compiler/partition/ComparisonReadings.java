@@ -82,17 +82,26 @@ final class ComparisonReadings {
 
     /**
      * What is the same at every comparison of one body: whose body it is, what the plan numbered,
-     * the module's names, and what the input's rules leave each quantity.
+     * the module's names, what the input's rules leave each quantity, and what the paths leave
+     * arriving at each comparison.
      */
     private record Body(String behavior, CoverageSites.Plan plan, Symbols symbols,
-                        souther.compiler.inputs.Quantities quantities) {}
+                        souther.compiler.inputs.Quantities quantities,
+                        souther.compiler.check.PathReachability.Answers arrives) {}
 
-    /** One reading of {@code body}, which is {@code behavior}'s. */
+    /**
+     * One reading of {@code body}, which is {@code behavior}'s.
+     *
+     * <p>{@code arrives} is what the walk of the whole body found reaching each comparison, which is
+     * one of the two domains a line is held against — the declarations leave the other. It is handed
+     * in here because this is where a comparison is read, and a reading of it is made once.
+     */
     static ComparisonReadings of(String behavior, Core body, CoverageSites.Plan plan,
                                  InputReads reads, Symbols symbols,
-                                 souther.compiler.inputs.Quantities quantities) {
+                                 souther.compiler.inputs.Quantities quantities,
+                                 souther.compiler.check.PathReachability.Answers arrives) {
         List<Reading> readings = new ArrayList<>();
-        walk(body, new Body(behavior, plan, symbols, quantities), reads, LiveFlow.of(body),
+        walk(body, new Body(behavior, plan, symbols, quantities, arrives), reads, LiveFlow.of(body),
                 List.of(), true, readings);
         return new ComparisonReadings(readings);
     }
@@ -111,11 +120,21 @@ final class ComparisonReadings {
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
+            //
+            // And under what arrives at it, which is where a body's comparison differs from a
+            // clause's: it stands somewhere, and what the conditions on the way leave is the other
+            // domain its line is held against. Required and not looked up leniently — the policy
+            // refuses a comparison the plan numbers no site for, so reaching here is the site
+            // existing. Asked as an optional, a policy that stopped proving it would hand the
+            // reading below the answer that restricts nothing, and this stage disagreeing with the
+            // plan would go out as an arrival nobody could project.
             BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(comparison, plan, live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
                             ComparisonAssessment.of(in.behavior(), comparison, reads, symbols,
-                                    in.quantities(), null, false)));
+                                    in.quantities(), null, false,
+                                    in.arrives().arrivalAt(
+                                            plan.requireComparisonAt(comparison)))));
             out.add(new Reading(comparison, reads, assumed, standing));
         }
         switch (e) {

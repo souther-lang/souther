@@ -425,6 +425,52 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return AffineReading.filedAt(direction(of).coefs().keySet());
     }
 
+    /**
+     * What the rules leave this quantity, narrowed by what actually arrives at the comparison —
+     * where the arrival is an interval of this quantity at all, and {@link #within} untouched where
+     * it is not.
+     *
+     * <p>Whether it is lives here, because it is a reading of the quantity and the quantity is this
+     * record's one answer. Asked by the caller instead, a second reader of the direction would stand
+     * beside this one, free to disagree with it about what the rule is about.
+     *
+     * <p><b>The quantity is the position's own value, and nothing else is taken.</b> An arrival
+     * states an interval of the value at one path, so it is an interval of this quantity exactly
+     * where the two are the same value — a quantity that is some multiple of the position is on
+     * another order, and its line is a level of that one. Taken with a change of units, the
+     * arithmetic would be written for a shape no reader produces: what publishes an arrival is one
+     * side of the comparison being that position, and the quantity such a comparison cuts is the
+     * position itself. So the narrower rule is the whole of what is reachable, and what a multiple
+     * costs is precision on a line that stands rather than an answer that is wrong.
+     *
+     * <p>Total over what it takes. An arrival this cannot project restricts nothing — not being
+     * able to read a fact is not a proof — so the answer is what the declarations leave, unchanged.
+     * The whole-state proof that nothing arrives is not taken here at all: that arm of the arrival
+     * is no interval of anything, and a caller holds it apart ({@code ComparisonAssessment}).
+     *
+     * <p>Sound as a meet of two over-approximations: every arriving row is inside both, so a line
+     * outside the meet is a line no arriving row reaches.
+     */
+    souther.compiler.numeric.NumericDomain.Bounds withinGiven(
+            souther.compiler.reach.ComparisonArrival.Values arriving) {
+        LinearForm<NumericTerm> direction = direction(of);
+        if (direction.coefs().size() != 1 || direction.constant().signum() != 0) {
+            return within;
+        }
+        java.util.Map.Entry<NumericTerm, java.math.BigDecimal> only =
+                direction.coefs().entrySet().iterator().next();
+        if (only.getValue().compareTo(java.math.BigDecimal.ONE) != 0
+                || !(only.getKey() instanceof NumericTerm.ValueOf(var position))
+                // The one thing this cannot read off its own quantity: which position the interval
+                // is of. Both are the position the comparison turns on today and the check is what
+                // says so — the day the two readings part, a line would be held inside the values of
+                // somewhere else.
+                || !position.equals(arriving.path())) {
+            return within;
+        }
+        return within == null ? arriving.bounds() : within.meet(arriving.bounds());
+    }
+
     /** Whether the rule singles a value out rather than ordering the values around it. */
     boolean singles() {
         return claim instanceof ComparisonClaim.Singled;

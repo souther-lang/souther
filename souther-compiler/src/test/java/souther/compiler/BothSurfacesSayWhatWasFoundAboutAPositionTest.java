@@ -85,7 +85,15 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
         // The handle too, because that is the half a person is shown. Keyed on the position and the
         // reason alone, two rules stopped alike here were one entry and the document could not say
         // which of them a reader was being told about.
-        assertEquals(List.of("n:unsupported_syntax:comparison@0:11:32"),
+        //
+        // Two entries about `n`, from two rules and for two different reasons. The second is
+        // `Int.clamp`'s own first comparison, which the call expands here: it asks whether `n` is
+        // below zero, and the guard above leaves nothing below sixty arriving at it, so the line it
+        // draws has nothing either side of it. That line has never been measured; what is new is
+        // that a reader is told why rather than finding it silently out of the denominator.
+        assertEquals(List.of("n:unsupported_syntax:comparison@0:11:32",
+                        "n:nothing_arrives_at_the_rules_line:"
+                                + "comparison in `Int.clamp`, reached at 0:11:11"),
                 documentSaysNotRead(MEASURED_AND_UNREAD),
                 "the document says what the report said");
     }

@@ -50,15 +50,18 @@ import java.util.Map;
 public final class PathReachability {
 
     /** What was found, and what a place nothing was found about comes to. */
-    public record Answers(Map<ControlPointId, Reachability> found) {
+    public record Answers(Map<ControlPointId, Reachability> found,
+                          Map<souther.compiler.coverage.ComparisonOccurrence,
+                                  souther.compiler.reach.ComparisonArrival> arriving) {
 
-        public static final Answers NONE = new Answers(Map.of());
+        public static final Answers NONE = new Answers(Map.of(), Map.of());
 
         public Answers {
             // The order the walk found them in. `Map.copyOf` is unordered and its iteration is
             // salted per run, so the warnings read off this came out in a different order on every
             // JVM — a diagnostic whose place in the output is not a function of the source.
             found = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(found));
+            arriving = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(arriving));
         }
 
         /**
@@ -75,19 +78,26 @@ public final class PathReachability {
         }
 
         /**
-         * What arrives at {@code way} — one comparison, coming out one way.
+         * What arrives at {@code at} — one comparison, before it is taken either way.
          *
-         * <p>Asked by the way out because that is what a line read off a comparison carries, and
-         * because it is what a run records. The place is still the control point; this only finds it.
+         * <p>An entry's absence reads as {@link souther.compiler.reach.ComparisonArrival
+         * .NoProjection}, which restricts nothing. Two ways to have none, and one answer for both:
+         * this reading was never made at all — the caller holds {@link #NONE}, which is what a
+         * reader of a comparison outside a measured body is given — or the walk fell over before
+         * finishing, since a walk that finished is held to an entry per numbered comparison
+         * ({@link PathReachability#unanswered}). A partial reading is owed the fail-open answer,
+         * the same one every other consumer of one gets.
+         *
+         * <p>What is not among them is a comparison this plan numbers no site for. There is no
+         * occurrence to ask about then, and a caller that has one has it from the plan — asked with
+         * something worked out another way, an absence here would be this reading and the plan
+         * disagreeing, dressed as a fact about the model.
          */
-        public Reachability atComparison(souther.compiler.coverage.ComparisonOutcome way) {
-            for (Map.Entry<ControlPointId, Reachability> each : found.entrySet()) {
-                if (each.getKey() instanceof ControlPointId.ComparisonPoint point
-                        && point.way().equals(way)) {
-                    return each.getValue();
-                }
-            }
-            return new Reachability.Unsettled(WhyUnsettled.theWalkDidNotReachIt());
+        public souther.compiler.reach.ComparisonArrival arrivalAt(
+                souther.compiler.coverage.ComparisonOccurrence at) {
+            souther.compiler.reach.ComparisonArrival answer = arriving.get(at);
+            return answer != null ? answer
+                    : new souther.compiler.reach.ComparisonArrival.NoProjection();
         }
 
         /**
@@ -115,7 +125,9 @@ public final class PathReachability {
                 out.put(where, new Reachability.Reachable(
                         Witness.aRunWentThrough(arm.probe().getAsInt())));
             });
-            return new AsRun(new Answers(out), provedWrong);
+            // The arrivals as they were: a run corrects what an arm's denominator counts, and the
+            // geometry the arrivals decide was settled from the model before any row ran.
+            return new AsRun(new Answers(out, arriving), provedWrong);
         }
 
         /**
@@ -148,16 +160,6 @@ public final class PathReachability {
                 }
             }
             return false;
-        }
-
-        /** Whether {@code comparison} divides nothing that gets to it — one of its two outcomes
-         *  being one nothing takes. */
-        public boolean dividesNothing(souther.compiler.coverage.ComparisonOccurrence comparison) {
-            return atComparison(new souther.compiler.coverage.ComparisonOutcome(comparison, true))
-                            instanceof Reachability.Unreachable
-                    || atComparison(
-                            new souther.compiler.coverage.ComparisonOutcome(comparison, false))
-                            instanceof Reachability.Unreachable;
         }
     }
 
@@ -197,6 +199,8 @@ public final class PathReachability {
         PathEngine engine =
                 new PathEngine(symbols, Map.of(), Terms.Of.THE_TREE_THAT_RUNS, policy);
         Map<ControlPointId, Reachability> out = new LinkedHashMap<>();
+        Map<souther.compiler.coverage.ComparisonOccurrence,
+                souther.compiler.reach.ComparisonArrival> arriving = new LinkedHashMap<>();
         boolean walked = false;
         try {
             PathEngine.Entered in = PathEngine.Entered.nothing();
@@ -206,7 +210,7 @@ public final class PathReachability {
             }
             PathReachability reading =
                     new PathReachability(engine, plan, read == null ? InputDomain.NONE : read,
-                            symbols, out);
+                            symbols, out, arriving);
             reading.entry = in.known();
             reading.entered = in.at();
             reading.walk(body, in.known(), in.at(),
@@ -218,10 +222,10 @@ public final class PathReachability {
             InvariantChecker.gaveUp("reachability", why);
         }
         if (walked) {
-            unanswered(body, plan, out).ifPresent(why -> InvariantChecker.gaveUp("reachability",
-                    new IllegalStateException(why)));
+            unanswered(body, plan, out, arriving).ifPresent(why ->
+                    InvariantChecker.gaveUp("reachability", new IllegalStateException(why)));
         }
-        return new Answers(out);
+        return new Answers(out, arriving);
     }
 
     /**
@@ -242,8 +246,10 @@ public final class PathReachability {
      *
      * @return what went unanswered, or empty where nothing did
      */
-    private static java.util.Optional<String> unanswered(Core body, CoverageSites.Plan plan,
-                                                         Map<ControlPointId, Reachability> out) {
+    private static java.util.Optional<String> unanswered(
+            Core body, CoverageSites.Plan plan, Map<ControlPointId, Reachability> out,
+            Map<souther.compiler.coverage.ComparisonOccurrence,
+                    souther.compiler.reach.ComparisonArrival> arriving) {
         if (body instanceof Core.Binary comparison) {
             for (boolean result : new boolean[] {true, false}) {
                 ControlPointId where = plan.outcomeOf(comparison, result).orElse(null);
@@ -255,9 +261,25 @@ public final class PathReachability {
                                     + "answer that was never made from one that settled nothing");
                 }
             }
+            // And the arrival beside the outcomes: filed with them or not at all, and a finished
+            // walk owes it for the same reason it owes them — a reader below reads an absence as
+            // the answer that restricts nothing, so only an audit here can tell the two apart.
+            //
+            // Which comparison this is, asked of the plan. Read off an outcome's own name instead,
+            // this would say a comparison is numbered where the plan numbered a way out of it, and
+            // the two are the plan's to keep in step rather than a reader's to assume.
+            var at = plan.comparisonAt(comparison).orElse(null);
+            if (at != null && !arriving.containsKey(at)) {
+                return java.util.Optional.of(
+                        "this reading said nothing about what arrives at " + comparison.op()
+                                + " at " + comparison.pos()
+                                + "; the plan numbered it and a reader below cannot tell an "
+                                + "answer that was never made from one that restricts nothing");
+            }
         }
         List<String> missed = new ArrayList<>();
-        Core.forEachChild(body, child -> unanswered(child, plan, out).ifPresent(missed::add));
+        Core.forEachChild(body, child ->
+                unanswered(child, plan, out, arriving).ifPresent(missed::add));
         return missed.isEmpty() ? java.util.Optional.empty()
                 : java.util.Optional.of(missed.get(0));
     }
@@ -269,6 +291,8 @@ public final class PathReachability {
     private final InputDomain read;
     private final Symbols symbols;
     private final Map<ControlPointId, Reachability> out;
+    private final Map<souther.compiler.coverage.ComparisonOccurrence,
+            souther.compiler.reach.ComparisonArrival> arriving;
     /**
      * What holds where the body begins: the inputs entered and seeded, and no condition taken.
      *
@@ -281,12 +305,15 @@ public final class PathReachability {
     private Denotations entered = Denotations.none();
 
     private PathReachability(PathEngine engine, CoverageSites.Plan plan, InputDomain read,
-                             Symbols symbols, Map<ControlPointId, Reachability> out) {
+                             Symbols symbols, Map<ControlPointId, Reachability> out,
+                             Map<souther.compiler.coverage.ComparisonOccurrence,
+                                     souther.compiler.reach.ComparisonArrival> arriving) {
         this.engine = engine;
         this.plan = plan;
         this.read = read;
         this.symbols = symbols;
         this.out = out;
+        this.arriving = arriving;
     }
 
     /**
@@ -307,7 +334,7 @@ public final class PathReachability {
         // is a comparison nothing arrives at — which is the fact, and the fact a boundary drawn on
         // it is dropped by.
         if (e instanceof Core.Binary comparison) {
-            outcomesAt(comparison, k, at, decided);
+            outcomesAt(comparison, k, at, reads, decided);
         }
         if (k.reachesNothing()) {
             // Nothing stands here, so nothing below is a place anything arrives at either. The arms
@@ -318,7 +345,7 @@ public final class PathReachability {
             // The comparisons are not. What this reading owes is one answer per comparison the plan
             // numbered, and a comparison nothing arrives at is exactly a comparison nothing arrives
             // at — so the walk goes on for those and stops for everything else.
-            unreached(e, k, at, decided);
+            unreached(e, k, at, reads, decided);
             return;
         }
         switch (e) {
@@ -410,12 +437,13 @@ public final class PathReachability {
      * {@code A && (B || C)} with {@code A} ruled out stops at the operator, which is numbered
      * nowhere, and left {@code B} and {@code C} unanswered — the shape of a claim nothing made.
      */
-    private void unreached(Core e, Known k, Denotations at, List<PathDecision> decided) {
+    private void unreached(Core e, Known k, Denotations at, InputReads reads,
+                           List<PathDecision> decided) {
         Core.forEachChild(e, child -> {
             if (child instanceof Core.Binary comparison) {
-                outcomesAt(comparison, k, at, decided);
+                outcomesAt(comparison, k, at, reads, decided);
             }
-            unreached(child, k, at, decided);
+            unreached(child, k, at, reads, decided);
         });
     }
 
@@ -430,8 +458,12 @@ public final class PathReachability {
      * <p>Empty is an ordinary answer here: the node is not a comparison, or is one this plan
      * numbered nothing at, and either way there is no place a run through it would be recorded.
      */
-    private void outcomesAt(Core.Binary comparison, Known k, Denotations at,
+    private void outcomesAt(Core.Binary comparison, Known k, Denotations at, InputReads reads,
                             List<PathDecision> decided) {
+        // What arrives is about the comparison and not about either way out of it, so it is filed
+        // under the comparison the plan names and asked of the plan directly.
+        plan.comparisonAt(comparison).ifPresent(site ->
+                arriving.put(site, arrivalAt(comparison, k, at, reads)));
         for (boolean result : new boolean[] {true, false}) {
             var where = plan.outcomeOf(comparison, result);
             if (where.isEmpty()) {
@@ -443,6 +475,35 @@ public final class PathReachability {
                             with(decided, taken, comparison.pos(), result)))
                     : new Reachability.Unsettled(whyNot(taken, comparison)));
         }
+    }
+
+    /**
+     * What arrives at {@code comparison}, from the state before the comparison is taken either way.
+     *
+     * <p>The one place a {@link souther.compiler.reach.ComparisonArrival} is made, so the order of
+     * the questions is fixed here and nowhere has to remember it. The whole state answers first:
+     * bounds read off an empty state say nothing — the predicates alone can empty it and leave every
+     * numeric reading untouched — so a {@code Values} built without asking would publish a wide-open
+     * projection of an arrival that is a contradiction.
+     *
+     * <p>The position and the interval come off the same side of the comparison. What the fact
+     * means is "the value at this path, among what arrives, lies here", and a reader applies it only
+     * where its own quantity is that path's value — so a comparison this cannot say that of answers
+     * {@code NoProjection}, which restricts nothing.
+     */
+    private souther.compiler.reach.ComparisonArrival arrivalAt(Core.Binary comparison, Known k,
+                                                               Denotations at, InputReads reads) {
+        if (k.reachesNothing()) {
+            return new souther.compiler.reach.ComparisonArrival.NothingArrives();
+        }
+        Core side = comparedSideIn(comparison, reads);
+        TermPath position = side == null ? null : pathUnder(side, reads);
+        FactSubject atom = side == null ? null : engine.terms().atomOf(side, at);
+        if (position == null || atom == null) {
+            return new souther.compiler.reach.ComparisonArrival.NoProjection();
+        }
+        return new souther.compiler.reach.ComparisonArrival.Values(position,
+                k.numbers().boundsOf(atom));
     }
 
     /**
@@ -471,12 +532,20 @@ public final class PathReachability {
 
     /** The position a comparison turns on, where it turns on exactly one this reading knows. */
     private TermPath comparedPositionIn(Core cond, InputReads reads) {
+        Core side = comparedSideIn(cond, reads);
+        return side == null ? null : pathUnder(side, reads);
+    }
+
+    /** The side of a comparison that is that one position, where there is exactly one. One
+     *  decision for the proof above and the arrival, so the two cannot name different sides. */
+    private Core comparedSideIn(Core cond, InputReads reads) {
         if (!(cond instanceof Core.Binary b)) {
             return null;
         }
         TermPath left = pathUnder(b.left(), reads);
         TermPath right = pathUnder(b.right(), reads);
-        return left != null && right == null ? left : right != null && left == null ? right : null;
+        return left != null && right == null ? b.left()
+                : right != null && left == null ? b.right() : null;
     }
 
     /** Where a side of a comparison sits, reading through a newtype's own value. */

@@ -78,6 +78,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("ComparisonCuttingNothing", "whole/whole/RULE_CUTS_NOTHING");
         table.put("ComparisonCuttingOutsideDomain",
                 "whole/whole/RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS");
+        // Its own word beside the one above. There the declarations never run as far as the line,
+        // wherever the rule stands; here they do, and the conditions on the way to the comparison
+        // rule the line's values out. Read to the end either way, and nothing is owed: the classes
+        // the line would make hold nothing that arrives, which is a fact about the model.
+        table.put("ComparisonNothingArrivesAtItsLine",
+                "whole/whole/NOTHING_ARRIVES_AT_THE_RULES_LINE");
         table.put("ComparisonBetweenPositions", "whole/whole/UNSUPPORTED_PARTITION_SHAPE");
         // Its own word beside the one above, because what a reader does about it differs: a rule
         // between two positions is waiting on a class about the pair, and a rule about what the
@@ -268,6 +274,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.CasePairingNotDetermined(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
+                new BlockReason.ComparisonNothingArrivesAtItsLine(),
                 new BlockReason.ComparisonBetweenPositions(),
                 new BlockReason.ComparisonOverARun(),
                 new BlockReason.TypeUnresolved(),

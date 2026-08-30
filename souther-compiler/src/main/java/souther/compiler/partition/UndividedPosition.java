@@ -267,6 +267,17 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS,
         /**
+         * A rule naming this position was read to the end, its line is inside what the
+         * declarations leave — and no row that arrives at the comparison holds a value at it: the
+         * conditions on the way there rule the line's values out.
+         *
+         * <p>Its own word beside {@link #RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS}, which is a
+         * fact about the declarations and holds wherever the rule stands. This one is about the
+         * place the rule stands at, and what a reader does about it differs: there they read one
+         * rule against the declarations, here they read the guards above it.
+         */
+        NOTHING_ARRIVES_AT_THE_RULES_LINE,
+        /**
          * The position holds its values inside something this does not reach into — the elements of
          * a collection, what an optional holds, what a map holds. One word for all of them: which
          * reaching is missing is a fact about this compiler, and the model reads the same either
