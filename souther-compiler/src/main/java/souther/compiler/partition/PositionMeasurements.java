@@ -75,6 +75,11 @@ public record PositionMeasurements(PositionAccount position, List<Axis> axes,
      * a question about which measure was asked.
      */
     public boolean measured() {
-        return axes.stream().anyMatch(Axis::measurable);
+        return !axes.isEmpty();
+    }
+
+    /** The measures of this location that divide their number into classes. */
+    public List<Axis> partitionAxes() {
+        return axes.stream().filter(Axis::derivable).toList();
     }
 }

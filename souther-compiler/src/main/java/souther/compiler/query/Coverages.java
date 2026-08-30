@@ -172,15 +172,14 @@ final class Coverages {
         // reading of the position left unread — which is the position's answer and is asked of it
         // here rather than of whichever measure happens to be in hand.
         for (souther.compiler.partition.PositionMeasurements at : partitioning.measurements()) {
-            for (Axis axis : at.axes()) {
-                if (!axis.measurable()) {
-                    continue;   // said by `undivided`, which also says which kind of nothing it is
-                }
-                if (axis.derivable()) {
-                    axes.add(coverageOf(axis, at.position(), partitioning, readings,
-                            level.readsRows()));
-                    divided.add(axis);
-                }
+            // The measures that divide their number, which is what a partition is counted over. A
+            // measure that is a boundary and no partition is covered by the rows at its edge and
+            // said there, and a location nothing measures is said by `undivided`, which also says
+            // which kind of nothing it is.
+            for (Axis axis : at.partitionAxes()) {
+                axes.add(coverageOf(axis, at.position(), partitioning, readings,
+                        level.readsRows()));
+                divided.add(axis);
             }
         }
         // Each measure asked its own closure, and neither told from the length of what came back.

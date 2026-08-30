@@ -307,7 +307,7 @@ class PartitionsTest {
                 let feeFor (amount, region) = Fee { yen = 0 }
                 """, "feeFor");
 
-        assertEquals(2, shipping.derivable().size());
+        assertEquals(2, shipping.partitionAxes().size());
         assertEquals(List.of("UnderThreeThousand", "ThreeThousandOrOver"),
                 classIds(axis(shipping, "amount")));
         assertEquals(List.of("Remote", "NotRemote"), classIds(axis(shipping, "region")));
@@ -345,11 +345,11 @@ class PartitionsTest {
 
         Partitions.Partitioning partitioning = partitioningOf(wide, "run");
 
-        assertEquals(15, partitioning.derivable().size(),
-                () -> "every field is divided: " + partitioning.derivable().stream()
+        assertEquals(15, partitioning.partitionAxes().size(),
+                () -> "every field is divided: " + partitioning.partitionAxes().stream()
                         .map(each -> each.id().toString()).toList());
         assertEquals("run/wide.f14",
-                partitioning.derivable().get(14).id().toString(),
+                partitioning.partitionAxes().get(14).id().toString(),
                 "including the last, which no ordering may quietly leave out");
     }
 }

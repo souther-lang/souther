@@ -162,9 +162,12 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
         return !classes.isEmpty();
     }
 
-    /** Whether there is anything here to measure at all — classes to cover, or a boundary to reach.
-     * A numeric newtype bounded by an invariant has the second and not the first: everything outside
-     * the bound is refused at construction, so there is no other class, only an edge worth a row. */
+    /** Whether there is a line to draw here — classes to cover, or a boundary to reach.
+     *
+     * <p>A numeric newtype bounded by an invariant has the second and not the first: everything
+     * outside the bound is refused at construction, so there is no other class, only an edge worth
+     * a row. False where the rules part the number and the position holds no value at the parting:
+     * that is a measure, and there is nothing at it for a row to be written against. */
     public boolean measurable() {
         return !classes.isEmpty() || !cuts.isEmpty();
     }

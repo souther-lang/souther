@@ -233,8 +233,15 @@ public final class Partitions {
             };
         }
 
-        /** Only the positions the model actually divides. */
-        public List<Axis> derivable() {
+        /**
+         * The measures that divide their number into classes, which is what a partition is over.
+         *
+         * <p>Named here so that a reader wanting them asks for them. A measure may be a boundary
+         * and no partition — a bound refuses everything outside it, so there is no class on the far
+         * side and what such a number gets is an edge worth a row — and every reader that answered
+         * this with a filter of its own was one that could be written without it.
+         */
+        public List<Axis> partitionAxes() {
             return axes().stream().filter(Axis::derivable).toList();
         }
     }
