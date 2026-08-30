@@ -58,12 +58,24 @@ final class LocationWrites {
             return already.equals(values) ? Written.AGAIN : Written.CONFLICTING;
         }
         for (TermPath other : written.keySet()) {
-            if (at.isAtOrUnder(other) || other.isAtOrUnder(at)) {
+            if (oneLocation(at, other)) {
                 return Written.CONFLICTING;
             }
         }
         written.put(at, values);
         return Written.FIRST;
+    }
+
+    /**
+     * Whether two asks reach one value, which is what makes them one location.
+     *
+     * <p>The same path, or a path inside a path: what is written at a container is written at every
+     * position under it. Asked here by everything that asks it — a reader keeping its own account of
+     * which locations are spoken for parts from this one over exactly the pair that is not spelled
+     * alike, which is the pair a total brings.
+     */
+    static boolean oneLocation(TermPath one, TermPath other) {
+        return one.isAtOrUnder(other) || other.isAtOrUnder(one);
     }
 
     /** What is to be written exactly here, or null where nothing is. Where a value inside this one

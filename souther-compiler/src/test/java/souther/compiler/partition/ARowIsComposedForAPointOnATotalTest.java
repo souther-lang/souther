@@ -58,8 +58,14 @@ class ARowIsComposedForAPointOnATotalTest {
                 invariant value >= 0
                 invariant value <= 10
 
+            data Money = Decimal
+                invariant value > 0m
+
             data Item = { amount: Amount }
             data Capped = { small: Small }
+
+            data Ledger = { lines: List<Item> }
+                invariant List.length(lines) >= 2
 
             data Yes
             data No
@@ -80,10 +86,19 @@ class ARowIsComposedForAPointOnATotalTest {
             behavior needingSeveral : (ls: List<Capped>) -> Verdict
             let needingSeveral (ls) =
                 if total(ls) >= 100 then Yes else No
+
+            behavior overADenseRunHeldAwayFromNought : (ds: List<Money>) -> Verdict
+            let overADenseRunHeldAwayFromNought (ds) =
+                if List.sum(List.map(d -> d.value, ds)) >= 100.5m then Yes else No
+
+            behavior aContainerTheRecordCounts : (l: Ledger) -> Verdict
+            let aContainerTheRecordCounts (l) =
+                if List.sum(List.map(i -> i.amount.value, l.lines)) >= 100000 then Yes else No
             """;
 
     private static final List<String> ON_A_TOTAL =
-            List.of("overABareList", "overAProjection", "needingSeveral");
+            List.of("overABareList", "overAProjection", "needingSeveral",
+                    "overADenseRunHeldAwayFromNought", "aContainerTheRecordCounts");
 
     /** Every point of a line drawn on a total has one. */
     @Test
@@ -92,8 +107,11 @@ class ARowIsComposedForAPointOnATotalTest {
         for (String behavior : ON_A_TOTAL) {
             List<String> owed = new ArrayList<>();
             forEachPoint(behavior, (point, item) -> {
-                if (!(item instanceof ItemAssessment.Owed one)
-                        || !(one.attempt() instanceof ItemAssessment.Attempt.Built)) {
+                // A point nothing owes is not one this composes for. An order with no value beside
+                // the one a line is drawn at owes no point off it, which is the order's answer and
+                // was the order's answer before any of this.
+                if (item instanceof ItemAssessment.Owed one
+                        && !(one.attempt() instanceof ItemAssessment.Attempt.Built)) {
                     owed.add(point);
                 }
             });
@@ -159,6 +177,28 @@ class ARowIsComposedForAPointOnATotalTest {
         assertEquals(10, rows.getFirst().split("Capped", -1).length - 1,
                 () -> "a hundred is ten elements of ten and no fewer, since ten is the most one of"
                         + " them may be: " + rows.getFirst());
+    }
+
+    /**
+     * A container the record it sits in counts is filled to that count.
+     *
+     * <p>What the elements may be is one rule and how many of them there are is another, and the
+     * second is written where the ledger is rather than on the list's own type. A reading that knew
+     * only {@code List<Item>} would offer one line and have it refused.
+     */
+    @Test
+    void aContainerTheRecordCountsIsFilledToWhatItCounts() {
+        List<String> rows = new ArrayList<>();
+        forEachComposedRow((behavior, point, row) -> {
+            if (behavior.equals("aContainerTheRecordCounts") && point.endsWith(" ON")) {
+                rows.add(row);
+            }
+        });
+
+        assertEquals(1, rows.size(), () -> "the ON point of the total is composed for once: " + rows);
+        assertEquals(2, rows.getFirst().split("Item", -1).length - 1,
+                () -> "the ledger holds two lines at the fewest, so the container built to reach the"
+                        + " total holds two: " + rows.getFirst());
     }
 
     /** What each claim is applied to: the behavior, one of its points, and the row composed at it. */

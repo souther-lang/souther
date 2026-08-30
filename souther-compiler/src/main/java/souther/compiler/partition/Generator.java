@@ -2406,7 +2406,11 @@ public final class Generator {
             // Which two locations are one is {@link LocationWrites}' answer and is asked of it once.
             // Asked here as well, this would be a second account of that, and the two would part
             // over a location inside another.
-            if (decided.write(at, edge.values()) == LocationWrites.Written.CONFLICTING) {
+            //
+            // Anything but the first ask, and not only an ask that disagrees. That two edges offer
+            // the same values is not the two being one ask here, for the reason above: what travels
+            // beside the values is each edge's own, and the second would be recorded as the first's.
+            if (decided.write(at, edge.values()) != LocationWrites.Written.FIRST) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
                         where.unrepresented());
@@ -2530,7 +2534,14 @@ public final class Generator {
                 // location is, and that one value would have to answer both — a string of a length
                 // and the string itself is the shape of it. Nothing here composes a value to two
                 // numbers at once, so the cut is one this could not put a value under.
-                if (taken.contains(at.position())) {
+                //
+                // Which locations are one is asked of the reader that owns it, because a container
+                // written whole and a position inside it are one location spelled two ways. Kept
+                // here as a lookup of the path, this would place a cut the writing then refuses,
+                // and a cut that cannot be represented would sink the whole point rather than being
+                // reported as the one thing it is.
+                if (taken.stream().anyMatch(
+                        each -> LocationWrites.oneLocation(each, at.position()))) {
                     shared = true;
                     break;
                 }

@@ -7,6 +7,7 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -33,10 +34,10 @@ import java.util.List;
  * free to disagree with it about how many elements a total is worth.
  *
  * <p><b>The elements are chosen against what the rules leave them.</b> How many the container may
- * hold is what the declarations say ({@link DeclaredBounds#countsHeld}); what one occurrence may be
- * is what the region leaves the number at that path. A container built without asking either is one
- * the decoder refuses, and the point it was built for then reads as an edge every value was refused
- * at rather than as one this did not fill.
+ * hold is what its own type declares and what the record holding it says, tightened together; what
+ * one occurrence may be is what the region leaves the number at that path. A container built without
+ * asking either is one the decoder refuses, and the point it was built for then reads as an edge
+ * every value was refused at rather than as one this did not fill.
  *
  * <p><b>And a range is not an existence proof.</b> That {@code k} elements between {@code lo} and
  * {@code hi} could reach the total is arithmetic on the ends, and the values between them are the
@@ -97,11 +98,12 @@ final class ContainersAddingUp {
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         DeclaredBounds.CountRange howMany = howMany(container, target.writeRoot(), within, symbols);
-        NumericDomain.Bounds each = within.runsBetween(new NumericTerm.ValueOf(occurrences(target)));
-        Ends ends = Ends.of(each == null ? NumericDomain.Bounds.OPEN : each, elements);
+        NumericDomain.Bounds runs =
+                within.runsBetween(new NumericTerm.ValueOf(occurrences(target)));
+        Ends ends = Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
         if (ends == null) {
-            // An end the carrier cannot name the first value past, which is what an exclusive end on
-            // an order without a smallest step is. Nothing to decompose against.
+            // Nowhere for an element to stand. Which is the rules leaving the elements nothing, and
+            // is said as a container this composed none of rather than as a total nothing reaches.
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         List<TermPath.Step> under = stepsInsideAnElement(target);
@@ -204,19 +206,22 @@ final class ContainersAddingUp {
         if (many == 0) {
             return total.signum() == 0 ? List.of() : null;
         }
-        BigDecimal owed = total.subtract(ends.low().multiply(BigDecimal.valueOf(many)));
+        BigDecimal owed = total.subtract(ends.from().multiply(BigDecimal.valueOf(many)));
         if (owed.signum() < 0) {
             return null;
         }
         List<BigDecimal> split = new ArrayList<>();
         for (int i = 0; i < many; i++) {
-            BigDecimal add = ends.high() == null ? owed
-                    : owed.min(ends.high().subtract(ends.low()));
-            BigDecimal at = ends.low().add(add);
-            // On the carrier, because the ends of a range say where its values run and not which
-            // numbers between them are values. A total reached by a decomposition the order does not
-            // hold is a total this count does not reach.
-            if (!(elements.onTheGrid(Count.of(at)) instanceof Count on)
+            BigDecimal add = ends.upTo() == null ? owed
+                    : owed.min(ends.upTo().subtract(ends.from()));
+            BigDecimal at = ends.from().add(add);
+            // Put back to the rules and to the carrier, which are the two things a number has to be
+            // to be a value here. Where an element starts and how far it may be moved are worked out
+            // from the ends and are this reader's arithmetic; whether what came of them is a value
+            // is not, and a decomposition that reads its own workings back would be sound only for
+            // as long as the workings are.
+            if (!ends.runs().admits(Count.of(at))
+                    || !(elements.onTheGrid(Count.of(at)) instanceof Count on)
                     || on.at().compareTo(at) != 0) {
                 return null;
             }
@@ -260,45 +265,45 @@ final class ContainersAddingUp {
     }
 
     /**
-     * The numbers a range runs between, as values the carrier holds.
+     * Where an element starts, how far it may be moved, and what it has to be inside.
      *
-     * <p>The low end is where every element starts and the high end is how far one may be moved, so
-     * both are needed as numbers rather than as ends. A range open below starts at nought — the
-     * number a walk that adds starts from, and the one an element contributing nothing holds.
+     * <p>The first two are how a decomposition is arrived at and the third is what it is held to.
+     * A range open at an end names no value there, and a dense one names none beside a value it
+     * excludes — so what an element starts at is a value the carrier picks out of the range rather
+     * than an end read off it, and how far it may be moved is nothing at all where the top cannot be
+     * named. Neither of those makes a decomposition wrong on its own, which is why the range travels
+     * with them and every number that comes out is put back to it.
      *
-     * @param high null where nothing caps an element, which is not a number and is not nought either
+     * @param upTo null where nothing caps an element, or where the cap is a value the order has no
+     *             value beside. Both are "there is no number to pour up to", and the range is what
+     *             refuses what is poured too far
      */
-    private record Ends(BigDecimal low, BigDecimal high) {
+    private record Ends(BigDecimal from, BigDecimal upTo, NumericDomain.Bounds runs) {
 
         static Ends of(NumericDomain.Bounds runs, Carrier elements) {
-            BigDecimal low = inward(runs.min(), elements, true);
-            BigDecimal high = inward(runs.max(), elements, false);
-            if (runs.min() != null && low == null || runs.max() != null && high == null) {
+            // A value of the carrier that the rules leave, which is the one reader of that question.
+            // Read as "the least the range names", a range open below had no start and a dense one
+            // held away from a value had the wrong one.
+            if (!(elements.somethingInside(runs.min(), runs.max()) instanceof Count from)) {
                 return null;
             }
-            return new Ends(low == null ? BigDecimal.ZERO : low, high);
+            return new Ends(from.at(), inward(runs.max(), elements), runs);
         }
 
         /**
-         * The first value inside an end, or null where the carrier names none.
+         * The greatest value of an end, or null where the order names none.
          *
-         * <p>An end written exclusively is a value taken out of the range, and the first one inside
-         * it is a step along the carrier — which exists only where the carrier's values count.
-         * Nothing here moves a dense end inward: between two decimals there is no next value, and a
-         * number chosen as though there were would be outside the rules.
+         * <p>An end written exclusively is a value taken out of the range, and the value beside it
+         * is the carrier's to name — asked of {@link BoundaryDomain}, which is where that question
+         * has its answer and where a carrier with no smallest step says it has none.
          */
-        private static BigDecimal inward(Endpoint end, Carrier elements, boolean upward) {
+        private static BigDecimal inward(Endpoint end, Carrier elements) {
             if (end == null || !(end.at() instanceof Count at)) {
                 return null;
             }
-            if (end.inclusive()) {
-                return at.at();
-            }
-            if (!elements.counts()) {
-                return null;
-            }
-            BigDecimal step = BigDecimal.ONE;
-            return upward ? at.at().add(step) : at.at().subtract(step);
+            return end.inclusive() ? at.at()
+                    : BoundaryDomain.on(elements).predecessor(at).orElse(null) instanceof Count on
+                            ? on.at() : null;
         }
     }
 
