@@ -230,7 +230,8 @@ sealed interface ComparisonAssessment {
      * form written two ways agree as arithmetic and are made of different things, so the rule they
      * state would come back as one about no input at all.
      */
-    static ComparisonAssessment of(String behavior, Core.Binary comparison, InputReads reads,
+    static ComparisonAssessment of(String behavior, Core.Binary comparison,
+                                   souther.compiler.inputs.InputDomain inputs, InputReads reads,
                                    Symbols symbols, Quantities quantities, BindingId answer,
                                    boolean drawnByAnInvariant,
                                    souther.compiler.reach.ComparisonArrival arrival) {
@@ -241,7 +242,7 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison, answer)) {
             return new AnswerDependent();
         }
-        return switch (Cutting.read(behavior, comparison, reads, symbols, quantities)) {
+        return switch (Cutting.read(behavior, comparison, inputs, reads, symbols, quantities)) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(comparison, cuts.cutting(), quantities, drawnByAnInvariant,
                             arrival);
@@ -258,7 +259,7 @@ sealed interface ComparisonAssessment {
             // is for.
             case Cutting.Read.Stopped stopped -> {
                 List<FilingCoordinate> filedAt =
-                        GuardThresholds.filedAt(comparison, reads, symbols);
+                        GuardThresholds.filedAt(comparison, inputs, reads, symbols);
                 yield filedAt.isEmpty() ? aboutNoPosition(comparison, reads, symbols)
                         : new Unread(stopped.why(), filedAt);
             }
@@ -374,9 +375,12 @@ sealed interface ComparisonAssessment {
      * <p>Answered here so that no caller chooses. Chosen at the two producers, one of them reached
      * for the walk's positions because that was the helper in hand, and a rule read from end to end
      * was filed at a position its arithmetic had cancelled.
+     *
+     * <p>Asked of nothing. Each case was filed where it was read and holds where; a comparison, an
+     * environment and the module's names are what it takes to work that out, and working it out is
+     * not what happens here.
      */
-    default List<FilingCoordinate> filedAt(Core.Binary comparison, InputReads reads,
-                                                Symbols symbols) {
+    default List<FilingCoordinate> filedAt() {
         return switch (this) {
             case AcrossPositions over -> over.cutting().over();
             case OutsideTheDomain outside -> outside.cutting().over();

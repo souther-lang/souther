@@ -73,16 +73,16 @@ final class CoverageNaming implements Naming<Outcome> {
         return both == null ? null : new Outcome(both);
     }
 
+    // The environment moves and the reading of the comparisons does not: what a name reads here is
+    // this naming's own, and what each comparison came to is one answer for the whole body.
     @Override
     public CoverageNaming under(Core.Binder binder, Core value) {
-        return new CoverageNaming(plan, symbols, reads.and(binder, value),
-                numbers.under(binder, value));
+        return new CoverageNaming(plan, symbols, reads.and(binder, value), numbers);
     }
 
     @Override
     public CoverageNaming insideArm(Core.Match match, Core.Case arm) {
-        return new CoverageNaming(plan, symbols, reads.insideArm(match, arm, symbols),
-                numbers.insideArm(match, arm));
+        return new CoverageNaming(plan, symbols, reads.insideArm(match, arm, symbols), numbers);
     }
 
     /**
@@ -104,7 +104,7 @@ final class CoverageNaming implements Naming<Outcome> {
         ComparisonOccurrence site = plan.comparisonAt(comparison).orElse(null);
         // The one reading of this comparison, which is the reading whatever admitted the way used.
         // Read again here, the decision would be said of a number the admission never saw.
-        ComparedNumber drawn = numbers.of(comparison);
+        ComparedNumber drawn = numbers.of(comparison, reads);
         if (site == null || drawn == null) {
             return null;
         }

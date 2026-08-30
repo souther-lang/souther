@@ -153,7 +153,7 @@ final class Coverages {
      *                   account: which of a border's points are its to write a row at is the
      *                   reading's answer and is read once, where the account is made
      */
-    static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
+    static PartitionEvidence of(Hir.SpecBehavior behavior, Sig sig,
                                 Symbols symbols, ReadingPolicy policy,
                                 Partitions.Partitioning partitioning,
                                 souther.compiler.query.Adequacy.RowReading observed,

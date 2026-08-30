@@ -34,8 +34,15 @@ import java.util.Map;
  * last four were one answer, and a rule written over a name given arithmetic over positions was read
  * as no rule at all.
  *
- * <p>Nothing here decides what a position holds; that is the reading of the declarations
- * ({@link InputDomain}), and this only says what a name is pointing at.
+ * <p><b>Nothing here decides what a position holds.</b> That is {@link InputDomain}, and it is not
+ * reachable from this: what a {@code Core.Read} met in a tree stands for and what the model says
+ * about the location it stands at are two questions, asked of two values, meeting only where a
+ * reader puts one answer to the other.
+ *
+ * <p>Which is a difference in how long each of them lives, and not only in what each of them is
+ * about. What is here is a function of the program point — the bindings gone under, the arm gone
+ * into — and changes at every step of a walk. The reading is one value for a whole analysis. Held
+ * in here it would be copied at every step, and a reader would ask whichever copy it had in hand.
  *
  * @param roots        which bindings name which parameter, in the tree being walked
  * @param alternatives which bindings stand for one of several values, and which values those are.
@@ -49,12 +56,11 @@ import java.util.Map;
  *                     walk: a call left standing names no location, which is an answer where such a
  *                     tree is what was handed over and a bug in the caller where it is not
  */
-public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
+public record InputReads(Map<BindingId, TermPath> roots,
                          Map<BindingId, Core> bound,
                          souther.compiler.check.ElementBindings elements,
                          Map<BindingId, java.util.List<Denotation>> alternatives,
-                         boolean callsStand)
-        implements InputPaths {
+                         boolean callsStand) {
 
     public InputReads {
         roots = Map.copyOf(roots);
@@ -62,54 +68,21 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         alternatives = Map.copyOf(alternatives);
     }
 
-    /** At the top of a body, where nothing has been bound yet and no element has been handed out. */
-    public static InputReads of(InputDomain read) {
-        return of(read, souther.compiler.check.ElementBindings.NONE);
-    }
-
     /**
-     * At the top of a body, before there is a reading of the input to hold beside it.
+     * At the top of a body, where nothing has been bound yet and no element has been handed out.
      *
-     * <p><b>What the paths a body names are worked out from, and it is not the reading.</b> Which
-     * location a name stands for is settled by the parameters, the bindings on the way and the case
-     * an arm selects — all of them facts about the tree. Whether a row is ever written at the
-     * location is the reading's answer and is asked of the reading, about the path this produced.
+     * <p>The parameters as a naming and not as a reading of them. What a caller has in hand is
+     * usually an {@link InputDomain}, which knows the same naming; taking the whole of it here
+     * would put the reading back inside the walk to be reached for later, so what comes in is the
+     * part this uses.
      *
-     * <p>Held apart because they cannot both be asked at once: the reading is built over the paths a
-     * behavior's measurement names, so a path environment that consulted the reading could not be
-     * used to find them. One built this way answers about names and refuses to answer about the
-     * model, which is what keeps the two questions from being run together again.
+     * <p>{@code elements} is what the operations that handed their closures the contents of
+     * containers were read to say, since the tree this walks has none of them left in it. Given
+     * nothing, every name inside a closure names no position.
      */
     public static InputReads ofParameters(Map<BindingId, String> parameters,
                                           souther.compiler.check.ElementBindings elements) {
-        return new InputReads(null, rooted(parameters), Map.of(), elements, Map.of(), false);
-    }
-
-    /**
-     * The reading of the input this was built beside.
-     *
-     * <p>Absent where this was built to find the paths a body names ({@link #ofParameters}), and
-     * asking for it there is a caller reaching for an answer that does not exist yet rather than one
-     * that happens to be missing.
-     */
-    public InputDomain read() {
-        if (read == null) {
-            throw new IllegalStateException(
-                    "a path environment built before the reading was asked for the reading");
-        }
-        return read;
-    }
-
-    /**
-     * The same, of a body whose operations handed their closures the contents of containers.
-     *
-     * <p>Read where those operations still stood and carried here, since the tree this walks has
-     * none of them left in it. A reading given nothing finds every name inside a closure naming no
-     * position, which is what it did before there was anything to give.
-     */
-    public static InputReads of(InputDomain read, souther.compiler.check.ElementBindings elements) {
-        return new InputReads(read, rooted(read.parameterReads()), Map.of(), elements,
-                Map.of(), false);
+        return new InputReads(rooted(parameters), Map.of(), elements, Map.of(), false);
     }
 
     /** The parameters as positions, which is what a name in a tree stands for. */
@@ -123,11 +96,11 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * At the top of a rule the behavior itself declares, which meets the parameters under the
      * bindings the declaration gave them rather than the ones an implementation did.
      *
-     * <p>Which is why this takes them rather than reading them off {@code read}: a behavior nothing
-     * implements binds its parameters nowhere a body could, and its clauses still name them.
+     * <p>Which is why the bindings are handed in: a behavior nothing implements binds its
+     * parameters nowhere a body could, and its clauses still name them.
      */
-    public static InputReads ofWhatIsDeclared(InputDomain read, Map<BindingId, String> roots) {
-        return new InputReads(read, rooted(roots), Map.of(),
+    public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
+        return new InputReads(rooted(roots), Map.of(),
                 souther.compiler.check.ElementBindings.NONE, Map.of(), true);
     }
 
@@ -144,14 +117,8 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * reading of what a declaration wrote: that is the representation a declaration's own rules are
      * held in, and a clause read in the one that runs would have the calls in it gone.
      */
-    public static InputReads ofADeclaredClause(InputDomain read, Map<BindingId, TermPath> roots) {
-        return new InputReads(read, roots, Map.of(),
-                souther.compiler.check.ElementBindings.NONE, Map.of(), true);
-    }
-
-    /** The same, before there is a reading to hold beside it ({@link #ofParameters}). */
-    public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
-        return new InputReads(null, rooted(roots), Map.of(),
+    public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots) {
+        return new InputReads(roots, Map.of(),
                 souther.compiler.check.ElementBindings.NONE, Map.of(), true);
     }
 
@@ -176,7 +143,6 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
      * arm is no evidence that the name is one of them: what would make it one is there being one
      * left, which is what the set says and the arm does not.
      */
-    @Override
     public InputReads insideArm(Core.Match match, Core.Case arm, Symbols symbols) {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
@@ -201,7 +167,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         // that stands for a place no row reaches — which the reading refuses when it is asked.
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
         wider.put(arm.binder().binding(), narrowed);
-        return new InputReads(read, wider, bound, elements, alternatives, callsStand);
+        return new InputReads(wider, bound, elements, alternatives, callsStand);
     }
 
     /**
@@ -253,7 +219,7 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         }
         Map<BindingId, java.util.List<Denotation>> wider = new LinkedHashMap<>(alternatives);
         wider.put(arm.binder().binding(), left);
-        return new InputReads(read, roots, bound, elements, wider, callsStand);
+        return new InputReads(roots, bound, elements, wider, callsStand);
     }
 
     /**
@@ -291,7 +257,6 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
     }
 
     /** The same, inside what {@code binder} binds. */
-    @Override
     public InputReads and(Core.Binder binder, Core value) {
         if (binder == null || binder.binding() == null || value == null) {
             return this;
@@ -299,11 +264,10 @@ public record InputReads(InputDomain read, Map<BindingId, TermPath> roots,
         Map<BindingId, Core> wider = new LinkedHashMap<>(bound);
         // The nearest binding wins, which is what being inside it means.
         wider.put(binder.binding(), value);
-        return new InputReads(read, roots, wider, elements, alternatives, callsStand);
+        return new InputReads(roots, wider, elements, alternatives, callsStand);
     }
 
     /** The position {@code e} names here, or null where it names none. */
-    @Override
     public TermPath pathOf(Core e, Symbols symbols) {
         return InputPath.of(e, roots, bound, elements, symbols, callsStand);
     }

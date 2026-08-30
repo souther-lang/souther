@@ -147,12 +147,13 @@ public final class GuardThresholds {
         // comparison is written, what its names point at, what a row had satisfied to get there,
         // whether a line may be drawn on it and what it came to are five questions about one
         // position, and one walk answers them about one position.
-        ComparisonReadings read = ComparisonReadings.of(behavior, body, plan,
-                InputReads.of(inputs, elements), symbols, quantities, arrives);
+        ComparisonReadings read = ComparisonReadings.of(behavior, body, plan, inputs,
+                InputReads.ofParameters(inputs.parameterReads(), elements), symbols, quantities,
+                arrives);
         for (ComparisonReadings.Reading each : read.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
-                        lineAt(behavior, each.comparison(), plan, each.reads(), symbols,
+                        lineAt(behavior, each.comparison(), plan, symbols,
                                 admitted.read(), found, between, withoutALine);
                 // Not a rule with no line here: its outcome is about no row, whichever of the
                 // reasons refused it ({@link NotABoundary}), so there is nothing for a report to
@@ -319,11 +320,11 @@ public final class GuardThresholds {
      * the position's own values — which number of it the rule is about is exactly the part that was
      * not read.
      */
-    static List<FilingCoordinate> filedAt(Core.Binary comparison, InputReads reads,
-                                               Symbols symbols) {
+    static List<FilingCoordinate> filedAt(Core.Binary comparison, InputDomain inputs,
+                                               InputReads reads, Symbols symbols) {
         List<FilingCoordinate> out = new ArrayList<>();
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            Named named = namedBy(side, reads, symbols);
+            Named named = namedBy(side, inputs, reads, symbols);
             if (named != null) {
                 // The term itself, because this side named one: a rule about a length that nothing
                 // could read leaves the length short and the string's own values alone.
@@ -365,7 +366,7 @@ public final class GuardThresholds {
      * settled ({@code read}). Nothing here reads the comparison again.
      */
     private static void lineAt(String behavior, Core.Binary each, CoverageSites.Plan plan,
-                               InputReads reads, Symbols symbols, ComparisonAssessment read,
+                               Symbols symbols, ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<RuleWithoutALine> withoutALine) {
@@ -375,7 +376,7 @@ public final class GuardThresholds {
         // is made of.
         souther.compiler.coverage.ComparisonOccurrence site =
                 plan.requireComparisonAt(each);
-        publish(behavior, each, plan, reads, symbols, read, withoutALine);
+        publish(behavior, each, plan, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
                 OriginRef.ComparisonOrigin origin = originOf(behavior, each, site, plan,
@@ -450,23 +451,21 @@ public final class GuardThresholds {
      * missing a border.
      */
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
-                                InputReads reads, Symbols symbols, ComparisonAssessment read,
-                                List<RuleWithoutALine> out) {
+                                ComparisonAssessment read, List<RuleWithoutALine> out) {
         read.whyTheLineReadingDrewNone().ifPresent(why ->
-                publish(behavior, comparison, plan, reads, symbols, read, out, why));
+                publish(behavior, comparison, plan, read, out, why));
     }
 
     /** The same, once there is something to say. */
     private static void publish(String behavior, Core.Binary comparison, CoverageSites.Plan plan,
-                                InputReads reads, Symbols symbols, ComparisonAssessment read,
-                                List<RuleWithoutALine> out,
+                                ComparisonAssessment read, List<RuleWithoutALine> out,
                                 BlockReason.RuleWithoutLineReason why) {
         RuleRef.Comparison rule = new RuleRef.Comparison(behavior, comparison.origin());
         souther.compiler.check.RuleCitation cited = citationOf(comparison, plan.comparisons());
         // Whose positions these are is the assessment's answer, not this reader's: a rule that was
         // read is filed at its quantity's coordinates and one that stopped at the positions the
         // walk met.
-        List<FilingCoordinate> named = read.filedAt(comparison, reads, symbols);
+        List<FilingCoordinate> named = read.filedAt();
         for (FilingCoordinate at : named) {
             RuleWithoutALine said = new RuleWithoutALine(rule, cited, at, why);
             if (out.stream().noneMatch(had -> had.sameAs(said))) {
@@ -543,12 +542,12 @@ public final class GuardThresholds {
      * as whole numbers and read them off a row as whole numbers, which agreed with itself about a
      * border nothing could meet (#1018).
      */
-    static Named namedBy(Core e, InputReads reads, Symbols symbols) {
-        NumericTerm term = InputNumber.of(e, reads, symbols);
+    static Named namedBy(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
+        NumericTerm term = InputNumber.of(e, inputs, reads, symbols);
         if (term == null) {
             return null;
         }
-        souther.compiler.inputs.TermOrders orders = reads.read().ordersOf(term, symbols);
+        souther.compiler.inputs.TermOrders orders = inputs.ordersOf(term, symbols);
         return orders.answered() == null ? null : new Named(term, orders);
     }
 

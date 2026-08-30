@@ -69,10 +69,12 @@ public record InputDemand(List<TermPath> paths) {
      * that change what a name means: a binding, and an arm that says which case the value it matched
      * turned out to be. Everything else is walked with the environment it stands in.
      *
-     * <p>Taken as {@link InputPaths} and not as the reader that implements it, so that the reading
-     * of the input is not reachable from here at all. It is the thing being built.
+     * <p>The reading of the input is not reachable from here, and is not reachable from what walks
+     * a body at all: {@link InputReads} knows what a name stands for and nothing about the model.
+     * Which is what lets this run — the reading is built over what this names, so whatever finds
+     * the names runs before there is one to consult.
      */
-    public static InputDemand of(Core body, InputPaths names, Symbols symbols) {
+    public static InputDemand of(Core body, InputReads names, Symbols symbols) {
         if (body == null) {
             return NONE;
         }
@@ -81,7 +83,7 @@ public record InputDemand(List<TermPath> paths) {
         return new InputDemand(List.copyOf(found));
     }
 
-    private static void walk(Core e, InputPaths names, Symbols symbols, Set<TermPath> found) {
+    private static void walk(Core e, InputReads names, Symbols symbols, Set<TermPath> found) {
         TermPath at = names.pathOf(e, symbols);
         if (at != null) {
             found.add(at);

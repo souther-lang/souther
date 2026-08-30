@@ -208,13 +208,17 @@ public final class PathReachability {
                 in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
                         p.getValue().type(), body.pos()), in.known(), in.at());
             }
+            // A behavior with no reading reads as one whose declarations leave nothing said, which
+            // is what every question below is answered against. Settled once here, since the walk
+            // and the environment it walks with are both about the same reading.
+            InputDomain of = read == null ? InputDomain.NONE : read;
             PathReachability reading =
-                    new PathReachability(engine, plan, read == null ? InputDomain.NONE : read,
-                            symbols, out, arriving);
+                    new PathReachability(engine, plan, of, symbols, out, arriving);
             reading.entry = in.known();
             reading.entered = in.at();
             reading.walk(body, in.known(), in.at(),
-                            InputReads.of(read == null ? InputDomain.NONE : read), List.of(), true);
+                            InputReads.ofParameters(of.parameterReads(), ElementBindings.NONE),
+                            List.of(), true);
             walked = true;
         } catch (RuntimeException why) {
             // The run-time check is the backstop for the analysis this borrows, and it is the
@@ -649,7 +653,10 @@ public final class PathReachability {
         if (path == null) {
             return;   // not a position of this input: nothing here has rules about it
         }
-        Position at = reads.read().at(path);
+        // The reading this walk was given, which is the one held here. Which location the name
+        // stands for is the environment's answer and what the rules leave there is the reading's,
+        // and neither is asked of the other.
+        Position at = read.at(path);
         for (int i = 0; i < match.cases().size() && i < arms.length; i++) {
             // A position this reading never got to — deeper than it reads into what a parameter
             // holds — states no such distinction, which is the position's own answer and not this

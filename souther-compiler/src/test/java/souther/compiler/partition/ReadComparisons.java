@@ -23,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>The source is asserted to compile here, because a model that does not is a test that measured
  * nothing and every claim below would be about an empty list.
  */
-record ReadComparisons(List<ComparisonReadings.Reading> comparisons, Symbols symbols) {
+record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
+                       souther.compiler.inputs.InputDomain inputs, Symbols symbols) {
 
     static ReadComparisons of(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -41,11 +42,12 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons, Symbols sym
                 checked.behaviorBodies().get(behavior),
                 CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                         checked.supplied()),
-                InputReads.of(inputs, checked.elementBindings().get(behavior)),
+                inputs, InputReads.ofParameters(inputs.parameterReads(),
+                        checked.elementBindings().get(behavior)),
                 symbols, inputs.quantities(symbols),
                 // Nothing said about what arrives, so every line here is held to what the
                 // declarations leave — which is what a fixture about standing wants.
-                souther.compiler.check.PathReachability.Answers.NONE).all(), symbols);
+                souther.compiler.check.PathReachability.Answers.NONE).all(), inputs, symbols);
     }
 
     /** The one comparison the body writes. A body writing two would leave a caller picking one of
