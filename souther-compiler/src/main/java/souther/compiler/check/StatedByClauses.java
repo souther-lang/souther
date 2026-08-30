@@ -113,17 +113,27 @@ sealed interface StatedByClauses {
             // Spoiled by there having been an alternative this could not read, which is the rule
             // the values join by ({@code PlannedValues}), said of the part: a value satisfying the
             // branch nothing read is under no obligation from this one, so what this side's copy
-            // reached is left open. Only where nothing has spoiled the position already — a reason
-            // recorded there is a rule that named it, which is nearer than a branch that widened
-            // it from outside.
+            // reached is left open. Not what it settled — a position a dead branch settled is an
+            // answer, and an unread alternative widens a constraint, not an answer ({@link
+            // Adoption#either} makes the same distinction). Only where nothing has spoiled the
+            // position already: a reason recorded there is a rule that named it, which is nearer
+            // than a branch that widened it from outside.
             if (other.byValues().dropped()) {
-                why = leftOpen(why, byValues().mentions());
+                why = leftOpen(why, reachedBy(byValues()));
             }
             if (byValues().dropped()) {
-                why = leftOpen(why, other.byValues().mentions());
+                why = leftOpen(why, reachedBy(other.byValues()));
             }
             return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
                     why);
+        }
+
+        /** The positions a rule of this copy reached and did not merely settle: what it
+         *  constrained, and what it was about and could not manage. */
+        private static java.util.Set<FactSubject> reachedBy(Adoption<FactSubject> of) {
+            java.util.Set<FactSubject> out = new java.util.LinkedHashSet<>(of.read());
+            out.addAll(of.missed());
+            return out;
         }
 
         private static Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>

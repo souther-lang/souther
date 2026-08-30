@@ -153,6 +153,38 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
                 byQuestion(read(THE_OTHER_CLAUSE_ORDER, "M")));
     }
 
+    private static final Term.Interner NAMES = new Term.Interner();
+    private static final FactSubject CONSTRAINED = FactSubject.of(NAMES.written("constrained"));
+    private static final FactSubject SETTLED = FactSubject.of(NAMES.written("settled"));
+    private static final FactSubject UNREAD = FactSubject.of(NAMES.written("unread"));
+
+    /**
+     * An unread alternative widens what a branch constrained, and not what a dead branch inside it
+     * settled.
+     *
+     * <p>The account's copy of the rule the values join by: a position a dead branch settled holds
+     * an answer — the choice imposes nothing there — and a further alternative, read or not,
+     * imposes nothing extra either ({@code Adoption.either} draws the same line). Written over the
+     * copy's mentions instead, the account held a reason at a settled position that no output
+     * happens to show today, which is a lie waiting for its first reader.
+     */
+    @Test
+    void anUnreadAlternativeWidensAConstraintAndNotAnAnswer() {
+        StatedByClauses.Part read = new StatedByClauses.Part(
+                new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(SETTLED),
+                        java.util.Set.of(), false),
+                Adoption.nothing(), Map.of());
+        StatedByClauses.Part unread = new StatedByClauses.Part(
+                new Adoption<>(java.util.Set.of(), java.util.Set.of(), java.util.Set.of(UNREAD),
+                        true),
+                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)));
+
+        assertEquals(Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ),
+                        CONSTRAINED, List.of(UnreadReason.ALTERNATIVE_NOT_READ)),
+                read.either(unread).standing(),
+                "the constraint is left open and the answer stands");
+    }
+
     /** Every question of every rule that nothing answered, and what stopped this reading of it. */
     private static Map<String, List<UnreadReason>> byQuestion(FieldDomains read) {
         Map<String, List<UnreadReason>> out = new LinkedHashMap<>();
