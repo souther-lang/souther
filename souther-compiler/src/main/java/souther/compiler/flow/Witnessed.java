@@ -40,10 +40,11 @@ import java.util.function.Function;
  * declaration has whatever range that declaration was written with, which is not read here — so
  * nothing is claimed about it. Under-reading, and the direction this reading takes everywhere.
  *
- * <p>What is not read is the model's own rules. A behavior that requires {@code a > 1} has no run
- * with a small {@code a}, and this says a way to false stands behind {@code a > 1} all the same. That
- * is the same liberty the reading of what arrives has always taken — an arm of a fork is counted
- * without anything having asked whether the condition can come out that way — and not a new one.
+ * <p>What is not read here is the model's own rules. A behavior that requires {@code a > 1} has no
+ * run with a small {@code a}, and this says a way to false stands behind {@code a > 1} all the same.
+ * That is what this reading is: the body's own text, and nothing that has to be looked up. A caller
+ * holding the rules answers the same question of the number instead ({@link ComparisonWays}), and
+ * this is what is left for the comparisons no such number is named for.
  */
 final class Witnessed {
 

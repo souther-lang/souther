@@ -122,9 +122,4 @@ public final class InputNumber {
                 : NumericTerm.TakenOver.of(measured.operation(), over, stands, symbols);
     }
 
-    /** The number a comparison is about, from whichever side names one. */
-    public static NumericTerm compared(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        NumericTerm left = of(comparison.left(), reads, symbols);
-        return left != null ? left : of(comparison.right(), reads, symbols);
-    }
 }

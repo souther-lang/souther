@@ -8,7 +8,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.observe.ObservedValue;
+import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -146,9 +146,9 @@ class ALineIsNamedByTheClauseThatDrewItTest {
 
     private static Cut cutAt(Axis axis, long value) {
         return axis.cuts().stream()
-                .filter(c -> c.value().equals(new ObservedValue.Integer(value)))
+                .filter(c -> c.at().sameAs(Count.of(value)))
                 .findFirst().orElseThrow(() -> new AssertionError("no cut at " + value + "; had "
-                        + axis.cuts().stream().map(Cut::value).toList()));
+                        + axis.cuts().stream().map(Cut::at).toList()));
     }
 
     private static Axis axis(String source) {

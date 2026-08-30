@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 
+import java.util.Optional;
+
 /**
  * Whether the rules of a model are read off one comparison, and why not where they are not.
  *
@@ -43,29 +45,56 @@ import souther.compiler.coverage.CoverageSites;
  */
 final class BoundaryPolicy {
 
-    /** What this policy says about one comparison of the body. */
+    /**
+     * What this policy says about one comparison of the body, and what the comparison came to
+     * where the policy admits it.
+     *
+     * <p>One answer per comparison. Whether a line may be drawn on it is this policy's question and
+     * what the line is, or why there is none, is the reading's ({@link ComparisonAssessment}) — and
+     * the second is asked only of a comparison the first admits, so a reason for bearing no line is
+     * never worked out from a reading that was never made. A comparison this refuses is not a rule
+     * with no line here: its outcome is about no row ({@link NotABoundary}), so a report saying
+     * nothing of it is right. Nor could it be said in the reading's words: what refuses it is where
+     * it stands, and the arithmetic has no answer to that.
+     *
+     * <p>Which comparison it is about is not held here. The reading that holds this holds the
+     * comparison beside it ({@link ComparisonReadings.Reading}), and a second copy would be one
+     * nothing keeps equal to the first.
+     */
     sealed interface Standing {
 
-        /** The comparison this is about, whichever answer it got. */
-        Core.Binary comparison();
+        /** A line may be drawn on it, and {@code read} is what the one reading of it came to. */
+        record Admitted(ComparisonAssessment read) implements Standing {
 
-        /** A line is drawn on it. */
-        record DrawsALine(Core.Binary comparison) implements Standing {}
+            public Admitted {
+                if (read == null) {
+                    throw new IllegalArgumentException("a comparison this admits has been read");
+                }
+            }
+        }
 
-        /** No line is drawn on it, and this is which of the reasons it is. */
-        record DrawsNone(Core.Binary comparison, NotABoundary why) implements Standing {}
+        /** No line may be drawn on it, and this is which of the reasons it is. */
+        record Refused(NotABoundary why) implements Standing {
+
+            public Refused {
+                if (why == null) {
+                    throw new IllegalArgumentException("a comparison is refused for a reason");
+                }
+            }
+        }
     }
 
     /**
-     * What {@code comparison}'s standing is, where it stands.
+     * Whether a line may be drawn on {@code comparison} where it stands, or why not.
      *
      * <p>The reason about the model is said first. A comparison the behavior's answer does not turn
      * on is not a boundary whichever way it could have been measured, and a reader told instead that
      * its outcome cannot be attributed to a row would go looking for a way to attribute it.
      *
-     * <p>Where the comparison stands and what its names point at are not arguments to this. A
-     * decision that took the reading only to hand it back was a second place holding it, and the
-     * walk that has it is {@link ComparisonReadings}.
+     * <p>Where the comparison stands and what its names point at are not arguments to this, and
+     * neither is the reading of the comparison. A decision that took the reading only to hand it
+     * back was a second place holding it, and the walk that has it is {@link ComparisonReadings},
+     * which reads what this admits.
      *
      * <p><b>How many times a run passes the comparison is not asked.</b> A recording holds that a
      * place was passed and not how many times, so two outcomes of one comparison in one run would
@@ -85,18 +114,22 @@ final class BoundaryPolicy {
      *
      * @param live whether what is computed at this position is read on the way to what the behavior
      *             answers with, which is {@link LiveFlow}'s answer carried down the walk
+     * @return why the comparison is refused, or empty where a line may be drawn on it. Decided from
+     *         what is passed in and nothing else: the reading of the comparison is made by the
+     *         caller, and only where this is empty
      */
-    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, boolean live) {
+    static Optional<NotABoundary> refuses(Core.Binary comparison, CoverageSites.Plan plan,
+                                          boolean live) {
         if (!live) {
-            return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_READS_IT);
+            return Optional.of(NotABoundary.NOTHING_READS_IT);
         }
         // Meeting a line takes getting the comparison to answer, and whether it answered is what a
-        // site records — so a comparison with no site is one no row could ever be shown to have
-        // reached, and a border on it would owe a row nothing can measure.
+        // site records — and the plan numbers no site where the expression the comparison decides
+        // never answers, so a comparison with no site is one no run answers through.
         if (plan.comparisonAt(comparison).isEmpty()) {
-            return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_RECORDS_IT);
+            return Optional.of(NotABoundary.NO_RUN_ANSWERS_THROUGH_IT);
         }
-        return new Standing.DrawsALine(comparison);
+        return Optional.empty();
     }
 
     private BoundaryPolicy() {}

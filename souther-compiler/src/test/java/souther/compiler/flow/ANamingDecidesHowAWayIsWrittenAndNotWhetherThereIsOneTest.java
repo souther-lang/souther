@@ -279,6 +279,11 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         }
 
         @Override
+        public Naming<Marks> insideArm(Core.Match match, Core.Case arm) {
+            return this;
+        }
+
+        @Override
         public Marks side(Core value, boolean held) {
             return mark(value, value instanceof Core.Binary comparison ? comparison.left() : value,
                     "cmp", held ? 1 : 0);

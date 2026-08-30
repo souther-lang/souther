@@ -62,6 +62,45 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
         if (at == null) {
             throw new IllegalArgumentException("an axis of no position");
         }
+        for (PartitionClass one : classes) {
+            subjectHeld(term, one);
+            // A line is a place on the number's order and falls in whichever class holds that
+            // place. A class that cannot be asked about a place holds none of them, and every line
+            // would fall in no class — which reads as the rules dividing the position nowhere,
+            // where what happened is that a class was built without the order it sits on.
+            if (!cuts.isEmpty() && !one.recognises().answersAboutAPlace()) {
+                throw new IllegalArgumentException("`" + one.id() + "` cannot be asked where on "
+                        + term + " it lies, and this axis has lines on it");
+            }
+        }
+    }
+
+    /**
+     * That {@code one} is a class of the number this axis measures, which is what an axis is a run
+     * of classes over.
+     *
+     * <p>Held where an axis is built, so that a reader crossing the classes with anything else the
+     * axis holds is crossing two answers about one number. A line is a place on the term's order and
+     * a class of another number is answered by reading a value of that one, so a mixed axis leaves
+     * the two with nothing to compare — and what comes of asking anyway is that the class is not
+     * found, which reads as the rules dividing the position nowhere.
+     *
+     * <p>Which number a class is of is said where the class is built and is never worked out from
+     * what it means. A {@code true} is a truth wherever it stands: whether it is one of the classes
+     * this position's own value is divided into is what the reading that built it decided, and an
+     * axis reading that off the class would be deciding it a second time — which is how a class of
+     * one position's truth would pass as a class of another's.
+     */
+    private static void subjectHeld(NumericTerm.FromOnePosition term, PartitionClass one) {
+        if (one.of() == null) {
+            throw new IllegalArgumentException("`" + one.id() + "` is a class of no measure, and"
+                    + " this axis measures " + term + "; a class is put on an axis by whatever"
+                    + " built it for one");
+        }
+        if (!one.of().equals(term)) {
+            throw new IllegalArgumentException("`" + one.id() + "` is a class of " + one.of()
+                    + ", and this axis measures " + term);
+        }
     }
 
     public Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
@@ -104,9 +143,17 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
      * classes and cuts; what the position came to was settled by the reading that made this one,
      * and a caller rebuilding an axis from its parts drops whatever it does not think to name. What
      * the position came to is one field, so a rebuild names it or does not compile.
+     *
+     * <p>Everything answered about the number goes where the number goes: the classes it was
+     * divided into, the lines cut on it, where the rules part it and where they leave its ends. At
+     * another number they answer a question nobody asked, and carried over they would be answers
+     * about one number on an axis of another. What is kept is the one thing here that is the
+     * position's, {@link #at}. What that leaves the axis short of is what the reading measuring it
+     * at the new number puts there.
      */
     public Axis measuredAt(AxisId id, NumericTerm.FromOnePosition term) {
-        return new Axis(id, term, at, classes, cuts, parted, narrowed);
+        return term.equals(this.term) ? new Axis(id, term, at, classes, cuts, parted, narrowed)
+                : new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */

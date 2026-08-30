@@ -794,7 +794,8 @@ public final class Partitions {
                                 + " singled out")
                 : classAt(term + "/" + label, label, away,
                         standing(type, carrier, other, symbols)));
-        return List.copyOf(classes);
+        // Classes of the number the values were singled out of, said where that is known.
+        return classes.stream().map(each -> each.ofTheNumber(term)).toList();
     }
 
     /** A class over the one value that stands for it, or one nothing produces where there is no

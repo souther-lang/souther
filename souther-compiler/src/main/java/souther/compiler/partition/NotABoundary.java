@@ -1,22 +1,25 @@
 package souther.compiler.partition;
 
 /**
- * Why a comparison of a body bears no line.
+ * Why {@link BoundaryPolicy} refuses a comparison of a body.
  *
- * <p>An answer and never an absence. What these are told apart for is that a reader has to do
- * opposite things about them: one says the behavior draws no boundary here and a report saying
- * nothing is right, and the other says it may well draw one that this could not be shown a row
- * against. Folded into one {@code false}, the second arrives downstream as the same silence as the
- * first — and whoever widens the measurement later has to work out again why anything was left out.
+ * <p>The two gates the policy asks, in the order it asks them, and an answer rather than an
+ * absence: which gate refused a comparison is a fact the policy has in hand when it refuses, and
+ * folded into one {@code false} it would have to be worked out again by anyone who needed it.
+ *
+ * <p><b>Neither is a rule without a line, and no report says either.</b> A comparison nothing reads
+ * decides nothing the behavior answers by; a comparison no run can be recorded through decides
+ * nothing any row reaches. In both the comparison's outcome is about no row, so there is nothing
+ * for a finding about a position to say — and nothing that could be said in the reading's words
+ * ({@link souther.compiler.inputs.BlockReason}), which are about what the arithmetic did with a
+ * form: what refuses the comparison is where it stands, and the arithmetic is never asked. A
+ * reason in those words for a refused comparison would be one made up from material that cannot
+ * answer the question, and it is the type of {@link BoundaryPolicy.Standing.Refused} that makes
+ * such a reason unsayable.
  *
  * <p>The first is said where both hold, because it is the one about the model. A reader told that a
  * comparison's outcome cannot be attributed to a row would go looking for a way to attribute it,
  * when the behavior's answer does not turn on the comparison at all.
- *
- * <p>Nothing here is about what a rule was written in. Whether a comparison this policy admits comes
- * to a line is the reading's answer and is said in the reading's words
- * ({@link souther.compiler.inputs.BlockReason}); the two vocabularies stay apart, and a comparison
- * this admits and no arithmetic reads is reported by that one rather than by a third word here.
  */
 public enum NotABoundary {
 
@@ -35,11 +38,18 @@ public enum NotABoundary {
     NOTHING_READS_IT,
 
     /**
-     * No run through the comparison can be recorded, so no row could be shown to have reached it.
+     * No run answers a value through the comparison, so its outcome is about no row.
      *
-     * <p>What the plan numbering already answers. A comparison behind something that aborts, or in an
-     * arm a condition never comes out the way of, is one no run gets to — and meeting a line takes
-     * getting the comparison to answer, so a border there would owe a row nothing can measure.
+     * <p>What the plan numbering already answers, and exactly that. The plan numbers a site for a
+     * comparison only where the expression the comparison decides can answer a value
+     * ({@link souther.compiler.coverage.NormalReturn}); a comparison behind something that aborts,
+     * or deciding between arms that both abort, gets none. So a comparison named this is not one a
+     * row may reach and this cannot measure — it is one whose truth no answer of the behavior turns
+     * on, for the same reason the first is, arrived at by a different reading.
+     *
+     * <p>Which is why it is not a shortfall of the measurement and no report says it. Where such a
+     * comparison stands is a case the model rules out, and that is what the report says of the
+     * case; a line the comparison would have drawn is not something the model is missing.
      */
-    NOTHING_RECORDS_IT
+    NO_RUN_ANSWERS_THROUGH_IT
 }

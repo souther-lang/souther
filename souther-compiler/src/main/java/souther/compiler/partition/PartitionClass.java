@@ -42,18 +42,68 @@ import souther.compiler.values.ValueSet;
  */
 public record PartitionClass(String id, String label, Recognition recognises,
                              RepresentativeSource representatives, ValueSet denotes,
-                             Refinement selects) {
+                             Refinement selects,
+                             souther.compiler.inputs.NumericTerm.FromOnePosition of) {
+
+    public PartitionClass {
+        // The meaning and the number it is said to be of are in one vocabulary. A meaning about a
+        // count is a class of that count and of no other; a meaning about the value at the position
+        // is a class of the position's own value and of nothing taken of it. Let them differ and the
+        // class answers membership on one order while being owed on another — the two readers an
+        // axis exists to keep together.
+        if (of != null && !recognises.canBeAClassOf(of)) {
+            throw new IllegalArgumentException("`" + id + "` means " + recognises
+                    + " and was said to be a class of " + of);
+        }
+    }
 
     public static PartitionClass of(String id, String label, Recognition recognises,
                                     RepresentativeSource representatives) {
-        return new PartitionClass(id, label, recognises, representatives, null, null);
+        return new PartitionClass(id, label, recognises, representatives, null, null, null);
     }
 
     /** A class nothing can produce a value for, and why. */
     public static PartitionClass ungeneratable(String id, String label,
                                                Recognition recognises, String why) {
         return new PartitionClass(id, label, recognises,
-                new RepresentativeSource.Ungeneratable(why), null, null);
+                new RepresentativeSource.Ungeneratable(why), null, null, null);
+    }
+
+    /**
+     * The same class, said to be a class of {@code number}.
+     *
+     * <p>Which number's values a class divides is not the class's meaning and is not read off it: a
+     * {@code true} means what it means wherever it stands, and whether it is one of the classes a
+     * position's own value is divided into is the producer's to say. Written by whoever builds the
+     * classes of a measure, and required by the measure ({@link Axis}) — so a class of one number
+     * cannot be put among another's, and a class built for no measure at all cannot be put on one.
+     *
+     * <p>Said once. A class already of one number is not made a class of another by saying so —
+     * that would be a label whoever wrote last owns, and an axis could trust it no further than the
+     * last writer. Saying the same number again is nothing said.
+     */
+    public PartitionClass ofTheNumber(souther.compiler.inputs.NumericTerm.FromOnePosition number) {
+        if (number == null) {
+            throw new IllegalArgumentException("`" + id + "` said to be a class of no number");
+        }
+        if (of != null && !of.equals(number)) {
+            throw new IllegalArgumentException("`" + id + "` is a class of " + of
+                    + " and cannot be made a class of " + number);
+        }
+        return new PartitionClass(id, label, recognises, representatives, denotes, selects, number);
+    }
+
+    /**
+     * Whether this class holds the number at {@code place}, which is on the order of the number the
+     * axis this is a class of measures.
+     *
+     * <p>Beside {@link #classifier()} and not through it. That one is handed a row's value and reads
+     * the class's number out of it; this one is handed the number, which is what a line is. Answered
+     * by turning the place back into a value, a class about a minute of a time would be handed the
+     * minute where it expects a time, and no class would hold the line at all.
+     */
+    public boolean holdsTheNumberAt(souther.compiler.numeric.Place place) {
+        return Recognitions.holdsTheNumberAt(recognises, place);
     }
 
     /**
@@ -76,7 +126,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
      * whole, which is the safe direction — the class stays.
      */
     public PartitionClass holding(ValueSet values) {
-        return new PartitionClass(id, label, recognises, representatives, values, selects);
+        return new PartitionClass(id, label, recognises, representatives, values, selects, of);
     }
 
     /**
@@ -87,7 +137,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
      * requirements of its position and no more.
      */
     public PartitionClass selecting(Refinement refinement) {
-        return new PartitionClass(id, label, recognises, representatives, denotes, refinement);
+        return new PartitionClass(id, label, recognises, representatives, denotes, refinement, of);
     }
 
     /**

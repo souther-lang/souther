@@ -160,10 +160,13 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
     private static GenerationPlan planOver(List<Generator.ClassOwed> classes,
                                            List<Generator.ArmOwed> arms) {
-        Axis days = new Axis(new AxisId("fee", "days"),
+        souther.compiler.inputs.NumericTerm.ValueOf atDays =
                 new souther.compiler.inputs.NumericTerm.ValueOf(
-                        souther.compiler.inputs.TermPath.of("days")),
-                Type.INT, List.of(divided("days/low", 1), divided("days/high", 9)), List.of());
+                        souther.compiler.inputs.TermPath.of("days"));
+        Axis days = new Axis(new AxisId("fee", "days"), atDays, Type.INT,
+                List.of(divided("days/low", 1).ofTheNumber(atDays),
+                        divided("days/high", 9).ofTheNumber(atDays)),
+                List.of());
         Generator.Subject subject = new Generator.Subject("fee",
                 new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
                         ReadAs.THE_COMPILATION_DOES),

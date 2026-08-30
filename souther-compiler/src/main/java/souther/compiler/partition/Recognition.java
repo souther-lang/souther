@@ -39,10 +39,21 @@ public sealed interface Recognition {
     record Held(boolean present) implements Recognition {}
 
     /** One case of a sum, told by the construction the row wrote. */
-    record OfCase(TypeSymbol leaf) implements Recognition {}
+    record OfCase(TypeSymbol leaf, Place at) implements Recognition {}
 
-    /** The one value a reading singled out, told by reading the value itself. */
-    record AtAValue(Value value) implements Recognition {}
+    /**
+     * The one value a reading singled out, told by reading the value itself.
+     *
+     * @param value what the class holds, which is what a row is read against
+     * @param at    where that value sits on the order of what stands at the position, or null where
+     *              nothing places it there. The one crossing between the two ways a class is asked
+     *              about, made where the position's type and the value are both in hand: a reader
+     *              holding a place on that order has no value to read, and one that placed the value
+     *              itself would be placing it on whatever order it had reached for. Null is "nothing
+     *              placed it" and never "it is nowhere" — a position with no order has no places to
+     *              be asked about at all
+     */
+    record AtAValue(Value value, Place at) implements Recognition {}
 
     /**
      * Where a count sits, read out of the row through the carrier that says how its values step.
@@ -109,4 +120,54 @@ public sealed interface Recognition {
 
     /** A class that exists and cannot be told from another by looking. */
     record Nothing() implements Recognition {}
+
+    /**
+     * Whether this can be asked about a place on the order the position's values are counted on.
+     *
+     * <p>Two things a "no" from such a question could mean — the place is not in the class, or the
+     * class has no way of being asked — and only the first is an answer. This is the second said on
+     * its own, so that an axis carrying lines can refuse a class that could never hold one of them
+     * rather than let every line fall in no class at all. A class about a count is asked on that
+     * count's order; a case of an ordered enumeration and a value the rules named are asked at the
+     * place written down when the class was built; a truth, an absence and a class nothing tells
+     * apart are on no order.
+     */
+    default boolean answersAboutAPlace() {
+        return switch (this) {
+            case OfACount ignored -> true;
+            case Under under -> under.inner().answersAboutAPlace();
+            case OfCase one -> one.at() != null;
+            case AtAValue one -> one.at() != null;
+            case Truth ignored -> false;
+            case Held ignored -> false;
+            case Nothing ignored -> false;
+        };
+    }
+
+    /**
+     * Whether a class meaning this can be a class of {@code number}.
+     *
+     * <p>Not which measure a class of this divides — that is said where the class is built and is
+     * never read off a meaning, because a truth means the same thing at every position. What this
+     * answers is whether the two are in one vocabulary. A meaning about a count carries the number
+     * it counts, and is a class of that number and of no other. Every other meaning is about the
+     * value standing at the position — a case, a truth, a value the rules named, and the place any
+     * of them was given is on the order that value is written on — so it is a class of the
+     * position's own value and of nothing taken of it. Said to be of a number taken of the
+     * position, such a class would hold a place on one order and be asked about places on another,
+     * which a {@code Place} on its own cannot tell apart.
+     *
+     * <p>Exhaustive with no {@code default}: a meaning added later says which vocabulary it is in.
+     */
+    default boolean canBeAClassOf(NumericTerm.FromOnePosition number) {
+        return switch (this) {
+            case OfACount count -> count.term().equals(number);
+            case Under under -> under.inner().canBeAClassOf(number);
+            case Truth ignored -> number instanceof NumericTerm.ValueOf;
+            case Held ignored -> number instanceof NumericTerm.ValueOf;
+            case OfCase ignored -> number instanceof NumericTerm.ValueOf;
+            case AtAValue ignored -> number instanceof NumericTerm.ValueOf;
+            case Nothing ignored -> number instanceof NumericTerm.ValueOf;
+        };
+    }
 }

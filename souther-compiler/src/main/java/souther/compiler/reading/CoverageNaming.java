@@ -8,7 +8,8 @@ import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.ForkOccurrence;
 import souther.compiler.flow.Naming;
-import souther.compiler.inputs.InputNumber;
+import souther.compiler.inputs.ComparedNumber;
+import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -45,10 +46,15 @@ final class CoverageNaming implements Naming<Outcome> {
     private final Symbols symbols;
     private final InputReads reads;
 
-    CoverageNaming(CoverageSites.Plan plan, Symbols symbols, InputReads reads) {
+    /** What each comparison of this body is about, read once and shared with whatever else asks. */
+    private final ComparedNumbers numbers;
+
+    CoverageNaming(CoverageSites.Plan plan, Symbols symbols, InputReads reads,
+                   ComparedNumbers numbers) {
         this.plan = plan;
         this.symbols = symbols;
         this.reads = reads;
+        this.numbers = numbers;
     }
 
     /** What a name reads here, which a caller walking the body needs for its own naming. */
@@ -69,7 +75,14 @@ final class CoverageNaming implements Naming<Outcome> {
 
     @Override
     public CoverageNaming under(Core.Binder binder, Core value) {
-        return new CoverageNaming(plan, symbols, reads.and(binder, value));
+        return new CoverageNaming(plan, symbols, reads.and(binder, value),
+                numbers.under(binder, value));
+    }
+
+    @Override
+    public CoverageNaming insideArm(Core.Match match, Core.Case arm) {
+        return new CoverageNaming(plan, symbols, reads.insideArm(match, arm, symbols),
+                numbers.insideArm(match, arm));
     }
 
     /**
@@ -89,10 +102,13 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         ComparisonOccurrence site = plan.comparisonAt(comparison).orElse(null);
-        NumericTerm at = InputNumber.compared(comparison, reads, symbols);
-        if (site == null || at == null) {
+        // The one reading of this comparison, which is the reading whatever admitted the way used.
+        // Read again here, the decision would be said of a number the admission never saw.
+        ComparedNumber drawn = numbers.of(comparison);
+        if (site == null || drawn == null) {
             return null;
         }
+        NumericTerm at = drawn.term();
         return plan.outcomeOf(comparison, held)
                 .flatMap(ControlClaim::of)
                 .map(claim -> one(new Decision(new Condition.Side(at, site, held), claim)))

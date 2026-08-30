@@ -195,15 +195,22 @@ class GeneratorTest {
     /** Two positions, each a bare number, so a hand-made class is the whole of what is at each. */
     private static Generator.Subject twoNumbers(Symbols symbols, List<PartitionClass> left,
                                                 List<PartitionClass> right) {
-        Axis a = new Axis(new AxisId("f", "a"), new NumericTerm.ValueOf(TermPath.of("a")), Type.INT, left,
-                List.of());
-        Axis b = new Axis(new AxisId("f", "b"), new NumericTerm.ValueOf(TermPath.of("b")), Type.INT, right,
-                List.of());
+        NumericTerm.ValueOf atA = new NumericTerm.ValueOf(TermPath.of("a"));
+        NumericTerm.ValueOf atB = new NumericTerm.ValueOf(TermPath.of("b"));
+        Axis a = new Axis(new AxisId("f", "a"), atA, Type.INT, classesOf(left, atA), List.of());
+        Axis b = new Axis(new AxisId("f", "b"), atB, Type.INT, classesOf(right, atB), List.of());
         // Axes written here rather than read off a model, so there is no reading of the input's
         // counts to hand over and none is invented.
         return new Generator.Subject("f",
                 new BehaviorInputs(List.of("a", "b"), List.of(Type.INT, Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 List.of(a, b), HeldCounts.NONE);
+    }
+
+    /** The classes said to be of the number the axis they are put on measures, which is what a
+     *  producer of them does and what an axis requires. */
+    private static List<PartitionClass> classesOf(List<PartitionClass> classes,
+                                                  NumericTerm.FromOnePosition of) {
+        return classes.stream().map(each -> each.ofTheNumber(of)).toList();
     }
 
     private static PartitionClass number(String id, long... candidates) {
@@ -385,8 +392,9 @@ class GeneratorTest {
     @Test
     void onePositionHasNoPairsAndItsClassesStillOweRows() {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
-        Axis only = new Axis(new AxisId("f", "a"), new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
-                List.of(number("low", 1), number("high", 9)), List.of());
+        NumericTerm.ValueOf atA = new NumericTerm.ValueOf(TermPath.of("a"));
+        Axis only = new Axis(new AxisId("f", "a"), atA, Type.INT,
+                classesOf(List.of(number("low", 1), number("high", 9)), atA), List.of());
         Generator.Subject subject = new Generator.Subject("f",
                 new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), List.of(only),
                 HeldCounts.NONE);
