@@ -74,7 +74,7 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
     private static String about(String point, String above) {
         String human = report(above);
         return human.lines()
-                .filter(each -> each.contains("not known to be writable: the " + point))
+                .filter(each -> each.contains("read as " + point))
                 .findFirst().orElseThrow(() -> new AssertionError(human));
     }
 
@@ -88,7 +88,7 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
      */
     @Test
     void aConditionTheRegionDoesNotAccountForIsSaid() {
-        String line = about("ON point check/p.low = 11", NOTHING_READS_IT);
+        String line = about("check/p.low: = 11", NOTHING_READS_IT);
 
         assertTrue(line.contains("not every condition on the way to the line is one the row was"
                 + " composed against"), line);
@@ -109,7 +109,7 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
      */
     @Test
     void aRegionThatAccountsForTheWholeWayIsNotRemarkedOn() {
-        String line = about("ON point check/p.low = 11", READ);
+        String line = about("check/p.low: = 11", READ);
 
         assertFalse(line.contains("not every condition on the way"), line);
     }
@@ -122,10 +122,15 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
      */
     @Test
     void aLineNothingStandsOnTheWayToIsNotRemarkedOn() {
-        String line = about("ON point check/p.low = 0", NOTHING_READS_IT);
-
-        assertTrue(line.contains("invariant Amount (range)"), line);
-        assertFalse(line.contains("not every condition on the way"), line);
+        // The rule is on the point and what the search came to is on the reading under it, so the
+        // two are two lines: a line is owed once wherever it is read, and only the reading has a
+        // position to name.
+        assertTrue(report(NOTHING_READS_IT).contains(
+                        "the ON point value = 0 (invariant Amount (range))"),
+                () -> report(NOTHING_READS_IT));
+        assertFalse(about("check/p.low: = 0", NOTHING_READS_IT)
+                        .contains("not every condition on the way"),
+                () -> about("check/p.low: = 0", NOTHING_READS_IT));
     }
 
 }

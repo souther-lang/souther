@@ -493,6 +493,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             each -> each.debt().owed().coverage().made().isEmpty(),
                             each -> whyNoBoundaryItem(each.debt().owed().coverage()))));
         }
+        // And the ones the count leaves out, said here for the reason it counts them here: a line
+        // a declaration drew is nobody's behavior's, so a block above has nothing to say about it
+        // and this is the only place it can be said at all.
+        for (Adequacy.DeclaredDebt each : debts) {
+            if (each.debt().owed().writabilityEvidence().known()) {
+                continue;
+            }
+            out.append(String.format("      · not known to be writable: the %s point %s (%s)%n",
+                    each.debt().role(), each.said(), each.debt().describe(names, null)));
+            readings(out, each.debt(), _ -> true, at -> whatWasTried(
+                    at.owedAt(each.debt().role()).attempt(), names, null));
+        }
         Map<String, List<Adequacy.Finding>> byDeclaration = new java.util.LinkedHashMap<>();
         for (Adequacy.Finding each : module.declarations()) {
             byDeclaration.computeIfAbsent(each.named(), _ -> new ArrayList<>()).add(each);
@@ -1173,12 +1185,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<BorderObligationPointAssessment> measured = points.stream()
                 .filter(p -> p.owed().coverage().made().isPresent())
                 .filter(p -> p.owed().writabilityEvidence().known()).toList();
-        // Per reading and whosever the point, because it is diagnosis about a search at a position
-        // and not about what is owed: a declaration's line read here was searched here, and what
-        // that came to is said where the position is.
-        List<BorderAssessment.Point> unpromised = BorderAssessment.pointsOf(lines).stream()
-                .filter(p -> p.item() instanceof ItemAssessment.Owed owed
-                        && !owed.writabilityEvidence().known()).toList();
+        // The obligations the count leaves out, read off the same evidence it leaves them out by.
+        // Said per reading instead, a point one reading proves writable and another does not would
+        // be counted above and printed here as not known — one search with two accounts, which is
+        // what this whole block stopped doing. What each reading's search came to is under it.
+        List<BorderObligationPointAssessment> unpromised = points.stream()
+                .filter(p -> !p.owed().writabilityEvidence().known()).toList();
         long met = measured.stream().filter(p -> p.owed().hasRowWitness()).count();
         // A point read from rows some of which could not be read. What was not found there is
         // undecided rather than absent, which is the measurement's answer and no longer a third
@@ -1239,7 +1251,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             : String.format("      %s no row is at an %s point beside %s (%s)%n",
                                     mark(f), point.role(), point.level(),
                                     point.describe(names, declaredIn)));
-                    readings(out, point, _ -> true);
+                    readings(out, point, _ -> true, _ -> "");
                 }
             }
         }
@@ -1254,22 +1266,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 out.append(String.format("      · the %s point at %s (%s) is answered, and not"
                                 + " at every reading of the line%n",
                         point.role(), point.level(), point.describe(names, declaredIn)));
-                readings(out, point, at -> !at.owedAt(point.role()).hasRowWitness());
+                readings(out, point, at -> !at.owedAt(point.role()).hasRowWitness(), _ -> "");
             }
         }
         // Said and not counted. Nothing has shown a row can be written at these — the projection
         // could not read every rule of the value, and nothing built one either — so they are not
         // rows anybody is owed, and they are still the only thing there is to say about the
         // position.
-        for (BorderAssessment.Point p : unpromised) {
-            // What the search came to, beside the verdict it did not decide. Whether this point is
-            // counted turns on whether a concrete value was accepted at it, so a reader looking at
-            // two models that differ here is looking at what the compiler could establish — and
-            // without this line the difference reads as the tool being arbitrary.
-            out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%s%n",
-                    p.role(), p.border().axis(), p.asked(),
-                    p.border().describe(names, declaredIn),
-                    whatWasTried(((ItemAssessment.Owed) p.item()).attempt(), names, declaredIn)));
+        for (BorderObligationPointAssessment p : unpromised) {
+            out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%n",
+                    p.role(), p.role().againstTheLine() ? "at" : "beside", p.level(),
+                    p.describe(names, declaredIn)));
+            // What each reading's search came to, beside the verdict none of them decided. Whether
+            // this point is counted turns on whether a concrete value was accepted at it, so a
+            // reader looking at two models that differ here is looking at what the compiler could
+            // establish — and without this the difference reads as the tool being arbitrary.
+            readings(out, p, _ -> true, at -> whatWasTried(
+                    at.owedAt(p.role()).attempt(), names, declaredIn));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
@@ -1293,16 +1306,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * {@code crm} one clause is read at 133 positions, and what is left out is said as a count so
      * the readings shown do not read as all there are.
      *
-     * @param shown which readings to say — every one under a gap, and only the unwitnessed ones
-     *              under a point some row answers
+     * @param shown  which readings to say — every one under a gap, and only the unwitnessed ones
+     *               under a point some row answers
+     * @param beside what to say after each, which is what that reading's search came to where one
+     *               was made
      */
     private static void readings(StringBuilder out, BorderObligationPointAssessment point,
-                                 java.util.function.Predicate<BorderAssessment> shown) {
+                                 java.util.function.Predicate<BorderAssessment> shown,
+                                 java.util.function.Function<BorderAssessment, String> beside) {
         List<BorderObligationPointAssessment.ReadingSaid> said = point.readingsSaid().stream()
                 .filter(each -> shown.test(point.met().get(each.where()))).toList();
         int say = Math.min(said.size(), BorderObligationPointAssessment.READINGS_SAID);
         for (BorderObligationPointAssessment.ReadingSaid each : said.subList(0, say)) {
-            out.append(String.format("          · read as %s: %s%n", each.at(), each.asks()));
+            out.append(String.format("          · read as %s: %s%s%n", each.at(), each.asks(),
+                    beside.apply(point.met().get(each.where()))));
         }
         if (said.size() > say) {
             out.append(String.format("          · %d more readings%n", said.size() - say));

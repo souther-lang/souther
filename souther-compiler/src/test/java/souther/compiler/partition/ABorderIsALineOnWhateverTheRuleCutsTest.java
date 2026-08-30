@@ -281,7 +281,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String report = report(guarded(
                 "Int.add(Int.multiply(3, a.value), Int.multiply(5, b.value)) <= 7"));
 
-        assertTrue(report.contains("the ON point f/3 * a + 5 * b = 7 (comparison@14:71)"
+        assertTrue(report.contains("the ON point at 7 (comparison@14:71)"), report);
+        assertTrue(report.contains("read as f/3 * a + 5 * b: = 7"
                         + " — the rules leave no value at 3 * a + 5 * b = 7"), report);
         assertFalse(report.contains("nothing composed one: the rules leave no value"),
                 "a proof does not arrive under the opening a failed search gets:\n" + report);

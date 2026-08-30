@@ -452,9 +452,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String rows = generated(MEASURED);
 
         assertFalse(report.contains("no row is at the OFF point at String.length(b)"), report);
-        assertTrue(report.contains(
-                "not known to be writable: the OFF point cmp/String.length(a) = String.length(b)"),
+        assertTrue(report.contains("not known to be writable: the OFF point at String.length(b)"),
                 report);
+        assertTrue(report.contains("read as cmp/String.length(a): = String.length(b)"), report);
         assertTrue(rows.contains("nothing here could build a representative for it"), rows);
         assertTrue(rows.contains("does not make one unwritable"), rows);
     }
@@ -475,7 +475,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
 
         assertFalse(report.contains("no row is at the OFF point at b"),
                 "zero is the only place both ranges hold and one position refuses it:\n" + report);
-        assertTrue(report.contains("not known to be writable: the OFF point cmp/a = b"), report);
+        assertTrue(report.contains("not known to be writable: the OFF point at b"), report);
+        assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
     /**

@@ -114,11 +114,12 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
     void aNameBetweenTheWalkAndTheTotalChangesNothing() {
         String report = report();
         for (String point : List.of("ON", "OFF", "IN", "OUT")) {
-            assertTrue(report.contains("the " + point + " point throughALocalName/"
-                            + "List.sum(lines[*].amount)"),
+            assertTrue(report.contains("the " + point + " point "),
                     () -> "the same " + point + " point is owed whether or not the mapped list was"
                             + " given a name: " + report);
         }
+        assertTrue(report.contains("read as throughALocalName/List.sum(lines[*].amount)"),
+                () -> "and against the total, named as the reading names it: " + report);
     }
 
     /**
@@ -145,10 +146,11 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
     void theLineIsOnTheTotalAndItsPointsAreOwed() {
         String report = report();
         for (String point : List.of("ON", "OFF", "IN", "OUT")) {
-            assertTrue(report.contains("the " + point + " point overAProjection/"
-                            + "List.sum(lines[*].amount)"),
-                    () -> "a " + point + " point is owed against the total: " + report);
+            assertTrue(report.contains("the " + point + " point "),
+                    () -> "a " + point + " point is owed: " + report);
         }
+        assertTrue(report.contains("read as overAProjection/List.sum(lines[*].amount)"),
+                () -> "and they are owed against the total: " + report);
         assertTrue(report.contains("nothing here could build a representative for"
                         + " List.sum(lines[*].amount) = 100000"),
                 () -> "and nothing composes a row for it, which is said rather than left to look"

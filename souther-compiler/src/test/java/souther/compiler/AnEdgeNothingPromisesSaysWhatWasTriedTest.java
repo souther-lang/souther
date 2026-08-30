@@ -58,7 +58,12 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
     void theEdgeIsStillNamed() {
         String human = report();
 
-        assertTrue(human.contains("not known to be writable: the ON point check/p.low = 0"), human);
+        // Under the declarations, whose line it is, in the words the declaration wrote — and the
+        // positions that read it under that.
+        assertTrue(human.contains(
+                "not known to be writable: the ON point value = 0 (invariant Amount (range))"),
+                human);
+        assertTrue(human.contains("read as check/p.low: = 0"), human);
     }
 
     /** And it says what the search came to, so the verdict is legible rather than surprising. */
@@ -67,7 +72,7 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
         String human = report();
 
         String line = human.lines()
-                .filter(each -> each.contains("not known to be writable: the ON point check/p.low = 0"))
+                .filter(each -> each.contains("read as check/p.low: = 0"))
                 .findFirst().orElseThrow(() -> new AssertionError(human));
 
         assertTrue(line.contains("nothing composed one"), line);

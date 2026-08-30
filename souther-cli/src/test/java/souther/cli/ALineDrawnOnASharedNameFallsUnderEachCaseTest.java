@@ -293,7 +293,7 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
 
         assertTrue(report.contains("borders 1"),
                 () -> "one line, not one per case of a sum nothing was filed under:\n" + report);
-        assertTrue(report.contains("read/o.q@B.q.limit ="),
+        assertTrue(report.contains("read as read/o.q@B.q.limit:"),
                 () -> "and it is at the name the model wrote, which is where it was measured:\n"
                         + report);
         assertFalse(report.contains("read/o.q@B.q@A.limit"),

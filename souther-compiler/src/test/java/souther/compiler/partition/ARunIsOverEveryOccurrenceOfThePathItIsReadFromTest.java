@@ -90,10 +90,14 @@ class ARunIsOverEveryOccurrenceOfThePathItIsReadFromTest {
                         + " class of any of them");
         String report = report();
         for (String point : List.of("ON", "OFF", "IN", "OUT")) {
-            assertTrue(report.contains("the " + point + " point overASequenceFromOutsideTheClosure/"
-                            + "List.sum(lines[*].amount)"),
-                    () -> "a " + point + " point is owed against the total: " + report);
+            assertTrue(report.contains("the " + point + " point "),
+                    () -> "a " + point + " point is owed: " + report);
         }
+        // And what each of them is owed against is the total, which is the reading's word: the
+        // point itself names no quantity, since a line is owed once wherever it is read.
+        assertTrue(report.contains("read as overASequenceFromOutsideTheClosure/"
+                        + "List.sum(lines[*].amount)"),
+                () -> "and the points are owed against the total: " + report);
     }
 
     /**
