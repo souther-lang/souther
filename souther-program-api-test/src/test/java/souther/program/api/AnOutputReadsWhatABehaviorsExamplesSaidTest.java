@@ -397,8 +397,9 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
             }
         }
         assertEquals(3, every.size(), () -> "the rows that crossed are " + every);
-        assertTrue(every.stream().anyMatch(row -> row.statement().states()
-                        instanceof RowStatement.RequiresStandIns),
+        assertTrue(every.stream().anyMatch(row -> row.statement()
+                        instanceof CheckedRow.NotReproducible needs
+                        && needs.why() instanceof RowStatement.RequiresStandIns),
                 "including the one that needs something stood in for");
     }
 

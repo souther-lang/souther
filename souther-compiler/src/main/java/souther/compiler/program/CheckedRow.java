@@ -70,12 +70,13 @@ public final class CheckedRow {
      * Said as arms rather than as a question that refuses to be asked, so that a reader which never
      * looked cannot get a verdict about a row that stated no values — the type is what stops it,
      * rather than a rule it has to have read.
+     *
+     * <p>And nothing here answers with what a row states, which each arm answers for itself. Asked
+     * of both at once, the answer would be the whole of what an evaluation can come away with — a
+     * compile that has not finished with a row among it — and a state no output can be handed would
+     * be one every output has to consider, one method away from the arms that leave it out.
      */
-    public sealed interface Statement {
-
-        /** What the row states, whichever of the two this is. */
-        RowStatement states();
-    }
+    public sealed interface Statement {}
 
     /**
      * A row an output can put to its own emission: the inputs it hands over, and what it states of
@@ -102,7 +103,7 @@ public final class CheckedRow {
             this.answers = answers;
         }
 
-        @Override
+        /** The values it hands over and what it states of the answer. */
         public RowStatement.Stated states() {
             return stated;
         }
@@ -137,10 +138,6 @@ public final class CheckedRow {
             }
         }
 
-        @Override
-        public RowStatement states() {
-            return why;
-        }
     }
 
     @Override
