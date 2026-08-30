@@ -34,10 +34,11 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
     /**
      * What one part of one clause came to, once every branch of the value is decided.
      *
-     * <p>A projection of the whole and not a reading of its own. The branch a part is in is dropped
-     * or kept by the rules of every clause together, so a part read again on its own answers about a
-     * branch this declaration has already dropped — and pays for machines the whole answer never
-     * needed to find out.
+     * <p>Answered over the part's own rule's tree, with the branches decided by the fates the
+     * settlement handed back ({@code Settlement}). The branch a part is in is dropped or kept by
+     * the rules of every clause together, so a part deciding that for itself would answer about a
+     * branch this declaration has already dropped — and would pay for machines the whole answer
+     * never needed to find out.
      *
      * @param aboutARule what a rule of this part is answerable for, per position
      */
