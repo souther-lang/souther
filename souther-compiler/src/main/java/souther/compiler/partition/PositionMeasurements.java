@@ -16,11 +16,17 @@ import java.util.List;
  * position the rules divide nowhere is still a position this phase answers for: a report names it,
  * and a rule read later can still be the first to draw a line there.
  *
- * @param position what the location is and what its reading came to, true of it once however many
- *                 numbers measure it
- * @param axes     the measures made of it, in the order the rules name the numbers
+ * @param position   what the location is and what its reading came to, true of it once however many
+ *                   numbers measure it
+ * @param axes       the measures made of it, in the order the rules name the numbers
+ * @param inspection what the rules written about this location came to, over every number it is
+ *                   measured at, or null where this phase read none of them. One sentence for the
+ *                   location because that is what a report says about one: written per measure, a
+ *                   location measured at two numbers is told twice that it is divided nowhere, and
+ *                   told it at all where one of its numbers is divided and another is not
  */
-public record PositionMeasurements(PositionAccount position, List<Axis> axes) {
+public record PositionMeasurements(PositionAccount position, List<Axis> axes,
+                                   BodyCutInspection inspection) {
 
     public PositionMeasurements {
         if (position == null) {
@@ -56,7 +62,19 @@ public record PositionMeasurements(PositionAccount position, List<Axis> axes) {
     }
 
     /** The same position, measured at what a body's rules added to it. */
-    public PositionMeasurements measuredAt(List<Axis> axes) {
-        return new PositionMeasurements(position, axes);
+    public PositionMeasurements measuredAt(List<Axis> axes, BodyCutInspection inspection) {
+        return new PositionMeasurements(position, axes, inspection);
+    }
+
+    /**
+     * Whether anything here has something to divide the location by.
+     *
+     * <p>Asked of the measures the location has, which is where the answer is. A location nothing
+     * measures has none of them, and one measured at a number the rules say nothing about has one
+     * that divides it nowhere — two different things that a report tells apart, and neither of them
+     * a question about which measure was asked.
+     */
+    public boolean measured() {
+        return axes.stream().anyMatch(Axis::measurable);
     }
 }

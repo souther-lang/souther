@@ -85,9 +85,7 @@ public final class Partitions {
     public record Partitioning(List<PositionMeasurements> measurements,
                                List<souther.compiler.inputs.StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
-                               List<UndividedPosition> undivided,
                                List<RuleWithoutALine> rulesWithoutALine,
-                               List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                java.util.Map<AxisId, List<Border>> along,
@@ -99,9 +97,7 @@ public final class Partitions {
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
-            undivided = List.copyOf(undivided);
             rulesWithoutALine = List.copyOf(rulesWithoutALine);
-            blocked = List.copyOf(blocked);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
             java.util.Map<AxisId, List<Border>> lines = new LinkedHashMap<>();
@@ -137,6 +133,52 @@ public final class Partitions {
          */
         public List<Axis> axes() {
             return measurements.stream().flatMap(each -> each.axes().stream()).toList();
+        }
+
+        /**
+         * The positions no measure of them came back with anything to divide them by, each saying
+         * which kind of nothing that is.
+         *
+         * <p>Read off the measurements, where both halves of the answer already are: whether
+         * anything measures the location is what it holds, and what the rules written about it came
+         * to is folded there over every number it is measured at. Kept beside them, the two would
+         * be one reading of the positions and one list built from it, in step for as long as
+         * whoever wrote the second remembered the first.
+         *
+         * <p>The structural reason outranks the rules': where the walk could not reach into what
+         * the position holds, a rule naming something inside it is a second description of that
+         * same stop and the first is the cause.
+         */
+        public List<UndividedPosition> undivided() {
+            List<UndividedPosition> out = new ArrayList<>();
+            for (PositionMeasurements at : measurements) {
+                PendingPosition pending = PendingPosition.of(at.position(), at.measured());
+                if (pending != null) {
+                    out.add(pending.complete(at.inspection()));
+                }
+            }
+            return List.copyOf(out);
+        }
+
+        /**
+         * The positions this reading did not get to the rules of.
+         *
+         * <p>Off the same two answers the verdict above is, and neither is read from the other.
+         * Both phases have spoken by the time a measurement exists — what the position's own
+         * declarations answered and what a body's rules drew — and a candidate that neither of them
+         * answered is what an author is waiting on.
+         */
+        public List<souther.compiler.inputs.PositionReadingBlocked> blocked() {
+            List<souther.compiler.inputs.PositionReadingBlocked> out = new ArrayList<>();
+            for (PositionMeasurements at : measurements) {
+                PendingPosition pending = PendingPosition.of(at.position(), at.measured());
+                souther.compiler.inputs.PositionReadingBlocked stopped =
+                        pending == null ? null : pending.reportable();
+                if (stopped != null && !out.contains(stopped)) {
+                    out.add(stopped);
+                }
+            }
+            return List.copyOf(out);
         }
 
         /**
@@ -273,9 +315,14 @@ public final class Partitions {
         // compares it, and so is one bounded by a rule read to the end that divides nothing. What
         // the rules came to is whether either happened, and which of the two it was — settled
         // beside each axis, as it is once a body has spoken.
-        List<Measured> measured = new ArrayList<>();
-        for (Axis axis : kept) {
-            keep(new ArrayList<>(), measured, axis, null, rulesWithoutALine);
+        List<PositionMeasurements> settled = new ArrayList<>();
+        for (PositionMeasurements at : measurements) {
+            BodyCutInspection came = null;
+            for (Axis axis : at.axes()) {
+                came = BodyCutInspection.outranking(came,
+                        keep(new ArrayList<>(), axis, null, rulesWithoutALine));
+            }
+            settled.add(at.measuredAt(at.axes(), came));
         }
         // The lines first, because the closure is a conclusion about them: whether the reading ran
         // out is asked of what it produced beside what it found, and not of the gaps alone. Both
@@ -287,9 +334,8 @@ public final class Partitions {
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         MeasureClosure.Both closed =
                 MeasureClosure.of(positions, standing, rulesWithoutALine, read);
-        return new Partitioning(List.copyOf(measurements), standing, uncertain,
-                undividedIn(positions, measured),
-                List.copyOf(rulesWithoutALine), blockedIn(positions, measured),
+        return new Partitioning(List.copyOf(settled), standing, uncertain,
+                List.copyOf(rulesWithoutALine),
                 List.copyOf(notSeparated),
                 List.of(), lines, ReachingCuts.NONE,
                 closed.partition(), closed.border(),
@@ -299,25 +345,15 @@ public final class Partitions {
                 quantities.emptiness().orElse(null));
     }
 
-    /**
-     * One position, and what the rules written about it came to.
-     *
-     * <p>Paired where both are in hand rather than rejoined afterwards by how a path is spelled.
-     * What holds the two to one position is {@link #keep} making them together — the type says they
-     * travel together, not that they are of the same position — and that is the whole of the
-     * difference from a list of reasons matched to a list of positions later.
-     */
-    private record Measured(Axis axis, BodyCutInspection body) {}
-
     /** The axis, and the body's answer about it — a line it drew, nothing, or a rule about it that
-     *  it drew no line from, with which of the two ways that happened. Kept beside the axis rather
-     *  than looked up afterwards by how its path is spelled. */
-    private static void keep(List<Axis> out, List<Measured> measured, Axis axis,
-                             BodyCutInspection drew, List<RuleWithoutALine> rules) {
+     *  it drew no line from, with which of the two ways that happened. Answered where the axis is
+     *  made, so that what the rules came to travels to the position holding the axis rather than
+     *  being looked up afterwards by how a path is spelled. */
+    private static BodyCutInspection keep(List<Axis> out, Axis axis,
+                                          BodyCutInspection drew, List<RuleWithoutALine> rules) {
         out.add(axis);
         if (drew != null) {
-            measured.add(new Measured(axis, drew));
-            return;
+            return drew;
         }
         // Whether this phase left anything at the position with no line, and not which limit it was.
         // A limit belongs to the rule it stopped, and the findings carry it there; taken as the
@@ -341,8 +377,8 @@ public final class Partitions {
         // something. The verdict below tells a reading that stopped from a rule read to the end,
         // and answered here with one word it read every rule this phase understood as one it could
         // not read.
-        measured.add(new Measured(axis, left == null ? new BodyCutInspection.Exhausted()
-                : new BodyCutInspection.NoLine(left)));
+        return left == null ? new BodyCutInspection.Exhausted()
+                : new BodyCutInspection.NoLine(left);
     }
 
     /**
@@ -393,7 +429,7 @@ public final class Partitions {
      * a position by are two ways to arrive at a number and one thing to do with it, and a second
      * route through this would be a second answer to what a rule about a number comes to.
      */
-    private static void measureAt(List<Axis> out, List<Measured> measured, Axis axis,
+    private static BodyCutInspection measureAt(List<Axis> out, Axis axis,
                                   NumericTerm.FromOnePosition term, List<LineEvidence> evidence,
                                   souther.compiler.inputs.Quantities reading, Symbols symbols,
                                   ReadingPolicy policy,
@@ -412,12 +448,11 @@ public final class Partitions {
             // everything else. Ranges here would ask the rows for a distinction between the two
             // sides of a value the behavior treats alike.
             mine.forEach(each -> account.measured(each, axis.id()));
-            keep(out, measured, refine(axis,
+            return keep(out, refine(axis,
                     () -> singledClasses(points, term, axis.type(), domain, symbols),
                     mergedPoints(axis.cuts(), points, carrier),
                     axis.parted()),
                     new BodyCutInspection.Evidence(), rules);
-            return;
         }
         // Filtered once, and both answers read the filtered list. A line outside what the
         // position holds divides nothing, and it is not a boundary either: leaving it in the
@@ -456,7 +491,7 @@ public final class Partitions {
         // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
         // written about the position rather than everything that came to nothing.
         NumericDomain.Bounds within = domain;
-        keep(out, measured, refine(axis,
+        return keep(out, refine(axis,
                 () -> Intervals.classesOf(
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
@@ -468,85 +503,6 @@ public final class Partitions {
                         .map(each -> Parting.by(each.parts(), each.origin().authoredLine()))
                         .toList()),
                 reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
-    }
-
-    /**
-     * What each position is left with, folded from the two readings that were made of it.
-     *
-     * <p>Nothing is searched for here. Both answers were settled where the position was read — the
-     * structural one on the axis, the rules' one beside it — and this only says which of them a
-     * report is owed, so a reason recovered here by matching a path would be a reading happening
-     * twice.
-     *
-     * <p>The structural reason outranks the rules': where the walk could not reach into what the
-     * position holds, a rule naming something inside it is a second description of that same stop
-     * and the first is the cause (issue #626).
-     *
-     * <p><b>Once per position and not once per measure.</b> That a position is divided no way is a
-     * sentence about the location, and a location is measured at as many numbers as the rules name
-     * of it. Written per measure, a report would say it as many times as the position has numbers —
-     * and say it at all where one of the numbers is divided and another is not, which is a position
-     * the model does divide. What this phase came to about the location is
-     * {@link BodyCutInspection#outranking}'s to fold.
-     */
-    private static List<UndividedPosition> undividedIn(List<PositionAccount> positions,
-                                                       List<Measured> measured) {
-        List<UndividedPosition> out = new ArrayList<>();
-        for (PositionAccount at : positions) {
-            PendingPosition pending = PendingPosition.of(at, anythingMeasures(at, measured));
-            if (pending != null) {
-                out.add(pending.complete(cameTo(at, measured)));
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    /** Whether any measure of this position has something to divide it by. */
-    private static boolean anythingMeasures(PositionAccount at, List<Measured> measured) {
-        return measured.stream()
-                .anyMatch(each -> each.axis().path().equals(at.path())
-                        && each.axis().measurable());
-    }
-
-    /**
-     * What this phase came to about one position, over every number it measures the position at.
-     *
-     * <p>A location is measured at as many numbers as the rules name of it, and what a report says
-     * about the location is one sentence. Which of the answers it is is
-     * {@link BodyCutInspection#outranking}'s, and null where nothing was measured here at all.
-     */
-    private static BodyCutInspection cameTo(PositionAccount at, List<Measured> measured) {
-        BodyCutInspection came = null;
-        for (Measured each : measured) {
-            if (each.axis().path().equals(at.path())) {
-                came = BodyCutInspection.outranking(came, each.body());
-            }
-        }
-        return came;
-    }
-
-    /**
-     * The positions this reading did not get to the rules of, resolved.
-     *
-     * <p>Off the same pairing the verdict is, and neither is read from the other. Both phases have
-     * spoken by the time a {@link Measured} exists — what the position's own declarations answered
-     * and what a body's rules drew — and a candidate that neither of them answered is what an
-     * author is waiting on. Written where the producer records it, every position holding an
-     * `+Option+` said so whether or not the reading of it came to anything, and `not read` would be
-     * a list of what this compiler cannot generally do rather than of what it did not read here.
-     */
-    private static List<souther.compiler.inputs.PositionReadingBlocked> blockedIn(
-            List<PositionAccount> positions, List<Measured> measured) {
-        List<souther.compiler.inputs.PositionReadingBlocked> out = new ArrayList<>();
-        for (PositionAccount at : positions) {
-            PendingPosition pending = PendingPosition.of(at, anythingMeasures(at, measured));
-            souther.compiler.inputs.PositionReadingBlocked stopped =
-                    pending == null ? null : pending.reportable();
-            if (stopped != null && !out.contains(stopped)) {
-                out.add(stopped);
-            }
-        }
-        return List.copyOf(out);
     }
 
     /**
@@ -673,28 +629,33 @@ public final class Partitions {
             }
         }
         List<PositionMeasurements> measurements = new ArrayList<>();
-        List<Measured> measured = new ArrayList<>();
         EvidenceAccount account = new EvidenceAccount(evidence);
         // A position at a time, so that what a body's rules add is added where the position already
         // is. Walked as one run of measures, which position each of them came back for is a
         // question this would have to answer again once the rules name a second number of one.
         for (PositionMeasurements at : base.measurements()) {
             List<Axis> here = new ArrayList<>();
+            // What the rules came to about the location, folded as its numbers are measured. One
+            // sentence for the location: a number the rules divide and a number they say nothing
+            // about are both measures of it, and which of the two answers a report is owed is
+            // `outranking`'s to settle rather than the order this happens to walk them in.
+            BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
                 List<NumericTerm.FromOnePosition> numbers =
                         numbersMeasuring(axis, evidence, account);
                 if (numbers.isEmpty()) {
-                    keep(here, measured, axis, null, rules);
+                    came = BodyCutInspection.outranking(came, keep(here, axis, null, rules));
                     continue;
                 }
                 for (NumericTerm.FromOnePosition term : numbers) {
                     AxisId id = term.equals(axis.term()) ? axis.id()
                             : AxisId.of(axis.id().behavior(), term);
-                    measureAt(here, measured, axis.measuredAt(id, term), term, evidence, reading,
-                            symbols, policy, rules, account);
+                    came = BodyCutInspection.outranking(came,
+                            measureAt(here, axis.measuredAt(id, term), term, evidence, reading,
+                                    symbols, policy, rules, account));
                 }
             }
-            measurements.add(at.measuredAt(here));
+            measurements.add(at.measuredAt(here, came));
         }
         List<Axis> out = measurements.stream().flatMap(each -> each.axes().stream()).toList();
         account.everyPieceWasDisposedOf(out);
@@ -709,8 +670,7 @@ public final class Partitions {
         MeasureClosure.Both closed =
                 MeasureClosure.of(base.positions(), base.unanswered(), rules, read);
         return new Partitioning(measurements, base.unanswered(), base.uncertain(),
-                undividedIn(base.positions(), measured), List.copyOf(rules),
-                blockedIn(base.positions(), measured),
+                List.copyOf(rules),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
                 // it was read from the relation the rules admit.
@@ -1040,7 +1000,7 @@ public final class Partitions {
                 PositionAccount at = PositionAccount.of(behavior, position, null, null);
                 measurements.add(new PositionMeasurements(at,
                         List.of(new Axis(id, term, at, divided.classes(), divided.cuts().cuts(),
-                                List.of(), position.narrowedEnds()))));
+                                List.of(), position.narrowedEnds())), null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:
@@ -1060,7 +1020,7 @@ public final class Partitions {
                         PositionAccount at = PositionAccount.of(behavior, position,
                                 retained.continuation(), leftAt(position));
                         measurements.add(new PositionMeasurements(at,
-                                List.of(Axis.pendingAt(id, term, at))));
+                                List.of(Axis.pendingAt(id, term, at)), null));
                     }
                 }
             }
