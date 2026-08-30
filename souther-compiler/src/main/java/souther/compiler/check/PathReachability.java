@@ -257,8 +257,11 @@ public final class PathReachability {
             // And the arrival beside the outcomes: filed with them or not at all, and a finished
             // walk owes it for the same reason it owes them — a reader below reads an absence as
             // the answer that restricts nothing, so only an audit here can tell the two apart.
-            var at = plan.outcomeOf(comparison, true)
-                    .map(point -> point.way().at()).orElse(null);
+            //
+            // Which comparison this is, asked of the plan. Read off an outcome's own name instead,
+            // this would say a comparison is numbered where the plan numbered a way out of it, and
+            // the two are the plan's to keep in step rather than a reader's to assume.
+            var at = plan.comparisonAt(comparison).orElse(null);
             if (at != null && !arriving.containsKey(at)) {
                 return java.util.Optional.of(
                         "this reading said nothing about what arrives at " + comparison.op()
@@ -450,8 +453,10 @@ public final class PathReachability {
      */
     private void outcomesAt(Core.Binary comparison, Known k, Denotations at, InputReads reads,
                             List<PathDecision> decided) {
-        plan.outcomeOf(comparison, true).ifPresent(point ->
-                arriving.put(point.way().at(), arrivalAt(comparison, k, at, reads)));
+        // What arrives is about the comparison and not about either way out of it, so it is filed
+        // under the comparison the plan names and asked of the plan directly.
+        plan.comparisonAt(comparison).ifPresent(site ->
+                arriving.put(site, arrivalAt(comparison, k, at, reads)));
         for (boolean result : new boolean[] {true, false}) {
             var where = plan.outcomeOf(comparison, result);
             if (where.isEmpty()) {

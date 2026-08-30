@@ -495,8 +495,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledDense", true, SourceNameResolver.identity()).text();
-        assertTrue(dense.lines().anyMatch(row -> row.contains("\"x=/= 0, 1\"")
-                        && row.contains("TwoDecimals(0.5m)")),
+        assertTrue(dense.contains("\"x=/= 0, 1\" : (TwoDecimals(0.5m)"),
                 "a decimal lies between the two singled out: " + dense);
 
         String moment = souther.compiler.report.GeneratedRows.of(
