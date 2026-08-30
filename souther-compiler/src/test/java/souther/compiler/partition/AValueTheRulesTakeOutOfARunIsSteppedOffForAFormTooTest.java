@@ -58,7 +58,7 @@ class AValueTheRulesTakeOutOfARunIsSteppedOffForAFormTooTest {
     void aPointWhoseCosetNamesARefusedValueIsStillOwedARow() {
         String report = report(A_HOLE_IN_BOTH_POSITIONS);
 
-        assertTrue(report.contains("! no row is at the OFF point f/p.a + p.b = 0"), report);
+        assertTrue(report.contains("read as f/p.a + p.b: = 0"), report);
         assertFalse(report.contains("the search stopped before reaching p.a + p.b = 0"), report);
     }
 
@@ -67,7 +67,7 @@ class AValueTheRulesTakeOutOfARunIsSteppedOffForAFormTooTest {
     void theOnPointIsOwedTheSameWay() {
         String report = report(A_HOLE_IN_BOTH_POSITIONS);
 
-        assertTrue(report.contains("! no row is at the ON point f/p.a + p.b = 1"), report);
+        assertTrue(report.contains("read as f/p.a + p.b: = 1"), report);
     }
 
     private static String report(String model) {

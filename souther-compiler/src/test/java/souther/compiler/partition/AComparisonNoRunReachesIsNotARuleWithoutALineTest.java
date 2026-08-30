@@ -126,6 +126,9 @@ class AComparisonNoRunReachesIsNotARuleWithoutALineTest {
                     | "low" : (3) -> Answer(0)
                 """);
         assertTrue(human.contains("borders 1"), human);
-        assertTrue(human.contains("the ON point pick/n = 100000 (comparison@6:21)"), human);
+        // The point names where on the line it is and which rule drew it; what it is on is the
+        // reading's word, since a line is owed once wherever it is read.
+        assertTrue(human.contains("the ON point (comparison@6:21)"), human);
+        assertTrue(human.contains("read as pick/n: = 100000"), human);
     }
 }

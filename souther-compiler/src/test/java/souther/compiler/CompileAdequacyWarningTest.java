@@ -124,7 +124,8 @@ class CompileAdequacyWarningTest {
         for (Db.Found found : warningsAt(level)) {
             switch (found.report().diagnostic().said()) {
                 case ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew it -> rules.add(it.rule());
-                case ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew _ ->
+                case ExampleMessage.NoRowIsAtThePointOfTheLineARuleDrew it -> rules.add(it.rule());
+                case ExampleMessage.NoRowIsAtThePointOfTheLineAConstructDrew _ ->
                         rules.add("cost <= 100");
                 default -> { }
             }

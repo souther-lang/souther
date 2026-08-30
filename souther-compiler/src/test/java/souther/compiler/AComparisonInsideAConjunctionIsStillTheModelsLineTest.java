@@ -91,7 +91,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
     /** The edge a row can reach through the arm that proves the comparison ran is owed as ever. */
     @Test
     void theEdgeOnTheSideTheConjunctionAdmitsIsStillOwed() {
-        assertTrue(blockOf("inAConjunction").contains("no row is at the ON point inAConjunction/r.cost = 100000"),
+        assertTrue(blockOf("inAConjunction").contains("read as inAConjunction/r.cost: = 100000"),
                 blockOf("inAConjunction"));
     }
 

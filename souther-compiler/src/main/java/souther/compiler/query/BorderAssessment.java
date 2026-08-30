@@ -13,10 +13,15 @@ import java.util.EnumSet;
 import java.util.Map;
 
 /**
- * Everything known about one border: the line, and what became of each of its four coverage items.
+ * Everything known about one reading of one border: the line as this position met it, and what
+ * became of each of its four coverage items at this reading.
  *
- * <p>One of these per border, made in one place. What a report prints, what a build is warned about
- * and what the generator offers are three readings of this and not three measurements.
+ * <p>One of these per border, made in one place. It is the occurrence: where a row can be written
+ * and what the search there came to, which is what a block that shows a border whole prints and
+ * what a generation composes from. What is owed is not here — a line is owed once however many
+ * positions read it — and what a finding is about, what a verdict counts and what a report marks is
+ * the point across its readings ({@link BorderObligationPointAssessment}), which is gathered from
+ * these and never read off one of them.
  *
  * <p><b>Total over {@link PointRole}, the way the border it is about is.</b> A border answers for
  * every role and so does this, so a reader asking what one of them came to is never answered by an
@@ -152,10 +157,13 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
     /**
      * One coverage item of one border, for a reader that walks the items rather than the borders.
      *
-     * <p>One place turns borders into items, so that a count, a document, a finding and the rows a
-     * tool offers are four readings of one list. Flattened separately by each of them, a reader that
-     * forgot a role would silently be short by it — which is the shape this whole measure was in
-     * before the border owed its four.
+     * <p>One place turns a border into its items, so that a reader walking them is never short of
+     * one: all four are here, and a role the rule owes nothing in says so rather than being left
+     * out. What is <em>not</em> read off this list is what anybody is owed — a count, a finding and
+     * a verdict work in obligations, which are what the readings of a line come to together
+     * ({@link BorderObligationPointAssessment}), and a line is owed once however many positions
+     * read it. This list has one entry per reading of each point, so anything counting it counts
+     * the walk.
      */
     public record Point(BorderAssessment border, PointRole role, ItemAssessment item) {
 

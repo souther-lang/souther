@@ -383,12 +383,14 @@ public final class Adequacy {
      * a second way to reach the same answer.
      *
      * @param signatures what the rows establish about each behavior's inputs and output
-     * @param partitions what they establish about its classes, and what it is owed a row for at the
-     *                   lines its rules draw
+     * @param partitions what they establish about its classes
+     * @param accounts   what each behavior is owed a row for at the lines its own rules draw
+     *                   ({@link BodyBorders})
      * @param branches   what they establish about the arms of each body
      */
     public record Of(Map<String, SignatureEvidence> signatures,
                      Map<String, PartitionEvidence> partitions,
+                     Map<String, Measure<List<BorderObligationPointAssessment>>> accounts,
                      Map<String, BranchEvidence> branches) {}
 
     /** Nothing read, so nothing proven and nothing shown wrong. What a measure gets where the
@@ -1301,7 +1303,7 @@ public final class Adequacy {
             // numbers rather than into them ({@link Claimed}), and the two meet where a report
             // is written.
             return Coverages.of(spec, sig, scope,
-                    db.ask(new Front.Reading()).value(), divided, seen, level, lines,
+                    db.ask(new Front.Reading()).value(), divided, seen, level,
                     db.ask(new Front.Adequacy()).value().measures());
         }
     }
@@ -3072,12 +3074,11 @@ public final class Adequacy {
                         none != null ? none
                         : switch (finding.about()) {
                             // Asked of the module's account, which is where a row for a point is
-                            // searched for. Read off this behavior's own attempt at the place it
-                            // met the line, the answer would be one reading's — and a point read at
-                            // two positions has as many of those as it has readings.
-                            case About.APointOfABorder(var point) -> account.outcomeAtTheReading(
-                                    point.owed(),
-                                    BorderObligationPointAssessment.Reading.of(point.line()));
+                            // searched for, and asked of the line: the finding is about the point
+                            // however many readings there are, and a row composed at any of them
+                            // answers it.
+                            case About.APointOfABorder(var point) ->
+                                    account.outcomeForTheLine(point.point());
                             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                                     atCase(input, missing, composed, spec);
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
@@ -3114,8 +3115,8 @@ public final class Adequacy {
                 Finding finding, souther.compiler.partition.FillResult composed,
                 Hir.SpecBehavior spec) {
             return switch (finding.about()) {
-                case About.APointOfABorder(var point) ->
-                        java.util.Optional.of(new OfferItem.APointOfALine(point.owed()));
+                case About.APointOfABorder(var point) -> java.util.Optional.of(
+                        new OfferItem.APointOfALine(point.point()));
                 case About.AnArmNoRowGoesThrough(var arm) -> java.util.Optional.of(
                         new OfferItem.AnArm(new Generator.ArmOwed(arm.index())));
                 case About.AClassNoRowIsIn(var missing) -> java.util.Optional.of(
@@ -3365,7 +3366,7 @@ public final class Adequacy {
                     case null -> {
                         if (each.worthSearching()) {
                             throw new IllegalStateException("nothing was searched for at "
-                                    + point.said() + ", which is worth searching");
+                                    + point + ", which is worth searching");
                         }
                     }
                 }
@@ -3907,13 +3908,9 @@ public final class Adequacy {
                 case About.ACaseNothingWasSeenToProduce _ -> Kind.OUTPUT_CASE_UNVERIFIED;
                 case About.ACaseNoRowAppliesItTo _ -> Kind.INPUT_CASE_UNSPECIFIED;
                 case About.AClassNoRowIsIn _ -> Kind.AXIS_CLASS_UNCOVERED;
-                // The same two rules, asked of the role. A line owed once over its readings and a
-                // line owed at one of them are the same technique's item and are told apart under
-                // the same two codes.
-                case About.APointOfADeclaredBorder(var owed) ->
-                        owed.debt().role().againstTheLine()
-                        ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
-                case About.APointOfABorder(var point) -> point.role().againstTheLine()
+                // Asked of the role, whosever the line is: a body's line and a declaration's are the
+                // same technique's item and are told apart under the same two codes.
+                case About.ABorderObligation owed -> owed.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleWithoutALine _ -> Kind.PARTITION_NOT_READ;
@@ -4318,6 +4315,48 @@ public final class Adequacy {
     }
 
     /**
+     * What each behavior of {@code name} is owed a row for at the lines its own rules drew, and how
+     * far the reading that found those lines got.
+     *
+     * <p>The behaviors' side of the one relation {@link Obligations} gathers, the way
+     * {@link DeclaredBorders} is the declarations' side: every point is in one of the two accounts
+     * or in neither, and which is the point's own answer
+     * ({@link BorderObligationPointAssessment#belongsToBehaviorAccount}). Nothing here reads the
+     * lines and works the account out again — a count, a finding, a verdict and an offering that
+     * each did so were four answers to how much work there is, and two of them disagreed.
+     *
+     * <p>A measure per behavior and not a list, for the reason the declarations' account is one:
+     * what a behavior is owed is read off the lines its positions met, so a reading that did not run
+     * out may have left the account short, and a verdict handed the entries alone would take a
+     * behavior whose lines nobody could derive for one with nothing to answer for. The measure is
+     * the lines' own ({@link BoundaryReadings}), read as the account.
+     */
+    public record BodyBorders(String name)
+            implements Key<Map<String, Measure<List<BorderObligationPointAssessment>>>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Measure<List<BorderObligationPointAssessment>>>> compute(Db db) {
+            Map<String, Measure<List<BorderAssessment>>> lines =
+                    db.ask(new BoundaryReadings(name)).value();
+            List<BorderObligationPointAssessment> points =
+                    db.ask(new Obligations(name, new GenerationScope.Module())).value();
+            if (lines == null || points == null) {
+                return Answer.absent();
+            }
+            Map<String, Measure<List<BorderObligationPointAssessment>>> out = new LinkedHashMap<>();
+            lines.forEach((behavior, read) -> out.put(behavior, read.readAs(_ ->
+                    points.stream().filter(point -> point.belongsToBehaviorAccount(behavior))
+                            .toList())));
+            return Answer.of(java.util.Collections.unmodifiableMap(out));
+        }
+    }
+
+    /**
      * Everything the measures found, whatever each of them is about.
      *
      * <p>The one statement of what counts as a finding. A report prints these, a build is warned about
@@ -4346,6 +4385,8 @@ public final class Adequacy {
             // deciding a second time what a measure had already answered, and dropping with them
             // every gap the measures did establish (issue #955).
             Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
+            Map<String, Measure<List<BorderObligationPointAssessment>>> accounts =
+                    db.ask(new BodyBorders(name)).value();
             Map<String, BranchEvidence> branches = db.ask(new BranchCoverage(name)).value();
 
             // One list and not a block per behavior. What each finding is about is its own
@@ -4363,7 +4404,8 @@ public final class Adequacy {
                 signatureFindings(behavior.name(), Citation.of(behavior.pos()),
                         signatures == null ? null : signatures.get(behavior.name()), out);
                 partitionFindings(behavior,
-                        partitions == null ? null : partitions.get(behavior.name()), out);
+                        partitions == null ? null : partitions.get(behavior.name()),
+                        accounts == null ? null : accounts.get(behavior.name()), out);
                 armFindings(behavior,
                         branches == null ? null : branches.get(behavior.name()), out);
             }
@@ -4472,6 +4514,7 @@ public final class Adequacy {
          *  position was read on every row: a row writing the very number the rule names, whose
          *  observation was cut short elsewhere in the same input, is not a row that missed. */
         private static void partitionFindings(Hir.BehaviorDef behavior, PartitionEvidence partition,
+                                              Measure<List<BorderObligationPointAssessment>> account,
                                               List<Finding> out) {
             if (partition == null) {
                 return;
@@ -4489,11 +4532,13 @@ public final class Adequacy {
                 }
             }
             // This behavior's account, walked as the things it is owed. One finding per thing and
-            // not one per role: a place two of this body's rules drew a line at leaves a run owed to
-            // each of them, and each is one obligation to be told about — a single row may well
-            // answer both. A line the declarations are owed is answered once for the module and is
-            // no part of this account.
-            for (OwedBoundaryPoint owed : partition.owedPoints()) {
+            // not one per reading: a guard on a name every case of a sum spreads is read once
+            // under each case and is one row to write, and a place two of this body's rules drew
+            // a line at leaves a run owed to each of them, which are two. A line the declarations
+            // are owed is answered once for the module and is no part of this account.
+            for (BorderObligationPointAssessment owed
+                    : account == null ? List.<BorderObligationPointAssessment>of()
+                            : account.made().orElseGet(List::of)) {
                 // Both halves, asked of the two answers the assessment keeps apart. A point no
                 // row was measured against is not a gap, and neither is one nothing has shown a
                 // row can be written at — that point is where the reading stopped rather than
@@ -4712,28 +4757,29 @@ public final class Adequacy {
                                                 .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
                                                 owed.debt().role().name(), owed.axis(),
                                                 owed.against(), owed.debt().id().named());
-                        case About.APointOfABorder(var point) ->
-                                point.role().againstTheLine()
-                                        ? point.origin().isWrittenRatherThanNamed()
-                                                ? new ExampleMessage
-                                                        .NoRowIsAtThePointOfTheBorderAConstructDrew(
-                                                        point.role().name(), point.axis(),
-                                                        point.against(), constructOf(point))
-                                                : new ExampleMessage
-                                                        .NoRowIsAtThePointOfTheBorderARuleDrew(
-                                                        point.role().name(), point.axis(),
-                                                        point.against(),
-                                                        point.origin().named())
-                                        : point.origin().isWrittenRatherThanNamed()
-                                                ? new ExampleMessage
-                                                        .NoRowIsAtThePointAwayFromTheBorderAConstructDrew(
-                                                        point.role().name(), point.axis(),
-                                                        point.against(), constructOf(point))
-                                                : new ExampleMessage
-                                                        .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
-                                                        point.role().name(), point.axis(),
-                                                        point.against(),
-                                                        point.origin().named());
+                        // A body's line, owed once wherever it is read, so the sentence names no
+                        // quantity: which of the four points, and which rule — by name where the
+                        // author gave it one, and as the construct where it is a comparison found
+                        // by where it is written. Writing where the point is takes a quantity and
+                        // a quantity is a reading's, so that is said under this, by the reading
+                        // whose word it is.
+                        case About.APointOfABorder(var point) -> switch (point.cited()) {
+                            case souther.compiler.check.RuleCitation.Named named ->
+                                    point.role().againstTheLine()
+                                            ? new ExampleMessage.NoRowIsAtThePointOfTheLineARuleDrew(
+                                                    point.role().name(), named.name())
+                                            : new ExampleMessage
+                                                    .NoRowIsAtThePointAwayFromTheLineARuleDrew(
+                                                    point.role().name(), named.name());
+                            case souther.compiler.check.RuleCitation.WrittenAt _ ->
+                                    point.role().againstTheLine()
+                                            ? new ExampleMessage
+                                                    .NoRowIsAtThePointOfTheLineAConstructDrew(
+                                                    point.role().name(), theComparison())
+                                            : new ExampleMessage
+                                                    .NoRowIsAtThePointAwayFromTheLineAConstructDrew(
+                                                    point.role().name(), theComparison());
+                        };
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(
                                         phraseFor(arm), arm.behavior());
@@ -4767,6 +4813,21 @@ public final class Adequacy {
                     // and `n < 100` is at its OFF point there — so it would be a second reading of
                     // one finding, sitting under a sentence that just named the role.
                     hintFor(point.role(), built);
+                    // Each reading of the line, in its own words. The sentence names no quantity
+                    // — the line is owed once wherever it is read — so where a row can be written
+                    // and what it has to do there is said here, one note per reading, in the
+                    // order the sentences sort and never the order the walk took.
+                    List<BorderObligationPointAssessment.ReadingSaid> readings =
+                            point.readingsSaid();
+                    for (BorderObligationPointAssessment.ReadingSaid read : readings.subList(0,
+                            Math.min(readings.size(),
+                                    BorderObligationPointAssessment.READINGS_SAID))) {
+                        built.hint(new ExampleMessage.TheLineAsReadAt(read.at(), read.asks()));
+                    }
+                    if (readings.size() > BorderObligationPointAssessment.READINGS_SAID) {
+                        built.hint(new ExampleMessage.MoreReadingsOfTheLine(
+                                readings.size() - BorderObligationPointAssessment.READINGS_SAID));
+                    }
                     // Where the rule has a place rather than a name, the place is a second region
                     // and not words in the sentence: a renderer resolves what to call its file,
                     // and a body written out of sight says so off its own coordinate.
@@ -4776,16 +4837,17 @@ public final class Adequacy {
                     // dropped, on the grounds that a label naming no source would be read against
                     // the file the diagnostic is in; a label no longer takes its file from where it
                     // is shown, so what was left unsaid can be said.
-                    point.origin().citation().ifPresent(cited -> {
+                    if (point.cited()
+                            instanceof souther.compiler.check.RuleCitation.WrittenAt(var cited)) {
                         switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
                                     built.secondary(souther.compiler.diag.Region.point(w.at()),
                                             new ExampleMessage.TheConstructThatDrawsTheLine(
-                                                    constructOf(point)));
+                                                    theComparison()));
                             case souther.compiler.diag.Citation.Reached r ->
                                     built.secondary(souther.compiler.diag.Region.point(r.at()),
                                             new ExampleMessage.TheConstructThatDrawsTheLine(
-                                                    constructOf(point)));
+                                                    theComparison()));
                             // Nowhere this compilation can put a marker. Where the guard is written
                             // out of sight the label says so instead; where it is in a text the
                             // caller handed over there is no declaration to name and nothing to say,
@@ -4794,10 +4856,10 @@ public final class Adequacy {
                             case souther.compiler.diag.Citation.Elsewhere e ->
                                     built.secondaryOutOfSight(e.provenance(),
                                             new ExampleMessage.TheConstructThatDrawsTheLine(
-                                                    constructOf(point)));
+                                                    theComparison()));
                             case souther.compiler.diag.Citation.Unplaced _ -> { }
                         }
-                    });
+                    }
                 }
                 case About.AnArmNoRowGoesThrough _ ->
                         built.hint(new ExampleMessage.EitherARowIsMissingOrNothingReachesIt());
@@ -4846,8 +4908,7 @@ public final class Adequacy {
         /** What a sentence calls a rule that has no name, as a phrase the reader's language
          *  supplies. One phrase, because a rule found by where it is written is a comparison —
          *  which construct stands around it is a fact about the body and not about the rule. */
-        private static souther.compiler.diag.Localizable constructOf(
-                OwedBoundaryPoint point) {
+        private static souther.compiler.diag.Localizable theComparison() {
             return souther.compiler.diag.Localizable.of("construct.comparison");
         }
 

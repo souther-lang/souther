@@ -87,7 +87,9 @@ class ANameBesideAnEndIsOwedToTheDifferenceItMadeTest {
     /** Where the record moved the end, the run beside it is the record's to answer for as well. */
     @Test
     void aDeclarationThatMovedAnEndIsNamedBesideIt() {
-        assertEquals("Lim or Held",
+        // In the declarations' own order and not the order the readings were met in: who owes a
+        // point is a set, and which of them a walk reached first is no part of it.
+        assertEquals("Held or Lim",
                 ownersOf(ONE_CLAUSE_MOVING_ONE_END, "example.tight", PointRole.IN,
                         "value in 0 <= value < 50"),
                 "nothing but the record's clause gives this field a floor, so the record holds it");

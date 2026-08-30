@@ -343,7 +343,7 @@ public record Settlements(List<OfferItem> requested,
                     .value();
             for (BorderObligationPointAssessment point
                     : points == null ? List.<BorderObligationPointAssessment>of() : points) {
-                if (!point.owedToTheReading() || !point.carriedBy(behavior)) {
+                if (!point.belongsToBehaviorAccount(behavior)) {
                     continue;
                 }
                 OfferItem.APointOfALine item = new OfferItem.APointOfALine(point.point());

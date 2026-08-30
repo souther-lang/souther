@@ -59,7 +59,7 @@ class ALineDrawnOnADateIsALineTest {
     void bothSidesOfTheLineAreOwed() {
         String human = report();
 
-        assertTrue(human.contains("border      borders 1   coverage items 1/4"), human);
+        assertTrue(human.contains("border      borders 1   obligations 1/4"), human);
         assertTrue(human.contains("2026-01-01"), human);
     }
 

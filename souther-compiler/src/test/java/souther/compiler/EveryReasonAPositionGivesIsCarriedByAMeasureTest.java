@@ -58,16 +58,10 @@ class EveryReasonAPositionGivesIsCarriedByAMeasureTest {
         Set<Object> out = new LinkedHashSet<>();
         partition.partitioned().weakening().observationCauses()
                 .forEach(gap -> out.add(gap.identity()));
-        partition.owes().weakening().observationCauses()
-                .forEach(gap -> out.add(gap.identity()));
         partition.pairs().counted().weakening().observationCauses()
                 .forEach(gap -> out.add(gap.identity()));
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             axis.reached().weakening().observationCauses().forEach(gap -> out.add(gap.identity()));
-        }
-        for (souther.compiler.query.OwedBoundaryPoint point : partition.owedPoints()) {
-            point.item().weakeningSource().weakening().observationCauses()
-                    .forEach(gap -> out.add(gap.identity()));
         }
         return out;
     }

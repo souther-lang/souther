@@ -143,22 +143,17 @@ final class Coverages {
      * @param partitioning what the model divides this behavior into, made once by
      *                   {@link souther.compiler.query.Adequacy.Divided} and read here. Worked out
      *                   again on the way in, this and the boundaries beside it would be two
-     *                   derivations of one thing and two chances to disagree about it
-     * @param lines      what was established about every line this behavior's rules drew, and how
-     *                   far the reading that found them got, made once by
-     *                   {@link souther.compiler.query.Adequacy.BoundaryReadings} and read here.
-     *                   Measuring a line takes putting a value through the module's decoders, which
-     *                   is not something a coverage count can do on its own and not something that
-     *                   should happen twice. What comes out of it here is this behavior's own
-     *                   account: which of a border's points are its to write a row at is the
-     *                   reading's answer and is read once, where the account is made
+     *                   derivations of one thing and two chances to disagree about it. The lines
+     *                   those rules drew are not here: what a behavior is owed at them is the
+     *                   module's one relation projected to it
+     *                   ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes
+     *                   measure reads none of it
      */
     static PartitionEvidence of(Hir.SpecBehavior behavior, Sig sig,
                                 Symbols symbols, ReadingPolicy policy,
                                 Partitions.Partitioning partitioning,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.query.Adequacy.Level level,
-                                Measure<List<BorderAssessment>> lines,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget) {
         List<RowOutcome> rows = observed.rowsSeen();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
@@ -189,7 +184,6 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                OwedBoundaryPoint.accountOf(lines),
                 pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the

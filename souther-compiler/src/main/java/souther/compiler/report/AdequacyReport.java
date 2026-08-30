@@ -22,6 +22,7 @@ import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -74,7 +75,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 8;
+    public static final int SCHEMA_VERSION = 9;
 
     /**
      * Where the schema this writes documents ships.
@@ -256,6 +257,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
 
         /**
+         * What this behavior is owed a row for at the lines its own rules drew, each once however
+         * many of its positions read it. Empty where the reading has none to show, for the reason
+         * {@link #lines} is.
+         */
+        public List<souther.compiler.query.BorderObligationPointAssessment> account() {
+            return evidence.account() == null ? List.of()
+                    : evidence.account().made().orElseGet(List::of);
+        }
+
+        /**
          * The same as the lines alone, empty where the reading has none to show.
          *
          * <p>The one place the absence of the measure itself is read, which is the compile not
@@ -363,6 +374,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 compilation.db().ask(new Adequacy.Coverage(name)).value();
         Map<String, Measure<List<BorderAssessment>>> lines =
                 compilation.db().ask(new Adequacy.BoundaryReadings(name)).value();
+        // What each behavior is owed at those lines, once per point: the behaviors' projection of
+        // the module's one relation, which the findings and the verdict read as well.
+        Map<String, Measure<List<BorderObligationPointAssessment>>> accounts =
+                compilation.db().ask(new Adequacy.BodyBorders(name)).value();
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(name)).value();
         // What each body declared, read where it was judged. Beside the measures and never inside
@@ -401,7 +416,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     lines == null ? null : lines.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
-                    new BehaviorEvidence(reading, signature, partition, read, branch),
+                    new BehaviorEvidence(reading, signature, partition, read,
+                            accounts == null ? null : accounts.get(behavior.name()), branch),
                     claims == null ? ClaimAnnotations.NONE
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
                     ofBehavior(findings, behavior.name())));
@@ -458,6 +474,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * what the model itself is short of once.
      */
     private void declared(StringBuilder out, ModuleReport module, SourceNameResolver names) {
+        // What the declarations are owed, counted the way a behavior's own account is: the
+        // obligations whose coverage was measured and whose writability is known, and how many of
+        // them a row stands at. Here rather than in the blocks above, because that is where the
+        // work is: a line a `data` clause drew is owed once for the module, and a behavior carrying
+        // the type is short of nothing on its account. Left uncounted, a model whose every rule is
+        // a declaration's showed borders in every block, no number anywhere, and nothing saying
+        // how many of them nobody had measured.
+        List<Adequacy.DeclaredDebt> debts = module.debts();
+        List<Adequacy.DeclaredDebt> measured = debts.stream()
+                .filter(each -> each.debt().owed().coverage().made().isPresent())
+                .filter(each -> each.debt().owed().writabilityEvidence().known()).toList();
+        if (!debts.isEmpty()) {
+            long met = measured.stream()
+                    .filter(each -> each.debt().owed().hasRowWitness()).count();
+            out.append(String.format("  declarations   obligations %d/%d%s%n", met, measured.size(),
+                    notes(debts,
+                            each -> each.debt().owed().coverage().made().isEmpty(),
+                            each -> whyNoBoundaryItem(each.debt().owed().coverage()))));
+        }
+        // And the ones the count leaves out, said here for the reason it counts them here: a line
+        // a declaration drew is nobody's behavior's, so a block above has nothing to say about it
+        // and this is the only place it can be said at all.
+        for (Adequacy.DeclaredDebt each : debts) {
+            if (each.debt().owed().writabilityEvidence().known()) {
+                continue;
+            }
+            out.append(String.format("      · not known to be writable: the %s point %s (%s)%n",
+                    each.debt().role(), each.said(), each.debt().describe(names, null)));
+            readings(out, each.debt(), _ -> true, at -> whatWasTried(
+                    at.owedAt(each.debt().role()).attempt(), names, null));
+        }
         Map<String, List<Adequacy.Finding>> byDeclaration = new java.util.LinkedHashMap<>();
         for (Adequacy.Finding each : module.declarations()) {
             byDeclaration.computeIfAbsent(each.named(), _ -> new ArrayList<>()).add(each);
@@ -698,7 +745,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // an obligation: a place two of this body's rules drew a line at leaves a run owed
                 // to each, and a verdict counting the role once would be short by the rest. How
                 // many rows answer them is a different count and is the generator's.
-                behavior.partition().owedPoints().stream()
+                behavior.account().stream()
                         .filter(owed -> held.requires(owed.role()))
                         .forEach(owed -> add(measures, measurementOf(owed.item())));
                 // Which of the four those are is the bar's answer and not a second reading of it
@@ -1122,36 +1169,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // filtered separately — a line nobody measured and a line nothing promises are not the same
         // absence, and printing them under one sentence said "not known to be writable" about
         // behaviors whose only problem was that nobody had written a row yet.
-        // Counted over the coverage items and named as such. A border owes a row at up to four
-        // points, so a count of borders would say a border with one point met and three missed was
-        // as covered as one with nothing to owe but that point — and how many items a border owes is
-        // the rule's answer rather than a constant.
-        // The lines this behavior's positions met, whosever the row at each point is. What this
-        // block accounts for is a border and its four points; which of them this behavior is owed a
-        // row at is the account beside it, and the findings printed below are written from that.
+        // Counted over the obligations and named as such. A border owes a row at up to four points,
+        // so a count of borders would say a border with one point met and three missed was as
+        // covered as one with nothing to owe but that point; and a line is owed once however many
+        // positions read it, so a count of readings would say a guard on a name every case of a sum
+        // spreads was as many rows as the sum has cases. `borders` stays the lines at coordinates,
+        // which is what the block under it shows, and the two numbers are not one multiplied.
+        //
+        // What this behavior is owed is its account, which is a projection of the module's one
+        // relation and not something worked out again here from the lines beside it.
         ReportMeasurement<List<BorderAssessment>> bounded =
                 ReportMeasurement.of(behavior.boundaryReadings());
         List<BorderAssessment> lines = behavior.lines();
-        List<BorderAssessment.Point> points =
-                BorderAssessment.pointsOf(lines).stream()
-                        .filter(p -> p.item() instanceof ItemAssessment.Owed).toList();
-        List<BorderAssessment.Point> measured = points.stream()
-                .filter(p -> owed(p).coverage().made().isPresent())
-                .filter(p -> owed(p).writabilityEvidence().known()).toList();
-        List<BorderAssessment.Point> unpromised = points.stream()
-                .filter(p -> !owed(p).writabilityEvidence().known()).toList();
-        long met = measured.stream().filter(p -> owed(p).hasRowWitness()).count();
+        List<BorderObligationPointAssessment> points = behavior.account();
+        List<BorderObligationPointAssessment> measured = points.stream()
+                .filter(p -> p.owed().coverage().made().isPresent())
+                .filter(p -> p.owed().writabilityEvidence().known()).toList();
+        // The obligations the count leaves out, read off the same evidence it leaves them out by.
+        // Said per reading instead, a point one reading proves writable and another does not would
+        // be counted above and printed here as not known — one search with two accounts, which is
+        // what this whole block stopped doing. What each reading's search came to is under it.
+        List<BorderObligationPointAssessment> unpromised = points.stream()
+                .filter(p -> !p.owed().writabilityEvidence().known()).toList();
+        long met = measured.stream().filter(p -> p.owed().hasRowWitness()).count();
         // A point read from rows some of which could not be read. What was not found there is
         // undecided rather than absent, which is the measurement's answer and no longer a third
         // case of the verdict beside it.
         long undecided = measured.stream()
-                .filter(p -> owed(p).coverage() instanceof Measurement.Partial<?>)
+                .filter(p -> p.owed().coverage() instanceof Measurement.Partial<?>)
                 .count();
-        // The points the model's own rules discharged. Said rather than left out of the numbers: a
-        // reader working to a coverage criterion counts four items per border, and a border showing
-        // two of them with nothing beside it reads as this compiler being short of the other two.
-        long excluded = lines.stream()
-                .mapToLong(b -> b.excluded().size()).sum();
         if (!bounded.counted()) {
             // `0/0` said the rows were at every line there was. What it meant was that nobody found
             // a line to be at, which a model whose bounds sit one type away from the position the
@@ -1159,12 +1205,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("    border      %s%n",
                     whyNoBoundary(bounded.reason())));
         } else {
-            out.append(String.format("    border      borders %d   coverage items %d/%d%s%s%s%s%n",
+            // The points the model's own rules discharged are not on this line. They are not
+            // obligations, so a count of them beside the obligations would be two units in one
+            // sentence; each is said under the block, by the reading it is a point of.
+            out.append(String.format("    border      borders %d   obligations %d/%d%s%s%s%n",
                     lines.size(), met, measured.size(),
-                    excluded == 0 ? "" : "   excluded " + excluded,
                     notes(points,
-                            p -> owed(p).coverage().made().isEmpty(),
-                            p -> whyNoBoundaryItem(owed(p).coverage())),
+                            p -> p.owed().coverage().made().isEmpty(),
+                            p -> whyNoBoundaryItem(p.owed().coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)",
                     inFull(bounded.status())));
         }
@@ -1188,32 +1236,48 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.APointOfABorder(var point)
                         && point.role().againstTheLine() == againstTheLine) {
+                    // The point and the rule, and no word with a quantity in it. Writing where the
+                    // point is takes a quantity, and a quantity is a reading's — so the mark says
+                    // which of the four and which rule drew the line, and every word an author
+                    // acts on is said under it by the reading whose word it is.
+                    //
                     // `the` for a point and `an` for a run. Two of the four are one value and the
                     // other two are met anywhere in a run of them, so a reader told there is no row
                     // at `the IN point` is being sent after a value that does not exist.
-                    out.append(againstTheLine
-                            ? String.format("      %s no row is at the %s point %s = %s (%s)%n",
-                                    mark(f), point.role(), point.axis(),
-                                    point.against(), point.describe(names, declaredIn))
-                            : String.format("      %s no row is at an %s point of %s, %s (%s)%n",
-                                    mark(f), point.role(), point.axis(),
-                                    point.against(), point.describe(names, declaredIn)));
+                    out.append(String.format("      %s no row is at %s %s point (%s)%n",
+                            mark(f), againstTheLine ? "the" : "an", point.role(),
+                            point.describe(names, declaredIn)));
+                    readings(out, point, _ -> true, _ -> "");
                 }
+            }
+        }
+        // A point some row answers, at a reading nothing stands at. Not a gap — the line is owed
+        // once and a row stands at it — and still a fact about that position: a reader who wants
+        // every case of the sum exercised is told which are not, and told it as diagnosis rather
+        // than as work a strict build refuses over.
+        for (BorderObligationPointAssessment point : points) {
+            if (point.owed().hasRowWitness()
+                    && point.readings().stream().anyMatch(
+                            at -> !at.owedAt(point.role()).hasRowWitness())) {
+                out.append(String.format("      · the %s point (%s) is answered, and not at every"
+                                + " reading of the line%n",
+                        point.role(), point.describe(names, declaredIn)));
+                readings(out, point, at -> !at.owedAt(point.role()).hasRowWitness(), _ -> "");
             }
         }
         // Said and not counted. Nothing has shown a row can be written at these — the projection
         // could not read every rule of the value, and nothing built one either — so they are not
         // rows anybody is owed, and they are still the only thing there is to say about the
         // position.
-        for (BorderAssessment.Point p : unpromised) {
-            // What the search came to, beside the verdict it did not decide. Whether this point is
-            // counted turns on whether a concrete value was accepted at it, so a reader looking at
-            // two models that differ here is looking at what the compiler could establish — and
-            // without this line the difference reads as the tool being arbitrary.
-            out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%s%n",
-                    p.role(), p.border().axis(), p.asked(),
-                    p.border().describe(names, declaredIn),
-                    whatWasTried(owed(p).attempt(), names, declaredIn)));
+        for (BorderObligationPointAssessment p : unpromised) {
+            out.append(String.format("      · not known to be writable: the %s point (%s)%n",
+                    p.role(), p.describe(names, declaredIn)));
+            // What each reading's search came to, beside the verdict none of them decided. Whether
+            // this point is counted turns on whether a concrete value was accepted at it, so a
+            // reader looking at two models that differ here is looking at what the compiler could
+            // establish — and without this the difference reads as the tool being arbitrary.
+            readings(out, p, _ -> true, at -> whatWasTried(
+                    at.owedAt(p.role()).attempt(), names, declaredIn));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
@@ -1227,9 +1291,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
     }
 
-    /** The owed half of a point this report has already filtered to the owed ones. */
-    private ItemAssessment.Owed owed(BorderAssessment.Point point) {
-        return (ItemAssessment.Owed) point.item();
+    /**
+     * The readings of one point, one line each, under the line that names the point.
+     *
+     * <p>Where the quantity's name lives. The point's own line names none — a body's line is owed
+     * once wherever it is read — so what a row has to be at each position that read it is said
+     * here, in that position's terms. In the order the sentences sort and never the order the walk
+     * took, and at most {@link BorderObligationPointAssessment#READINGS_SAID} of them: over
+     * {@code crm} one clause is read at 133 positions, and what is left out is said as a count so
+     * the readings shown do not read as all there are.
+     *
+     * @param shown  which readings to say — every one under a gap, and only the unwitnessed ones
+     *               under a point some row answers
+     * @param beside what to say after each, which is what that reading's search came to where one
+     *               was made
+     */
+    private static void readings(StringBuilder out, BorderObligationPointAssessment point,
+                                 java.util.function.Predicate<BorderAssessment> shown,
+                                 java.util.function.Function<BorderAssessment, String> beside) {
+        List<BorderObligationPointAssessment.ReadingSaid> said = point.readingsSaid().stream()
+                .filter(each -> shown.test(point.met().get(each.where()))).toList();
+        int say = Math.min(said.size(), BorderObligationPointAssessment.READINGS_SAID);
+        for (BorderObligationPointAssessment.ReadingSaid each : said.subList(0, say)) {
+            out.append(String.format("          · read as %s: %s%s%n", each.at(), each.asks(),
+                    beside.apply(point.met().get(each.where()))));
+        }
+        if (said.size() > say) {
+            out.append(String.format("          · %d more readings%n", said.size() - say));
+        }
     }
 
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
@@ -1874,6 +1963,155 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What tells one thing a row is owed for from every other, written the way {@code ruleId} is:
+     * every part of the identity and nothing that merely reads well.
+     *
+     * <p>A key within this document, and the one a boundary finding joins to its obligation by.
+     * Written out rather than left to the words beside it, because those do not tell them apart: a
+     * guard on a name two cases spread whose cases stop the run in different places owes two
+     * {@code IN} points, and both are the same role of the same rule at the same level — what
+     * differs is where the run stops, which is {@code region} here and is in no sentence.
+     *
+     * <p>Every part, for the reason a rule's identity is written whole. Which line of the rule is
+     * {@code conjunct}: one clause places as many lines as it has ends. What the line says about
+     * its own value is {@code facts}: {@code value >= 5 && value <= 5} puts a minimum and a maximum
+     * at one place and they are two lines. Which declarations took an end in is
+     * {@code narrowedWithin}: a bound another type narrowed is not the bound it narrows.
+     */
+    private static void obligationId(ObjectNode into,
+                                     souther.compiler.partition.BorderObligationPoint point) {
+        authoredLineId(into.putObject("line"), point.line().line());
+        level(into.putObject("level"), point.line().at());
+        into.put("point", word(point.role()));
+        // Absent for a point against the line, which is at a value and has no run to be stopped.
+        if (point instanceof souther.compiler.partition.BorderObligationPoint.InRegion region) {
+            ObjectNode beside = into.putObject("region");
+            switch (region.region()) {
+                case souther.compiler.partition.RegionBasis.Beside(var farEnd) -> {
+                    beside.put("kind", "beside");
+                    farEnd(beside.putObject("stops"), farEnd);
+                }
+                // What a rule naming one value leaves, which carries nothing: which value is left
+                // out is the line's, and the line is above.
+                case souther.compiler.partition.RegionBasis.TheRest _ ->
+                        beside.put("kind", "everything_but_the_value");
+            }
+        }
+    }
+
+    /** One line of the model, by the rule that drew it and which of that rule's lines it is. */
+    private static void authoredLineId(ObjectNode into,
+                                       souther.compiler.partition.AuthoredLine line) {
+        ruleId(into.putObject("rule"), line.rule());
+        into.put("conjunct", line.conjunct());
+        ObjectNode facts = into.putObject("facts");
+        facts.put("valueBelongsBelow", line.facts().valueBelongsBelow());
+        facts.put("holdsAtTheValue", line.facts().holdsAtTheValue());
+        facts.put("singles", line.facts().singles());
+        ArrayNode within = into.putArray("narrowedWithin");
+        line.narrowedWithin().forEach(each -> typeId(within.addObject(), each));
+    }
+
+    /** A level, as the thing it is a level of writes it: a place on a carrier, or a number. */
+    private static void level(ObjectNode into, souther.compiler.partition.Level at) {
+        switch (at) {
+            case souther.compiler.partition.Level.OnACarrier on -> {
+                into.put("kind", "on_a_carrier");
+                carrier(into.putObject("carrier"), on.of());
+                into.put("at", on.at().key());
+            }
+            case souther.compiler.partition.Level.ACount count -> {
+                into.put("kind", "a_count");
+                into.put("at", count.at().key());
+            }
+        }
+    }
+
+    /**
+     * Which declaration a type is, as this document carries it.
+     *
+     * <p>The pair, because that is what a type's identity is: two modules may each declare a
+     * {@code Status} and they are two types. Written as one word — the name alone, or the two
+     * joined — the two project onto one identity, and a module name has dots in it so a joined
+     * spelling cannot even be taken apart again. One writer, because every place a published
+     * identity names a type wants the same answer.
+     *
+     * <p>A type the language declares has no module to name. It is one of a closed set the
+     * language fixes, so its name is its identity and {@code kind} says which sort it is.
+     */
+    private static void typeId(ObjectNode into, souther.compiler.types.TypeSymbol type) {
+        switch (type) {
+            case souther.compiler.types.TypeSymbol.AtModule at -> {
+                into.put("kind", "declared");
+                into.put("module", at.module());
+                into.put("name", at.name());
+            }
+            case souther.compiler.types.TypeSymbol.Primitive it -> {
+                into.put("kind", "primitive");
+                into.put("name", it.name());
+            }
+            case souther.compiler.types.TypeSymbol.LanguageCase it -> {
+                into.put("kind", "language_case");
+                into.put("name", it.name());
+            }
+        }
+    }
+
+    /**
+     * Which order a level is counted on, in this document's own words.
+     *
+     * <p>Said by a switch over the orders there are rather than by what this compiler calls one to
+     * itself. A record's {@code toString} is a rendering of a Java class — {@code Whole[]} — and
+     * publishing it as part of an identity makes the class's shape a contract: a field added to a
+     * carrier, or a rename, would silently be a new identity for the same order.
+     */
+    private static void carrier(ObjectNode into, souther.compiler.check.Carrier of) {
+        switch (of) {
+            case souther.compiler.check.Carrier.Whole _ -> into.put("kind", "whole");
+            case souther.compiler.check.Carrier.Dense _ -> into.put("kind", "dense");
+            case souther.compiler.check.Carrier.Days _ -> into.put("kind", "days");
+            case souther.compiler.check.Carrier.Seconds _ -> into.put("kind", "seconds");
+            case souther.compiler.check.Carrier.SecondsOfDay _ ->
+                    into.put("kind", "seconds_of_day");
+            case souther.compiler.check.Carrier.Nanos _ -> into.put("kind", "nanos");
+            case souther.compiler.check.Carrier.Text _ -> into.put("kind", "text");
+            // The enumeration itself, because two enumerations are two orders however alike their
+            // cases count. Which cases it has is what the order is made of and is written with it.
+            case souther.compiler.check.Carrier.Ordinal it -> {
+                into.put("kind", "ordinal");
+                // The enumeration and the places it declares, because two enumerations are two
+                // orders however alike their cases count, and where a case comes in the
+                // declaration is what the order is.
+                typeId(into.putObject("enumeration"), it.enumeration());
+                ArrayNode cases = into.putArray("cases");
+                it.cases().forEach(each -> typeId(cases.addObject(), each));
+            }
+        }
+    }
+
+    /** Where the run beside a line stops, which is one of the three things that can have stopped
+     *  it. */
+    private static void farEnd(ObjectNode into, souther.compiler.partition.FarEnd end) {
+        switch (end) {
+            case souther.compiler.partition.FarEnd.AtALine(var line, var where) -> {
+                into.put("kind", "at_a_line");
+                authoredLineId(into.putObject("line"), line);
+                into.put("where", where.key());
+            }
+            case souther.compiler.partition.FarEnd.AtTheDomain(var reaches) -> {
+                into.put("kind", "at_the_domain");
+                level(into.putObject("at"), reaches.at().written());
+                into.put("per", reaches.at().per().toPlainString());
+                into.put("inclusive", reaches.inclusive());
+            }
+            case souther.compiler.partition.FarEnd.AtTheOrderEnd(var towards) -> {
+                into.put("kind", "at_the_order_end");
+                into.put("towards", word(towards));
+            }
+        }
+    }
+
+    /**
      * What tells one rule of the model from another, as this document carries it.
      *
      * <p>The parts that are the identity and no more. A rule is a clause of an invariant, a
@@ -2028,7 +2266,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // one flat list they are two identical objects, and which declaration a reader is being
             // sent to is exactly what {@link souther.compiler.query.FindingSubject} was introduced
             // to keep.
-            declarations(m.putArray("declarations"), module.declarations(), sources);
+            declarations(m.putArray("declarations"), module.declarations(), module.debts(),
+                    sources);
             ArrayNode behaviors = m.putArray("behaviors");
             for (BehaviorReport behavior : module.behaviors()) {
                 ObjectNode b = behaviors.addObject();
@@ -2043,7 +2282,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 weakening(b, behavior.weakenedBy());
                 signature(b, behavior.signature());
                 partition(b, behavior.partition(), behavior.boundaryReadings(),
-                        behavior.claimed(), sources);
+                        behavior.account(), behavior.claimed(), sources);
                 branch(b, behavior.branch(), sources);
                 findings(b, behavior, sources);
             }
@@ -2165,6 +2404,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     private void partition(ObjectNode behavior, PartitionEvidence partition,
                                   Measure<List<BorderAssessment>> lines,
+                                  List<BorderObligationPointAssessment> account,
                                   ClaimAnnotations claimed, DocumentSources sources) {
         // The one decision, the same one the page reads. Written here as well, the two surfaces
         // answered a reader differently about which behaviors have a section at all.
@@ -2338,6 +2578,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 }
             }
         }
+        // What this behavior is owed, once per point, with every reading of it. A second layer
+        // and not a rewrite of `boundaries`: that array is the lines at coordinates, which is what
+        // a border is, and this is the account — a guard on a name every case of a sum spreads is
+        // two entries there and one here. A consumer joining a finding to what it is about joins
+        // here, on the point, where on the line and the rule; and every reading is published, so
+        // nothing a text report left out for room is missing from the document.
+        obligations(out.putArray("obligations"), account, null, sources);
         ObjectNode pairs = out.putObject("pairs");
         // The size of the space is the model's and is written whether or not anybody counted. The
         // counts are the measurement's and are written only where one was made; `truncated` is gone
@@ -2457,24 +2704,130 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * What each declaration of the module is short of, under the declaration.
+     * What a set of obligations comes to, written the one way wherever they are published.
+     *
+     * <p>One writer, because a behavior's account and the declarations' are two projections of one
+     * relation and a consumer joins a finding to either by the same key. Written twice, the section
+     * edited last would carry a field the other did not, and a reader would have to know which
+     * account it was looking at to know what to expect.
+     *
+     * @param axes what each point's line is on in the words a declaration wrote, for the account
+     *             that has such words. Null for a body's own lines, which have none: a reading
+     *             names the position it met the line at and no reading can stand for the rest
+     */
+    private void obligations(ArrayNode out, List<BorderObligationPointAssessment> account,
+                             Map<souther.compiler.partition.BorderObligationPoint, String> axes,
+                             DocumentSources sources) {
+        for (BorderObligationPointAssessment point : account) {
+            ObjectNode o = out.addObject();
+            // The identity first, because it is what a finding joins on. The words below are what
+            // a person reads, and two obligations can share every one of them.
+            obligationId(o.putObject("obligationId"), point.point());
+            o.put("point", word(point.role()));
+            o.put("rule", point.describe(sources::written, null));
+            ruleId(o.putObject("ruleId"), point.id().provenance());
+            o.put("relation", point.operator());
+            // What the line is on, where the author wrote a word for it. A body's line has none,
+            // and the readings below say what each position it was met at has to hold.
+            String axis = axes == null ? null : axes.get(point.point());
+            if (axis != null) {
+                o.put("axis", axis);
+                o.put("against", point.against(axis));
+            }
+            ItemAssessment.WritabilityEvidence evidence = point.owed().writabilityEvidence();
+            o.put("knownWritable", evidence.known());
+            ArrayNode because = o.putArray("writableBecause");
+            for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
+                if (evidence.has(ground)) {
+                    because.add(wire(ground));
+                }
+            }
+            measured(o, point.owed().coverage(), (node, coverage) ->
+                    node.put("hit", ItemAssessment.Coverage.hit(coverage)));
+            // The readings, each as the position it met the line at and what a row there has to
+            // do in that position's terms. In the order the sentences sort and never the walk's;
+            // the order is not a contract, and a consumer reads these as a bag: two entries that
+            // print alike are two readings, so they may be counted and may not be merged.
+            ArrayNode readings = o.putArray("readings");
+            for (BorderObligationPointAssessment.ReadingSaid said : point.readingsSaid()) {
+                BorderAssessment at = point.met().get(said.where());
+                ObjectNode r = readings.addObject();
+                r.put("behavior", said.where().behavior());
+                r.put("axis", said.at());
+                r.put("relation", at.border().operator(point.role()));
+                r.put("against", at.border().against(point.role()));
+                measured(r, at.owedAt(point.role()).coverage(), (node, coverage) ->
+                        node.put("hit", ItemAssessment.Coverage.hit(coverage)));
+            }
+        }
+    }
+
+    /**
+     * What each declaration of the module is owed and is short of, under the declaration.
      *
      * <p>The grouping a human report prints, published. A finding carries which declaration it is
-     * about, so this is a rendering of that and not a second answer: read off the entries alone, the
-     * subject a finding writes is what the line asks of a row, and the declaration it belongs to
-     * would be gone.
+     * about, so that half is a rendering of the finding and not a second answer: read off the
+     * entries alone, the subject a finding writes is what the line asks of a row, and the
+     * declaration it belongs to would be gone.
      */
     private void declarations(ArrayNode out, List<Adequacy.Finding> written,
-                              DocumentSources sources) {
-        Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
-        for (Adequacy.Finding each : written) {
-            byDeclaration.computeIfAbsent(each.named(), _ -> new ArrayList<>()).add(each);
+                              List<Adequacy.DeclaredDebt> owed, DocumentSources sources) {
+        // What the declarations are owed, under the declaration each is owed to, and not only what
+        // they are short of. A line a row already stands at has no finding, so a section written
+        // from the findings alone publishes the gaps and nothing else — a reader could not tell a
+        // module whose declarations owe nothing from one whose every line is answered, and a
+        // finding's `obligationId` had nothing in the document to join to. The behavior blocks are
+        // written from their account for the same reason; this is the declarations' side of it.
+        // Keyed on who owes it, which is a list of declarations and not a word. A line two of the
+        // module's declarations took an end in together is owed to both — `Cap or Held` is how a
+        // report says that pair and not the name of a declaration — so a section keyed on the
+        // words would put one entry under a name nothing declares, and two pairs a report happens
+        // to write alike under one. The words are the last thing written and nothing is grouped by
+        // them.
+        Map<List<souther.compiler.types.TypeSymbol.AtModule>, Entry> byOwners = new LinkedHashMap<>();
+        for (Adequacy.DeclaredDebt each : owed) {
+            byOwners.computeIfAbsent(each.subject().declarations(), _ -> new Entry())
+                    .owed.add(each);
         }
-        byDeclaration.forEach((declaration, findings) -> {
+        for (Adequacy.Finding each : written) {
+            List<souther.compiler.types.TypeSymbol.AtModule> owners =
+                    each.subject() instanceof souther.compiler.query.FindingSubject.OfADeclaration it
+                            ? it.declarations() : List.of();
+            byOwners.computeIfAbsent(owners, _ -> new Entry()).found.add(each);
+        }
+        byOwners.forEach((owners, entry) -> {
             ObjectNode one = out.addObject();
-            one.put("name", declaration);
-            findings(one.putArray("findings"), findings, sources);
+            ArrayNode declared = one.putArray("owners");
+            owners.forEach(each -> typeId(declared.addObject(), each));
+            one.put("name", entry.named(owners));
+            obligations(one.putArray("obligations"),
+                    entry.owed.stream().map(Adequacy.DeclaredDebt::debt).toList(),
+                    entry.owed.stream().collect(java.util.stream.Collectors.toMap(
+                            each -> each.debt().point(), Adequacy.DeclaredDebt::axis, (a, _) -> a)),
+                    sources);
+            findings(one.putArray("findings"), entry.found, sources);
         });
+    }
+
+    /** What one set of owners owes and is short of, gathered before anything is written. */
+    private static final class Entry {
+        private final List<Adequacy.DeclaredDebt> owed = new ArrayList<>();
+        private final List<Adequacy.Finding> found = new ArrayList<>();
+
+        /**
+         * What a report calls this set, taken from whoever already says it.
+         *
+         * <p>A presentation of the owners and never the key they were gathered by: two sets a
+         * report writes alike are two sets, and the words are what a reader sees rather than what
+         * tells them apart.
+         */
+        String named(List<souther.compiler.types.TypeSymbol.AtModule> owners) {
+            if (!owed.isEmpty()) {
+                return owed.getFirst().subject().named();
+            }
+            return found.isEmpty()
+                    ? souther.compiler.partition.AuthoredLine.naming(owners) : found.getFirst().named();
+        }
     }
 
     /**
@@ -2500,6 +2853,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // identical in every field with nothing to join them by.
             if (finding.about() instanceof About.OfARule about) {
                 ruleId(f.putObject("ruleId"), about.rule());
+            }
+            // And which thing a row is owed for, where the finding is about one. The words in
+            // `subject` do not tell two of them apart — a rule read at one level in one role owes
+            // two points where two cases stop the run in different places — so a consumer joining
+            // a finding to its `partition.obligations` entry joins on this.
+            if (finding.about() instanceof About.ABorderObligation owed) {
+                obligationId(f.putObject("obligationId"), owed.obligation().point());
             }
             // And which limit stopped it, where the finding is about one being in the way. Two
             // conjuncts of one clause about one position can stop for two different limits, so
@@ -2598,9 +2958,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " " + subjectOf(asked, sources::written, null);
             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                     missing.name() + " (in #" + (input.at() + 1) + ")";
-            // What the point asks of a row, which is what joins it to one of a border's `items`.
-            // Asked of the point, which is where the two readers of that name meet.
-            case About.APointOfABorder(var point) -> point.said();
+            // The point and the line, and no quantity: a body's line is owed once wherever it is
+            // read, so what joins this to a `partition.obligations` entry is the role, where on
+            // the line, and the rule — the same three that entry is keyed on.
+            case About.APointOfABorder(var point) -> point.said(sources::written, null);
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).

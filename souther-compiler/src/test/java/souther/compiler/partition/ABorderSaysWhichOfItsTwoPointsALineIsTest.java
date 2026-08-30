@@ -82,8 +82,15 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void aClosedBorderIsAtItsOwnOnPoint() {
         String report = report(CLOSED);
 
-        assertTrue(report.contains("no row is at the ON point sized/n = 100"), report);
-        assertTrue(report.contains("no row is at the OFF point sized/n = 101"), report);
+        // The role is the point's and the value is the reading's, so the two are two lines and
+        // the pairing is what this test is about: read apart, `= 100` would answer for whichever
+        // role the report happened to print it under.
+        assertTrue(report.contains("""
+                the ON point (comparison@10:10)
+                          · read as sized/n: = 100"""), report);
+        assertTrue(report.contains("""
+                the OFF point (comparison@10:10)
+                          · read as sized/n: = 101"""), report);
     }
 
     /**
@@ -97,8 +104,12 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void anOpenBorderIsAtItsOwnOffPoint() {
         String report = report(OPENED);
 
-        assertTrue(report.contains("no row is at the OFF point sized/n = 100"), report);
-        assertTrue(report.contains("no row is at the ON point sized/n = 99"), report);
+        assertTrue(report.contains("""
+                the OFF point (comparison@10:10)
+                          · read as sized/n: = 100"""), report);
+        assertTrue(report.contains("""
+                the ON point (comparison@10:10)
+                          · read as sized/n: = 99"""), report);
     }
 
     /**
@@ -110,8 +121,12 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      */
     @Test
     void theSameValueIsTheOtherPointUnderTheOtherOperator() {
-        assertTrue(report(CLOSED).contains("the ON point sized/n = 100"), report(CLOSED));
-        assertTrue(report(OPENED).contains("the OFF point sized/n = 100"), report(OPENED));
+        assertTrue(report(CLOSED).contains("""
+                the ON point (comparison@10:10)
+                          · read as sized/n: = 100"""), report(CLOSED));
+        assertTrue(report(OPENED).contains("""
+                the OFF point (comparison@10:10)
+                          · read as sized/n: = 100"""), report(OPENED));
     }
 
     /**

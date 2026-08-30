@@ -101,7 +101,7 @@ class APositionTheBodyNamedIsReadLikeAnyOtherTest {
     void aLineInsideWhatTheDeclarationAdmitsIsDrawn() {
         String report = report(INSIDE_THE_BOUND);
 
-        assertTrue(report.contains("no row is at the ON point f/c@Cons.tail@Cons.head = 150"),
+        assertTrue(report.contains("read as f/c@Cons.tail@Cons.head: = 150"),
                 report);
     }
 

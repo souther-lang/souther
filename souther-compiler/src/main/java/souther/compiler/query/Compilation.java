@@ -471,6 +471,7 @@ public final class Compilation {
     public Adequacy.Of adequacy(String module) {
         return new Adequacy.Of(db.ask(new Adequacy.Witnesses(module)).value(),
                 db.ask(new Adequacy.Coverage(module)).value(),
+                db.ask(new Adequacy.BodyBorders(module)).value(),
                 db.ask(new Adequacy.BranchCoverage(module)).value());
     }
 

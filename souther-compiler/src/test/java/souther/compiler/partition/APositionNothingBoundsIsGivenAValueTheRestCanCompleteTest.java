@@ -98,7 +98,8 @@ class APositionNothingBoundsIsGivenAValueTheRestCanCompleteTest {
     void aLevelAProgressionReachesIsOwedARowAndNotAnAccountOfWhyNoneWasFound() {
         String report = report(COUNTING);
 
-        assertTrue(report.contains("! no row is at the ON point f/3 * p.a + 6 * p.b = 3"), report);
+        assertTrue(report.contains("! no row is at the ON point (comparison"), report);
+        assertTrue(report.contains("read as f/3 * p.a + 6 * p.b: = 3"), report);
         assertFalse(report.contains("the search stopped before reaching 3 * p.a + 6 * p.b = 3"),
                 report);
     }
@@ -109,7 +110,8 @@ class APositionNothingBoundsIsGivenAValueTheRestCanCompleteTest {
     void aLevelACosetOfDecimalsReachesIsOwedARowToo() {
         String report = report(FILLING);
 
-        assertTrue(report.contains("! no row is at the OFF point f/p.a + 3 * p.b = 1"), report);
+        assertTrue(report.contains("! no row is at the OFF point (comparison"), report);
+        assertTrue(report.contains("read as f/p.a + 3 * p.b: = 1"), report);
         assertFalse(report.contains("the search stopped before reaching p.a + 3 * p.b = 1"), report);
     }
 

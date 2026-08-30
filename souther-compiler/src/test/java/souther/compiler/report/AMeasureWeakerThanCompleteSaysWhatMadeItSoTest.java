@@ -167,7 +167,9 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
                 }
                 if (behavior.partition() != null) {
                     failed.add(behavior.partition().partitioned());
-                    failed.add(behavior.partition().owes());
+                }
+                if (behavior.evidence().account() != null) {
+                    failed.add(behavior.evidence().account());
                 }
                 if (behavior.boundaryReadings() != null) {
                     failed.add(behavior.boundaryReadings());

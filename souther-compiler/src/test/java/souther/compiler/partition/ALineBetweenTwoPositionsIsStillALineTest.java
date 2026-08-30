@@ -279,8 +279,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aComparisonOfTwoPositionsAsksForARowWhereTheyAreEqual() {
         String report = report(TWO_NEWTYPES);
 
-        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("border      borders 3   coverage items 6/8   excluded 4"), report);
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling"), report);
+        assertTrue(report.contains("border      borders 3   obligations 2/4"), report);
     }
 
     /**
@@ -297,10 +297,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("border      borders 3   coverage items 7/8   excluded 4"), report);
-        assertFalse(report.contains("no row is at the OFF point benefitOf/charge = ceiling ("),
+        assertTrue(report.contains("border      borders 3   obligations 3/4"), report);
+        assertFalse(report.contains("read as benefitOf/charge: = ceiling\n"),
                 report);
-        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1"),
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1"),
                 report);
     }
 
@@ -315,8 +315,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aBehaviorWithNoAxisStillDrawsALineBetweenItsPositions() {
         String report = report(NO_AXIS);
 
-        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("border      borders 1   coverage items 2/4"), report);
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling"), report);
+        assertTrue(report.contains("border      borders 1   obligations 2/4"), report);
     }
 
     /** An enumeration counts on the place its cases are declared at, so it reaches this by the same
@@ -325,7 +325,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void anEnumerationDrawsOneToo() {
         String report = report(ENUMERATION);
 
-        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
+        assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
     /** A carrier whose values are strings reaches this the way one whose values count does. Nothing
@@ -334,7 +334,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aCarrierOfStringsDrawsOneToo() {
         String report = report(TEXT);
 
-        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
+        assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
     /**
@@ -368,9 +368,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void anOffsetOnOneSideMovesTheLineRatherThanTakingItAway() {
         String report = report(NOT_A_TERM);
 
-        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling + 1000"),
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1000"),
                 report);
-        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1001"),
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1001"),
                 report);
         assertTrue(notReadAbout(report, "charge"), report);
     }
@@ -451,9 +451,11 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(MEASURED);
         String rows = generated(MEASURED);
 
-        assertFalse(report.contains("no row is at the OFF point cmp/String.length(a) = String.length(b)"), report);
-        assertTrue(report.contains(
-                "not known to be writable: the OFF point cmp/String.length(a) = String.length(b)"), report);
+        assertFalse(report.contains("no row is at the OFF point ("), report);
+        // The point is at a distance of nothing, which is what a level of a distance is — how far
+        // the row stands from the other position, and which position that is is each reading's.
+        assertTrue(report.contains("not known to be writable: the OFF point ("), report);
+        assertTrue(report.contains("read as cmp/String.length(a): = String.length(b)"), report);
         assertTrue(rows.contains("nothing here could build a representative for it"), rows);
         assertTrue(rows.contains("does not make one unwritable"), rows);
     }
@@ -472,9 +474,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleTheRangesCouldNotTakeInIsNotAProofEither() {
         String report = report(A_HOLE_AND_A_POINT);
 
-        assertFalse(report.contains("no row is at the OFF point cmp/a = b"),
+        assertFalse(report.contains("no row is at the OFF point ("),
                 "zero is the only place both ranges hold and one position refuses it:\n" + report);
-        assertTrue(report.contains("not known to be writable: the OFF point cmp/a = b"), report);
+        assertTrue(report.contains("not known to be writable: the OFF point ("), report);
+        assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
     /**
@@ -516,8 +519,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleThatAdmitsTheDiagonalStillOwesTheRow() {
         String report = report(ALLOWED_BY_THE_RECORD);
 
-        assertTrue(report.contains("no row is at the OFF point cmp/p.a = p.b"), report);
-        assertTrue(report.contains("border      borders 2   coverage items 1/3"), report);
+        assertTrue(report.contains("read as cmp/p.a: = p.b"), report);
+        assertTrue(report.contains("border      borders 2   obligations 1/2"), report);
     }
 
     private static String report(String model) {

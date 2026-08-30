@@ -63,70 +63,87 @@ public sealed interface About {
     }
 
     /**
-     * A point of a border no row is at.
+     * A point of a line no row stands at, wherever the line is read.
      *
-     * <p>One entry of this behavior's account, which is what the count, the document and this are
-     * three readings of. Held as the point rather than as the axis, the value, the rule and the
-     * role, which is what those four fields were: a copy that did not identify a point, since
-     * several rules can draw a line at one value.
+     * <p>The two arms below are one grain. A point is owed once — a line a body's rule drew is read
+     * under each case of a sum the position ranges over, and a line a declaration drew is read at
+     * every position carrying the type — and what a finding is about, what a verdict counts and what
+     * a generation answers is that one thing. Held at the reading instead, one arm marked as many
+     * gaps as the line had readings while the offering composed one row for the point and refused
+     * the rest as already answered: a build a person could not make pass.
      *
-     * <p>What is here is what was measured, and a reader wanting more than that says so. A
-     * generation composes values at these lines whatever the build was measuring, so what it can do
-     * about a finding is read out of the search it asked for — the same point of the same line,
-     * found with the line itself ({@link BorderAssessment#owedAt}). This carries the measurement
-     * because that is what a finding is about: a search settles what can be written at the point and
-     * changes nothing about the point being missed.
+     * <p>What tells the arms apart is whose account the point is in, and what words there are for
+     * what it is on. The rest — the role, what the readings came to, which rule — is asked here of
+     * both, so that a reader sorting findings or writing a code asks once.
+     */
+    sealed interface ABorderObligation extends About {
+
+        /** What every reading of the point came to, which is what the finding stands on. */
+        BorderObligationPointAssessment obligation();
+
+        /** Which of a border's four points this is about, which the point itself says. */
+        default souther.compiler.partition.PointRole role() {
+            return obligation().role();
+        }
+
+        /** What became of it, which is what the finding is about. */
+        default ItemAssessment item() {
+            return obligation().item();
+        }
+    }
+
+    /**
+     * A point of a line a body's own rule drew, that no row stands at.
+     *
+     * <p>One entry of this behavior's account
+     * ({@link BorderObligationPointAssessment#belongsToBehaviorAccount}), which is what the count,
+     * the document and this are three readings of. The obligation and not one reading of it: a
+     * guard on a name every case of a sum spreads is read once under each case, and the readings are
+     * where a row can be written, not how many rows are owed.
+     *
+     * <p>So this holds no word for what the line is on. A body's comparison has no authored
+     * spelling of its quantity — each reading names the position it met the line at, and none of
+     * them can stand for the rest — and a finding that took one would be choosing a representative
+     * by the order the walk took. A report says the readings under the point, each in its own words.
      *
      * <p>That this behavior is owed a row here at all is settled where the account is made, so
      * nothing is checked again: a point owed to the declarations that drew the line is answered once
      * for the module and never reaches this.
-     *
-     * @param point what this behavior is owed a row for, and what became of it
      */
-    record APointOfABorder(OwedBoundaryPoint point) implements About {
+    record APointOfABorder(BorderObligationPointAssessment obligation)
+            implements ABorderObligation {
         public APointOfABorder {
-            java.util.Objects.requireNonNull(point, "a finding is about something");
+            java.util.Objects.requireNonNull(obligation, "a finding is about something");
         }
     }
 
     /**
      * A point of a line a declaration drew, that no row anywhere in the module stands at.
      *
-     * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is which
-     * question was answered. That one is about a line as one position of one behavior met it, and a
-     * row written for that behavior answers it. This one is about the line itself: {@code UserId}
-     * says a user id is a string of one character or more, whether the compiler believes a row
-     * standing at length 1 is a question about {@code UserId}, and the answer cannot differ between
-     * the behaviors carrying it. One row anywhere settles it.
-     *
-     * <p>Which is why it carries the debt and not one of the readings. Over {@code crm} one clause
-     * of {@code UserId} is read at 126 positions; a finding naming one of them would name whichever
-     * the walk reached first, and an author sent there would be sent to a body that says nothing
-     * about the length of a user id.
+     * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is whose
+     * it is. That one is a body's to write and is in that behavior's account. This one is about the
+     * line itself: {@code UserId} says a user id is a string of one character or more, whether the
+     * compiler believes a row standing at length 1 is a question about {@code UserId}, and the
+     * answer cannot differ between the behaviors carrying it. One row anywhere settles it, and it is
+     * kept under the declaration.
      *
      * <p>The declaration's debt and not the point alone, so that what a report writes it on is the
-     * quantity the author wrote. A point holds no such word — its readings each name a position
-     * they met the line at — and a finding that reached for one got the rule's own name standing in
-     * for it.
+     * quantity the author wrote — {@code String.length(value)} — which is not a representative but
+     * the author's own word, and is what the body's arm has none of.
      */
-    record APointOfADeclaredBorder(Adequacy.DeclaredDebt owed) implements About {
+    record APointOfADeclaredBorder(Adequacy.DeclaredDebt owed) implements ABorderObligation {
         public APointOfADeclaredBorder {
             java.util.Objects.requireNonNull(owed, "a finding is about something");
         }
 
-        /** What the readings of the line came to, which is what the finding stands on. */
-        public BorderObligationPointAssessment debt() {
+        @Override
+        public BorderObligationPointAssessment obligation() {
             return owed.debt();
         }
 
-        /** Which of a border's four points this is about, which the point itself says. */
-        public souther.compiler.partition.PointRole role() {
-            return debt().role();
-        }
-
-        /** What became of this point, which is what the finding is about. */
-        public ItemAssessment item() {
-            return debt().item();
+        /** The same, under the name the declarations' readers know it by. */
+        public BorderObligationPointAssessment debt() {
+            return owed.debt();
         }
     }
 

@@ -303,6 +303,22 @@ public sealed interface ExampleMessage extends Message {
             implements ExampleMessage, Reported {}
 
     /**
+     * The same, of a line a body's own rule drew, which is owed once wherever it is read.
+     *
+     * <p>Its own sentence because it names no quantity. A body's comparison has no authored spelling
+     * of what it is on: a guard on a name every case of a sum spreads is read once under each case,
+     * each reading names the position it met the line at, and none of them can stand for the rest.
+     * So this says where on the line the point is — {@code level}, the value the rule cut at, which
+     * every reading writes the same — and what each reading asks is said beside it
+     * ({@link TheLineAsReadAt}).
+     *
+     * <p>{@code rule} is the name the author gave it, where the rule has one ({@code ensures}).
+     */
+    @Code(DiagnosticCode.E1916)
+    record NoRowIsAtThePointOfTheLineARuleDrew(String point, String rule)
+            implements ExampleMessage, Reported {}
+
+    /**
      * The same, where a fork of a body drew the line.
      *
      * <p>A rule of its own because a fork has no name to put in the other one's slot. What went
@@ -319,9 +335,23 @@ public sealed interface ExampleMessage extends Message {
      * <p>Where the construct is written is not here either. It is a place, and a place is pointed at.
      */
     @Code(DiagnosticCode.E1916)
-    record NoRowIsAtThePointOfTheBorderAConstructDrew(String point, String at, String value,
-                                                     souther.compiler.diag.Localizable construct)
+    record NoRowIsAtThePointOfTheLineAConstructDrew(String point,
+                                                   souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
+
+    /**
+     * One reading of a line owed once, said under the point it is a reading of.
+     *
+     * <p>The quantity's name lives here and nowhere in the sentence above: {@code at} is the position
+     * this reading met the line at, and {@code asks} is what a row there has to do, in that
+     * position's terms. One of these per reading, in the order the readings' sentences sort, so
+     * that which reading a walk met first is not what a reader sees first.
+     */
+    record TheLineAsReadAt(String at, String asks) implements ExampleMessage, Supporting {}
+
+    /** How many readings were not said, where a line has more than a sentence has room for. A
+     *  count and not a silence: left out unsaid, the readings shown read as all there are. */
+    record MoreReadingsOfTheLine(int more) implements ExampleMessage, Supporting {}
 
     /**
      * The same, for one of the two points away from the line.
@@ -337,10 +367,16 @@ public sealed interface ExampleMessage extends Message {
                                                        String rule)
             implements ExampleMessage, Reported {}
 
+    /** The same, of a line a body's own rule drew and named, which names no quantity for the
+     *  reason {@link NoRowIsAtThePointOfTheLineARuleDrew} does not. */
+    @Code(DiagnosticCode.E1917)
+    record NoRowIsAtThePointAwayFromTheLineARuleDrew(String point, String rule)
+            implements ExampleMessage, Reported {}
+
     /** The same again, where a fork of a body drew the line and there is no name to put in the slot. */
     @Code(DiagnosticCode.E1917)
-    record NoRowIsAtThePointAwayFromTheBorderAConstructDrew(String point, String at, String value,
-                                                            souther.compiler.diag.Localizable construct)
+    record NoRowIsAtThePointAwayFromTheLineAConstructDrew(String point,
+                                                         souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
 
     /** What a row well inside shows: the border is the only thing keeping the values apart there. */

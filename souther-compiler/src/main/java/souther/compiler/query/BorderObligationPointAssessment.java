@@ -34,6 +34,19 @@ import java.util.Map;
  * border whole groups these by the line and joins them with the border's four answers, because a
  * role nobody is owed a row in has no point here to be found by.
  *
+ * <p><b>And a point has no word for where it is.</b> Where on the quantity the rule cut is part of
+ * what a point is, and it is published as the identity it is. What it has no word for is a
+ * <em>reader's</em> spelling of that place, because writing one takes a quantity and a quantity is
+ * a reading's: a distance writes its levels as how far the row stands from the other position —
+ * {@code d.to - 1} — and which position that is differs between the readings. Over {@code crm} one
+ * point of one line has twenty-five such spellings. Written from the level alone instead, the
+ * number comes out true and unreadable: the {@code ON} point of {@code from < to} is a distance of
+ * −1, which is no value any position holds and nothing an author can write. So a point says which
+ * of the four it is and which rule drew the line, and every word with a quantity in it is said
+ * under it by the reading whose quantity it is ({@link #readingsSaid}). A line a declaration drew
+ * is the exception the author makes: there the quantity is one they wrote, and {@link #said(String)}
+ * takes it from them.
+ *
  * <p><b>What is owed is the same at every reading, and that is checked rather than folded.</b> A
  * {@link Demand} is what the point asks — a criterion over the levels of the quantity the line cut,
  * or a reason no row is asked for — and none of it is about where the line was read. So two readings
@@ -416,13 +429,30 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     }
 
     /**
+     * Whether this point is one of the things {@code behavior} is owed a row for.
+     *
+     * <p>The one spelling of a behavior's account. A point is in it where the row is the reading's
+     * own to write — a line a body's rule drew, and not one a declaration is owed — and that
+     * behavior is one of the readings carrying it. Two facts, and every reader of the account wants
+     * their conjunction: a report's count, its findings, the strict verdict and the offering. Spelled
+     * at each of them, two of the four would drift apart the way {@link #keptBy} records the
+     * module's question once did.
+     *
+     * <p>Not {@link #keptBy}: a point one of this module's declarations owns is that account's and
+     * not any behavior's, however many behaviors carry it.
+     */
+    public boolean belongsToBehaviorAccount(String behavior) {
+        return owedToTheReading() && carriedBy(behavior);
+    }
+
+    /**
      * Which behaviors read the line at this point, in the order the module declares them.
      *
      * <p>Not part of what the point is — a line is owed once however many behaviors carry the type —
-     * and here because an editor's offer stands beside a behavior. What a row written for that
-     * behavior settles is this point, so an offer there has to know the point is one of the things
-     * it would answer. Without it the offer beside a behavior went quiet as soon as the only work
-     * left was a line the declaration is owed.
+     * and not an account either: which behavior's work this point is takes whose the point is as
+     * well, which is {@link #belongsToBehaviorAccount}. This is the fact under it, and is what an
+     * editor's offer beside a behavior asks about a declaration's line, since a row written for that
+     * behavior settles it whoever owes it.
      */
     public boolean carriedBy(String behavior) {
         return met.keySet().stream().anyMatch(each -> each.behavior().equals(behavior));
@@ -440,6 +470,47 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     }
 
     /**
+     * One reading of the point as a surface says it: where it was read, and what a row there has
+     * to do, in that position's own terms.
+     *
+     * <p>Words for a reader and never a key. Two readings that happen to say the same words are
+     * still two entries here — what tells them apart is {@link #where}, and a surface that folded
+     * them by their words would be deciding identity from a rendering.
+     */
+    public record ReadingSaid(Reading where, String at, String asks) {}
+
+    /**
+     * How many readings a surface says under the point before saying how many are left.
+     *
+     * <p>One number, because two surfaces say the readings: a report under its mark and a warning
+     * under its sentence. Over {@code crm} one clause is read at 133 positions, and neither surface
+     * is a place to list them.
+     */
+    public static final int READINGS_SAID = 4;
+
+    /**
+     * Every reading of the point, as the sentences a surface prints under it, in the order the
+     * sentences sort.
+     *
+     * <p>Sorted by what is printed and by nothing else. The order the readings were made in is the
+     * order a walk took, which is what this value exists to keep out of what anybody is shown; and
+     * sorting by anything the sentence does not show would give two runs that print the same words
+     * in a different order for a reason no reader can see. Whether two of these are one reading is
+     * not asked here: the sentence is not the identity, and a sort key need not be one.
+     *
+     * <p>All of them. Which to show is the surface's ({@link #READINGS_SAID}), so that what is left
+     * out is a count the surface says rather than a reading this dropped.
+     */
+    public List<ReadingSaid> readingsSaid() {
+        List<ReadingSaid> out = new ArrayList<>();
+        met.forEach((where, at) -> out.add(new ReadingSaid(where, at.axis(),
+                new BorderAssessment.Point(at, role(), at.at(role())).asked())));
+        out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
+                .thenComparing(ReadingSaid::asks));
+        return List.copyOf(out);
+    }
+
+    /**
      * What a row here would have to do, written on a quantity called {@code axis}.
      *
      * <p>The quantity is handed in because no reading of the point names it and this holds no name
@@ -449,7 +520,23 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * reading standing in for the rest; it is the one answer they all give.
      */
     public String against(String axis) {
-        return demand.criterion().written(met.firstEntry().getValue().border().cut().of(), axis);
+        // Every reading asked, and refused where they disagree rather than resolved. What a row
+        // here has to do is the point's, so a spelling that differs between the readings is a
+        // spelling only one of them can give — and taking one would name this point after the
+        // place a walk reached first. Where they agree, which reading answered is immaterial and
+        // no representative was chosen.
+        String written = null;
+        for (BorderAssessment reading : met.values()) {
+            String also = demand.criterion().written(reading.border().cut().of(), axis);
+            if (written == null) {
+                written = also;
+            } else if (!written.equals(also)) {
+                throw new IllegalStateException("a point whose readings write what it asks for"
+                        + " differently, so it has no words of its own: " + point + " is " + written
+                        + " and " + also);
+            }
+        }
+        return written;
     }
 
     /**
@@ -463,5 +550,22 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     public String said(String axis) {
         return role().againstTheLine() ? axis + " = " + against(axis)
                 : axis + " " + operator() + " " + against(axis);
+    }
+
+    /**
+     * The point, as a surface names it: which of the four it is, and which rule drew the line,
+     * with the sources under the names {@code names} gives them.
+     *
+     * <p>What a body's line gets, since it has no authored spelling of what it is on
+     * ({@link #said(String)} is for a line a declaration wrote). No word for where it is either,
+     * for the reason above: what a reader is shown of that is each reading's, said under this.
+     *
+     * <p>Which is why these words are not what tells two points apart. Two lines of one rule can
+     * be at two places, and two runs beside one line can stop in two places, and this says the
+     * same of both — a consumer joins on {@code obligationId} and shows this.
+     */
+    public String said(souther.compiler.diag.SourceNameResolver names,
+                       souther.compiler.source.SourceId sectionSource) {
+        return role() + " point of " + describe(names, sectionSource);
     }
 }

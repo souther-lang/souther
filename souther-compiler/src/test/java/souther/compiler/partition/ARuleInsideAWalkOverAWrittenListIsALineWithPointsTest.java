@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.OwedBoundaryPoint;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.stream.Collectors;
@@ -34,15 +33,18 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      * hundred thousand, off it at the value next to that one, and inside and outside it anywhere
      * past each of those.
      */
-    private static final String AT_A_HUNDRED_THOUSAND =
-            "[n/x < 100000, n/100000 <= x] unread [] points ["
-                    + "classify/n ON 100000, classify/n OFF 99999, "
-                    + "classify/n IN 100000 < n, classify/n OUT n < 99999]";
+    private static String atAHundredThousand(String comparison) {
+        return "[n/x < 100000, n/100000 <= x] unread [] points ["
+                + "ON point of " + comparison + ", "
+                + "OFF point of " + comparison + ", "
+                + "IN point of " + comparison + ", "
+                + "OUT point of " + comparison + "]";
+    }
 
     /** A rule no element enters, written inside a step applied per element of a written list. */
     @Test
     void aRuleNoElementEntersIsALine() {
-        assertEquals(AT_A_HUNDRED_THOUSAND, reading("""
+        assertEquals(atAHundredThousand("comparison@0:19:30"), reading("""
                 {
                         let ks = [ Big { threshold = 100000 }, Big { threshold = 200000 } ]
                         if List.any((k) -> n >= 100000, ks) then Yes else No
@@ -58,7 +60,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      */
     @Test
     void aRuleAgainstANumberEveryElementStatesIsTheSameLine() {
-        assertEquals(AT_A_HUNDRED_THOUSAND, reading("""
+        assertEquals(atAHundredThousand("comparison@0:13:37"), reading("""
                 {
                         let ks = [ AtMost { threshold = 100000 }, Whatever ]
                         if List.any((k) -> reaches(n, k), ks) then Yes else No
@@ -77,8 +79,10 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
     @Test
     void membersWritingOneFormTwoWaysAreStillTheSameLine() {
         assertEquals("[n/x <= 49999, n/49999 < x] unread [] points ["
-                        + "classify/n ON 50000, classify/n OFF 49999, "
-                        + "classify/n IN 50000 < n, classify/n OUT n < 49999]", reading("""
+                        + "ON point of comparison@0:19:40, "
+                        + "OFF point of comparison@0:19:40, "
+                        + "IN point of comparison@0:19:40, "
+                        + "OUT point of comparison@0:19:40]", reading("""
                 {
                         let ks = [ Big { threshold = n + n }, Big { threshold = 2 * n } ]
                         if List.any((k) -> k.threshold >= 100000, ks) then Yes else No
@@ -119,10 +123,14 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
     void aModelReachesItsThresholdThroughACandidateListAndAnArm() {
         assertEquals("[予定費用/x < 100000, 予定費用/100000 <= x, 役職/x <= 3, 役職/3 < x] "
                         + "unread [] points ["
-                        + "判定する/予定費用 ON 100000, 判定する/予定費用 OFF 99999, "
-                        + "判定する/予定費用 IN 100000 < 予定費用, 判定する/予定費用 OUT 予定費用 < 99999, "
-                        + "判定する/役職 ON 4, 判定する/役職 OFF 3, "
-                        + "判定する/役職 IN 4 < 役職, 判定する/役職 OUT 役職 < 3]",
+                        + "ON point of comparison@0:16:44, "
+                        + "OFF point of comparison@0:16:44, "
+                        + "IN point of comparison@0:16:44, "
+                        + "OUT point of comparison@0:16:44, "
+                        + "ON point of comparison@0:21:33, "
+                        + "OFF point of comparison@0:21:33, "
+                        + "IN point of comparison@0:21:33, "
+                        + "OUT point of comparison@0:21:33]",
                 readingOf("""
                 module g
 
@@ -202,13 +210,8 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
                 + "] unread [" + read.partition().notRead().stream()
                 .map(each -> each.at() + " " + each.reason())
                 .collect(Collectors.joining(", "))
-                + "] points [" + read.partition().owedPoints().stream()
-                .map(ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest::said)
+                + "] points [" + read.account().stream()
+                .map(point -> point.said(souther.compiler.source.SourceId::value, null))
                 .collect(Collectors.joining(", ")) + "]";
-    }
-
-    /** One point a row is owed, as the position, which of the four it is, and the value. */
-    private static String said(OwedBoundaryPoint point) {
-        return point.axis() + " " + point.role() + " " + point.against();
     }
 }

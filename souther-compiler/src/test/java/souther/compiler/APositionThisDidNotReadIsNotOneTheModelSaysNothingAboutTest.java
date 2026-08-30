@@ -219,7 +219,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
         assertFalse(block.contains("not derivable: c"), block);
         assertFalse(notReadAbout(block, "c"), block);
-        assertTrue(block.contains("border      borders 1   coverage items 0/0   excluded 2   (2 not measured"), block);
+        assertTrue(block.contains("border      borders 1   obligations 0/0\n"), block);
     }
 
     /**

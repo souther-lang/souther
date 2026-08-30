@@ -76,11 +76,11 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
     void aClausesLineIsMetByWritingTheValueAndAForksIsNot() throws Exception {
         List<String> gaps = boundaryGaps(reportOf(REACHED_BY_ONE_RULE_ONLY));
 
-        assertTrue(gaps.stream().anyMatch(line -> line.contains("charge/a.n = 100")
-                        && line.contains("comparison@")),
-                () -> "no row got the fork's comparison to answer at a hundred: " + gaps);
-        assertFalse(gaps.stream().anyMatch(line -> line.contains("charge/a.n = 100")
-                        && line.contains("ensures")),
+        // Told apart by the rule and the role, which is what a point is named by: the value is the
+        // reading's word and is said under the mark.
+        assertTrue(gaps.stream().anyMatch(line -> line.contains("the ON point (comparison@")),
+                () -> "no row got the fork's comparison to answer on its line: " + gaps);
+        assertFalse(gaps.stream().anyMatch(line -> line.contains("the ON point (ensures")),
                 () -> "the row writes a hundred, which is the whole of what the clause wants: "
                         + gaps);
     }
@@ -119,18 +119,15 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
     void aClausesLineBetweenTwoPositionsIsMetByWritingBothValues() throws Exception {
         List<String> gaps = boundaryGaps(reportOf(A_LINE_BETWEEN_TWO_POSITIONS));
 
-        assertTrue(gaps.stream().anyMatch(line -> line.contains("point book/from = to (")
-                        && line.contains("comparison@")),
-                () -> "no row got the fork's comparison to answer on the line: " + gaps);
-        assertFalse(gaps.stream().anyMatch(line -> line.contains("point book/from = to (")
-                        && line.contains("ensures")),
+        assertTrue(gaps.stream().anyMatch(line -> line.contains("the ON point (comparison@")),
+                () -> "no row got the fork's comparison to answer on its line: " + gaps);
+        assertFalse(gaps.stream().anyMatch(line -> line.contains("the ON point (ensures")),
                 () -> "the row puts one count in both positions, which is what the clause wants: "
                         + gaps);
-        // The point one step from the line is a different pair, and this row is not at it. Matched
-        // on the point rather than on the border it belongs to: read as a substring of the line,
-        // the point beside it answered for the point the row does meet.
-        assertTrue(gaps.stream().anyMatch(line -> line.contains("point book/from = to - 1 (")
-                        && line.contains("ensures")),
+        // The point one step from the line is a different pair, and this row is not at it. Named by
+        // the role rather than by the value the two lines share, so the point beside the clause's
+        // line cannot answer for the point on it.
+        assertTrue(gaps.stream().anyMatch(line -> line.contains("the OFF point (ensures")),
                 () -> "the pair one step from the line is owed and no row is at it: " + gaps);
     }
 

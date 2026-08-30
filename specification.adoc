@@ -3530,7 +3530,15 @@ Which is a separate decision from what a build is told about. A row against the 
 
 Named for what it counts, which is not what the syllabus calls an `+IN+` point. An `+IN+` point is a value inside a partition and away from *one border of it*, so it is keyed on a border and this count is keyed on a class. A row on a line is in one of the two partitions it parts and counts here; whether that partition also has a row away from the line is what the border's `+IN+` point says, and neither number answers for the other. The two are different measures of different things and both are reported: this one is equivalence partitioning's item, one row per class, and the four keyed on a border are domain testing's.
 
-*What a border owes.* `+borders+` is how many lines some rule drew, each named by the coordinate it was drawn on (<<boundary-coordinates>>), and `+coverage items+` is how many of the points those borders owe a row is at. A border is *closed* where the values on the line satisfy the rule that drew it and *open* where they do not, which is what tells a rule written `+<=+` from one written `+<+`.
+*What a border owes.* `+borders+` is how many lines some rule drew, each named by the coordinate it was drawn on (<<boundary-coordinates>>). A border is *closed* where the values on the line satisfy the rule that drew it and *open* where they do not, which is what tells a rule written `+<=+` from one written `+<+`.
+
+[[a-line-is-owed-once-wherever-it-is-read]]*What a behavior owes.* `+obligations+` is how many rows the behavior's own rules ask for, and how many of them some row answers. A rule is owed one row at each of its points however many coordinates read it: a guard on a name every case of a sum spreads is read once under each case, so it is as many borders as the sum has cases and one obligation per point. The two numbers are two questions and neither is the other multiplied — a border is where a row can be written, and an obligation is the work. The count is over the obligations whose coverage was measured and whose writability is known, the way the border block's items are, at the coarser grain. What the rules refuse to owe a row at is no obligation and is said under the block by the reading it is a point of, not counted beside these.
+
+*What the declarations owe.* The same word again, under the module's declarations: a line a `+data+` clause drew is owed once for the module however many behaviors carry the type, so it is counted there and no behavior is short of it. A model whose every rule is a declaration's shows borders in its blocks and its obligations under the declarations; the two counts do not overlap, and neither is a part of the other.
+
+A gap is marked per obligation, and the readings of the line are said under the mark, each as the coordinate it was read at and what a row there has to do in that coordinate's terms. The mark says which of the four points it is and which rule drew the line, and no more: writing where a point is takes a quantity, and a quantity belongs to the coordinate that read the line, so a mark that named one would be naming a place the row is not owed at — and one written from the level alone comes out true and unreadable, since the `+ON+` point of `+from < to+` is a distance of −1, which is no value any position holds. Where the line has more readings than the report has room for, it says the first few in the order their sentences sort and how many it left out; the document carries every reading, and where the point is is published there as identity rather than as words (`+obligationId+`).
+
+A line one of the module's declarations owns is the exception the author makes: it is on something they wrote — `+String.length(value)+` — so it is said with that word, under the declaration that owes it.
 
 [[a-border-owes-four-points]]*A border owes a row at four points, and every one of them is keyed on the border.* They are the four the syllabus names: an `+ON+` point is inside the partition the border bounds and closest to it, an `+OFF+` point is outside it and closest to it, an `+IN+` point is inside it and away from it, and an `+OUT+` point is outside it and away from it. The same value can be a different point of the border beside it, which is why none of them is a property of the value. A closed border is at its own `+ON+` point with an `+OFF+` point one step over, and an open border is at its own `+OFF+` point with the `+ON+` point one step back; the two sides run from those points outwards:
 
@@ -6212,8 +6220,9 @@ Not warned about for a case the model's own rules refuse (<<a-case-the-rules-ref
 
 [,text]
 ----
-No row is at the ON point submit/cost = 100 of the border the `guard` draws.
+No row is at the ON point of the line the `guard` draws.
 Hint: A row at the nearest value the border keeps in is what shows the border does not fall a step further in.
+Hint: Read at submit/cost, a row there is = 100.
 ----
 
 A warning, and one that needs the arms measured where the line was drawn by a fork of the body (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a border of several and reaching it through one leaves the others unmet.
@@ -6229,9 +6238,10 @@ The fork is named by the construct it was written as — an `+if+`, a `+guard+`,
 
 [,text]
 ----
-No row is at an IN point of submit/cost, 50, away from the border the `guard` draws.
+No row is at an IN point away from the line the `guard` draws.
 Hint: A row well inside is what shows the border, and not something else about the value, is
 what divides the two.
+Hint: Read at submit/cost, a row there is in submit/cost < 100.
 ----
 
 [[every-border-has-a-row-away-from-its-line]]A warning, and only to a build held to reliable domain coverage. The same assessment of the same border answers this and <<e1916>>; what differs is which of the four points a build is asked for (<<a-border-owes-four-points>>). A build that asked for simplified domain coverage is not told this, and the points are still reported.
