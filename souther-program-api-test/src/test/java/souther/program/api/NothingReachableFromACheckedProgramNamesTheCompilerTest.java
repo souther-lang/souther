@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -76,7 +77,45 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
         // carries — reached off the program itself rather than through a body.
         assertTrue(reached.contains("souther.compiler.core.KernelSignature"),
                 () -> "no kernel signature in " + reached);
+        // And what a behavior's rows said: the row, what it states, the values it states them with,
+        // and what asking whether an answer keeps one comes to. Each is reached through the arm
+        // that carries it, which is the walk going down into a behavior rather than reading the top
+        // of it.
+        assertTrue(reached.contains("souther.compiler.program.CheckedRow"),
+                () -> "no row in " + reached);
+        assertTrue(reached.contains("souther.compiler.observe.RowStatement$Stated"),
+                () -> "no stated row in " + reached);
+        assertTrue(reached.contains("souther.compiler.observe.Asserted"),
+                () -> "nothing a row stated in " + reached);
+        assertTrue(reached.contains("souther.compiler.observe.Mismatch"),
+                () -> "nowhere two values part in " + reached);
         assertTrue(reached.size() > 50, () -> "the walk reached only " + reached.size());
+    }
+
+    /**
+     * And nothing an output can reach is a state of a compile that has not finished.
+     *
+     * <p>How far an evaluation got is the compiler's own: a row it stopped before the values of is
+     * one the language refuses the program for, so an output is never handed one and has nothing to
+     * do with the case. Said as a type — what a row states is reached through the arm that says
+     * whether there are values, and neither arm answers with the whole of what an evaluation can
+     * come away with.
+     *
+     * <p>Checked here rather than read off the arms, because a way back to the whole is one method
+     * anywhere on the way: a convenience that answered "what does this row state" for both arms at
+     * once put the case back into every reader's switch, one call from the arms that leave it out.
+     */
+    @Test
+    void andNothingReachableIsAStateOfACompileThatHasNotFinished() {
+        List<String> reached = everythingReachableFrom(CheckedProgram.class).stream()
+                .map(each -> each.type().getName()).toList();
+
+        assertFalse(reached.contains("souther.compiler.observe.RowStatement$StoppedBeforeItsValues"),
+                () -> "an output would have to consider a row this compile has not finished with,"
+                        + " reached in " + reached);
+        assertTrue(reached.contains("souther.compiler.observe.RowStatement$NotRead"),
+                () -> "and the states an output is handed are reached, so this saw something: "
+                        + reached);
     }
 
     @Test

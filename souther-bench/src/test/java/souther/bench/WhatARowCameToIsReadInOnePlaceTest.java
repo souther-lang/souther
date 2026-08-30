@@ -74,17 +74,22 @@ class WhatARowCameToIsReadInOnePlaceTest {
     /**
      * One method reads what a module's sources saw, and it is the one the answer is made in.
      *
-     * <p>{@code rowsOf} gathers the rows and the reasons behind them. Its callers each decided for
-     * themselves what to do where the build reads no rows — the same `level → nothing was asked`
-     * reading, written five times — so what the answer says about a level and what a measure made
-     * of it were two statements of one thing. The answer says it now, and the gathering is reached
-     * only through the answer (issue #996).
+     * <p>{@code Adequacy.rowsOf} makes the reading a measure is counted over. Its callers each
+     * decided for themselves what to do where the build reads no rows — the same `level → nothing
+     * was asked` reading, written five times — so what the answer says about a level and what a
+     * measure made of it were two statements of one thing. The answer says it now, and the reading
+     * is reached only through the answer (issue #996).
+     *
+     * <p>Of that method and not of every one named for the rows. What a behavior's rows are is asked
+     * elsewhere, by whoever is not measuring, and a check spelled by a member's name alone answers
+     * about whatever else was named that.
      */
     @Test
     void whatTheSourcesSawIsGatheredWhereTheAnswerIsMade() throws IOException {
         Set<String> gathering = new LinkedHashSet<>();
         for (Compiled.Site site : Compiled.sites()) {
-            if (site.member().equals("rowsOf")
+            if (site.owner().equals("souther.compiler.query.Adequacy")
+                    && site.member().equals("rowsOf")
                     && !site.at().startsWith("souther.compiler.query.Adequacy$Rows#compute")) {
                 gathering.add(site.at());
             }

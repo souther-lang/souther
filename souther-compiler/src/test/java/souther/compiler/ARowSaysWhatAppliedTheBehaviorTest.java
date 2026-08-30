@@ -182,18 +182,18 @@ class ARowSaysWhatAppliedTheBehaviorTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.stage(),
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(), Run.nothing()),
+                        ran.inputCases(), ran.inputs(), ran.statement(), Run.nothing()),
                 "a row that applied the behavior says what applied it");
         assertThrows(IllegalArgumentException.class,
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), Stage.FIXTURES_VALIDATED,
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(),
+                        ran.inputCases(), ran.inputs(), ran.statement(),
                         new Run(new Applied.GeneratedHere(), new Counting.Read(1L, souther.compiler.coverage.Observation.NONE))),
                 "and one that did not has nothing to say applied it");
         assertThrows(NullPointerException.class,
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.stage(),
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(), null),
+                        ran.inputCases(), ran.inputs(), ran.statement(), null),
                 "and every row says what became of its evaluation");
     }
 }

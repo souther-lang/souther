@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.WhatWasCompiled;
+import souther.compiler.check.Shape;
 import souther.test.RepositoryLayout;
 
 import java.io.IOException;
@@ -12,8 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The reading of an input and the plan for building a value take the same step down a type.
@@ -43,28 +43,27 @@ class TheReadingAndThePlanTakeOneStepDownATypeTest {
     /** Read once: what this asks of it does not change between its checks. */
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
-    /** Where the fields are taken off a product shape. */
-    private static final String THE_ONE_PLACE = "check/StructuralDescent.java";
+    /** Where the fields are taken off a product shape, as the class that does it. */
+    private static final String THE_ONE_PLACE = "souther.compiler.check.StructuralDescent";
 
     /**
      * The fields of a {@code Shape.Product} are read in one place.
      *
-     * <p>Of the code and not of the file. Explaining the rule in a javadoc and breaking it are two
-     * different things, and a check reading the prose as well cannot tell them apart — it would go
-     * red on the sentence that says what the rule is, which is a check that gets harder to satisfy
-     * the better the writing around it gets.
+     * <p>Of the call and not of a spelling. What names a reader is that it asks a
+     * {@link Shape.Product} for its fields, which is in its constant pool however the call was
+     * written — under an import, through a variable of any name, from inside a lambda. Read as text
+     * it was two guesses at once: {@code product.fields()} is a variable's name, so it answered
+     * about every other type declared in products as well, and a reader that named its variable
+     * something else was not there to be found.
      */
     @Test
     void theFieldsOfAProductShapeAreReadInOnePlace() throws IOException {
-        List<Path> sources = mainSources();
-        assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
-        assertTrue(sources.size() > 20,
-                () -> "the scan found only " + sources.size() + " sources, which is not the tree");
-
         List<String> readers = new ArrayList<>();
-        for (Path source : sources) {
-            if (code(source).contains("product.fields()")) {
-                readers.add(where(source));
+        for (String each : WhatWasCompiled.callersOf(Shape.Product.class, "fields")) {
+            // The record holds its own accessor, in the members a compiler writes for every one of
+            // them. Naming itself is not reading itself.
+            if (!each.equals(Shape.Product.class.getName())) {
+                readers.add(each);
             }
         }
         assertEquals(List.of(THE_ONE_PLACE), readers,

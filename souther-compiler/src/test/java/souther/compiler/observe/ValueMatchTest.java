@@ -1,14 +1,11 @@
-package souther.compiler.examples;
+package souther.compiler.observe;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.DefaultStdlib;
-import souther.compiler.check.Symbols;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -20,21 +17,31 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * The equality two structured values are compared by.
  *
- * <p>What a row asserted and what a behavior answered are held against each other here, and the
- * corpus does not settle the rules: a set and a list are read back as the same kind of value, an
- * empty one carries almost nothing, and two decimals that differ in scale are one amount. So each is
- * fixed here rather than inferred from rows that happen to pass.
+ * <p>What was stated and what was answered are held against each other here, and the corpus does not
+ * settle the rules: a set and a list are read back as the same kind of value, an empty one carries
+ * almost nothing, and two decimals that differ in scale are one amount. So each is fixed here rather
+ * than inferred from rows that happen to pass.
  *
  * <p>The position is semantic context. It says whether order is part of being the same value, and it
  * never supplies a name: the {@code List} and {@code Set} readings of one pair of sequences differ,
  * and neither turns a value into one of another type.
+ *
+ * <p>What it reads of the declarations is one question, so this is written with an answer to that
+ * question and nothing else — no module, no compiler, no reading of a source.
  */
 class ValueMatchTest {
 
+    private static final TypeSymbol.AtModule RECEIPT =
+            TypeSymbols.declared(new TypeKey("demo", "Receipt"));
+
+    /** What a declaration would say, written out: `Receipt.lines` is a set of ints and nothing else
+     *  is declared anywhere. */
+    private static final ValueTypes TYPES = (owner, field) ->
+            RECEIPT.equals(owner) && field.equals("lines")
+                    ? Position.at(Type.set(Type.Prim.named("Int"))) : Position.UNREAD;
+
     private static ValueMatch match() {
-        Symbols symbols = Symbols.none(DefaultStdlib.get());
-        NeutralForm neutral = new NeutralForm(symbols);
-        return new ValueMatch(neutral, new ValueRendering(neutral));
+        return new ValueMatch(TYPES);
     }
 
     /** A value with no parts, on either side. */
@@ -74,35 +81,63 @@ class ValueMatchTest {
     private static final Type MAP = Type.map(INT, INT);
 
     private static void holds(Asserted a, ObservedValue b, Type position) {
-        assertNull(match().compare(a, b, position), "the two state the same value");
+        assertNull(match().compare(a, b, at(position)), "the two state the same value");
     }
 
     private static void holds(ObservedValue a, ObservedValue b, Type position) {
         holds(said(a), b, position);
     }
 
-    private static ValueMatch.Mismatch differs(Asserted a, ObservedValue b, Type position) {
-        ValueMatch.Mismatch m = match().compare(a, b, position);
+    private static Mismatch differs(Asserted a, ObservedValue b, Type position) {
+        Mismatch m = match().compare(a, b, at(position));
         assertNotNull(m, "the two state different values");
         return m;
     }
 
-    private static ValueMatch.Mismatch differs(ObservedValue a, ObservedValue b, Type position) {
+    private static Mismatch differs(ObservedValue a, ObservedValue b, Type position) {
         return differs(said(a), b, position);
+    }
+
+    private static Position at(Type position) {
+        return position == null ? Position.UNREAD : Position.at(position);
+    }
+
+    /**
+     * What a text stated cannot be changed after it was read.
+     *
+     * <p>What this is compared against is what was written down once, and a value whose parts could
+     * be reached into is one whose answer moves after it was compared — by whoever built it, or by
+     * whoever it was handed to.
+     */
+    @Test
+    void whatWasStatedIsNotChangedByWhoeverHoldsIt() {
+        List<Asserted> given = new java.util.ArrayList<>();
+        given.add(said(n(1)));
+        Asserted.Elements stated = new Asserted.Elements(Asserted.Container.LIST, given);
+        given.add(said(n(2)));
+        assertEquals(1, stated.elements().size(), "a list handed over is copied");
+
+        java.util.Map<String, Asserted> fields = new java.util.LinkedHashMap<>();
+        fields.put("lines", said(n(1)));
+        Asserted.Built built = new Asserted.Built(RECEIPT, fields);
+        fields.put("other", said(n(2)));
+        assertEquals(java.util.Set.of("lines"), built.fields().keySet(),
+                "and so is a construction's parts");
     }
 
     @Test
     void aListIsItsElementsInOrder() {
         holds(wrote(n(1), n(2)), seq(n(1), n(2)), LIST);
-        assertEquals(ValueMatch.Reason.VALUE, differs(wrote(n(1), n(2)), seq(n(2), n(1)), LIST).reason());
-        assertEquals("$[0]", differs(wrote(n(1), n(2)), seq(n(2), n(1)), LIST).path());
+        assertEquals(Mismatch.Reason.VALUE, differs(wrote(n(1), n(2)), seq(n(2), n(1)), LIST).reason());
+        assertEquals(List.of(new PathElement.Index(0)),
+                differs(wrote(n(1), n(2)), seq(n(2), n(1)), LIST).path());
     }
 
     @Test
     void aSetIsItsElements() {
         holds(wrote(n(1), n(2)), seq(n(1), n(2)), SET);
         holds(wrote(n(1), n(2)), seq(n(2), n(1)), SET);
-        assertEquals(ValueMatch.Reason.SHAPE, differs(wrote(n(1), n(2)), seq(n(1), n(3)), SET).reason());
+        assertEquals(Mismatch.Reason.SHAPE, differs(wrote(n(1), n(2)), seq(n(1), n(3)), SET).reason());
     }
 
     @Test
@@ -111,7 +146,7 @@ class ValueMatchTest {
         // answer's own type says which reading applies. The one pair, read both ways, answers
         // differently — a comparison that lost that would give one answer for both.
         holds(wrote(n(1), n(2)), seq(n(2), n(1)), SET);
-        assertNotNull(match().compare(wrote(n(1), n(2)), seq(n(2), n(1)), LIST),
+        assertNotNull(match().compare(wrote(n(1), n(2)), seq(n(2), n(1)), at(LIST)),
                 "a list is its elements in order, whatever a set of the same elements is");
     }
 
@@ -121,17 +156,40 @@ class ValueMatchTest {
         // answering with a list did not answer with it — which the position must not be allowed to
         // paper over, since it is the answer's type and not the row's.
         holds(wroteASet(n(1), n(2)), seq(n(1), n(2)), SET);
-        assertEquals(ValueMatch.Reason.TYPE, differs(wroteASet(n(1)), seq(n(1)), LIST).reason());
+        assertEquals(Mismatch.Reason.TYPE, differs(wroteASet(n(1)), seq(n(1)), LIST).reason());
         // An empty one carries nothing at all, so it is only what the row said that tells them apart.
-        assertEquals(ValueMatch.Reason.TYPE, differs(wroteASet(), seq(), LIST).reason());
+        assertEquals(Mismatch.Reason.TYPE, differs(wroteASet(), seq(), LIST).reason());
         holds(wroteASet(), seq(), SET);
+    }
+
+    /**
+     * And what says which collection a field holds is what declares that field.
+     *
+     * <p>The one thing a comparison cannot read off either value. Asked of the declarations, the
+     * elements of {@code lines} are a set and their order is not part of the value; asked of
+     * nothing, they are read in the order they stand.
+     */
+    @Test
+    void andWhatAFieldHoldsIsWhatItsDeclarationSays() {
+        Asserted stated = new Asserted.Built(RECEIPT,
+                java.util.Map.of("lines", wrote(n(1), n(2))));
+        ObservedValue answered = new ObservedValue.Constructed(RECEIPT,
+                java.util.Map.of("lines", seq(n(2), n(1))));
+        assertNull(match().compare(stated, answered, Position.UNREAD),
+                "the field is declared a set, so the order it stands in is not part of it");
+
+        ValueMatch nothingDeclared = new ValueMatch((owner, field) -> Position.UNREAD);
+        Mismatch differs = nothingDeclared.compare(stated, answered, Position.UNREAD);
+        assertNotNull(differs, "with nothing declaring the field, the elements are read in order");
+        assertEquals(List.of(new PathElement.Field("lines"), new PathElement.Index(0)),
+                differs.path());
     }
 
     @Test
     void aSequenceAndAMapAreNeverOneValue() {
-        assertEquals(ValueMatch.Reason.TYPE,
+        assertEquals(Mismatch.Reason.TYPE,
                 differs(new Asserted.Entries(true, List.of()), seq(), MAP).reason());
-        assertEquals(ValueMatch.Reason.TYPE,
+        assertEquals(Mismatch.Reason.TYPE,
                 differs(wroteASet(), new ObservedValue.Mapping(List.of()), MAP).reason());
     }
 
@@ -141,7 +199,7 @@ class ValueMatchTest {
         holds(wrote(), seq(), SET);
         holds(new Asserted.Entries(false, List.of()), new ObservedValue.Mapping(List.of()), MAP);
         // An empty sequence and an empty map carry the same nothing, and are not the same value.
-        assertEquals(ValueMatch.Reason.TYPE,
+        assertEquals(Mismatch.Reason.TYPE,
                 differs(wrote(), new ObservedValue.Mapping(List.of()), MAP).reason());
     }
 
@@ -158,9 +216,10 @@ class ValueMatchTest {
         ObservedValue.Mapping wrongValue = new ObservedValue.Mapping(List.of(
                 new ObservedValue.Entry(n(1), new ObservedValue.Text("a")),
                 new ObservedValue.Entry(n(2), new ObservedValue.Text("z"))));
-        ValueMatch.Mismatch m = differs(a, wrongValue, Type.map(INT, Type.Prim.named("String")));
-        assertEquals(ValueMatch.Reason.VALUE, m.reason());
-        assertEquals("$[2]", m.path(), "the entry is named by its key, not by where it was written");
+        Mismatch m = differs(a, wrongValue, Type.map(INT, Type.Prim.named("String")));
+        assertEquals(Mismatch.Reason.VALUE, m.reason());
+        assertEquals(List.of(new PathElement.Key(said(n(2)))), m.path(),
+                "the entry is named by its key, not by where it was written");
     }
 
     @Test
@@ -168,7 +227,7 @@ class ValueMatchTest {
         // What `Values.equal` says of the run-time values: two that differ only in scale are one amount.
         holds(new ObservedValue.Decimal(new BigDecimal("1.0")),
                 new ObservedValue.Decimal(new BigDecimal("1.00")), Type.Prim.named("Decimal"));
-        assertEquals(ValueMatch.Reason.VALUE,
+        assertEquals(Mismatch.Reason.VALUE,
                 differs(new ObservedValue.Decimal(new BigDecimal("1.0")),
                         new ObservedValue.Decimal(new BigDecimal("1.5")),
                         Type.Prim.named("Decimal")).reason());
@@ -185,12 +244,12 @@ class ValueMatchTest {
 
     @Test
     void aValueUnderANameIsNotTheBaseItWraps() {
-        // The whole of #653, at the level the comparison works at: one representation, two types.
+        // One representation, two types, at the level the comparison works at.
         TypeSymbol.AtModule amount = TypeSymbols.declared(new TypeKey("demo", "AmountN"));
         ObservedValue wrapped = new ObservedValue.Constructed(amount,
                 java.util.Map.of("value", n(1)));
-        ValueMatch.Mismatch m = differs(said(n(1)), wrapped, Type.ref(amount));
-        assertEquals(ValueMatch.Reason.TYPE, m.reason());
+        Mismatch m = differs(said(n(1)), wrapped, Type.ref(amount));
+        assertEquals(Mismatch.Reason.TYPE, m.reason());
     }
 
     @Test
@@ -199,28 +258,28 @@ class ValueMatchTest {
                 java.util.Map.of("value", said(n(1))));
         ObservedValue other = new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("demo", "OtherAmountN")),
                 java.util.Map.of("value", n(1)));
-        assertEquals(ValueMatch.Reason.TYPE, differs(one, other, null).reason());
+        assertEquals(Mismatch.Reason.TYPE, differs(one, other, null).reason());
     }
 
     @Test
     void aDateIsNotTheTextThatSpellsIt() {
-        assertEquals(ValueMatch.Reason.TYPE,
+        assertEquals(Mismatch.Reason.TYPE,
                 differs(new ObservedValue.Text("2026-07-25"),
                         new ObservedValue.Temporal("2026-07-25"), Type.Prim.named("Date")).reason());
     }
 
     @Test
     void anAbsentValueIsNotAPresentOne() {
-        assertEquals(ValueMatch.Reason.ABSENCE,
+        assertEquals(Mismatch.Reason.ABSENCE,
                 differs(new ObservedValue.Absent(), n(1), Type.option(INT)).reason());
         holds(new ObservedValue.Absent(), new ObservedValue.Absent(), Type.option(INT));
     }
 
     @Test
     void aValueThatCouldNotBeReadIsNotAValueThatMatches() {
-        assertEquals(ValueMatch.Reason.UNREADABLE,
+        assertEquals(Mismatch.Reason.UNREADABLE,
                 differs(new ObservedValue.Unknown("why"), n(1), INT).reason());
-        assertEquals(ValueMatch.Reason.UNREADABLE,
+        assertEquals(Mismatch.Reason.UNREADABLE,
                 differs(n(1), new ObservedValue.Truncated(), INT).reason());
     }
 
@@ -229,27 +288,9 @@ class ValueMatchTest {
         // Both sides stopping at the same limit is the limit being reached twice, and says nothing
         // about what stood past it. Reading it as equality is how a depth bound answers "the same"
         // for two values that differ only below it.
-        assertEquals(ValueMatch.Reason.UNREADABLE,
+        assertEquals(Mismatch.Reason.UNREADABLE,
                 differs(new ObservedValue.Truncated(), new ObservedValue.Truncated(), INT).reason());
-        assertEquals(ValueMatch.Reason.UNREADABLE,
+        assertEquals(Mismatch.Reason.UNREADABLE,
                 differs(new ObservedValue.Unknown("a"), new ObservedValue.Unknown("a"), INT).reason());
-    }
-
-    @Test
-    void aValueDeeperThanTheComparisonReadsIsStoppedRatherThanFlattened() {
-        // The limit a comparison observes under is wide, not absent. What is past it has to arrive as
-        // something the comparison refuses to call equal, which the case above fixes.
-        Object deep = 1L;
-        for (int i = 0; i < FixtureReader.WHOLE.maxDepth() + 2; i++) {
-            deep = List.of(deep);
-        }
-        Symbols symbols = Symbols.none(DefaultStdlib.get());
-        ObservedValue observed = ObservedValues.of(deep, symbols, new NeutralForm(symbols),
-                FixtureReader.WHOLE);
-        ObservedValue at = observed;
-        while (at instanceof ObservedValue.Sequence s) {
-            at = s.elements().get(0);
-        }
-        assertEquals(new ObservedValue.Truncated(), at, "the walk stops rather than reading on");
     }
 }

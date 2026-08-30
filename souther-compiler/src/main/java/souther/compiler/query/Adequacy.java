@@ -5,7 +5,6 @@ import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.source.SourceId;
 
 
 import souther.compiler.diag.DiagnosticCode;
@@ -2757,64 +2756,17 @@ public final class Adequacy {
      * is settled.
      */
     static Map<String, RowReading> rowsOf(Db db, String module) {
-        java.util.SequencedSet<SourceId> origins = db.ask(new Front.ExampleSources(module)).value();
-        Map<String, List<RowOutcome>> rows = new LinkedHashMap<>();
-        Map<String, List<Incompleteness>> stopped = new LinkedHashMap<>();
-        List<Incompleteness> everywhere = new ArrayList<>();
-        if (origins == null) {
+        Output.RowsRead.Of read = db.ask(new Output.RowsRead(module)).value();
+        if (read == null) {
             return Map.of();
         }
-        for (SourceId sourceId : origins) {
-            Output.Examples.Of observed = db.ask(Output.Examples.asked(db, module, sourceId)).value();
-            if (observed == null) {
-                // The source was not evaluated at all. Which behaviors it wrote rows for is exactly
-                // what cannot be read, so it counts against every one of them.
-                everywhere.add(Incompleteness.ofSource(
-                        Incompleteness.Code.OBSERVATION_ABSENT, sourceId));
-                continue;
-            }
-            for (RowOutcome row : observed.rows()) {
-                rows.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
-            }
-            for (Incompleteness gap : observed.incompleteness()) {
-                Optional<String> one = gap.behavior();
-                if (one.isPresent()) {
-                    stopped.computeIfAbsent(one.get(), _ -> new ArrayList<>()).add(gap);
-                } else {
-                    everywhere.add(gap);   // larger than a behavior, so about all of them
-                }
-            }
-        }
-        everywhere = distinct(everywhere);
-        // Every behavior of the module, and not only the ones something was seen of. A gap larger
-        // than a behavior counts against all of them — which is what the branch above says as it
-        // records one — and keying this on what was seen gave it to exactly the behaviors it was
-        // least about: one with no row at all is the case a source nobody could evaluate matters
-        // most for, and it was the one that got nothing. The report patched over it by reading the
-        // module's own list a second time, behind the measures (issue #953).
-        Set<String> named = new LinkedHashSet<>(rows.keySet());
-        named.addAll(stopped.keySet());
-        Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(module));
-        if (prepared.present() && prepared.value() != null) {
-            prepared.value().behaviors().forEach(each -> named.add(each.name()));
-        }
         Map<String, RowReading> out = new LinkedHashMap<>();
-        for (String behavior : named) {
-            List<Incompleteness> gaps = new ArrayList<>(everywhere);
-            gaps.addAll(stopped.getOrDefault(behavior, List.of()));
-            out.put(behavior, RowReading.of(rows.getOrDefault(behavior, List.of()), gaps));
-        }
-        return new WithFallback(out, everywhere);
-    }
-
-    /** One entry per reason. A module's classes failing to be instrumented is one fact, and looking
-     * for them once per source is not three facts. */
-    private static List<Incompleteness> distinct(List<Incompleteness> gaps) {
-        Map<Object, Incompleteness> byIdentity = new LinkedHashMap<>();
-        for (Incompleteness gap : gaps) {
-            byIdentity.putIfAbsent(gap.identity(), gap);
-        }
-        return List.copyOf(byIdentity.values());
+        // What ran, which is what a measure is counted over. A row nothing came back for is not a
+        // row a measure reads and is not one it may pass over either: what it would have covered is
+        // unknown, which is what the gaps beside it say.
+        read.byBehavior().forEach((behavior, its) ->
+                out.put(behavior, RowReading.of(its.ran(), read.gapsFor(behavior))));
+        return new WithFallback(out, read.everywhere());
     }
 
     /** The map above, answering for a behavior nothing named with whatever stopped every source. A

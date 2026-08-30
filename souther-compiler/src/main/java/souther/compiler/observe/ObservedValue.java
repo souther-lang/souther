@@ -1,5 +1,6 @@
 package souther.compiler.observe;
 
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
@@ -122,6 +123,54 @@ public sealed interface ObservedValue {
         return switch (this) {
             case Truncated _ -> Incompleteness.Code.VALUE_TRUNCATED;
             case Unknown _ -> Incompleteness.Code.VALUE_UNREADABLE;
+            default -> null;
+        };
+    }
+
+    /**
+     * Which primitive a value with no parts is of, or null where it has parts.
+     *
+     * <p>Answered by the value, because three readers want it and each would otherwise answer it for
+     * itself: whether a text wrote a value of a position's type, whether two values are of one type,
+     * and what to call them where they are not. A reader that worked it out on its own worked it out
+     * from what it had — and one of them had a decoder, which reads a whole number where a
+     * {@code Decimal} stands because a boundary carries one that way. What a text wrote is not that:
+     * {@code 1} is an {@code Int} and {@code 1m} is a {@code Decimal}, and the language makes that
+     * difference written.
+     *
+     * <p>A temporal is which one its text spells. An observation keeps the ISO form rather than the
+     * class it arrived in, and the four spell themselves apart.
+     */
+    default Type.Prim primitive() {
+        return switch (this) {
+            case Bool _ -> Type.Prim.BOOL;
+            case Integer _ -> Type.Prim.INT;
+            case Decimal _ -> Type.Prim.DECIMAL;
+            case Text _ -> Type.Prim.STRING;
+            case Temporal t -> {
+                String iso = t.iso();
+                if (iso.endsWith("Z")) {
+                    yield Type.Prim.INSTANT;
+                }
+                yield iso.contains("T") ? Type.Prim.DATETIME
+                        : iso.contains("-") ? Type.Prim.DATE : Type.Prim.TIME;
+            }
+            case Unit _, Constructed _, Absent _, Sequence _, Mapping _, Unknown _, Truncated _ ->
+                    null;
+        };
+    }
+
+    /**
+     * The declaration this value is of, or null where nothing declares it.
+     *
+     * <p>A case is the type it is: a data with fields is that data, and a case carrying nothing is
+     * the name it is. A value with no parts is of no declaration — which is the same answer the
+     * reading that produced it gives, and not a case it could not name.
+     */
+    default TypeSymbol declaredAs() {
+        return switch (this) {
+            case Constructed c -> c.type();
+            case Unit u -> u.type();
             default -> null;
         };
     }

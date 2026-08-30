@@ -823,6 +823,315 @@ public final class Output {
     }
 
     /**
+     * What each behavior of one module wrote down, and what stopped a source being read.
+     *
+     * <p>The one place a module's sources are gathered. A behavior's rows are written across its own
+     * file and any number of attached {@code examples for} files, so which rows it has is an answer
+     * over all of them together — and a caller assembling that again decides for itself what a
+     * source that did not answer means, which is a decision made here once: it counts against every
+     * behavior, because which behaviors it wrote rows for is exactly what could not be read.
+     *
+     * <p>What is here are the rows as they were read and the reasons a reading fell short, and
+     * nothing made of either. What a measurement makes of them is {@link Adequacy.Rows}, which is
+     * asked only where a build measures; what a behavior owes is a fact about the model, and an
+     * output holding a checked program reads it whether or not anything was measured.
+     */
+    public record RowsRead(String name) implements Key<RowsRead.Of> {
+
+        /**
+         * What was read, by the behavior each row is of.
+         *
+         * <p>A reason belongs to one behavior or to more than one, and the two are kept apart here
+         * rather than merged into each entry. Merged, the same reason is in the answer twice — once
+         * under every behavior it counts against and once as itself — and a reader adding up what
+         * it was told would count a source nobody could evaluate once per behavior in it.
+         *
+         * @param everywhere what stopped a reading in a way larger than one behavior, which counts
+         *     against every behavior of the module, including the ones no entry names
+         */
+        public record Of(Map<String, ReadRows> byBehavior,
+                         List<souther.compiler.observe.Incompleteness> everywhere) {
+
+            /** What counts against {@code behavior}: what stopped a reading of its own rows, and
+             *  what stopped one larger than any behavior. */
+            public List<souther.compiler.observe.Incompleteness> gapsFor(String behavior) {
+                List<souther.compiler.observe.Incompleteness> gaps =
+                        new java.util.ArrayList<>(everywhere);
+                ReadRows its = byBehavior.get(behavior);
+                if (its != null) {
+                    gaps.addAll(its.gaps());
+                }
+                return List.copyOf(gaps);
+            }
+
+            public Of {
+                // Ordered, because what is read out of it is read in an order: a module's behaviors
+                // are shown in the order they were gathered, and a map keyed by a hash would show
+                // one nothing decided, which can differ between two runs of one compiler.
+                byBehavior = java.util.Collections.unmodifiableMap(
+                        new java.util.LinkedHashMap<>(byBehavior));
+                everywhere = List.copyOf(everywhere);
+            }
+        }
+
+        /**
+         * One behavior's rows, and what stopped a reading of that behavior's own.
+         *
+         * <p>Every row the module wrote for it, in the order they are written, and not only the
+         * ones something came back for. A reading that stopped leaves rows nothing was seen of —
+         * the classes would not link, the source produced no observation at all — and those rows
+         * are still rows someone wrote: listed as what was read, a reader would be handed a
+         * behavior that says nothing about an input that is written down in front of it.
+         *
+         * <p>{@code gaps} is its own, and not everything that counts against it. What stopped a
+         * reading of the whole source is larger than any behavior in it and is said once, beside
+         * these; a reader that wants both asks {@link Of#gapsFor}.
+         */
+        public record ReadRows(List<ReadRow> rows,
+                               List<souther.compiler.observe.Incompleteness> gaps) {
+
+            public ReadRows {
+                rows = List.copyOf(rows);
+                gaps = List.copyOf(gaps);
+            }
+
+            /** The rows something came back for, which is what a measurement is counted over. */
+            public List<souther.compiler.observe.RowOutcome> ran() {
+                List<souther.compiler.observe.RowOutcome> out = new ArrayList<>();
+                for (ReadRow row : rows) {
+                    if (row instanceof ReadRow.Ran(souther.compiler.observe.RowOutcome outcome)) {
+                        out.add(outcome);
+                    }
+                }
+                return out;
+            }
+        }
+
+        /**
+         * One written row, and what became of reading it.
+         *
+         * <p>Two arms and no third: something came back for the row, or nothing did and this says
+         * why. Written as a sum so that a reader deciding what to do with a module's rows has to
+         * say what it does with the ones nothing came back for — dropped, they are rows an output
+         * would never hear of, and a behavior would read as having nothing to say about them.
+         */
+        public sealed interface ReadRow {
+
+            /** What the row names itself. */
+            souther.compiler.observe.RowIdentity identity();
+
+            /** Where it is written. */
+            souther.compiler.diag.SourcePos at();
+
+            /** The row ran, and this is what it came to. */
+            record Ran(souther.compiler.observe.RowOutcome outcome) implements ReadRow {
+
+                public Ran {
+                    if (outcome == null) {
+                        throw new IllegalArgumentException("a row that ran came to something");
+                    }
+                }
+
+                @Override
+                public souther.compiler.observe.RowIdentity identity() {
+                    return outcome.identity();
+                }
+
+                @Override
+                public souther.compiler.diag.SourcePos at() {
+                    return outcome.at();
+                }
+            }
+
+            /**
+             * Nothing came back for the row, and why nothing did.
+             *
+             * <p>The reason is the reading's and not the row's: what the row states was never read,
+             * so there is nothing about it to say beyond which row it is and that this compile did
+             * not get to it.
+             */
+            record NotRun(souther.compiler.observe.RowIdentity identity,
+                          souther.compiler.diag.SourcePos at,
+                          souther.compiler.observe.Incompleteness.Code why) implements ReadRow {
+
+                public NotRun {
+                    if (identity == null || at == null || why == null) {
+                        throw new IllegalArgumentException("a row nothing came back for is still a"
+                                + " row, written somewhere, for a reason it was not read");
+                    }
+                    if (!why.leftNoRowRead()) {
+                        throw new IllegalArgumentException(why + " is a reason a row that was read"
+                                + " fell short, and this row was not read");
+                    }
+                }
+            }
+        }
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Of> compute(Db db) {
+            java.util.SequencedSet<SourceId> origins =
+                    db.ask(new Front.ExampleSources(name)).value();
+            if (origins == null) {
+                return Answer.of(new Of(Map.of(), List.of()));
+            }
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Map<String, List<ReadRow>> written = new LinkedHashMap<>();
+            Map<String, List<souther.compiler.observe.Incompleteness>> stopped =
+                    new LinkedHashMap<>();
+            List<souther.compiler.observe.Incompleteness> everywhere = new ArrayList<>();
+            Set<String> named = new LinkedHashSet<>();
+            for (SourceId sourceId : origins) {
+                Examples.Of observed = db.ask(Examples.asked(db, name, sourceId)).value();
+                // What this source wrote and what became of reading it, put together here — where
+                // both are still this source's. Flattened first and matched afterwards, a row of
+                // one source takes a reason that happened in another: two sources exampling one
+                // behavior leave two reasons under its name, and nothing in either says which row
+                // it is about.
+                readOneSource(prepared, sourceId, observed, written, named);
+                if (observed == null) {
+                    // The source was not evaluated at all. Which behaviors it wrote rows for is
+                    // exactly what cannot be read, so it counts against every one of them.
+                    everywhere.add(souther.compiler.observe.Incompleteness.ofSource(
+                            souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
+                            sourceId));
+                    continue;
+                }
+                for (souther.compiler.observe.Incompleteness gap : observed.incompleteness()) {
+                    java.util.Optional<String> one = gap.behavior();
+                    if (one.isPresent()) {
+                        stopped.computeIfAbsent(one.get(), _ -> new ArrayList<>()).add(gap);
+                    } else {
+                        everywhere.add(gap);   // larger than a behavior, so about all of them
+                    }
+                }
+            }
+            // Every behavior of the module, and not only the ones something was seen of. A gap
+            // larger than a behavior counts against all of them, and keying this on what was seen
+            // gave it to exactly the behaviors it was least about: one with no row at all is the
+            // case a source nobody could evaluate matters most for, and it was the one that got
+            // nothing.
+            named.addAll(stopped.keySet());
+            if (prepared.present() && prepared.value() != null) {
+                prepared.value().behaviors().forEach(each -> named.add(each.name()));
+            }
+            Map<String, ReadRows> out = new LinkedHashMap<>();
+            for (String behavior : named) {
+                out.put(behavior, new ReadRows(written.getOrDefault(behavior, List.of()),
+                        stopped.getOrDefault(behavior, List.of())));
+            }
+            return Answer.of(new Of(out, distinct(everywhere)));
+        }
+
+        /**
+         * Every row the module wrote, by the behavior it is a row of, each with what came back for
+         * it.
+         *
+         * <p>Read off what was written rather than off what came back, because those are two sets
+         * and only the first is the model. A reading that stopped leaves the second short — the
+         * classes would not link, a source produced no observation at all — and a row missing from
+         * it is a row someone wrote that nothing downstream would ever hear of.
+         *
+         * <p>What is attached to a written row is the outcome recorded for it, found by what a row
+         * names itself and where it is written, which is what an outcome is made with. A row with
+         * none takes the reason its reading fell short for: whatever stopped that behavior's rows,
+         * or what stopped the whole reading where nothing was said of the behavior.
+         */
+        static void readOneSource(Answer<souther.compiler.check.Prepared> prepared,
+                SourceId sourceId, Examples.Of observed, Map<String, List<ReadRow>> into,
+                Set<String> named) {
+            if (!prepared.present() || prepared.value() == null) {
+                // Nothing says what this source wrote, so what came back is all there is to say —
+                // and a module whose declarations could not be read is one every reader is already
+                // told about.
+                if (observed != null) {
+                    for (souther.compiler.observe.RowOutcome row : observed.rows()) {
+                        into.computeIfAbsent(row.target(), _ -> new ArrayList<>())
+                                .add(new ReadRow.Ran(row));
+                        named.add(row.target());
+                    }
+                }
+                return;
+            }
+            for (souther.compiler.check.Prepared.Rows block
+                    : prepared.value().forExamplesWrittenIn(sourceId).rows()) {
+                souther.compiler.ast.Hir.Example written = block.read();
+                List<ReadRow> mine = into.computeIfAbsent(written.target(),
+                        _ -> new ArrayList<>());
+                named.add(written.target());
+                for (souther.compiler.ast.Hir.ExampleRow row : written.rows()) {
+                    souther.compiler.observe.RowOutcome came = observed == null ? null
+                            : among(observed.rows(), written.target(), row);
+                    mine.add(came != null ? new ReadRow.Ran(came)
+                            : new ReadRow.NotRun(row.identity(), row.pos(),
+                                    whyNothingCameBack(written.target(), row, observed, sourceId)));
+                }
+            }
+        }
+
+        /** The outcome recorded for {@code row} of {@code behavior}, or null where nothing came
+         * back for it. A row is what it names itself and where it is written, which is what an
+         * outcome carries of it. */
+        private static souther.compiler.observe.RowOutcome among(
+                List<souther.compiler.observe.RowOutcome> outcomes, String behavior,
+                souther.compiler.ast.Hir.ExampleRow row) {
+            for (souther.compiler.observe.RowOutcome each : outcomes) {
+                if (each.target().equals(behavior) && each.identity().equals(row.identity())
+                        && each.at().equals(row.pos())) {
+                    return each;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Why nothing came back for a row, taken from what happened where the row is written.
+         *
+         * <p>This source and no other. A behavior may be exampled in its own module and in an
+         * attached file, and what stopped a reading of one of them says nothing about the other —
+         * a row taking a reason from wherever one was recorded under its behavior's name would be
+         * told about a file it is not in.
+         *
+         * <p>Where nothing was observed of the source at all, that is the reason and it is the
+         * source's. Otherwise it is what this source recorded of this behavior, and a reading is
+         * only ever short of a row for a reason it recorded — so a row with neither an outcome nor
+         * a reason is this compiler having lost one, which is the thing a reader must never be
+         * handed as a row that was never written.
+         */
+        private static souther.compiler.observe.Incompleteness.Code whyNothingCameBack(
+                String behavior, souther.compiler.ast.Hir.ExampleRow row, Examples.Of observed,
+                SourceId sourceId) {
+            if (observed == null) {
+                return souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT;
+            }
+            for (souther.compiler.observe.Incompleteness gap : observed.incompleteness()) {
+                if (gap.code().leftNoRowRead()
+                        && gap.behavior().map(behavior::equals).orElse(true)) {
+                    return gap.code();
+                }
+            }
+            throw new IllegalStateException("nothing came back for " + behavior + " "
+                    + row.identity().shown() + " in " + sourceId + ", and nothing there says why:"
+                    + " a reading is short of a row only for a reason it recorded");
+        }
+
+        /** One entry per reason. A module's classes failing to be instrumented is one fact, and
+         * looking for them once per source is not three facts. */
+        private static List<souther.compiler.observe.Incompleteness> distinct(
+                List<souther.compiler.observe.Incompleteness> gaps) {
+            Map<Object, souther.compiler.observe.Incompleteness> byIdentity = new LinkedHashMap<>();
+            for (souther.compiler.observe.Incompleteness gap : gaps) {
+                byIdentity.putIfAbsent(gap.identity(), gap);
+            }
+            return List.copyOf(byIdentity.values());
+        }
+    }
+
+    /**
      * The examples of one module, evaluated. Every module's examples are evaluated before any
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.

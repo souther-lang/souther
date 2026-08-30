@@ -78,6 +78,12 @@ import java.util.List;
  * @param inputCases     the case each input fixture constructs, in order; an entry is null where the
  *                       text does not say
  * @param inputs         each input as the compiler owns it, in order
+ * @param statement      what the row states, taken as this evaluation read it. Here rather than
+ *                       worked out again, because reading it is running what the fixtures name: a
+ *                       second reading would apply the same helpers a second time, and a helper
+ *                       applied twice is counted twice and does whatever it does twice. What is
+ *                       carried is what this evaluation had in hand, so nothing downstream reads a
+ *                       source text
  * @param run            what applied the behavior, and what this compile counted while the row ran.
  *                       A row that reached {@link Stage#INVOKED} says what applied it and a row that
  *                       did not says nothing did, which is held to at construction: the two are
@@ -96,9 +102,29 @@ public record RowOutcome(SourcePos at,
                          TypeSymbol resultArm,
                          List<TypeSymbol> inputCases,
                          List<ObservedValue> inputs,
+                         RowStatement statement,
                          Run run) {
 
     public RowOutcome {
+        java.util.Objects.requireNonNull(statement, "a row states something");
+        if (statement instanceof RowStatement.Stated values
+                && !values.inputs().equals(inputs)) {
+            // One fact with two places to be read from, held to being one. A row that states values
+            // states the ones it handed over, and a reader taking them from either side gets the
+            // same values — where a measure reads them here and an output reads them there, two
+            // lists that could differ are two answers about what a row is about.
+            throw new IllegalArgumentException("a row states the values it handed over: " + inputs
+                    + " against " + values.inputs());
+        }
+        if (stage.reached(Stage.FIXTURES_VALIDATED)
+                == statement instanceof RowStatement.StoppedBeforeItsValues) {
+            // The two are one evaluation read apart, and they are written a line from each other:
+            // what the row states is taken as its values are read, and the stage says they were.
+            // Kept apart, a reader meets a row whose values were read saying the reading stopped
+            // before them, or one that says what it states beside a stage that never got there.
+            throw new IllegalArgumentException("a row whose values were read states them, and one"
+                    + " the reading stopped before does not: " + stage + " with " + statement);
+        }
         // A list that keeps a null in it cannot be List.copyOf'd, and an input whose case the text does
         // not say is exactly that — so the unmodifiable wrapper is taken rather than the copying factory.
         inputCases = inputCases == null ? List.of()
