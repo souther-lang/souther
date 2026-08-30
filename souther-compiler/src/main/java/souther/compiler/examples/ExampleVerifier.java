@@ -30,7 +30,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.Limits;
 import souther.compiler.observe.Mismatch;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.observe.Verdict;
@@ -1289,10 +1288,8 @@ public final class ExampleVerifier {
             return new RowStatement.RequiresStandIns(dependencies);
         }
         // What a statement of values is, is not decided here: whether these are values a reader can
-        // be given is one question with one answer, and the limits are what that answer is made
-        // under. The row's inputs were observed under the same ones, so its two halves are held to
-        // one size.
-        return RowStatement.of(inputs, stated, Limits.DEFAULT);
+        // be given is one question, and what answers it is what a statement is made by.
+        return RowStatement.of(inputs, stated);
     }
 
     /** What the row turned out to be, from the state its worker left. */

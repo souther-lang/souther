@@ -27,7 +27,8 @@ import java.util.Objects;
  * language says a behavior answers rather than a test of this compiler — a program whose rows do not
  * hold is not accepted — so an output emitting from this can hold what it emitted to what the model
  * owes, instead of to a test it wrote itself over inputs it picked itself. Whether an answer keeps a
- * row is asked of the language ({@link CheckedRow#holds}) and not decided by whoever reads it.
+ * row is asked of the language ({@link CheckedRow.Reproducible#holds}), and only of a row that
+ * hands over values — one that does not says why instead, and there is nothing to ask.
  *
  * <p>How this compiler works out its answers is not here. There is no {@code Db} on this object and
  * none behind it: what a query was asked, and which key held which answer, is how

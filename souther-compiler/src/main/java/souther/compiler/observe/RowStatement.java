@@ -166,19 +166,27 @@ public sealed interface RowStatement {
     }
 
     /**
-     * What a row with these values states, under the limits a reader of it is held to.
+     * What a row with these values states.
      *
      * <p>The one place a statement is made of values, so that what {@link Stated} means is decided
-     * once. A value that is not there in full, and one larger than {@code kept} keeps, are both
-     * values a reader cannot be given — the first because nothing here has it, the second because
-     * carrying it would carry a value nobody wrote — and both come back as {@link Incomplete}
-     * saying which and why.
+     * once. A value that is not there in full, and one larger than what is kept, are both values a
+     * reader cannot be given — the first because nothing here has it, the second because carrying
+     * it would carry a value nobody wrote — and both come back as {@link Incomplete} saying which
+     * and why.
      *
-     * @param kept how much of a value whoever holds this may carry. Not what the values mean: these
-     *     limits decide whether a value is carried whole, and no value means anything else under
-     *     one set of them than under another
+     * <p>Held to {@link Limits#DEFAULT} and not to limits a caller chooses. What a row's inputs are
+     * observed under is that one, so a row's two halves are held to one size; and a type whose
+     * meaning came from an argument would mean one thing where it was made and another where it was
+     * read, which is what a reader of a {@link Stated} would then have to ask about before it could
+     * do anything with the values. How much is kept is a thing to change, in the one place it is
+     * written; whose choice it is, is not.
      */
-    static RowStatement of(List<ObservedValue> inputs, Expectation expects, Limits kept) {
+    static RowStatement of(List<ObservedValue> inputs, Expectation expects) {
+        return under(inputs, expects, Limits.DEFAULT);
+    }
+
+    private static RowStatement under(List<ObservedValue> inputs, Expectation expects,
+                                      Limits kept) {
         if (expects == null) {
             throw new IllegalArgumentException("a row states something of the answer");
         }
