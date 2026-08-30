@@ -123,16 +123,18 @@ final class ComparisonReadings {
             //
             // And under what arrives at it, which is where a body's comparison differs from a
             // clause's: it stands somewhere, and what the conditions on the way leave is the other
-            // domain its line is held against.
+            // domain its line is held against. Required and not looked up leniently — the policy
+            // refuses a comparison the plan numbers no site for, so reaching here is the site
+            // existing. Asked as an optional, a policy that stopped proving it would hand the
+            // reading below the answer that restricts nothing, and this stage disagreeing with the
+            // plan would go out as an arrival nobody could project.
             BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(comparison, plan, live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
                             ComparisonAssessment.of(in.behavior(), comparison, reads, symbols,
                                     in.quantities(), null, false,
-                                    plan.comparisonAt(comparison)
-                                            .map(in.arrives()::arrivalAt)
-                                            .orElseGet(souther.compiler.reach.ComparisonArrival
-                                                    .NoProjection::new))));
+                                    in.arrives().arrivalAt(
+                                            plan.requireComparisonAt(comparison)))));
             out.add(new Reading(comparison, reads, assumed, standing));
         }
         switch (e) {

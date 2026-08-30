@@ -81,10 +81,17 @@ public final class PathReachability {
          * What arrives at {@code at} — one comparison, before it is taken either way.
          *
          * <p>An entry's absence reads as {@link souther.compiler.reach.ComparisonArrival
-         * .NoProjection}, which restricts nothing. Absence is only possible where the walk fell
-         * over before finishing — a walk that finished is held to an entry per numbered comparison
-         * ({@link PathReachability#unanswered}) — and a reader handed a partial reading is owed the
-         * fail-open answer, the same one every other consumer of a partial reading gets.
+         * .NoProjection}, which restricts nothing. Two ways to have none, and one answer for both:
+         * this reading was never made at all — the caller holds {@link #NONE}, which is what a
+         * reader of a comparison outside a measured body is given — or the walk fell over before
+         * finishing, since a walk that finished is held to an entry per numbered comparison
+         * ({@link PathReachability#unanswered}). A partial reading is owed the fail-open answer,
+         * the same one every other consumer of one gets.
+         *
+         * <p>What is not among them is a comparison this plan numbers no site for. There is no
+         * occurrence to ask about then, and a caller that has one has it from the plan — asked with
+         * something worked out another way, an absence here would be this reading and the plan
+         * disagreeing, dressed as a fact about the model.
          */
         public souther.compiler.reach.ComparisonArrival arrivalAt(
                 souther.compiler.coverage.ComparisonOccurrence at) {
