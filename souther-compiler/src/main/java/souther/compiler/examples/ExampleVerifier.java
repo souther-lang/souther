@@ -27,7 +27,14 @@ import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Disposition;
+import souther.compiler.observe.Expectation;
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.Mismatch;
+import souther.compiler.observe.RowStatement;
+import souther.compiler.observe.Verdict;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
@@ -592,13 +599,16 @@ public final class ExampleVerifier {
         }
         FixtureReader fixtures = newFixtureReader();
         Object[] args;
-        Asserted stated;
+        // A table entry states the whole value, always: what a fake answers with is what it was
+        // written with, and there is no grain below that for it to have stated instead.
+        Expectation stated;
         try {
             args = new Object[sig.ins().size()];
             for (int i = 0; i < args.length; i++) {
                 args[i] = fixtures.built(entry.written().inputs().get(i), sig.ins().get(i));
             }
-            stated = fixtures.assertedExpected(entry.written().output(), sig.out()).asserted();
+            stated = new Expectation.TheValue(
+                    fixtures.assertedExpected(entry.written().output(), sig.out()).asserted());
         } catch (FixtureException fe) {
             return new StandinObservation.Unobserved(
                     new StandinObservation.Reason.TheEntryWasNotRead(
@@ -622,10 +632,11 @@ public final class ExampleVerifier {
                             String.valueOf(fe.getMessage())));
         }
         answered = projected(answered, sig.outputType());
-        ValueMatch.Mismatch differs = fixtures.disagreement(stated, answered, sig.outputType());
-        return differs == null ? new StandinObservation.AsStated()
-                : new StandinObservation.OtherThanStated(entry.stated(),
-                        fixtures.observed(answered), differs.path());
+        return fixtures.holds(stated, answered, sig.outputType())
+                instanceof Verdict.NotHeld(Mismatch differs)
+                ? new StandinObservation.OtherThanStated(entry.stated(),
+                        fixtures.observed(answered), fixtures.shown(differs.path()))
+                : new StandinObservation.AsStated();
     }
 
     /**
@@ -1185,6 +1196,17 @@ public final class ExampleVerifier {
         private TypeSymbol resultArm;
         private final List<TypeSymbol> inputCases = new ArrayList<>();
         private final List<ObservedValue> inputs = new ArrayList<>();
+        /**
+         * What the row states, written once the values it states have been read.
+         *
+         * <p>Until then, what this compile came away with is nothing: a row it refused before
+         * reading the values, and one whose reading did not finish, both leave it here. Written by
+         * the row's own worker and read after it has finished, as everything but {@link #reached}
+         * is — except that a row given up on is read while the worker still holds it, and what it
+         * says then is what it said before the row began.
+         */
+        private volatile RowStatement statement = new RowStatement.Incomplete(
+                new RowStatement.Side.TheReading(), Incompleteness.Code.ROW_UNDECIDED);
         /** What this row was seen to do, where the classes it ran were generated to say. Empty
          * otherwise, and empty for a row that did not finish — a snapshot read from a row still
          * running would be some of what it did rather than what it did. */
@@ -1241,12 +1263,55 @@ public final class ExampleVerifier {
         }
     }
 
+    /**
+     * What the row states, as something that did not read the source can hold it.
+     *
+     * <p>Read once, here, from what this evaluation already has: the inputs it built and observed,
+     * and what it made of the expectation. Read a second time somewhere else, the helpers a fixture
+     * names would be applied a second time — which is counted twice against the row and does
+     * whatever they do twice.
+     *
+     * <p>In one order, so that what a reader is told is settled rather than depending on which of
+     * two things was noticed first. What the behavior needs stood in for comes before the values,
+     * because a row of a behavior that takes something injected does not state a runnable thing at
+     * all — what stands in for the dependency is the rest of the obligation, and a reader given the
+     * values alone would apply the behavior with nothing to answer the dependency with. Then the
+     * inputs in the order they are written, then the expectation.
+     */
+    private static RowStatement statementOf(ExampleTarget target, List<ObservedValue> inputs,
+                                            Expectation stated) {
+        if (!target.requirements().isEmpty()) {
+            List<ValueName.Behavior> dependencies = new ArrayList<>();
+            for (BehaviorRequirement required : target.requirements()) {
+                dependencies.add(required.dependency());
+            }
+            return new RowStatement.RequiresStandIns(dependencies);
+        }
+        for (int i = 0; i < inputs.size(); i++) {
+            Incompleteness.Code stopped = Limits.UNBOUNDED.stoppedBy(inputs.get(i));
+            if (stopped != null) {
+                return new RowStatement.Incomplete(new RowStatement.Side.AnInput(i), stopped);
+            }
+        }
+        // What the row states of the answer is read whole, so that the comparison is made against
+        // what was written; whether it may be carried is asked of the limits an input was already
+        // observed under, so that one row's two halves are held to one size.
+        Incompleteness.Code stopped = switch (stated) {
+            case Expectation.TheValue(Asserted value) -> Limits.DEFAULT.stoppedBy(value);
+            // A case is a name. Nothing about it can be too large or fail to be read.
+            case Expectation.TheCase _ -> null;
+        };
+        return stopped != null
+                ? new RowStatement.Incomplete(new RowStatement.Side.TheExpectation(), stopped)
+                : new RowStatement.Stated(inputs, stated);
+    }
+
     /** What the row turned out to be, from the state its worker left. */
     private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state) {
         Reached reached = state.reached;
         return new RowOutcome(row.pos(), target.name(), row.identity(),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
-                state.resultArm, state.inputCases, state.inputs,
+                state.resultArm, state.inputCases, state.inputs, state.statement,
                 ran(reached, new Counting.Read(state.stepsSpent, state.seen)));
     }
 
@@ -1301,10 +1366,13 @@ public final class ExampleVerifier {
                 // while it runs would be some of what it spent rather than what it spent. That is
                 // what the row says — not zero, which is what a row that passed no counted point
                 // says.
+                // What the row states is read from what the worker published before it was given up
+                // on, which for a row that never got its values read is that this compile did not
+                // come away with them.
                 rows.add(new RowOutcome(row.pos(), target.name(),
                         row.identity(), reached.stage(), Disposition.INCOMPLETE,
                         FailurePhase.TIMEOUT, null, null, List.of(), List.of(),
-                        ran(reached, new Counting.Unread())));
+                        evaluation.state.statement, ran(reached, new Counting.Unread())));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The evaluated code stopped itself, having gone through more than it was allowed.
@@ -1463,7 +1531,9 @@ public final class ExampleVerifier {
         // Build the expected value before running: a row whose expectation cannot be built states no
         // expectation, and comparing a result against a value nothing built reported a mismatch
         // against an empty expected value — a wrong answer for a row that was right.
-        FixtureReader.ExpectedValue expected;
+        // What the row states of the answer, at the grain it states it: the value it wrote, or the
+        // case it named and nothing under it.
+        Expectation stated;
         // What the row states of the answer, which is not always the answer. A bare case name
         // asserts the arm, and whether that is also the answer is decided by whether the name
         // determines a value: a unit case has one, so a row naming it has written the whole answer
@@ -1473,7 +1543,10 @@ public final class ExampleVerifier {
         Evidence evidence;
         try {
             TypeSymbol only = fixtures.caseOnly(row.expected());
-            expected = only != null ? null : fixtures.assertedExpected(row.expected(), sig.out());
+            FixtureReader.ExpectedValue expected =
+                    only != null ? null : fixtures.assertedExpected(row.expected(), sig.out());
+            stated = only != null ? new Expectation.TheCase(only)
+                    : new Expectation.TheValue(expected.asserted());
             evidence = only == null ? new Evidence.Answer(expected.live())
                     : symbols.declarations().declaration(only) instanceof Hir.UnitData
                             ? new Evidence.Answer(fixtures.buildFixture(row.expected(), sig.out()).value())
@@ -1486,7 +1559,7 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.EXPECTED_FIXTURE);
             return;
         }
-        Asserted asserted = expected == null ? null : expected.asserted();
+        state.statement = statementOf(target, state.inputs, stated);
         state.got(Stage.FIXTURES_VALIDATED);
         // What the row states, held to what the behavior declares of what it answers. Before
         // anything is applied, and so before the row is let go for having nothing to apply it: the
@@ -1549,7 +1622,7 @@ public final class ExampleVerifier {
         try {
             result = applying.to(handed(fixtures, target, args, ins));
         } catch (InvocationFailure f) {
-            applicationFailed(fixtures, row, asserted, f.getCause(), out, state);
+            applicationFailed(fixtures, row, stated, f.getCause(), out, state);
             return;
         } catch (ImplementationNotReached e) {
             // Nothing was applied: what would have applied it could not be reached. Told as the row
@@ -1557,7 +1630,7 @@ public final class ExampleVerifier {
             // one throw — saying it differently is a change to what a row is told, and a different
             // thing from where the two are told apart.
             state.neverEntered();
-            aborted(fixtures, row, asserted, String.valueOf(e.getMessage()), out, state);
+            aborted(fixtures, row, stated, String.valueOf(e.getMessage()), out, state);
             return;
         } catch (FixtureException fe) {
             // The row's input could not be put in the form the answerer reads. Nothing about the row
@@ -1578,25 +1651,18 @@ public final class ExampleVerifier {
                 state)) {
             return;
         }
-        TypeSymbol arm = fixtures.caseOnly(row.expected());
-        if (arm != null) {
-            // A bare case name asserts the arm and nothing under it, so there is no value to compare.
-            if (!arm.equals(state.resultArm)) {
-                out.add(mismatch(fixtures, row, arm.name(), fixtures.describeActual(result), null));
-                state.failed(FailurePhase.COMPARISON);
-                return;
-            }
-        } else {
-            ValueMatch.Mismatch differs = fixtures.disagreement(asserted, result, sig.outputType());
-            if (differs != null) {
-                // The whole of each side, so the two can be read against each other, and then where
-                // they part: a row that wrote a name the answer does not wear differs at one position
-                // by its type, which reading two whole values does not say on its own.
-                out.add(mismatch(fixtures, row, fixtures.shown(asserted),
-                        fixtures.shown(fixtures.structured(result), sig.outputType()), differs));
-                state.failed(FailurePhase.COMPARISON);
-                return;
-            }
+        // Asked of what the row stated, which is what decides what being the same answer means: a
+        // row that wrote a value is held to the value, and one that named a case is held to the
+        // case and nothing under it.
+        if (fixtures.holds(stated, result, sig.outputType())
+                instanceof Verdict.NotHeld(Mismatch differs)) {
+            // The whole of each side, so the two can be read against each other, and then where they
+            // part: a row that wrote a name the answer does not wear differs at one position by its
+            // type, which reading two whole values does not say on its own.
+            out.add(mismatch(fixtures, row, fixtures.shown(stated),
+                    answerShown(fixtures, stated, result, sig.outputType()), differs));
+            state.failed(FailurePhase.COMPARISON);
+            return;
         }
         state.disposition = Disposition.HELD;
         state.failurePhase = FailurePhase.NONE;
@@ -1944,8 +2010,24 @@ public final class ExampleVerifier {
     }
 
 
+    /**
+     * The answer, written beside what the row stated of it.
+     *
+     * <p>Rendering and not a second comparison: what a reader is shown of the answer is as much of
+     * it as the row said anything about, so a row that named a case is shown the answer named and a
+     * row that wrote a value is shown the value written out. A switch, so a grain added later is
+     * shown deliberately rather than however the arm it falls into happens to read.
+     */
+    private static String answerShown(FixtureReader fixtures, Expectation stated, Object result,
+                                      Type answers) {
+        return switch (stated) {
+            case Expectation.TheCase _ -> fixtures.describeActual(result);
+            case Expectation.TheValue _ -> fixtures.shown(fixtures.structured(result), answers);
+        };
+    }
+
     private Diagnostic mismatch(FixtureReader fixtures, Hir.ExampleRow row, String expected,
-                                String actual, ValueMatch.Mismatch differs) {
+                                String actual, Mismatch differs) {
         // Underline the expected result (the part the row asserts), not the whole row, so the marker
         // lands on something meaningful rather than a single column at the row's start.
         SourcePos pos = row.expected() != null ? row.expected().pos() : row.pos();
@@ -1956,9 +2038,9 @@ public final class ExampleVerifier {
         // Where the two are of different types, the values alone do not say so — a newtype and the
         // base it wraps are written the same way by an encoder, and were reported as a mismatch
         // between two identical renderings. So the position and the two names are said.
-        if (differs != null && differs.reason() == ValueMatch.Reason.TYPE) {
-            b.hint(new ExampleMessage.TheTwoAreOfDifferentTypes(differs.path(),
-                    fixtures.typeShown(differs.asserted()),
+        if (differs != null && differs.reason() == Mismatch.Reason.TYPE) {
+            b.hint(new ExampleMessage.TheTwoAreOfDifferentTypes(fixtures.shown(differs.path()),
+                    fixtures.typeShown(differs.expected()),
                     fixtures.typeShown(differs.observed(), differs.position())));
         }
         // The row's own words, where it has any. An unnamed row's ordinal is not words about the
@@ -2007,7 +2089,7 @@ public final class ExampleVerifier {
      * <p>A budget spent is raised on rather than read: it is about the row's cost, which is held to
      * where the row is given its deadline, and read as anything else the reason is lost.
      */
-    private void applicationFailed(FixtureReader fixtures, Hir.ExampleRow row, Asserted asserted,
+    private void applicationFailed(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated,
                                    Throwable cause, List<Diagnostic> out, RowState state) {
         if (overspending(cause) != null) {
             throw (RuntimeException) cause;
@@ -2037,19 +2119,15 @@ public final class ExampleVerifier {
             state.incomplete(FailurePhase.STACK_EXHAUSTED);
             return;
         }
-        aborted(fixtures, row, asserted,
+        aborted(fixtures, row, stated,
                 cause == null ? "aborted" : String.valueOf(cause.getMessage()), out, state);
     }
 
     /** The behavior stopped itself while the row ran — an invariant it broke, or anything else it
      * ended with. Reported against what the row said it would answer, so the two can be read together. */
-    private void aborted(FixtureReader fixtures, Hir.ExampleRow row, Asserted asserted, String why,
+    private void aborted(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated, String why,
                          List<Diagnostic> out, RowState state) {
-        TypeSymbol only = fixtures.caseOnly(row.expected());
-        String stated = asserted != null ? fixtures.shown(asserted)
-                : only == null ? null : only.name();
-        out.add(mismatch(fixtures, row, stated == null ? "the expected value" : stated,
-                "aborted: " + why, null));
+        out.add(mismatch(fixtures, row, fixtures.shown(stated), "aborted: " + why, null));
         state.failed(FailurePhase.INVOCATION);
     }
 

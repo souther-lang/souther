@@ -6,6 +6,8 @@ import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DeclaredTypeEvidence;
 import souther.compiler.check.Symbols;
+import souther.compiler.observe.Position;
+import souther.compiler.observe.ValueTypes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -37,7 +39,7 @@ import java.util.Set;
  * {@link #simpleName} for what a report quotes — because a live value's type is a question every
  * reader of a run asks and only one answer to it is right.
  */
-final class NeutralForm {
+final class NeutralForm implements ValueTypes {
 
     private final Symbols symbols;
 
@@ -126,14 +128,14 @@ final class NeutralForm {
             return unit;
         }
         if (data.newtype()) {
-            Position base = Position.declaredBy(newtypeBaseType(caseName));
+            Position base = declaredBy(newtypeBaseType(caseName));
             return newtypeAt(position, caseName,
                     shaped(of(field(live, "value", what), base, what), base));
         }
         Map<String, Hir.TypeRef> declared = fieldTypes(caseName);
         Map<String, Object> out = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.TypeRef> f : declared.entrySet()) {
-            Position at = Position.declaredBy(f.getValue());
+            Position at = declaredBy(f.getValue());
             Object value = shaped(of(field(live, f.getKey(), what), at, what), at);
             // an absent optional is left out, the same neutral form a fixture writes for `None`
             if (value != null) {
@@ -407,6 +409,31 @@ final class NeutralForm {
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
     Map<String, Hir.TypeRef> fieldTypes(TypeSymbol typeName) {
         return DeclaredTypeEvidence.fieldTypes(typeName, symbols);
+    }
+
+    /**
+     * Where this module's declarations read {@code field} of {@code owner}.
+     *
+     * <p>This compiler's answer to the one question a comparison asks of the declarations, read from
+     * the same walk everything else here reads them from.
+     */
+    @Override
+    public Position field(TypeSymbol owner, String field) {
+        Map<String, Hir.TypeRef> declared = fieldTypes(owner);
+        return declared.containsKey(field) ? declaredBy(declared.get(field)) : Position.UNREAD;
+    }
+
+    /**
+     * The place a declaration writes, and {@link Position#UNREAD} where it writes none — a field a
+     * fixture wrote that the data does not declare, or a newtype's base where the type it wraps has
+     * no written form.
+     *
+     * <p>Here rather than on {@link Position}, which is a place a value stands and knows nothing of
+     * how a module was written down. What a written type denotes is this compiler's reading of its
+     * own syntax, and a place carrying that reading would be a place only this compiler could make.
+     */
+    static Position declaredBy(Hir.TypeRef declared) {
+        return declared == null ? Position.UNREAD : Position.at(declared.denotes());
     }
 
     /**

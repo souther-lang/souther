@@ -9,7 +9,12 @@ import souther.compiler.check.DeclaredTypeEvidence;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Kernel;
+import souther.compiler.observe.Asserted;
+import souther.compiler.observe.Expectation;
 import souther.compiler.observe.Limits;
+import souther.compiler.observe.PathElement;
+import souther.compiler.observe.Position;
+import souther.compiler.observe.Verdict;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
 import souther.compiler.check.BoundaryInput;
@@ -583,7 +588,7 @@ public final class FixtureReader {
      *  is why it is not asked of a decoder: one reads a whole number where a `Decimal` stands, and a
      *  row writing `1` there wrote an `Int`. */
     private static boolean spells(ObservedValue v, TypeSymbol name) {
-        return name.primitiveKind() != null && name.primitiveKind() == ValueRendering.primitiveOf(v);
+        return name.primitiveKind() != null && name.primitiveKind() == v.primitive();
     }
 
     private boolean each(List<Asserted> elements, Type element) {
@@ -1679,7 +1684,7 @@ public final class FixtureReader {
         // the argument is shaped against what the newtype wraps, the same way a record fixture
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe
-        Position base = Position.declaredBy(neutral.newtypeBaseType(built));
+        Position base = NeutralForm.declaredBy(neutral.newtypeBaseType(built));
         return neutral.newtypeAt(at, built,
                 neutral.shaped(raw(c.args().get(0), base, below(admission)), base));
     }
@@ -1697,7 +1702,7 @@ public final class FixtureReader {
         TypeSymbol built = nd.typeName().answered().type();
         if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            Position base = Position.declaredBy(neutral.newtypeBaseType(built));
+            Position base = NeutralForm.declaredBy(neutral.newtypeBaseType(built));
             return neutral.newtypeAt(at, built,
                     neutral.shaped(raw(nd.inits().get(0).value(), base, below(admission)), base));
         }
@@ -1746,7 +1751,7 @@ public final class FixtureReader {
             }
         }
         for (Hir.FieldInit fi : nd.inits()) {
-            Position field = Position.declaredBy(declared.get(fi.name()));
+            Position field = NeutralForm.declaredBy(declared.get(fi.name()));
             Object v = neutral.shaped(raw(fi.value(), field, below(admission)), field);
             // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads it as
             // absent (spec §absence-is-written-as-null, absent -> None), the same neutral form as omitting
@@ -1998,10 +2003,28 @@ public final class FixtureReader {
         return new NeutralValue(neutral.of(value, Position.at(position), what));
     }
 
-    /** Where what a row asserted and what came back differ, or null where they are the same value. */
-    ValueMatch.Mismatch disagreement(Asserted asserted, Object result, Type position) {
-        return new ValueMatch(neutral, new ValueRendering(neutral))
-                .compare(asserted, structured(result), position);
+    /**
+     * Whether what a row stated is what came back.
+     *
+     * <p>Asked of the statement, which is what owns the comparison: whether the row wrote a value or
+     * named a case decides what being the same answer means, and a caller that told the two apart
+     * itself would be a second place that decided it.
+     */
+    Verdict holds(Expectation stated, Object result, Type position) {
+        return stated.compare(structured(result), neutral, Position.at(position));
+    }
+
+    /** What a row stated, as it stated it: the value it wrote, or the case it named. */
+    String shown(Expectation stated) {
+        return switch (stated) {
+            case Expectation.TheValue(Asserted value) -> shown(value);
+            case Expectation.TheCase(TypeSymbol name) -> name.name();
+        };
+    }
+
+    /** Where inside a value two of them differ. */
+    String shown(List<PathElement> path) {
+        return new ValueRendering(neutral).shown(path);
     }
 
     /** A value in the notation a fixture is written in — what a row wrote, or what came out. */
@@ -2020,6 +2043,15 @@ public final class FixtureReader {
 
     String typeShown(ObservedValue v, Type position) {
         return new ValueRendering(neutral).typeShown(v, position);
+    }
+
+    String typeShown(ObservedValue v, Position position) {
+        return new ValueRendering(neutral).typeShown(v, position);
+    }
+
+    /** What a row stated, named as the language names it. */
+    String typeShown(Expectation stated) {
+        return new ValueRendering(neutral).typeShown(stated);
     }
 
     BoundaryValues.Built building(BoundaryInput at, Hir.Expr fixture) {

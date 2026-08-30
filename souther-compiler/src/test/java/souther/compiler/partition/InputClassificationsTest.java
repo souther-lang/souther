@@ -168,7 +168,8 @@ class InputClassificationsTest {
         RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.identity(), row.stage(),
                 row.disposition(), row.failurePhase(), row.expectedArm(), row.resultArm(),
                 row.inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), broken)), row.run());
+                List.of(new ObservedValue.Constructed(request.type(), broken)), row.statement(),
+                row.run());
 
         Map<AxisId, Classification> classes =
                 InputClassifications.of(damaged.inputs(), read.inputs(), read.axes());

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
 import souther.compiler.check.Symbols;
+import souther.compiler.observe.Position;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;

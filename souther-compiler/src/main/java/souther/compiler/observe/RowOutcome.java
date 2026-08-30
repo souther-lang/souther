@@ -78,6 +78,12 @@ import java.util.List;
  * @param inputCases     the case each input fixture constructs, in order; an entry is null where the
  *                       text does not say
  * @param inputs         each input as the compiler owns it, in order
+ * @param statement      what the row states, taken as this evaluation read it. Here rather than
+ *                       worked out again, because reading it is running what the fixtures name: a
+ *                       second reading would apply the same helpers a second time, and a helper
+ *                       applied twice is counted twice and does whatever it does twice. What is
+ *                       carried is what this evaluation had in hand, so nothing downstream reads a
+ *                       source text
  * @param run            what applied the behavior, and what this compile counted while the row ran.
  *                       A row that reached {@link Stage#INVOKED} says what applied it and a row that
  *                       did not says nothing did, which is held to at construction: the two are
@@ -96,9 +102,11 @@ public record RowOutcome(SourcePos at,
                          TypeSymbol resultArm,
                          List<TypeSymbol> inputCases,
                          List<ObservedValue> inputs,
+                         RowStatement statement,
                          Run run) {
 
     public RowOutcome {
+        java.util.Objects.requireNonNull(statement, "a row states something");
         // A list that keeps a null in it cannot be List.copyOf'd, and an input whose case the text does
         // not say is exactly that — so the unmodifiable wrapper is taken rather than the copying factory.
         inputCases = inputCases == null ? List.of()

@@ -111,7 +111,8 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         return new RowOutcome(read.row().at(), read.row().target(), read.row().identity(),
                 read.row().stage(), read.row().disposition(), read.row().failurePhase(),
                 read.row().expectedArm(), read.row().resultArm(), read.row().inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), fields)), read.row().run());
+                List.of(new ObservedValue.Constructed(request.type(), fields)),
+                read.row().statement(), read.row().run());
     }
 
     /** The interval the row wrote, with {@code inner} where the position's number was. */

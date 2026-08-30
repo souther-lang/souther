@@ -1,7 +1,12 @@
 package souther.compiler.examples;
 
+import souther.compiler.observe.Asserted;
+import souther.compiler.observe.Expectation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.PathElement;
+import souther.compiler.observe.Position;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -99,11 +104,24 @@ final class ValueRendering {
 
     /** What came out is, named as the language names it, at the position that says what it is. */
     String typeShown(ObservedValue v, Type position) {
-        Type open = NeutralForm.open(position);
+        return typeShown(v, Position.at(position));
+    }
+
+    /** The same, where what reads the value is a place rather than a written type. */
+    String typeShown(ObservedValue v, Position position) {
         if (v instanceof ObservedValue.Sequence) {
-            return open instanceof Type.SetOf ? "a set" : "a list";
+            return position.opened() instanceof Position.At(Type type) && type instanceof Type.SetOf
+                    ? "a set" : "a list";
         }
         return typeShown(v);
+    }
+
+    /** What the row stated, named as the language names it. */
+    String typeShown(Expectation stated) {
+        return switch (stated) {
+            case Expectation.TheValue(Asserted value) -> typeShown(value);
+            case Expectation.TheCase(TypeSymbol name) -> name.name();
+        };
     }
 
     /** The value as a row would write it, where nothing says what its sequences are. */
@@ -115,7 +133,7 @@ final class ValueRendering {
             case ObservedValue.Text t -> "\"" + t.value() + "\"";
             // Written as the construction a fixture writes one with, so it is never read as the text
             // that spells it — which is the difference a row writing a date as a string is told about.
-            case ObservedValue.Temporal t -> primitiveOf(t).shown() + "(\"" + t.iso() + "\")";
+            case ObservedValue.Temporal t -> t.primitive().shown() + "(\"" + t.iso() + "\")";
             case ObservedValue.Unit u -> u.type().name();
             case ObservedValue.Absent _ -> "None";
             case ObservedValue.Constructed c -> constructed(c);
@@ -159,37 +177,23 @@ final class ValueRendering {
     }
 
     /**
-     * Which primitive a value with no parts is of, or null where it has parts.
+     * The place inside a value a difference is at, as a reader of this compiler's reports reads one.
      *
-     * <p>Answered once, here, because three readers want it and each would otherwise answer it for
-     * itself: whether a row wrote a value of a position's type, whether two values are of one type,
-     * and what to call them where they are not. A reader that worked it out on its own worked it out
-     * from what it had — and one of them had a decoder, which reads a whole number where a
-     * {@code Decimal} stands because a boundary carries one that way. What a row wrote is not that:
-     * {@code 1} is an {@code Int} and {@code 1m} is a {@code Decimal}, and the language makes that
-     * difference written.
-     *
-     * <p>A temporal is which one its text spells. An observation keeps the ISO form rather than the
-     * class it arrived in, and the four spell themselves apart.
+     * <p>Written here and not carried as text. What names an entry is the key it was found by, and a
+     * key is written the way any other value this reports is — so spelling a path needs what spells a
+     * value, and a path spelled anywhere else would be a second answer to how a value is written.
      */
-    static Type.Prim primitiveOf(ObservedValue v) {
-        return switch (v) {
-            case ObservedValue.Bool _ -> Type.Prim.BOOL;
-            case ObservedValue.Integer _ -> Type.Prim.INT;
-            case ObservedValue.Decimal _ -> Type.Prim.DECIMAL;
-            case ObservedValue.Text _ -> Type.Prim.STRING;
-            case ObservedValue.Temporal t -> {
-                String iso = t.iso();
-                if (iso.endsWith("Z")) {
-                    yield Type.Prim.INSTANT;
-                }
-                yield iso.contains("T") ? Type.Prim.DATETIME
-                        : iso.contains("-") ? Type.Prim.DATE : Type.Prim.TIME;
+    String shown(List<PathElement> path) {
+        StringBuilder out = new StringBuilder("$");
+        for (PathElement step : path) {
+            switch (step) {
+                case PathElement.Field(String name) -> out.append('.').append(name);
+                case PathElement.Index(int at) -> out.append('[').append(at).append(']');
+                case PathElement.Key(Asserted key) ->
+                        out.append('[').append(show(key)).append(']');
             }
-            case ObservedValue.Unit _, ObservedValue.Constructed _, ObservedValue.Absent _,
-                    ObservedValue.Sequence _, ObservedValue.Mapping _, ObservedValue.Unknown _,
-                    ObservedValue.Truncated _ -> null;
-        };
+        }
+        return out.toString();
     }
 
     /**
@@ -197,7 +201,7 @@ final class ValueRendering {
      * differ by their type rather than by their contents.
      */
     String typeShown(ObservedValue v) {
-        Type.Prim primitive = primitiveOf(v);
+        Type.Prim primitive = v.primitive();
         if (primitive != null) {
             return primitive.shown();   // the one table a primitive is spelled from
         }

@@ -47,6 +47,16 @@ final class ObservedValues {
     }
 
     private ObservedValue walk(Object live, int depth) {
+        // An optional holding a value is that value (spec §absence-is-written-as-null), so what is
+        // read is what it holds and the envelope is not a node of what was read. Asked before the
+        // budget, because the budget bounds the value that is kept: charged for, the same value
+        // would be kept or dropped depending on whether the position it stood at was optional.
+        if (live != null && NeutralForm.simpleName(live).equals("Option$Some")) {
+            Object held = read(live, "value");
+            return held == FAILED
+                    ? new ObservedValue.Unknown("an optional's value could not be read")
+                    : walk(held, depth);
+        }
         if (budget-- <= 0) {
             return new ObservedValue.Truncated();
         }
@@ -111,16 +121,11 @@ final class ObservedValues {
 
     private ObservedValue constructed(Object live, int depth) {
         String name = NeutralForm.simpleName(live);
-        // An optional is its payload where it holds one, and `Absent` where it does not — which is what
-        // a fixture writes by leaving the field out (spec §optional).
+        // An optional holding nothing is a value of its own — what a fixture writes by leaving the
+        // field out (spec §optional). One holding a value is read where the walk begins, since what
+        // it holds is what stands here.
         if (name.equals("Option$None")) {
             return new ObservedValue.Absent();
-        }
-        if (name.equals("Option$Some")) {
-            Object inner = read(live, "value");
-            return inner == FAILED
-                    ? new ObservedValue.Unknown("an optional's value could not be read")
-                    : walk(inner, depth);
         }
         TypeSymbol type = neutral.typeOf(live);
         if (type == null) {
