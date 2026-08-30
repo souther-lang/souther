@@ -2391,9 +2391,9 @@ public final class Generator {
                         where.unrepresented());
             }
             TermPath at = each.getKey().position();
-            // Two terms at one path is one location asked for two things at once — a string of a
-            // length and the string itself — and what a row writes at a location is one value. The
-            // fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
+            // Two terms at one location is that location asked for two things at once — a string of
+            // a length and the string itself — and what a row writes at a location is one value.
+            // The fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
             // rather than writing whichever came last and offering half the point as the whole.
             //
             // Refused whatever the second edge offers, and not only where it offers something else.
@@ -2401,12 +2401,15 @@ public final class Generator {
             // back — is the edge's own answer, and two edges have two of those however alike their
             // values are. Written as one, the row would carry one edge's account of a place both
             // were asked about.
-            if (decided.holds(at)) {
+            //
+            // Which two locations are one is {@link LocationWrites}' answer and is asked of it once.
+            // Asked here as well, this would be a second account of that, and the two would part
+            // over a location inside another.
+            if (decided.write(at, edge.values()) == LocationWrites.Written.CONFLICTING) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
                         where.unrepresented());
             }
-            decided.write(at, edge.values());
             // The orders the value was built against, kept so that reading it back asks the
             // question building it asked rather than a second reading of the same position.
             builtOn.put(each.getKey(), edge.on());
@@ -3340,8 +3343,9 @@ public final class Generator {
         TermPath at = TermPath.of(subject.parameters().get(p));
         Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
         for (Axis axis : axes) {
-            if (axis.path().head().equals(at.head()) && decided.holds(axis.path())) {
-                here.put(axis.path(), decided.at(axis.path()));
+            List<FixtureTemplate> already = decided.at(axis.path());
+            if (axis.path().head().equals(at.head()) && already != null) {
+                here.put(axis.path(), already);
             }
         }
         return valueAt(subject, p, here, settledIn(here), required, check);
