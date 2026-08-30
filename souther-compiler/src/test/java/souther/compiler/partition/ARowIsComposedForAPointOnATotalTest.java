@@ -61,11 +61,28 @@ class ARowIsComposedForAPointOnATotalTest {
             data Money = Decimal
                 invariant value > 0m
 
+            data NotFour = Int
+                invariant value >= 0
+                invariant value <= 10
+                invariant value /= 4
+
             data Item = { amount: Amount }
             data Capped = { small: Small }
 
             data Ledger = { lines: List<Item> }
                 invariant List.length(lines) >= 2
+
+            data Pair = { xs: List<NotFour> }
+
+            data Awkward = Int
+                invariant value >= 0
+                invariant value <= 10
+                invariant value /= 3
+                invariant value /= 4
+                invariant value /= 7
+
+            data Two = { xs: List<Awkward> }
+                invariant List.length(xs) == 2
 
             data Yes
             data No
@@ -89,16 +106,29 @@ class ARowIsComposedForAPointOnATotalTest {
 
             behavior overADenseRunHeldAwayFromNought : (ds: List<Money>) -> Verdict
             let overADenseRunHeldAwayFromNought (ds) =
-                if List.sum(List.map(d -> d.value, ds)) >= 100.5m then Yes else No
+                if List.sum(List.map(d -> d.value, ds)) >= 0.5m then Yes else No
 
             behavior aContainerTheRecordCounts : (l: Ledger) -> Verdict
             let aContainerTheRecordCounts (l) =
                 if List.sum(List.map(i -> i.amount.value, l.lines)) >= 100000 then Yes else No
+
+            behavior aTotalBelowWhereItsElementsStart : (ns: List<Int>) -> Verdict
+            let aTotalBelowWhereItsElementsStart (ns) =
+                if List.sum(ns) >= (0 - 1) then Yes else No
+
+            behavior aTotalTheOneSidedSplitCannotReach : (p: Pair) -> Verdict
+            let aTotalTheOneSidedSplitCannotReach (p) =
+                if List.sum(List.map(x -> x.value, p.xs)) >= 4 then Yes else No
+
+            behavior noShapeOfferedReachesIt : (t: Two) -> Verdict
+            let noShapeOfferedReachesIt (t) =
+                if List.sum(List.map(x -> x.value, t.xs)) >= 7 then Yes else No
             """;
 
     private static final List<String> ON_A_TOTAL =
             List.of("overABareList", "overAProjection", "needingSeveral",
-                    "overADenseRunHeldAwayFromNought", "aContainerTheRecordCounts");
+                    "overADenseRunHeldAwayFromNought", "aContainerTheRecordCounts",
+                    "aTotalBelowWhereItsElementsStart", "aTotalTheOneSidedSplitCannotReach");
 
     /** Every point of a line drawn on a total has one. */
     @Test
@@ -199,6 +229,98 @@ class ARowIsComposedForAPointOnATotalTest {
         assertEquals(2, rows.getFirst().split("Item", -1).length - 1,
                 () -> "the ledger holds two lines at the fewest, so the container built to reach the"
                         + " total holds two: " + rows.getFirst());
+    }
+
+    /**
+     * A total under a dense run held away from a value is reached all the same.
+     *
+     * <p>An element is more than nought and there is no least value it may be: between two decimals
+     * the order names nothing next. So where an element starts is a value the range holds and not
+     * its floor, and a total under that start is reached by moving down from it — which is the same
+     * rule the whole numbers above are under, and not a case beside it.
+     */
+    @Test
+    void aTotalUnderADenseRunHeldAwayFromAValueIsReached() {
+        assertEquals(List.of("([Money(0.5m)])"),
+                rowsAt("overADenseRunHeldAwayFromNought", " ON"),
+                "nothing names the first decimal above nought, and the total is a decimal above it");
+    }
+
+    /**
+     * A total below where its elements start is reached by moving them down.
+     *
+     * <p>Nothing floors an {@code Int}, so where an element starts is a value inside the run and not
+     * the least one there is — there is no least one. A decomposition that only moved elements up
+     * from where they started reached no total under it, and a list of whole numbers coming to less
+     * than nothing is a row anybody writes in a line.
+     */
+    @Test
+    void aTotalBelowWhereItsElementsStartIsReached() {
+        assertEquals(List.of("([-1])"), rowsAt("aTotalBelowWhereItsElementsStart", " ON"),
+                "one element carries it, and it is under where an unbounded element starts");
+    }
+
+    /**
+     * A total the one-sided split cannot reach is reached by sharing it.
+     *
+     * <p>Every element of {@code Pair} may be nought to ten and may not be four, and the line is at
+     * four: a container that puts the whole of the total on one element carries a four whatever the
+     * count, and a container that shares it does not. So a decomposition is one shape of several and
+     * the shapes are what the rules the elements are under tell apart.
+     */
+    @Test
+    void aTotalTheOneSidedSplitCannotReachIsShared() {
+        assertEquals(List.of("(Pair { xs = [NotFour(2), NotFour(2)] })"),
+                rowsAt("aTotalTheOneSidedSplitCannotReach", " ON"),
+                "the shared shape is what the rule leaves, and the massed one is not");
+    }
+
+    /**
+     * Where none of the shapes offered is a row, the point is left owed and said to be unfinished.
+     *
+     * <p>Every element of {@code Two} may be nought to ten and may not be three, four or seven, and
+     * the two of them are asked to come to seven. Neither shape this offers is a row — the whole of
+     * it on one element is a seven, and half each is a three and a four — and {@code [2, 5]} is one,
+     * which an author writes as readily as any other.
+     *
+     * <p><b>So what is said is that the search stopped, and not that every row was refused.</b> The
+     * second is the sentence a reader may act on (ADR-0091), and a walk that made two of the many
+     * decompositions has established nothing of the kind. This is the one place the difference is
+     * visible from outside: the counts here are fixed at two, so no budget over counts is what
+     * leaves something unmade.
+     */
+    @Test
+    void whereNoShapeOfferedIsARowTheSearchSaysItStopped() {
+        List<String> said = new ArrayList<>();
+        for (BorderAssessment border : lines(MODEL, "noShapeOfferedReachesIt")) {
+            if (!border.label().contains("List.sum")) {
+                continue;
+            }
+            ItemAssessment at = border.items().get(PointRole.ON);
+            if (at instanceof ItemAssessment.Owed owed
+                    && owed.attempt() instanceof ItemAssessment.Attempt.Unresolved why) {
+                said.add(why.why().reason().toString());
+            }
+        }
+
+        assertEquals(List.of("SEARCH_LIMIT"), said,
+                "two of the decompositions were made and the rest were not, so what a reader is"
+                        + " told is that this stopped");
+        assertEquals(List.of(), otherThanTheAnswer(MODEL + "\nexample noShapeOfferedReachesIt\n"
+                        + "    | (Two { xs = [Awkward(2), Awkward(5)] }) -> " + WHATEVER + "\n"),
+                "and the row an author writes for it is one the model holds, which is why the other"
+                        + " sentence would have been a lie");
+    }
+
+    /** The rows composed at the points of one behavior whose names end this way. */
+    private static List<String> rowsAt(String behavior, String role) {
+        List<String> rows = new ArrayList<>();
+        forEachComposedRow((of, point, row) -> {
+            if (of.equals(behavior) && point.endsWith(role)) {
+                rows.add(row);
+            }
+        });
+        return rows;
     }
 
     /** What each claim is applied to: the behavior, one of its points, and the row composed at it. */

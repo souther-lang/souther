@@ -267,15 +267,7 @@ public final class DeclaredBounds {
      * collection that cannot be empty would be answering a question this did not.
      */
     public static int leastCountOf(Type type, Symbols symbols) {
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        if (counts == null) {
-            return 0;
-        }
-        Bounds sized = of(type, symbols, Carrier.WHOLE, counts);
-        if (sized == null || sized.min() == null) {
-            return 0;
-        }
-        return CountDomain.leastFrom(sized.min().at());
+        return countsHeld(type, symbols, null).least();
     }
 
     /**
@@ -291,8 +283,7 @@ public final class DeclaredBounds {
      * came to four, and the two would disagree about one rule written twice.
      */
     public static int leastCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
-        return Math.max(leastCountOf(type, symbols),
-                held == null ? 0 : CountDomain.leastFrom(held.bounds().min()));
+        return countsHeld(type, symbols, held).least();
     }
 
     /**
@@ -304,13 +295,7 @@ public final class DeclaredBounds {
      * the second offered a value at a position the first leaves no room for.
      */
     public static int mostCountOf(Type type, Symbols symbols) {
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        if (counts == null) {
-            return Integer.MAX_VALUE;
-        }
-        Bounds sized = of(type, symbols, Carrier.WHOLE, counts);
-        return sized == null || sized.max() == null ? Integer.MAX_VALUE
-                : CountDomain.mostFrom(sized.max().at());
+        return countsHeld(type, symbols, null).most();
     }
 
     /**
@@ -320,8 +305,7 @@ public final class DeclaredBounds {
      * {@link #leastCountOf}'s argument at the other end.
      */
     public static int mostCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
-        return Math.min(mostCountOf(type, symbols),
-                held == null ? Integer.MAX_VALUE : CountDomain.mostFrom(held.bounds().max()));
+        return countsHeld(type, symbols, held).most();
     }
 
     /**
@@ -339,9 +323,16 @@ public final class DeclaredBounds {
      * over it silently.
      */
     public static CountRange countsHeld(Type type, Symbols symbols, FieldDomains.Held held) {
-        int least = leastCountOf(type, symbols, held);
-        int most = mostCountOf(type, symbols, held);
-        return least > most ? CountRange.NONE : new CountRange(least, most);
+        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
+        Bounds sized = counts == null ? null : of(type, symbols, Carrier.WHOLE, counts);
+        Endpoint least = sized == null || sized.min() == null ? null : sized.min().at();
+        Endpoint most = sized == null || sized.max() == null ? null : sized.max().at();
+        return new CountRange(
+                Math.max(CountDomain.leastFrom(least),
+                        held == null ? 0 : CountDomain.leastFrom(held.bounds().min())),
+                Math.min(CountDomain.mostFrom(most),
+                        held == null ? Integer.MAX_VALUE
+                                : CountDomain.mostFrom(held.bounds().max())));
     }
 
     /**
@@ -352,9 +343,6 @@ public final class DeclaredBounds {
      * is the search's own budget and is nothing this says.
      */
     public record CountRange(int least, int most) {
-
-        /** The rules leave no count, so no value of the type holds anything. */
-        public static final CountRange NONE = new CountRange(1, 0);
 
         /** Whether {@code many} is a count the rules allow. */
         public boolean admits(int many) {

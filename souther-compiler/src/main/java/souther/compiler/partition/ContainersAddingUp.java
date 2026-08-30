@@ -15,6 +15,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
@@ -66,13 +67,16 @@ final class ContainersAddingUp {
     /**
      * How many containers are offered for one total.
      *
-     * <p>More than one, because the counts that reach a total are not alike to the rules the
+     * <p>More than one, because the containers that reach a total are not alike to the rules the
      * elements are under: a container of ten is refused by a rule about how many it holds while one
-     * of eleven is not, and the search that puts them through the decoder has nothing else to try.
-     * Small, because they are alike to the total, and a reader offered a third is being offered the
-     * same row again.
+     * of eleven is not, and one that put the whole difference on a single element is refused by a
+     * rule that takes that value out of the run while one that shared it is not. The search that
+     * puts them through the decoder has nothing else to try.
+     *
+     * <p>Small all the same. They are alike to the total, so what a fifth buys is another row
+     * reading like the last, and what is not made is said rather than made up for.
      */
-    private static final int HOW_MANY_SHAPES_ARE_OFFERED = 2;
+    private static final int HOW_MANY_SHAPES_ARE_OFFERED = 4;
 
     /**
      * Containers whose occurrences of {@code target}'s path come to {@code answer}, or why there are
@@ -109,25 +113,36 @@ final class ContainersAddingUp {
         List<TermPath.Step> under = stepsInsideAnElement(target);
         List<FixtureTemplate> built = new ArrayList<>();
         int cap = Math.min(howMany.most(), MOST_ELEMENTS_A_ROW_CARRIES);
-        for (int many = Math.max(howMany.least(), 0);
-                many <= cap && built.size() < HOW_MANY_SHAPES_ARE_OFFERED; many++) {
-            List<BigDecimal> split = splitting(total.at(), many, ends, elements);
-            FixtureTemplate one = split == null ? null
-                    : filled(split, holding, container, under, elements, symbols, policy);
-            if (one != null) {
-                built.add(one);
+        // What this walk did not do, recorded as it decides not to do it. Worked out afterwards from
+        // the ends, the two ways of leaving something unmade — a count never tried, and a count
+        // whose other decompositions were never made — cannot both be seen, and a container offered
+        // and refused was reported as every container having been refused.
+        boolean left = cap < howMany.most();
+        int many = Math.max(howMany.least(), 0);
+        for (; many <= cap; many++) {
+            if (built.size() >= HOW_MANY_SHAPES_ARE_OFFERED) {
+                left = true;
+                break;
+            }
+            // More than one element is more than one decomposition, whether or not this made a
+            // second: what is offered is two shapes of the many, and the many are what a rule taking
+            // a value out of the middle of a run tells apart.
+            left |= many > 1;
+            for (Spread how : Spread.values()) {
+                List<BigDecimal> split = splitting(total.at(), many, ends, how, elements);
+                FixtureTemplate one = split == null ? null
+                        : filled(split, holding, container, under, elements, symbols, policy);
+                if (one != null && !built.contains(one)) {
+                    built.add(one);
+                }
             }
         }
-        if (!built.isEmpty()) {
-            return new TermRealizations.Realization.Built(built,
-                    cap < howMany.most() && built.size() < HOW_MANY_SHAPES_ARE_OFFERED
-                            ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null);
-        }
-        // Every count the rules allow was tried, up to the one this stops at. Where the rules allow
-        // more than that, the counts past it were never tried and saying "nothing composes one"
-        // would be this compiler's budget reported as the model's answer.
-        return none(cap < howMany.most() ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT
-                : Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        Generator.UnresolvedCombination.Reason held =
+                left ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null;
+        return built.isEmpty()
+                ? none(held == null
+                        ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : held)
+                : new TermRealizations.Realization.Built(built, held);
     }
 
     /**
@@ -156,8 +171,7 @@ final class ContainersAddingUp {
         }
         int least = Math.max(declared.least(), CountDomain.leastFrom(runs.min()));
         int most = Math.min(declared.most(), CountDomain.mostFrom(runs.max()));
-        return least > most ? DeclaredBounds.CountRange.NONE
-                : new DeclaredBounds.CountRange(least, most);
+        return new DeclaredBounds.CountRange(least, most);
     }
 
     /**
@@ -189,31 +203,53 @@ final class ContainersAddingUp {
     }
 
     /**
-     * The numbers {@code many} elements hold for the container to come to {@code total}, or null
-     * where none do.
+     * How the difference between a starting point and the total is spread over the elements.
      *
-     * <p>Every element at the least it may be, and the difference poured into them in turn up to the
-     * most each may be. Which is a choice among the decompositions and not the only one: what is
-     * owed is a container that reads back as the total, and the elements' own rules answer the rest.
-     *
-     * <p>Null for three unlike reasons and one answer: too many elements to hold so little, too few
-     * to hold so much, and a difference the carrier's values cannot be moved by. The third is why
-     * what is poured is put back on the carrier and the remainder is checked at the end — a walk
-     * that trusted the ends would hand over values no order has.
+     * <p>Two, because the shapes a decomposition can take are what the rules the elements are under
+     * tell apart. A rule taking one number out of the middle of a run refuses the container that put
+     * the whole difference on one element and admits the one that shared it, and neither shape is
+     * more of a decomposition than the other. What is not here is a search: these are two of the
+     * many, and what the walk owes is to say that the rest were never made.
      */
-    private static List<BigDecimal> splitting(BigDecimal total, int many, Ends ends,
+    private enum Spread {
+
+        /** The whole difference on as few elements as will carry it, the rest where they started. */
+        MASSED,
+
+        /** As near an equal share each as the order allows, the last taking what division left. */
+        LEVEL
+    }
+
+    /**
+     * The numbers {@code many} elements hold for the container to come to {@code total}, or null
+     * where this shape reaches none.
+     *
+     * <p>Every element starts where {@link Ends#from} puts it and moves by its share of what is
+     * still owed. <b>Either way along the order</b>: a total below where the elements start is
+     * reached by moving down as readily as one above it is reached by moving up, and a run open
+     * below or held away from a value has no least element to start from at all. Read as a floor,
+     * the start was a floor only for the ranges that have one — and a list of whole numbers had no
+     * container coming to less than nothing.
+     *
+     * <p>How far one element may move is the distance to the end it is moving toward, and nothing at
+     * all where that end names no value: an order open that way, or a dense one held away from a
+     * value it excludes, has no number to move up to. What comes of that is put back to the range
+     * and to the carrier, which is what makes a start that is not the least, and a distance that is
+     * not a bound, safe to work with.
+     *
+     * <p>Null where this shape reaches no decomposition. Which is not that none exists — another
+     * shape or another count may — and the walk that asked says so.
+     */
+    private static List<BigDecimal> splitting(BigDecimal total, int many, Ends ends, Spread how,
                                               Carrier elements) {
         if (many == 0) {
             return total.signum() == 0 ? List.of() : null;
         }
         BigDecimal owed = total.subtract(ends.from().multiply(BigDecimal.valueOf(many)));
-        if (owed.signum() < 0) {
-            return null;
-        }
         List<BigDecimal> split = new ArrayList<>();
         for (int i = 0; i < many; i++) {
-            BigDecimal add = ends.upTo() == null ? owed
-                    : owed.min(ends.upTo().subtract(ends.from()));
+            BigDecimal wanted = how == Spread.MASSED ? owed : shared(owed, many - i, elements);
+            BigDecimal add = toward(wanted, ends, elements);
             BigDecimal at = ends.from().add(add);
             // Put back to the rules and to the carrier, which are the two things a number has to be
             // to be a value here. Where an element starts and how far it may be moved are worked out
@@ -229,6 +265,40 @@ final class ContainersAddingUp {
             owed = owed.subtract(add);
         }
         return owed.signum() == 0 ? List.copyOf(split) : null;
+    }
+
+    /**
+     * One element's share of what is still owed, over the elements still to be given one.
+     *
+     * <p>Toward nought, so the elements before the last take no more than their share and the last
+     * takes what division left over. Which is what makes the shares add up without a remainder to
+     * place: the last element is given whatever is still owed, whatever the division came to.
+     *
+     * <p>An order that steps divides to a whole number of its counts; one that does not is divided
+     * as far as the numbers being added were written, since a share finer than that is a value the
+     * total was never stated to a.
+     */
+    private static BigDecimal shared(BigDecimal owed, int among, Carrier elements) {
+        BigDecimal by = BigDecimal.valueOf(among);
+        return elements.spacing() == Granularity.DISCRETE
+                ? owed.divideToIntegralValue(by)
+                : owed.divide(by, Math.max(owed.scale(), 1), java.math.RoundingMode.DOWN);
+    }
+
+    /**
+     * As much of {@code wanted} as one element may move, in the direction it is asking to move.
+     *
+     * <p>The end an element is moving toward is the one that bounds it, and the other says nothing
+     * about the move. Bounded by whichever end happened to be named, an element moving down was held
+     * to how far it could go up.
+     */
+    private static BigDecimal toward(BigDecimal wanted, Ends ends, Carrier elements) {
+        if (wanted.signum() >= 0) {
+            return ends.upTo() == null ? wanted
+                    : wanted.min(ends.upTo().subtract(ends.from()));
+        }
+        return ends.downTo() == null ? wanted
+                : wanted.max(ends.downTo().subtract(ends.from()));
     }
 
     /**
@@ -265,20 +335,25 @@ final class ContainersAddingUp {
     }
 
     /**
-     * Where an element starts, how far it may be moved, and what it has to be inside.
+     * Where an element starts, how far it may be moved either way, and what it has to be inside.
      *
-     * <p>The first two are how a decomposition is arrived at and the third is what it is held to.
+     * <p>The first three are how a decomposition is arrived at and the last is what it is held to.
      * A range open at an end names no value there, and a dense one names none beside a value it
      * excludes — so what an element starts at is a value the carrier picks out of the range rather
-     * than an end read off it, and how far it may be moved is nothing at all where the top cannot be
-     * named. Neither of those makes a decomposition wrong on its own, which is why the range travels
-     * with them and every number that comes out is put back to it.
+     * than an end read off it, and how far it may be moved is nothing at all where the end it is
+     * moving toward cannot be named. None of that makes a decomposition wrong on its own, which is
+     * why the range travels with them and every number that comes out is put back to it.
      *
-     * @param upTo null where nothing caps an element, or where the cap is a value the order has no
-     *             value beside. Both are "there is no number to pour up to", and the range is what
-     *             refuses what is poured too far
+     * <p>Both ends and not the top alone. An element moves down as readily as up, and an element
+     * held to the distance to the top while moving down is one that walks out of the range and is
+     * caught by it — which is a decomposition lost for a reason about this reader.
+     *
+     * @param downTo null where nothing floors an element, or where the floor is a value the order
+     *               has no value beside
+     * @param upTo   the same at the other end
      */
-    private record Ends(BigDecimal from, BigDecimal upTo, NumericDomain.Bounds runs) {
+    private record Ends(BigDecimal from, BigDecimal downTo, BigDecimal upTo,
+                        NumericDomain.Bounds runs) {
 
         static Ends of(NumericDomain.Bounds runs, Carrier elements) {
             // A value of the carrier that the rules leave, which is the one reader of that question.
@@ -287,23 +362,28 @@ final class ContainersAddingUp {
             if (!(elements.somethingInside(runs.min(), runs.max()) instanceof Count from)) {
                 return null;
             }
-            return new Ends(from.at(), inward(runs.max(), elements), runs);
+            return new Ends(from.at(), inward(runs.min(), elements, true),
+                    inward(runs.max(), elements, false), runs);
         }
 
         /**
-         * The greatest value of an end, or null where the order names none.
+         * The value of an end that is inside it, or null where the order names none.
          *
          * <p>An end written exclusively is a value taken out of the range, and the value beside it
          * is the carrier's to name — asked of {@link BoundaryDomain}, which is where that question
          * has its answer and where a carrier with no smallest step says it has none.
          */
-        private static BigDecimal inward(Endpoint end, Carrier elements) {
+        private static BigDecimal inward(Endpoint end, Carrier elements, boolean upward) {
             if (end == null || !(end.at() instanceof Count at)) {
                 return null;
             }
-            return end.inclusive() ? at.at()
-                    : BoundaryDomain.on(elements).predecessor(at).orElse(null) instanceof Count on
-                            ? on.at() : null;
+            if (end.inclusive()) {
+                return at.at();
+            }
+            BoundaryDomain beside = BoundaryDomain.on(elements);
+            java.util.Optional<Place> next =
+                    upward ? beside.successor(at) : beside.predecessor(at);
+            return next.orElse(null) instanceof Count on ? on.at() : null;
         }
     }
 
