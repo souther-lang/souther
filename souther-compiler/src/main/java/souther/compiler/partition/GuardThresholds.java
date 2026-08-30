@@ -118,23 +118,29 @@ public final class GuardThresholds {
     /**
      * The same, reading the input's rules here.
      *
-     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
-     * reads them once and hands the same one to everything that asks, since each of these reading
-     * its own is every rule of every parameter read again to arrive at the same answers.
+     * <p>For a caller that has no reading of them in hand — nor of what arrives at each comparison,
+     * which reads as restricting nothing, so every line such a caller reads is kept as the
+     * declarations alone leave it. The pipeline that measures a behavior reads both once and hands
+     * the same ones to everything that asks, since each of these reading its own is every rule of
+     * every parameter read again to arrive at the same answers.
      */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
         return of(behavior, body, plan, inputs, inputs.quantities(symbols), symbols,
-                souther.compiler.check.ElementBindings.NONE);
+                souther.compiler.check.ElementBindings.NONE,
+                souther.compiler.check.PathReachability.Answers.NONE);
     }
 
     /** The thresholds one behavior's body compares its parameters against. {@code plan} supplies
      * the site each comparison's own value is recorded at, so a boundary can later ask whether the
-     * comparison ran — which is not something the arms of anything standing round it record. */
+     * comparison ran — which is not something the arms of anything standing round it record.
+     * {@code arrives} says what the paths leave arriving at each of those sites, which is what a
+     * line is dropped by ({@link ComparisonAssessment.NothingArrivesAtItsLine}). */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, souther.compiler.inputs.Quantities quantities,
                             Symbols symbols,
-                            souther.compiler.check.ElementBindings elements) {
+                            souther.compiler.check.ElementBindings elements,
+                            souther.compiler.check.PathReachability.Answers arrives) {
         List<LineEvidence> found = new ArrayList<>();
         List<RuleWithoutALine> withoutALine = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
@@ -153,8 +159,8 @@ public final class GuardThresholds {
         // a walk apiece to disagree about what a `let` does.
         ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs, elements), symbols);
         for (ComparisonReadings.Reading each : read.drawn()) {
-            lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
-                    between, assessed, withoutALine);
+            lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, arrives,
+                    found, between, assessed, withoutALine);
         }
         // And every comparison the model states something by that this reader never saw.
         noticed(behavior, read, assessed, plan, symbols, withoutALine);
@@ -525,6 +531,7 @@ public final class GuardThresholds {
     private static void lineAt(String behavior, Core.Binary each, CoverageSites.Plan plan,
                                InputReads reads, Symbols symbols,
                                souther.compiler.inputs.Quantities quantities,
+                               souther.compiler.check.PathReachability.Answers arrives,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<Core> assessed, List<RuleWithoutALine> withoutALine) {
@@ -538,7 +545,8 @@ public final class GuardThresholds {
         // ({@link ComparisonAssessment}). What is added here is what meeting the line takes, which
         // is a guard's own answer and no other rule's.
         ComparisonAssessment read =
-                ComparisonAssessment.of(behavior, each, reads, symbols, quantities, null, false);
+                ComparisonAssessment.of(behavior, each, reads, symbols, quantities, null, false,
+                        arrives.arrivalAt(site));
         assessed.add(each);
         publish(behavior, each, plan, reads, symbols, read, withoutALine);
         switch (read) {
@@ -589,6 +597,7 @@ public final class GuardThresholds {
             }
             case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
                  ComparisonAssessment.CutsNothing _, ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.NothingArrivesAtItsLine _,
                  ComparisonAssessment.NoFeasibleInput _,
                  ComparisonAssessment.Unread _ -> { }
         }

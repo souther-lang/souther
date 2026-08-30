@@ -256,16 +256,19 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                 invariant value >= DateTime("2026-08-01T00:00:00")
                     && value <= DateTime("2026-08-01T00:00:01")
 
-            behavior singledDense : (x: TwoDecimals) -> Verdict
-            let singledDense (x) = { guard x.value == 0.0m else Ok
-                guard x.value == 1.0m else No
-                Ok }
+            behavior singledDense : (x: TwoDecimals, k: Int) -> Verdict
+            let singledDense (x, k) = {
+                if k > 0 then { guard x.value == 0.0m else No
+                    Ok }
+                else { guard x.value == 1.0m else No
+                    Ok } }
 
-            behavior singledMoment : (x: TwoMoments) -> Verdict
-            let singledMoment (x) = {
-                guard x.value == DateTime("2026-08-01T00:00:00") else Ok
-                guard x.value == DateTime("2026-08-01T00:00:01") else No
-                Ok }
+            behavior singledMoment : (x: TwoMoments, k: Int) -> Verdict
+            let singledMoment (x, k) = {
+                if k > 0 then { guard x.value == DateTime("2026-08-01T00:00:00") else No
+                    Ok }
+                else { guard x.value == DateTime("2026-08-01T00:00:01") else No
+                    Ok } }
 
             behavior openOnBothSidesMoment : (x: DateTime) -> Verdict
             let openOnBothSidesMoment (x) = {
@@ -476,6 +479,13 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      *
      * <p>Reachable because this branch taught the reader to see a date-time constant at all: before
      * it, an equality against one was not read and there was no such class.
+     *
+     * <p><b>The two equalities are under a fork on another position, and that is what keeps both.</b>
+     * Written one under the other, the second stands where the first has already narrowed the
+     * position to the value it names — nothing arriving there holds the second's value, so the line
+     * is one the model draws through nothing that gets to it and is dropped
+     * ({@link ComparisonAssessment.NothingArrivesAtItsLine}). A position needs two values singled out
+     * for this class to exist at all, so they are put where neither narrows the other.
      */
     @Test
     void theClassOfEverythingElseIsOfferedAValueThatIsNoneOfThem() {
@@ -485,7 +495,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledDense", true, SourceNameResolver.identity()).text();
-        assertTrue(dense.contains("\"x=/= 0, 1\" : (TwoDecimals(0.5m))"),
+        assertTrue(dense.lines().anyMatch(row -> row.contains("\"x=/= 0, 1\"")
+                        && row.contains("TwoDecimals(0.5m)")),
                 "a decimal lies between the two singled out: " + dense);
 
         String moment = souther.compiler.report.GeneratedRows.of(

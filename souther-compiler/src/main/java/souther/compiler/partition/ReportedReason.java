@@ -107,6 +107,12 @@ public final class ReportedReason {
             // a clause they could delete.
             case BlockReason.ComparisonCuttingOutsideDomain _ ->
                     UndividedPosition.Reason.RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS;
+            // And its own word beside that one. There the declarations never run as far as the
+            // line, wherever the rule stands; here they do, and what stops short of it is the rows
+            // that arrive — a reader of the first looks at one rule against the declarations, and
+            // a reader of this one looks at the guards above it.
+            case BlockReason.ComparisonNothingArrivesAtItsLine _ ->
+                    UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RULES_LINE;
         };
     }
 

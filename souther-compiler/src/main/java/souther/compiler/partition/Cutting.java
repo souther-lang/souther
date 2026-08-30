@@ -425,6 +425,75 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return AffineReading.filedAt(direction(of).coefs().keySet());
     }
 
+    /**
+     * What the rules leave this quantity, narrowed by what actually arrives at the comparison —
+     * where the arrival can be read as this quantity at all, and {@link #within} untouched where it
+     * cannot.
+     *
+     * <p>The identity match and the change of units both live here, because both are readings of
+     * the quantity and the quantity is this record's one answer. The arrival states an interval of
+     * the value at one path; it is this quantity's exactly when the quantity is that path's own
+     * value taken some number of times, and then the interval arrives in the quantity's units by
+     * taking it that many times too. Asked anywhere else, a second reader of the direction stands
+     * beside this one, free to disagree with it about what the rule is about.
+     *
+     * <p>Total over what it takes. An arrival this cannot project restricts nothing — not being
+     * able to read a fact is not a proof — so the answer is what the declarations leave, unchanged.
+     * The whole-state proof that nothing arrives is not taken here at all: that arm of the arrival
+     * is no interval of anything, and a caller holds it apart ({@code ComparisonAssessment}).
+     *
+     * <p>Sound as a meet of two over-approximations: every arriving row is inside both, so a line
+     * outside the meet is a line no arriving row reaches.
+     */
+    souther.compiler.numeric.NumericDomain.Bounds withinGiven(
+            souther.compiler.reach.ComparisonArrival.Values arriving) {
+        LinearForm<NumericTerm> direction = direction(of);
+        if (direction.coefs().size() != 1 || direction.constant().signum() != 0) {
+            return within;
+        }
+        java.util.Map.Entry<NumericTerm, java.math.BigDecimal> only =
+                direction.coefs().entrySet().iterator().next();
+        if (!(only.getKey() instanceof NumericTerm.ValueOf(var position))
+                || !position.equals(arriving.path())) {
+            return within;
+        }
+        souther.compiler.numeric.NumericDomain.Bounds scaled =
+                scaledBy(arriving.bounds(), only.getValue());
+        if (scaled == null) {
+            return within;
+        }
+        return within == null ? scaled : within.meet(scaled);
+    }
+
+    /**
+     * {@code bounds} taken {@code times} over, or null where an end is at no number to take.
+     *
+     * <p>Taken a negative number of times, the ends change places: the least of the values is
+     * {@code times} the greatest of what they were. Whether an end is one of the counts it stops at
+     * is unchanged either way — the map between the two orders is one to one.
+     */
+    private static souther.compiler.numeric.NumericDomain.Bounds scaledBy(
+            souther.compiler.numeric.NumericDomain.Bounds bounds, java.math.BigDecimal times) {
+        souther.compiler.numeric.Endpoint low = timesAt(bounds.min(), times);
+        souther.compiler.numeric.Endpoint high = timesAt(bounds.max(), times);
+        if (low == null && bounds.min() != null || high == null && bounds.max() != null) {
+            return null;
+        }
+        return times.signum() < 0
+                ? new souther.compiler.numeric.NumericDomain.Bounds(high, low)
+                : new souther.compiler.numeric.NumericDomain.Bounds(low, high);
+    }
+
+    /** One end taken {@code times} over, or null where it stands at no number. */
+    private static souther.compiler.numeric.Endpoint timesAt(
+            souther.compiler.numeric.Endpoint end, java.math.BigDecimal times) {
+        if (end == null || !(end.at() instanceof Count(java.math.BigDecimal at))) {
+            return null;
+        }
+        return new souther.compiler.numeric.Endpoint(new Count(at.multiply(times)),
+                end.inclusive());
+    }
+
     /** Whether the rule singles a value out rather than ordering the values around it. */
     boolean singles() {
         return claim instanceof ComparisonClaim.Singled;

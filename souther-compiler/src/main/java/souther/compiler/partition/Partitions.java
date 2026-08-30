@@ -377,7 +377,6 @@ public final class Partitions {
                                   NumericTerm.FromOnePosition term, List<LineEvidence> evidence,
                                   souther.compiler.inputs.Quantities reading, Symbols symbols,
                                   ReadingPolicy policy,
-                                  souther.compiler.check.PathReachability.Answers arrives,
                                   List<RuleWithoutALine> rules, EvidenceAccount account) {
         List<LineEvidence> mine = evidence.stream()
                 .filter(each -> each.at().equals(term)).toList();
@@ -424,17 +423,6 @@ public final class Partitions {
             // against the range the record it sits in leaves. So a line that gets past that reader
             // and is dropped here is a line lost with nothing said, and the account below says so.
             if (domain != null && !admits(domain, line.parts())) {
-                continue;
-            }
-            // And what the guards above it left. Only a proof drops a line: a comparison
-            // this could not settle keeps its line and its rows, which is the direction that
-            // leaves an author with work rather than with a report about a model of theirs
-            // that is fine.
-            // Asked of the comparison, where the rule is met by having produced one. A
-            // clause has no comparison a path can arrive at: it is checked whenever the
-            // behavior answers, so nothing about which branch a body took drops its line.
-            if (line.origin().comparisonAt().stream().anyMatch(arrives::dividesNothing)) {
-                account.disposedOf(each, new EvidenceAccount.Disposition.NothingArrivesAtIt());
                 continue;
             }
             account.measured(each, axis.id());
@@ -612,34 +600,7 @@ public final class Partitions {
                                        List<GuardThresholds.Guards.Singled> singled,
                                        List<LineDrawn> between) {
         return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
-                souther.compiler.check.PathReachability.Answers.NONE);
-    }
-
-    /**
-     * The same, told what arrives at each comparison.
-     *
-     * <p>A comparison one of whose outcomes nothing takes draws no line. It is written, it is read,
-     * and what it divides is nothing that gets there — {@code guard a.value < 6000} under
-     * {@code guard a.value < 5000} puts a line at six thousand through values that are all under
-     * five, and a report asking for a row either side of it is asking for a row nobody can write.
-     *
-     * <p>Asked of the reading of the whole body, not of the position's own values. Whether a line
-     * falls inside what the position can hold is the other question and is asked below: that one is
-     * what the classes are built out of, and a cut outside the interval it divides is not a partition
-     * of anything. Both are needed and neither is the other — a line well inside a position's values
-     * can still be one nothing on the way to it can be either side of.
-     */
-    static Partitioning withThresholds(Partitioning base,
-                                       souther.compiler.inputs.Quantities reading,
-                                       List<Threshold> thresholds,
-                                       Symbols symbols, ReadingPolicy policy,
-                                       List<RuleWithoutALine> rulesWithoutALine,
-                                       List<GuardThresholds.Guards.Singled> singled,
-                                       List<LineDrawn> between,
-                                       souther.compiler.check.PathReachability.Answers
-                                               arrives) {
-        return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
-                arrives, ReachingCuts.NONE);
+                ReachingCuts.NONE);
     }
 
     /**
@@ -657,14 +618,12 @@ public final class Partitions {
                                        List<RuleWithoutALine> rulesWithoutALine,
                                        List<GuardThresholds.Guards.Singled> singled,
                                        List<LineDrawn> between,
-                                       souther.compiler.check.PathReachability.Answers
-                                               arrives,
                                        ReachingCuts reaching) {
         List<LineEvidence> evidence = new ArrayList<>();
         thresholds.forEach(each -> evidence.add(new LineEvidence.Divides(each)));
         singled.forEach(each -> evidence.add(new LineEvidence.Singles(each)));
         return withEvidence(base, reading, evidence, symbols, policy, rulesWithoutALine, between,
-                arrives, reaching);
+                reaching);
     }
 
     /**
@@ -683,8 +642,6 @@ public final class Partitions {
                                             Symbols symbols, ReadingPolicy policy,
                                             List<RuleWithoutALine> rulesWithoutALine,
                                             List<LineDrawn> between,
-                                            souther.compiler.check.PathReachability.Answers
-                                                    arrives,
                                             ReachingCuts reaching) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
@@ -709,7 +666,7 @@ public final class Partitions {
                 AxisId id = term.equals(axis.term()) ? axis.id()
                         : AxisId.of(axis.id().behavior(), term);
                 measureAt(out, measured, axis.measuredAt(id, term), term, evidence, reading,
-                        symbols, policy, arrives, rules, account);
+                        symbols, policy, rules, account);
             }
         }
         account.everyPieceWasDisposedOf(out);

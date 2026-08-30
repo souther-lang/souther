@@ -35,10 +35,6 @@ final class EvidenceAccount {
         /** It divides an axis, which carries its cut. */
         record Measured(AxisId at) implements Disposition {}
 
-        /** Nothing reaches the comparison it was read from, so what it divides is nothing that
-         *  gets there. */
-        record NothingArrivesAtIt() implements Disposition {}
-
         /**
          * The declarations already measure this position at another number, and this stage does not
          * add a second measure of a position a rule of its own divides.

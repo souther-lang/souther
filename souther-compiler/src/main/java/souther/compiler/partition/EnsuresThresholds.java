@@ -203,8 +203,12 @@ public final class EnsuresThresholds {
         // What the comparison comes to is read the same way wherever a comparison is written, which
         // is what {@link ComparisonAssessment} is for: a clause and a guard over one arithmetic form
         // draw one line and raise one question, and neither is worked out beside the other.
+        // No arrival either: a clause stands in no body, it is checked whenever the behavior
+        // answers, so there is nothing on the way to it and what arrives is the declarations'
+        // whole domain — which is what an arrival that restricts nothing reads as.
         ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, reads,
-                symbols, quantities, rule.value(), false);
+                symbols, quantities, rule.value(), false,
+                new souther.compiler.reach.ComparisonArrival.NoProjection());
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
@@ -259,6 +263,7 @@ public final class EnsuresThresholds {
             // above, in the one place that answers it for both readers of a comparison.
             case ComparisonAssessment.Unread _, ComparisonAssessment.CutsNothing _,
                  ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.NothingArrivesAtItsLine _,
                  ComparisonAssessment.NoFeasibleInput _,
                  ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
