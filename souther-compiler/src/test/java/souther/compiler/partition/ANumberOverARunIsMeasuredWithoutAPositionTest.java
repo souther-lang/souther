@@ -107,10 +107,18 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
                 "and one that comes to anything else does not");
     }
 
-    /** Nothing composes a row for such a line, and the search says so rather than assigning a
-     *  value somewhere. */
+    /**
+     * The search reaches the level and demands the sequence, which is where such a number is
+     * realized.
+     *
+     * <p>What it hands back is a demand and not a value: the sequence the run is read from is what a
+     * row rebuilds to move the total, and no total is written at it
+     * ({@link RealizationTarget.OverARun}). Whether anything writes such a value is
+     * {@link TermRealizations}' question, asked once, of every number — held here as well, this
+     * would be a second reading of what can be built, free to say no on a day that one says yes.
+     */
     @Test
-    void nothingComposesARowForIt() {
+    void theSearchDemandsTheSequenceTheRunIsReadFrom() {
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("decide",
                 LinearForm.atom((NumericTerm) TOTAL),
                 Map.of(TOTAL, WHOLE));
@@ -119,11 +127,13 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
 
         Realization made = new LevelRealizer().realize(standing, nothingIsKnown());
 
-        assertEquals(new Realization.Unknown(
-                        Realization.Unknown.Reason.NOTHING_COMPOSED_ONE),
+        assertEquals(new Realization.Found(
+                        Map.of(new RealizationTarget.OverARun(TOTAL), Count.of(100000))),
                 made,
-                "a search hands back an assignment, and there is no place here to assign at — which"
-                        + " leaves the point owed rather than proven unwritable");
+                "the level is reached, and what the row has to do to be at it is come to it");
+        assertEquals(TermPath.of("lines"),
+                new RealizationTarget.OverARun(TOTAL).writeRoot(),
+                "and the value it rebuilds is the sequence, which the run holds to one of them");
     }
 
     /** A region the rules say nothing about, so what the search does is its own answer and not the

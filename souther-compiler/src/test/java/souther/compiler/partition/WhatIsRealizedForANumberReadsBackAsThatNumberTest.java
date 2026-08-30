@@ -130,7 +130,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             for (long each : answerable(term)) {
                 Place asked = Count.of(each);
                 TermRealizations.Realization made =
-                        TermRealizations.at(term, source, orders, asked, SYMBOLS, POLICY);
+                        TermRealizations.at(new RealizationTarget.AtOnePosition(term), source,
+                                orders, asked, SYMBOLS, POLICY);
                 // An operation that builds nothing at a number is not a failure of this: whether
                 // anything answers it is `EveryAnswerItCanGiveHasASourceValue`, asked below.
                 if (!(made instanceof TermRealizations.Realization.Built built)) {
@@ -172,7 +173,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
             for (long each : answerable(term)) {
                 assertInstanceOf(TermRealizations.Realization.Built.class,
-                        TermRealizations.at(term, source, orders, Count.of(each), SYMBOLS, POLICY),
+                        TermRealizations.at(new RealizationTarget.AtOnePosition(term), source,
+                                orders, Count.of(each), SYMBOLS, POLICY),
                         operation + " says every number it answers is one some value answers, and"
                                 + " nothing was built for " + each);
             }
@@ -275,7 +277,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
         for (long each : numbers) {
             Place asked = Count.of(each);
             TermRealizations.Realization made =
-                    TermRealizations.at(term, source, orders, asked, SYMBOLS, POLICY);
+                    TermRealizations.at(new RealizationTarget.AtOnePosition(term), source,
+                            orders, asked, SYMBOLS, POLICY);
             TermRealizations.Realization.Built built = assertInstanceOf(
                     TermRealizations.Realization.Built.class, made,
                     qualified + " answers " + each + " of some date, so there is one to offer");

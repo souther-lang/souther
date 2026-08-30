@@ -62,7 +62,7 @@ public final class LevelRealizer {
                               souther.compiler.inputs.SearchRegion within) {
         Place at = placeMeeting(one.where(), one.of(), bounds(within, one.term()));
         return at == null ? new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE)
-                : found(Map.of(one.term(), at), within);
+                : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within);
     }
 
     /**
@@ -95,9 +95,9 @@ public final class LevelRealizer {
             if (at == null) {
                 continue;
             }
-            Map<NumericTerm.FromOnePosition, Place> fixing = new LinkedHashMap<>();
-            fixing.put(two.on(), at);
-            fixing.put(two.against(), common);
+            Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+            fixing.put(new RealizationTarget.AtOnePosition(two.on()), at);
+            fixing.put(new RealizationTarget.AtOnePosition(two.against()), common);
             if (found(fixing, within) instanceof Realization.Found made) {
                 return made;
             }
@@ -186,19 +186,16 @@ public final class LevelRealizer {
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms =
-                new java.util.ArrayList<>();
+        List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms = new java.util.ArrayList<>();
         for (Map.Entry<NumericTerm, java.math.BigDecimal> each
                 : AffineReading.ordered(over.form())) {
-            NumericTerm.FromOnePosition at = each.getKey().atOnePosition();
-            // What a search hands back is an assignment: somewhere a row is asked to hold a value.
-            // A form over a number no single position answers has nothing here to assign, and that
-            // is a row this composed none of rather than a level the rules refuse.
-            if (at == null) {
-                return new Realization.Unknown(
-                        Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
-            }
-            terms.add(Map.entry(at, each.getValue()));
+            // Every number is realized by rebuilding one value, so what the walk assigns is a demand
+            // and there is one for each term of the form. Whether anything writes such a value is
+            // not asked here and is not this reader's to answer: a walk that turned a term away for
+            // being of the wrong kind would be deciding what is buildable from the shape of the
+            // number, which is the answer that went stale the first time something learned to build
+            // one.
+            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
         }
         boolean bounded = true;
         for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
@@ -305,7 +302,7 @@ public final class LevelRealizer {
      */
     private final class Search {
 
-        private final List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms;
+        private final List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms;
         /**
          * The order each position is read and written on, in the order the terms are walked.
          *
@@ -340,24 +337,24 @@ public final class LevelRealizer {
         private int taken;
         private int asked;
 
-        Search(List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms,
+        Search(List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms,
                Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within) {
             this.terms = terms;
             this.carriers = new Carrier[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                carriers[i] = on.get(terms.get(i).getKey());
+                carriers[i] = on.get(terms.get(i).getKey().term());
             }
             this.within = within;
             this.at = new Place[terms.size()];
             this.runsBetween = new NumericDomain.Bounds[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                runsBetween[i] = bounds(within, terms.get(i).getKey());
+                runsBetween[i] = bounds(within, terms.get(i).getKey().term());
             }
             this.fromHere = new AdditiveImage[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
                 Map<NumericTerm, souther.compiler.numeric.Rational> coefs = new LinkedHashMap<>();
                 for (int j = i; j < terms.size(); j++) {
-                    coefs.put(terms.get(j).getKey(),
+                    coefs.put(terms.get(j).getKey().term(),
                             souther.compiler.numeric.Rational.of(terms.get(j).getValue()));
                 }
                 // Each term's own spacing, which is what the image was always asking for: a sum of
@@ -378,8 +375,8 @@ public final class LevelRealizer {
          * nowhere, and a map with nothing under a key is a row somebody is offered with a position
          * missing from it.
          */
-        Map<NumericTerm.FromOnePosition, Place> fixing() {
-            Map<NumericTerm.FromOnePosition, Place> out = new LinkedHashMap<>();
+        Map<RealizationTarget, Place> fixing() {
+            Map<RealizationTarget, Place> out = new LinkedHashMap<>();
             for (int i = 0; i < terms.size(); i++) {
                 if (at[i] == null) {
                     throw new IllegalStateException(
@@ -409,7 +406,7 @@ public final class LevelRealizer {
             // ends, a box a million wide is walked a million times and the budget runs out on
             // `a + b <= 2000000` — an equation with one answer.
             NumericDomain.Bounds left =
-                    leaving(i + 1, owed, coef, bounds(here, terms.get(i).getKey()));
+                    leaving(i + 1, owed, coef, bounds(here, terms.get(i).getKey().term()));
             if (i == terms.size() - 1) {
                 return solving(i, owed, coef, left);
             }
@@ -448,7 +445,7 @@ public final class LevelRealizer {
         private Reached trying(int i, java.math.BigDecimal x, java.math.BigDecimal owed,
                                java.math.BigDecimal coef, souther.compiler.inputs.SearchRegion here) {
             souther.compiler.inputs.SearchRegion next =
-                    narrowing(here, terms.get(i).getKey(), x);
+                    narrowing(here, terms.get(i).getKey().term(), x);
             if (next == null) {
                 return Reached.EXHAUSTED;
             }
@@ -606,7 +603,7 @@ public final class LevelRealizer {
          * to nothing it had not already checked.
          */
         private boolean theRulesHaveNotRefused() {
-            java.util.Map<NumericTerm, Place> all = new LinkedHashMap<>();
+            java.util.Map<RealizationTarget, Place> all = new LinkedHashMap<>();
             for (int j = 0; j < terms.size(); j++) {
                 all.put(terms.get(j).getKey(), at[j]);
             }
@@ -841,7 +838,7 @@ public final class LevelRealizer {
      * the rules are already known to refuse, offered as a row and then reported as though the point
      * had nothing at it.
      */
-    private Realization found(Map<NumericTerm.FromOnePosition, Place> fixing,
+    private Realization found(Map<RealizationTarget, Place> fixing,
                               souther.compiler.inputs.SearchRegion within) {
         return theRulesHaveNotRefused(fixing, within)
                 ? new Realization.Found(fixing)
@@ -869,12 +866,12 @@ public final class LevelRealizer {
      * about the values in it. Anything more would be a claim about an order this reading does not
      * reach.
      */
-    private boolean theRulesHaveNotRefused(Map<? extends NumericTerm, Place> fixing,
+    private boolean theRulesHaveNotRefused(Map<RealizationTarget, Place> fixing,
                                            souther.compiler.inputs.SearchRegion within) {
         Map<NumericTerm, Count> counted = new LinkedHashMap<>();
-        fixing.forEach((term, at) -> {
+        fixing.forEach((target, at) -> {
             if (at instanceof Count count) {
-                counted.put(term, count);
+                counted.put(target.term(), count);
             }
         });
         return counted.isEmpty() || within.given(counted).emptiness().isEmpty();
