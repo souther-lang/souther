@@ -999,8 +999,8 @@ public final class Partitions {
                 // (issue #1084).
                 PositionAccount at = PositionAccount.of(behavior, position, null, null);
                 measurements.add(new PositionMeasurements(at,
-                        List.of(new Axis(id, term, at, divided.classes(), divided.cuts().cuts(),
-                                List.of(), position.narrowedEnds())), null));
+                        List.of(new Axis(id, term, at.type(), divided.classes(),
+                                divided.cuts().cuts(), List.of(), position.narrowedEnds())), null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:
@@ -1020,7 +1020,7 @@ public final class Partitions {
                         PositionAccount at = PositionAccount.of(behavior, position,
                                 retained.continuation(), leftAt(position));
                         measurements.add(new PositionMeasurements(at,
-                                List.of(Axis.pendingAt(id, term, at)), null));
+                                List.of(Axis.pendingAt(id, term, at.type())), null));
                     }
                 }
             }

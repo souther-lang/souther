@@ -168,13 +168,19 @@ final class Coverages {
         Readings readings = Readings.of(rows, where, partitioning.axes(),
                 observed.gaps().stream()
                         .filter(gap -> gap.code().leftNoRowRead()).toList());
-        for (Axis axis : partitioning.axes()) {
-            if (!axis.measurable()) {
-                continue;   // said by `undivided`, which also says which kind of nothing it is
-            }
-            if (axis.derivable()) {
-                axes.add(coverageOf(axis, partitioning, readings, level.readsRows()));
-                divided.add(axis);
+        // A position at a time, because what one of its measures is owed to say includes what the
+        // reading of the position left unread — which is the position's answer and is asked of it
+        // here rather than of whichever measure happens to be in hand.
+        for (souther.compiler.partition.PositionMeasurements at : partitioning.measurements()) {
+            for (Axis axis : at.axes()) {
+                if (!axis.measurable()) {
+                    continue;   // said by `undivided`, which also says which kind of nothing it is
+                }
+                if (axis.derivable()) {
+                    axes.add(coverageOf(axis, at.position(), partitioning, readings,
+                            level.readsRows()));
+                    divided.add(axis);
+                }
             }
         }
         // Each measure asked its own closure, and neither told from the length of what came back.
@@ -442,16 +448,16 @@ final class Coverages {
 
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis,
+            souther.compiler.partition.PositionAccount at,
             souther.compiler.partition.Partitions.Partitioning partitioning, Readings readings,
             boolean asked) {
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
-        // What the axis already says about which of this position's rules nothing accounted for,
-        // each named. Read off the axis rather than worked out here, and in the questions' own
-        // words: the vocabulary beside it says why a division could not be derived, which is a
-        // different question, and borrowing it left a reader with a sentence that named neither
-        // (issue #842).
+        // Which of this position's rules nothing accounted for, each named. Read off the position
+        // rather than worked out here, and in the questions' own words: the vocabulary beside it
+        // says why a division could not be derived, which is a different question, and borrowing it
+        // left a reader with a sentence that named neither.
         PartitionEvidence.AxisCoverage.Reading read = new PartitionEvidence.AxisCoverage.Reading(
-                axis.at().residue().rulesLeftUnread().isEmpty()
+                at.residue().rulesLeftUnread().isEmpty()
                         ? PartitionEvidence.AxisCoverage.Reach.EVERY_RULE
                         : PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
                 // Of the questions standing at this position, the ones this measure is the reader

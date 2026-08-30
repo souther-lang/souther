@@ -48,31 +48,37 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
 
     private static final AxisId ID = AxisId.of("run", new NumericTerm.ValueOf(AT));
 
-    private static Axis measured() {
-        return new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
+    private static PositionMeasurements measured() {
+        return at(new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
                 List.of(PartitionClass.of("true", "true", new Recognition.Nothing(),
                                 RepresentativeSource.of(FixtureTemplate.bool(true)))
                         .ofTheNumber(new NumericTerm.ValueOf(AT))),
-                List.of());
+                List.of()), null, null);
     }
 
-    /** What is still to be answered for at the position this axis is of. The fixtures here are
-     *  axis-shaped, and the question is the position's. */
-    private static PendingPosition of(Axis axis) {
-        return PendingPosition.of(axis.at(), axis.measurable());
+    /** One position with nothing left to answer for, measured at the one number. */
+    private static PositionMeasurements at(Axis axis, StructuralInspection.Continuation found,
+                                           BlockReason.RuleWithoutLineReason unread) {
+        return new PositionMeasurements(
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
+                        unread == null ? null : LeftAtThePosition.of(unread)),
+                List.of(axis), null);
     }
 
-    private static Axis pending(StructuralInspection.Continuation found) {
+    /** What is still to be answered for at this position. */
+    private static PendingPosition of(PositionMeasurements at) {
+        return PendingPosition.of(at.position(), at.measured());
+    }
+
+    private static PositionMeasurements pending(StructuralInspection.Continuation found) {
         return pending(found, null);
     }
 
     /** The same, with a rule about the position's own values that the local reading could not take
      *  in — which is a second way a position can be left unable to reach an absence. */
-    private static Axis pending(StructuralInspection.Continuation found,
-                                BlockReason.RuleWithoutLineReason unread) {
-        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT),
-                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
-                        unread == null ? null : LeftAtThePosition.of(unread)));
+    private static PositionMeasurements pending(StructuralInspection.Continuation found,
+                                                BlockReason.RuleWithoutLineReason unread) {
+        return at(Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL), found, unread);
     }
 
     /**
@@ -151,8 +157,9 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      *  said of it is this compiler's state, written down as what the model divides. */
     @Test
     void aPositionNothingReadIsNotAnsweredFor() {
-        assertThrows(IllegalStateException.class, () -> of(
-                new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL, List.of(), List.of())));
+        assertThrows(IllegalStateException.class, () -> of(new PositionMeasurements(
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, null, null),
+                List.of(), null)));
     }
 
     @Test

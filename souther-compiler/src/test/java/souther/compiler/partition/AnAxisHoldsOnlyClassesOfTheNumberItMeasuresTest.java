@@ -209,7 +209,8 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         assertEquals(List.of(), elsewhere.parted());
         assertSame(souther.compiler.check.NarrowedBounds.NOTHING, elsewhere.narrowed(),
                 "where the rules leave the first number's ends is an answer about that number");
-        assertSame(length.at(), elsewhere.at(), "and the position is the position");
+        assertSame(length.type(), elsewhere.type(),
+                "and what stands at the position is what stands there, whichever number is read");
     }
 
     /**

@@ -37,10 +37,14 @@ import java.util.List;
  *                a run of classes over the values of a number a row can be asked for somewhere. A
  *                number read from a run of a sequence has no such place, so it draws a line without
  *                dividing anything and never arrives here
- * @param at      the position the number is read from, and what this phase is left answering for
- *                there. Pointed at rather than copied out, because a position carries as many of
- *                these axes as the rules name numbers of it and what is in there is true of the
- *                position once ({@link PositionAccount})
+ * @param type    what stands at the position the number is read from, which is what a value read
+ *                here is of. Not the term's: a string is measured at how long it is, and what
+ *                stands at the location is still a string. The one thing about the location a
+ *                measure needs, and nothing else about it is here — where the walk stopped, what
+ *                the reading left standing and what the location is if nothing answers are true of
+ *                it once however many numbers measure it, and a measure that answered them would
+ *                let any reader ask a location's question through whichever number it happens to
+ *                hold ({@link PositionMeasurements})
  * @param classes exclusive and exhaustive over the term's values, or empty where the model does
  *                not divide them
  * @param cuts    the values the classes meet at, each carrying every rule that drew it there
@@ -51,7 +55,7 @@ import java.util.List;
  *                away from its line is a run of what these leave together, and the cuts alone are
  *                short of the lines that have no value
  */
-public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount at,
+public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
                    List<PartitionClass> classes,
                    List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
 
@@ -59,8 +63,8 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
-        if (at == null) {
-            throw new IllegalArgumentException("an axis of no position");
+        if (type == null) {
+            throw new IllegalArgumentException("an axis of a value of nothing");
         }
         for (PartitionClass one : classes) {
             subjectHeld(term, one);
@@ -105,25 +109,8 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
 
     public Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
                 List<PartitionClass> classes, List<Cut> cuts) {
-        this(id, term, PositionAccount.at(id.behavior(), term.position(), type), classes, cuts,
-                List.of(), NarrowedBounds.NOTHING);
+        this(id, term, type, classes, cuts, List.of(), NarrowedBounds.NOTHING);
     }
-
-    /**
-     * The position's type, which is what a value read here is of. Not the term's: a string is
-     * measured at how long it is, and what stands at the location is still a string.
-     *
-     * <p>One of two things read off {@link #at} here, with {@link #path}. Both are about the
-     * measure — where it reads from and what stands there — and everything else the position's
-     * account holds is asked of the account, in the open. What its reading came to, where the walk
-     * stopped and what it is left with are true of the location once however many numbers measure
-     * it, and a measure that answered them would let any reader ask a location's question through
-     * whichever measure it happened to hold.
-     */
-    public Type type() {
-        return at.type();
-    }
-
 
     /**
      * A position nothing has answered for yet, and what the readings of it found.
@@ -132,8 +119,8 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
      * and only where none does is what was found here what a report says — an absence where every
      * reading ran to the end and found nothing, and what stopped one where it did not.
      */
-    public static Axis pendingAt(AxisId id, NumericTerm.FromOnePosition term, PositionAccount at) {
-        return new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
+    public static Axis pendingAt(AxisId id, NumericTerm.FromOnePosition term, Type type) {
+        return new Axis(id, term, type, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
     }
 
     /**
@@ -148,17 +135,17 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
      * divided into, the lines cut on it, where the rules part it and where they leave its ends. At
      * another number they answer a question nobody asked, and carried over they would be answers
      * about one number on an axis of another. What is kept is the one thing here that is the
-     * position's, {@link #at}. What that leaves the axis short of is what the reading measuring it
-     * at the new number puts there.
+     * position's, {@link #type}. What that leaves the axis short of is what the reading measuring
+     * it at the new number puts there.
      */
     public Axis measuredAt(AxisId id, NumericTerm.FromOnePosition term) {
-        return term.equals(this.term) ? new Axis(id, term, at, classes, cuts, parted, narrowed)
-                : new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
+        return term.equals(this.term) ? new Axis(id, term, type, classes, cuts, parted, narrowed)
+                : new Axis(id, term, type, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
     public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted) {
-        return new Axis(id, term, at, classes, cuts, parted, narrowed);
+        return new Axis(id, term, type, classes, cuts, parted, narrowed);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
