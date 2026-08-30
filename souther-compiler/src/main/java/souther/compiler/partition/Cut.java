@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
-import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
 
@@ -40,11 +39,6 @@ public record Cut(Carrier carrier, Place at, List<OriginRef> origins) {
         List<OriginRef> all = new java.util.ArrayList<>(origins);
         all.add(origin);
         return new Cut(carrier, at, all);
-    }
-
-    /** Where this line is drawn, as a value rather than as the count it is recorded at. */
-    public ObservedValue value() {
-        return carrier.valueOf(at);
     }
 
     /** What makes two cuts one cut: the place on the order, and not how the number was written.

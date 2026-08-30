@@ -35,13 +35,14 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons, Symbols sym
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return new ReadComparisons(ComparisonReadings.of(
+        souther.compiler.inputs.InputDomain inputs =
+                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        return new ReadComparisons(ComparisonReadings.of(behavior,
                 checked.behaviorBodies().get(behavior),
                 CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                         checked.supplied()),
-                InputReads.of(compilation.db().ask(new Adequacy.Inputs(module)).value()
-                        .get(behavior), checked.elementBindings().get(behavior)),
-                symbols).all(), symbols);
+                InputReads.of(inputs, checked.elementBindings().get(behavior)),
+                symbols, inputs.quantities(symbols)).all(), symbols);
     }
 
     /** The one comparison the body writes. A body writing two would leave a caller picking one of

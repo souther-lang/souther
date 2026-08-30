@@ -8,6 +8,11 @@ Build from the reactor root. Never `-pl`, never `clean`, never `CI=1` or
     mvn -o test -Dtest=<Class> -Dsurefire.failIfNoSpecifiedTests=false   # iterating
     mvn -o test                                                          # before pushing
 
+Add `-Dmaven.compiler.useIncrementalCompilation=false` for a mutation or a probe
+— 21s to 5s, because one changed file otherwise sends the whole module to javac.
+It does not recompile what depends on what it recompiled, so drop it as soon as
+the edit changes a signature or a compile-time constant.
+
 `clean` only when tests you did not touch fail with `VerifyError`.
 
 ## Commit hook

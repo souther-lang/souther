@@ -18,7 +18,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonCatalog;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.diag.Citation;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -138,105 +137,24 @@ public final class GuardThresholds {
         List<LineEvidence> found = new ArrayList<>();
         List<RuleWithoutALine> withoutALine = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
-        // The comparisons this reader assessed, and not the positions they were about. A position
-        // carries more than one statement and reading one of them settles nothing about the others.
-        // What each of them left the positions with is said where it was assessed, so what is left
-        // for the walk below is the comparisons that never reached this reader at all.
-        List<Core> assessed = new ArrayList<>();
-        // Every line the body draws, read where the comparison that draws it is written and under
-        // the names in force there. Which comparisons those are is
-        // {@link BoundaryPolicy}'s answer: a reader that had to find a fork before it could
-        // find a rule could not be handed a wider one without being rewritten.
         // One reading of the body, and everything below is that reading asked something. Where a
-        // comparison is written, what its names point at, what a row had satisfied to get there and
-        // whether a line is drawn on it are four questions about one position, and a walk apiece was
-        // a walk apiece to disagree about what a `let` does.
-        ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs, elements), symbols);
-        for (ComparisonReadings.Reading each : read.drawn()) {
-            lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
-                    between, assessed, withoutALine);
+        // comparison is written, what its names point at, what a row had satisfied to get there,
+        // whether a line may be drawn on it and what it came to are five questions about one
+        // position, and one walk answers them about one position.
+        ComparisonReadings read = ComparisonReadings.of(behavior, body, plan,
+                InputReads.of(inputs, elements), symbols, quantities);
+        for (ComparisonReadings.Reading each : read.all()) {
+            switch (each.standing()) {
+                case BoundaryPolicy.Standing.Admitted admitted ->
+                        lineAt(behavior, each.comparison(), plan, each.reads(), symbols,
+                                admitted.read(), found, between, withoutALine);
+                // Not a rule with no line here: its outcome is about no row, whichever of the
+                // reasons refused it ({@link NotABoundary}), so there is nothing for a report to
+                // say of it.
+                case BoundaryPolicy.Standing.Refused _ -> { }
+            }
         }
-        // And every comparison the model states something by that this reader never saw.
-        noticed(behavior, read, assessed, plan, symbols, withoutALine);
         return new Guards(found, withoutALine, between, read.reaching(plan));
-    }
-
-    /**
-     * Every comparison the model states something by that nothing turned into a line.
-     *
-     * <p>Asked of the comparisons and not of the positions. One position carries more than one
-     * statement, and a line read at it says nothing about the rest: kept per position, a threshold
-     * on `x` swallowed the comparison beside it that nothing could read, which is "a result exists,
-     * so the reading is complete".
-     *
-     * <p>Read off the same answer the lines came off, and not from a walk of its own. Both used to
-     * start from a fork, and a comparison written anywhere else came back neither a line nor a rule
-     * this could not read — it came back unmentioned, which is the one answer that says the model
-     * states nothing at the position. Two walks agreeing about which comparisons there are is
-     * something to keep in step; one answer read twice is not.
-     *
-     * <p>A wider set than the one that bears lines, and deliberately. What this establishes is that
-     * the model states something at a position — which is exactly what {@code not derivable} would
-     * otherwise deny — so a comparison a line could never be drawn from is still a rule the author
-     * wrote and still worth saying went unread.
-     *
-     * <p>Which is why a comparison nothing can measure is in and one nothing reads is out, and the
-     * split is the same one {@link NotABoundary} is made of. {@link NotABoundary#NOTHING_RECORDS_IT}
-     * is the author's rule, written at a position, that this could not draw a line from — the
-     * sentence {@code not read} is there to say. {@link NotABoundary#NOTHING_READS_IT} is not a rule
-     * of the model at all, and saying it went unread would put a statement into the report that the
-     * behavior does not make.
-     */
-    private static void noticed(String behavior, ComparisonReadings read, List<Core> assessed,
-                                CoverageSites.Plan plan, Symbols symbols, List<RuleWithoutALine> out) {
-        for (ComparisonReadings.Reading reading : read.all()) {
-            if (reading.standing() instanceof BoundaryPolicy.Standing.DrawsNone none
-                    && none.why() == NotABoundary.NOTHING_READS_IT) {
-                continue;
-            }
-            Core.Binary binary = reading.comparison();
-            // By the comparison it is, and not by what it was about: two comparisons at one position
-            // are two statements, and this one having been assessed is no answer about the other.
-            // What an assessed comparison leaves the positions with was said where it was assessed,
-            // in the words that reading came to — worked out again here, a comparison whose carrier
-            // stopped the reading was described as one that relates two positions, which says no
-            // measure is short of anything.
-            if (assessed.stream().anyMatch(each -> each == binary)) {
-                continue;
-            }
-            ComparisonCatalog.Comparison entry = plan.comparisons().at(binary).orElse(null);
-            if (entry == null || !writtenHere(entry)) {
-                continue;
-            }
-            InputReads reads = reading.reads();
-            List<FilingCoordinate> named = filedAt(binary, reads, symbols);
-            final BlockReason.RuleWithoutLineReason why = why(binary, reads, symbols);
-            // The rule the author wrote, read off the source. Which comparison it is is the
-            // behavior and the construct the source wrote; where a reader is sent is where it is
-            // written. Neither comes from the plan: a comparison in a fork both of whose arms can
-            // record nothing is numbered nowhere, and a model states its rules regardless.
-            RuleRef.Comparison rule = new RuleRef.Comparison(behavior, binary.origin());
-            souther.compiler.check.RuleCitation cited = citationOf(binary, plan.comparisons());
-            // A comparison naming no position of the input, whose terms came from one. Where the
-            // rule is filed and nothing else: what it says is the reading's answer, and deciding it
-            // here made the same fact about one comparison come out one way for an element and
-            // another for a number — which is not a difference between the two rules.
-            if (named.isEmpty()) {
-                List<TermPath> from = new ArrayList<>();
-                cameFrom(binary, reads, symbols, from);
-                from.forEach(each -> named.add(FilingCoordinate.at(each)));
-            }
-            for (FilingCoordinate each : named) {
-                // One per position the comparison names, and told from its neighbours by the rule as
-                // well as the place. Kept by position alone, the second comparison of one condition
-                // about one position was dropped as a repeat of the first — which is the defect this
-                // finding is about, one level in.
-                RuleWithoutALine said = new RuleWithoutALine(rule, cited, each, why);
-                if (out.stream().noneMatch(had -> had.sameAs(said))) {
-                    out.add(said);
-                }
-            }
-        }
     }
 
     /**
@@ -254,37 +172,6 @@ public final class GuardThresholds {
                 out.add(at);
             }
         }
-    }
-
-    /**
-     * Whether this comparison is written in code this compile can send a reader to.
-     *
-     * <p>A call is spliced into the body that makes it, so a comparison written in something else
-     * stands in this tree. Where that something else is out of sight — a library this compile has
-     * no file for — the comparison is not a rule anybody reading this behavior can act on:
-     * {@code Int.clamp(0, 100, n) > 70} is one comparison an author wrote and two they cannot open,
-     * and naming the second two tells them to edit a function they do not have.
-     *
-     * <p>A helper of their own is not one of these. It has a file, the report cites it where it is
-     * written, and it is theirs to rewrite — so the line is drawn at what a reader can reach and
-     * not at whether an expansion happened.
-     *
-     * <p>{@link Citation} and not the position, which cannot say this: a spliced node carries the
-     * coordinates of the code it was copied from. {@link Citation.Elsewhere} is exactly "written
-     * where this compile has no file", and it is the same answer
-     * {@link souther.compiler.check.RuleCitation} renders.
-     *
-     * <p>Read off the catalog, which holds where a comparison is written. Taken from the node again
-     * here, this was one more place deciding for itself what the catalog already answers — and the
-     * one deciding whether an author is told to edit a file they do not have.
-     *
-     * <p>Asked of the comparison and not of the fork above it. The one the author wrote sits
-     * outside an expansion whose insides they did not, so a subtree is the wrong unit — and the
-     * walk still goes through the expansion, because that is where a call's argument is bound and
-     * a comparison read without it is about nothing.
-     */
-    private static boolean writtenHere(ComparisonCatalog.Comparison comparison) {
-        return !(comparison.at() instanceof Citation.Elsewhere);
     }
 
     /**
@@ -366,83 +253,32 @@ public final class GuardThresholds {
     }
 
     /**
-     * What would have to change before this comparison could be a line.
+     * What stopped the arithmetic's reading of this comparison, told where it stopped.
      *
-     * <p>{@link UnreadComparison}'s, which is where the answer is so that an invariant's clause of
+     * <p>{@link UnreadComparison}'s answer, which is where it is so that an invariant's clause of
      * the same shape gets the same one. What is this reader's own is how a position is looked up:
      * a body's read of a parameter is what names one here, and a coordinate of a value is what
      * names one over there.
-     */
-    static BlockReason.RuleWithoutLineReason why(Core.Binary comparison, InputReads reads,
-                           Symbols symbols) {
-        return said(comparison, AffineReading.read(comparison, reads, symbols), reads, symbols);
-    }
-
-    /**
-     * The same, told what the arithmetic already came to.
      *
-     * <p>For a caller holding the reading, which is every caller that met the absence this
-     * describes. Reading it again to say why it stopped is the comparison read twice, and the
-     * second read is free to answer about a shape the first one had already got past.
+     * <p>Only for a reading that stopped, which the parameter says. A comparison the arithmetic
+     * read to the end has its answer in what it read — a line, or a quantity that is nothing — and
+     * none of that is a stop; handed the sides of such a comparison, this would describe a form
+     * that was read as one that was not. Where the reading stopped, the expression and the
+     * environment it was being read in come back together, so the sides are not read again in
+     * whatever the caller happens to hold.
      */
     static BlockReason.RuleReadingStopped whyItStopped(Core.Binary comparison,
-                                                   AffineReading.OfAComparison canonical,
+                                                   AffineReading.OfAComparison.Stopped stopped,
                                                    InputReads reads, Symbols symbols) {
-        BlockReason.RuleWithoutLineReason said = said(comparison, canonical, reads, symbols);
-        // What this reader is asked for is why it stopped, and the words for a rule read to the end
-        // are not answers to that. Reached with one, the caller has met an absence this reading did
-        // not produce — so it is refused rather than passed on as a reason nothing fell short.
-        if (said instanceof BlockReason.RuleReadingStopped stopped) {
-            return stopped;
-        }
-        throw new IllegalStateException(
-                "a reading that stopped cannot say it read the rule to the end: " + said);
-    }
-
-    /** What stopped a reading of this comparison, in whatever words its own answer comes in. */
-    private static BlockReason.RuleWithoutLineReason said(Core.Binary comparison,
-                                               AffineReading.OfAComparison canonical,
-                                               InputReads reads, Symbols symbols) {
         Names left = namesIn(comparison.left(), reads, symbols);
         Names right = namesIn(comparison.right(), reads, symbols);
+        Names here = namesIn(stopped.node(), stopped.at(), symbols);
         java.util.Map<TermPath, Type> met = new java.util.LinkedHashMap<>(left.met());
         right.met().forEach(met::putIfAbsent);
-        return UnreadComparison.why(left.origin(), right.origin(),
-                quantityOf(canonical, reads, symbols, met),
+        here.met().forEach(met::putIfAbsent);
+        return UnreadComparison.whatStopped(left.origin(), right.origin(),
+                new UnreadComparison.Quantity.NotRead<>(here.origin()),
                 at -> met.containsKey(at) && orderable(met.get(at), symbols));
-    }
-
-    /**
-     * The positions the quantity this comparison cuts is over, or null where the arithmetic read no
-     * form at all.
-     *
-     * <p>This reader's own, because the atoms are: a body names a position by what it reads of a
-     * parameter. What is done with the answer is {@link UnreadComparison}'s, so a clause of the same
-     * shape two declarations away is described in the same words.
-     */
-    private static UnreadComparison.Quantity<TermPath> quantityOf(
-            AffineReading.OfAComparison canonical, InputReads reads, Symbols symbols,
-            java.util.Map<TermPath, Type> met) {
-        // Each of the three the reading can come to, and no fourth made out of an absence. Where it
-        // stopped, the expression and the environment it was being read in come back together, so
-        // this does not read it again in whatever it happens to hold.
-        switch (canonical) {
-            case AffineReading.OfAComparison.Stopped stopped -> {
-                Names here = namesIn(stopped.node(), stopped.at(), symbols);
-                here.met().forEach(met::putIfAbsent);
-                return new UnreadComparison.Quantity.NotRead<>(here.origin());
-            }
-            case AffineReading.OfAComparison.CutsNothing _ -> {
-                return new UnreadComparison.Quantity.CutsNothing<>();
-            }
-            case AffineReading.OfAComparison.Cuts cuts -> {
-                java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
-                for (NumericTerm atom : cuts.read().form().coefs().keySet()) {
-                    over.add(atom.subjectPath());
-                }
-                return new UnreadComparison.Quantity.Over<>(over);
-            }
-        }
     }
 
     /**
@@ -519,27 +355,20 @@ public final class GuardThresholds {
      * rule's own and no other's.
      *
      * <p>Whether a line may be drawn on this comparison at all was settled before the walk got
-     * here, by {@link BoundaryPolicy}. Asked at the fork instead, this reader had to find one
-     * to find a rule.
+     * here, by {@link BoundaryPolicy}, and what the comparison comes to was read where that was
+     * settled ({@code read}). Nothing here reads the comparison again.
      */
     private static void lineAt(String behavior, Core.Binary each, CoverageSites.Plan plan,
-                               InputReads reads, Symbols symbols,
-                               souther.compiler.inputs.Quantities quantities,
+                               InputReads reads, Symbols symbols, ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
-                               List<Core> assessed, List<RuleWithoutALine> withoutALine) {
+                               List<RuleWithoutALine> withoutALine) {
         // The plan numbered every comparison of an instrumented condition before anything read a
         // line off one, so this is here. Required rather than looked up leniently: a line whose
         // comparison has no site is this reader and the plan disagreeing about what a condition
         // is made of.
         souther.compiler.coverage.ComparisonOccurrence site =
                 plan.requireComparisonAt(each);
-        // What the comparison comes to is one question with one answer
-        // ({@link ComparisonAssessment}). What is added here is what meeting the line takes, which
-        // is a guard's own answer and no other rule's.
-        ComparisonAssessment read =
-                ComparisonAssessment.of(behavior, each, reads, symbols, quantities, null, false);
-        assessed.add(each);
         publish(behavior, each, plan, reads, symbols, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {

@@ -128,7 +128,7 @@ final class PartitionClasses {
         PartitionClass built = switch (one) {
             case Case.Truth truth -> eitherWay(truth.value(), worn, writes);
             case Case.Presence presence -> heldOrNot(presence.present(), view, worn, policy, writes, symbols);
-            case Case.SumCase sum -> caseClass(sum, worn, policy, writes, symbols);
+            case Case.SumCase sum -> caseClass(sum, view.declared(), worn, policy, writes, symbols);
             case Case.Named named -> ValueClasses.classAt(named.value(), view, worn, symbols);
         };
         Refinement narrowing = Refinement.of(one);
@@ -177,10 +177,10 @@ final class PartitionClasses {
                         RepresentativeSource.under(writes, RepresentativeSource.of(some)));
     }
 
-    private static PartitionClass caseClass(Case.SumCase one, List<TypeSymbol> worn,
+    private static PartitionClass caseClass(Case.SumCase one, Type of, List<TypeSymbol> worn,
                                             ReadingPolicy policy,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
-        return holdingWhatItIs(one, writableCase(one.leaf(), worn, policy, writes, symbols));
+        return holdingWhatItIs(one, writableCase(one.leaf(), of, worn, policy, writes, symbols));
     }
 
     /**
@@ -198,11 +198,16 @@ final class PartitionClasses {
     }
 
     /** The class itself: what it is called, what it recognises, and what can be written for it. */
-    private static PartitionClass writableCase(TypeSymbol leaf, List<TypeSymbol> worn,
+    private static PartitionClass writableCase(TypeSymbol leaf, Type of, List<TypeSymbol> worn,
                                                ReadingPolicy policy,
                                                List<TypeReachName.Written> writes,
                                                Symbols symbols) {
-        Recognition is = Recognition.Under.of(worn, new Recognition.OfCase(leaf));
+        // Where the case sits on the position's order, decided here where the case, the position's
+        // type and the declarations are all in hand. A line a body draws on an ordered enumeration
+        // is at one of these places, and the class holding it is asked with the place.
+        Recognition is = Recognition.Under.of(worn, new Recognition.OfCase(leaf,
+                ValueClasses.placeOf(new souther.compiler.observe.ObservedValue.Unit(leaf), of,
+                        symbols)));
         // A case whose module does not expose it: a value of the position all the same, and one no
         // author here can write down. Said as that, rather than offered under a spelling that
         // resolves to nothing wherever the row is pasted (issue #696).

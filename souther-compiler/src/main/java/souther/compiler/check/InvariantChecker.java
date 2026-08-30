@@ -672,14 +672,6 @@ public final class InvariantChecker {
             // value is the walk's answer and is given to both readings; what each of them makes of a
             // clause is its own, so neither can widen the other's idea of what it was handed.
             Map<FactSubject, Type> positions = positions(atoms, keys, typeAt);
-            // One reading in two languages and not two readings: the connectives belong to the clause,
-            // so an alternative nothing can satisfy is dropped by asking the whole of what is known
-            // about it.
-            //
-            // Read before the ends are, because the reading of ends asks what this one made of each part
-            // it meets. Nothing here depends on that order otherwise — both are given the same clauses
-            // and neither takes anything from the other.
-            StatedByClauses stated = StatedByClauses.top();
             // How a choice holds what it leaves, settled over the whole declaration before any of
             // it is read. Its clauses are met, so what they come to together is the product of what
             // each comes to, and a bound on that bounds every step of the fold — which is why the
@@ -701,11 +693,11 @@ public final class InvariantChecker {
             StatedByClauses.Reading reader = StatedByClauses
                     .readingOf(c.terms, at, positions, symbols, alternatives, allowed);
             // What each clause said and what each part of it said, kept as they were read and
-            // asked afterwards. Which branch of a choice anybody can take turns on machines nobody
-            // has made at this point, and every one of these questions has a different answer for a
-            // branch that survives and one that does not — a clause's adoption included. Asked
-            // here, a reading answered from what it happened to hold, and an account named a rule
-            // of a branch nothing satisfies.
+            // asked afterwards. Which branch of a choice anybody can take turns on clauses not yet
+            // read and on machines nobody has made at this point, and every one of these questions
+            // has a different answer for a branch that survives and one that does not — a clause's
+            // adoption included. Asked here, a reading answered from what it happened to hold, and
+            // an account named a rule of a branch nothing satisfies.
             //
             // Kept in the order they were read and not in a map keyed by what a node happens to be,
             // because the order these are worked out in is the order the allowance is spent in: a
@@ -713,7 +705,7 @@ public final class InvariantChecker {
             // where its clauses landed in a table.
             StatedByClauses.Asked<Written> asked = new StatedByClauses.Asked<>();
             for (Written each : written) {
-                stated = stated.meet(asked.read(reader, each, each.clause()));
+                asked.read(reader, each, each.clause());
             }
             // And now that every rule about this value has been said, what its positions admit is
             // worked out — and with it what each clause and each part of it took in, since a branch
@@ -721,7 +713,7 @@ public final class InvariantChecker {
             // met out of every clause that reached it, so anything built before the last of them
             // arrived would be built out of less than the rules say — and which of two ways of
             // writing the same rules was affordable would be a fact about the writing.
-            StatedByClauses.Answered<Written> answered = asked.resolve(reader, stated, allowed);
+            StatedByClauses.Answered<Written> answered = asked.resolve(reader, allowed);
             // What the answer has left, before a word of the account is read.
             Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
             AdmissibleValues<FactSubject> values = answered.whole().values();
@@ -1737,9 +1729,14 @@ public final class InvariantChecker {
         for (FactSubject atom : whole.coefs().keySet()) {
             over.add(byName.get(atom).path());
         }
-        return over.isEmpty()
-                ? new Arithmetic(new UnreadComparison.Quantity.CutsNothing<>(), whole.constant())
-                : new Arithmetic(new UnreadComparison.Quantity.Over<>(over), null);
+        if (over.isEmpty()) {
+            return new Arithmetic(new UnreadComparison.Quantity.CutsNothing<>(), whole.constant());
+        }
+        if (over.size() == 1) {
+            return new Arithmetic(new UnreadComparison.Quantity.OverOne<>(over.iterator().next()),
+                    null);
+        }
+        return new Arithmetic(new UnreadComparison.Quantity.OverSeveral<>(over), null);
     }
 
     /**

@@ -11,7 +11,14 @@ import java.util.List;
 
 /**
  * One reading of a body's comparisons: where each stands, what its names point at, what a row had
- * already satisfied to get there, and whether a line is drawn on it.
+ * already satisfied to get there, whether a line may be drawn on it, and what it came to where one
+ * may.
+ *
+ * <p><b>Each comparison is read once, here, and what it came to travels with it.</b> A reader that
+ * reports why a comparison bears no line reads the answer off the standing and never reads the
+ * arithmetic again: read again downstream, the second reading answers about the form when the
+ * question was about where the comparison stands, and a form read to the end is described as one
+ * nobody could read.
  *
  * <p><b>One walk, because there is one thing being walked.</b> Three facts about a comparison are
  * settled by where it stands in the body, and each was being worked out by a walk of its own: which
@@ -63,13 +70,6 @@ final class ComparisonReadings {
         return readings;
     }
 
-    /** The comparisons a line is drawn on, in the order the source wrote them. */
-    List<Reading> drawn() {
-        return readings.stream()
-                .filter(each -> each.standing() instanceof BoundaryPolicy.Standing.DrawsALine)
-                .toList();
-    }
-
     /** What each comparison stands under, filed under the site a run through it is recorded at. */
     ReachingCuts reaching(CoverageSites.Plan plan) {
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
@@ -80,11 +80,20 @@ final class ComparisonReadings {
         return cuts.made();
     }
 
-    /** One reading of {@code body}. */
-    static ComparisonReadings of(Core body, CoverageSites.Plan plan, InputReads reads,
-                                 Symbols symbols) {
+    /**
+     * What is the same at every comparison of one body: whose body it is, what the plan numbered,
+     * the module's names, and what the input's rules leave each quantity.
+     */
+    private record Body(String behavior, CoverageSites.Plan plan, Symbols symbols,
+                        souther.compiler.inputs.Quantities quantities) {}
+
+    /** One reading of {@code body}, which is {@code behavior}'s. */
+    static ComparisonReadings of(String behavior, Core body, CoverageSites.Plan plan,
+                                 InputReads reads, Symbols symbols,
+                                 souther.compiler.inputs.Quantities quantities) {
         List<Reading> readings = new ArrayList<>();
-        walk(body, plan, reads, symbols, LiveFlow.of(body), List.of(), true, readings);
+        walk(body, new Body(behavior, plan, symbols, quantities), reads, LiveFlow.of(body),
+                List.of(), true, readings);
         return new ComparisonReadings(readings);
     }
 
@@ -94,12 +103,20 @@ final class ComparisonReadings {
      *                with. Carried down because everything inside a value nothing reads is read by
      *                nothing either
      */
-    private static void walk(Core e, CoverageSites.Plan plan, InputReads reads, Symbols symbols,
-                             LiveFlow flow, List<OnTheWay> assumed, boolean live,
-                             List<Reading> out) {
+    private static void walk(Core e, Body in, InputReads reads, LiveFlow flow,
+                             List<OnTheWay> assumed, boolean live, List<Reading> out) {
+        CoverageSites.Plan plan = in.plan();
+        Symbols symbols = in.symbols();
         if (e instanceof Core.Binary comparison && plan.comparisons().at(comparison).isPresent()) {
-            out.add(new Reading(comparison, reads, assumed,
-                    BoundaryPolicy.standingOf(comparison, plan, live)));
+            // Read only where the policy admits it, and under the names in force here, which is
+            // the one environment the comparison is about. `answer` is null: a body has nothing
+            // that is the answer.
+            BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(comparison, plan, live)
+                    .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
+                    .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
+                            ComparisonAssessment.of(in.behavior(), comparison, reads, symbols,
+                                    in.quantities(), null, false)));
+            out.add(new Reading(comparison, reads, assumed, standing));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer
@@ -107,32 +124,31 @@ final class ComparisonReadings {
             // any fork above it: there need not be one, and where there is, this is what the fork
             // would have been reading anyway.
             case Core.Binary both when both.op() == BinOp.AND -> {
-                walk(both.left(), plan, reads, symbols, flow, assumed, live, out);
-                walk(both.right(), plan, reads, symbols, flow,
+                walk(both.left(), in, reads, flow, assumed, live, out);
+                walk(both.right(), in, reads, flow,
                         taking(both.left(), true, reads, assumed, symbols), live, out);
             }
             case Core.Binary either when either.op() == BinOp.OR -> {
-                walk(either.left(), plan, reads, symbols, flow, assumed, live, out);
-                walk(either.right(), plan, reads, symbols, flow,
+                walk(either.left(), in, reads, flow, assumed, live, out);
+                walk(either.right(), in, reads, flow,
                         taking(either.left(), false, reads, assumed, symbols), live, out);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
             // of it. A comparison inside a condition is not below the fork: it runs to decide it.
             case Core.If iff -> {
-                walk(iff.cond(), plan, reads, symbols, flow, assumed, live, out);
-                walk(iff.then(), plan, reads, symbols, flow,
+                walk(iff.cond(), in, reads, flow, assumed, live, out);
+                walk(iff.then(), in, reads, flow,
                         taking(iff.cond(), true, reads, assumed, symbols), live, out);
-                walk(iff.els(), plan, reads, symbols, flow,
+                walk(iff.els(), in, reads, flow,
                         taking(iff.cond(), false, reads, assumed, symbols), live, out);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
             // body is where the name stands for what was bound to it.
             case Core.LetIn let -> {
-                walk(let.value(), plan, reads, symbols, flow, assumed,
-                        live && flow.reads(let), out);
-                walk(let.body(), plan, reads.and(let.binder(), let.value()), symbols, flow, assumed,
-                        live, out);
+                walk(let.value(), in, reads, flow, assumed, live && flow.reads(let), out);
+                walk(let.body(), in, reads.and(let.binder(), let.value()), flow, assumed, live,
+                        out);
             }
             // And each arm under what the arm says the value it matched turned out to be. A name
             // the arm binds is the scrutinee's position narrowed to that case, so a comparison
@@ -144,14 +160,14 @@ final class ComparisonReadings {
             // inside an arm was owed a row by a walk that had been told nothing stood on the way to
             // it, and the row composed for it was written in whichever arm the values fell in.
             case Core.Match match -> {
-                walk(match.scrutinee(), plan, reads, symbols, flow, assumed, live, out);
+                walk(match.scrutinee(), in, reads, flow, assumed, live, out);
                 for (Core.Case arm : match.cases()) {
-                    walk(arm.body(), plan, reads.insideArm(match, arm, symbols), symbols, flow,
+                    walk(arm.body(), in, reads.insideArm(match, arm, symbols), flow,
                             entering(match, arm, reads, assumed, symbols), live, out);
                 }
             }
             default -> Core.forEachChild(e, child ->
-                    walk(child, plan, reads, symbols, flow, assumed, live, out));
+                    walk(child, in, reads, flow, assumed, live, out));
         }
     }
 
