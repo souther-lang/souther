@@ -112,14 +112,9 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
      */
     @Test
     void aNameBetweenTheWalkAndTheTotalChangesNothing() {
-        String report = report();
-        for (String point : List.of("ON", "OFF", "IN", "OUT")) {
-            assertTrue(report.contains("the " + point + " point "),
-                    () -> "the same " + point + " point is owed whether or not the mapped list was"
-                            + " given a name: " + report);
-        }
-        assertTrue(report.contains("read as throughALocalName/List.sum(lines[*].amount)"),
-                () -> "and against the total, named as the reading names it: " + report);
+        assertEquals(pointsOn("overAProjection"), pointsOn("throughALocalName"),
+                "the same points are owed against the same total whether or not the mapped list was"
+                        + " given a name");
     }
 
     /**
@@ -141,20 +136,36 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
         }
     }
 
-    /** The line is on the total, with the four points a border owes standing against it. */
+    /**
+     * The line is on the total, with the four points a border owes standing against it.
+     *
+     * <p>Read off what was measured and not out of the report's text. What a point is owed is one
+     * question and what became of the search for a row at it is another, and the sentence a report
+     * prints is about the second: a point a row was composed for is no longer written down as one
+     * nothing was, so a test reading the text would say the point had gone.
+     */
     @Test
     void theLineIsOnTheTotalAndItsPointsAreOwed() {
-        String report = report();
-        for (String point : List.of("ON", "OFF", "IN", "OUT")) {
-            assertTrue(report.contains("the " + point + " point "),
-                    () -> "a " + point + " point is owed: " + report);
+        assertEquals(List.of("List.sum(lines[*].amount) = 100000 ON",
+                        "List.sum(lines[*].amount) = 100000 OFF",
+                        "List.sum(lines[*].amount) = 100000 IN",
+                        "List.sum(lines[*].amount) = 100000 OUT"),
+                pointsOn("overAProjection"),
+                "a border on a total owes the four points every border owes");
+    }
+
+    /** The points of the total's own line, in the order a border names them. */
+    private static List<String> pointsOn(String behavior) {
+        Compilation compilation = measured();
+        List<String> out = new java.util.ArrayList<>();
+        for (souther.compiler.query.BorderAssessment border
+                : souther.compiler.query.Adequacy.readingsOf(compilation.db(), MODULE)
+                        .get(behavior)) {
+            if (border.label().contains("List.sum")) {
+                border.items().forEach((role, _) -> out.add(border.label() + " " + role));
+            }
         }
-        assertTrue(report.contains("read as overAProjection/List.sum(lines[*].amount)"),
-                () -> "and they are owed against the total: " + report);
-        assertTrue(report.contains("nothing here could build a representative for"
-                        + " List.sum(lines[*].amount) = 100000"),
-                () -> "and nothing composes a row for it, which is said rather than left to look"
-                        + " like a measure nobody asked for: " + report);
+        return out;
     }
 
     /**

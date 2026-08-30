@@ -2348,7 +2348,7 @@ public final class Generator {
      */
     public static BoundaryAttempt probeFixing(Subject subject, String label,
                                               java.util.function.Function<NumericTerm, Carrier> on,
-                                              Map<NumericTerm.FromOnePosition, Place> fixing,
+                                              Map<RealizationTarget, Place> fixing,
                                               Reachability.Reaching reaching, CandidateCheck check) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
@@ -2365,8 +2365,8 @@ public final class Generator {
         // declarations leave and the first from what reaches the border, and only one of them was
         // about the row being written.
         Standing where = alsoOnTheWay(subject, fixing, reaching);
-        Map<NumericTerm.FromOnePosition, Place> standing = where.at();
-        for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
+        Map<RealizationTarget, Place> standing = where.at();
+        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
             // The order this position is written back on, which is the position's own. Handed one
             // order for the whole fixing, a form over positions written back differently wrote each
             // of them as a value of whichever order the quantity happened to answer with.
@@ -2375,7 +2375,7 @@ public final class Generator {
             // condition above the line is over positions the quantity is not taken of, and each of
             // those is read and written on its own order like any other.
             Carrier carrier = fixing.containsKey(each.getKey())
-                    ? on.apply(each.getKey()) : carrierOf(subject, each.getKey());
+                    ? on.apply(each.getKey().term()) : carrierOf(subject, each.getKey().term());
             if (carrier == null) {
                 throw new IllegalStateException("a row is owed at " + each.getKey()
                         + " and the quantity it is owed for is over no such position");
@@ -2384,16 +2384,17 @@ public final class Generator {
             // in: what that limit is about is a number met by several values being asked to stand
             // beside a second position of the same item, and a position bounded on the way is one
             // this could leave to its own range without the row stopping being a row at the item.
-            Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(), fixing.size() > 1);
+            Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(),
+                    fixing.size() > 1, reaching.region());
             if (edge.values().isEmpty()) {
                 return new BoundaryAttempt.Unresolved(
                         new UnresolvedCombination(List.of(label), edge.reason()),
                         where.unrepresented());
             }
-            TermPath at = each.getKey().position();
-            // Two terms at one path is one location asked for two things at once — a string of a
-            // length and the string itself — and what a row writes at a location is one value. The
-            // fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
+            TermPath at = each.getKey().writeRoot();
+            // Two terms at one location is that location asked for two things at once — a string of
+            // a length and the string itself — and what a row writes at a location is one value.
+            // The fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
             // rather than writing whichever came last and offering half the point as the whole.
             //
             // Refused whatever the second edge offers, and not only where it offers something else.
@@ -2401,15 +2402,22 @@ public final class Generator {
             // back — is the edge's own answer, and two edges have two of those however alike their
             // values are. Written as one, the row would carry one edge's account of a place both
             // were asked about.
-            if (decided.holds(at)) {
+            //
+            // Which two locations are one is {@link LocationWrites}' answer and is asked of it once.
+            // Asked here as well, this would be a second account of that, and the two would part
+            // over a location inside another.
+            //
+            // Anything but the first ask, and not only an ask that disagrees. That two edges offer
+            // the same values is not the two being one ask here, for the reason above: what travels
+            // beside the values is each edge's own, and the second would be recorded as the first's.
+            if (decided.write(at, edge.values()) != LocationWrites.Written.FIRST) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
                         where.unrepresented());
             }
-            decided.write(at, edge.values());
             // The orders the value was built against, kept so that reading it back asks the
             // question building it asked rather than a second reading of the same position.
-            builtOn.put(each.getKey(), edge.on());
+            builtOn.put(each.getKey().term(), edge.on());
             if (edge.settledAt() != null) {
                 settled.put(at, edge.settledAt());
             }
@@ -2426,7 +2434,7 @@ public final class Generator {
             CandidateCheck certified =
                     certifying(check, subject, p, standing, builtOn, uncertified);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            for (NumericTerm.FromOnePosition term : standing.keySet()) {
+            for (RealizationTarget target : standing.keySet()) {
                 // A position the way also narrows is not fixed at a value here. What has to hold of
                 // it is one thing said two ways — a place the item asks for, and a case the way
                 // says the value turned out to be — and one location is decided once: the narrowing
@@ -2434,9 +2442,9 @@ public final class Generator {
                 // is accepted ({@link #certifying}). Handed over as both, it is a position with two
                 // accounts, which is what {@link ConstructionPlan} refuses and what it is right to
                 // refuse.
-                if (term.position().head().equals(head)
-                        && reaching.requirements().at(term.position()) == null) {
-                    here.put(term.position(), decided.at(term.position()));
+                if (target.writeRoot().head().equals(head)
+                        && reaching.requirements().at(target.writeRoot()) == null) {
+                    here.put(target.writeRoot(), decided.at(target.writeRoot()));
                 }
             }
             Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(), certified);
@@ -2488,17 +2496,16 @@ public final class Generator {
      * those is a row that cannot be written, and each is a row this composes the way it did before
      * the way was carried here at all.
      */
-    private static Standing alsoOnTheWay(Subject subject,
-                                         Map<NumericTerm.FromOnePosition, Place> fixing,
+    private static Standing alsoOnTheWay(Subject subject, Map<RealizationTarget, Place> fixing,
                                          Reachability.Reaching reaching) {
-        Map<NumericTerm.FromOnePosition, Place> out = new LinkedHashMap<>(fixing);
+        Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         List<ReachabilityGap.Uncomposed> unrepresented = new ArrayList<>();
         java.util.Set<TermPath> taken = new java.util.LinkedHashSet<>();
-        fixing.keySet().forEach(term -> taken.add(term.position()));
+        fixing.keySet().forEach(target -> taken.add(target.writeRoot()));
         souther.compiler.inputs.SearchRegion here = reaching.region();
-        for (Map.Entry<NumericTerm.FromOnePosition, Place> each : fixing.entrySet()) {
+        for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
             if (each.getValue() instanceof Count count) {
-                here = here.given(each.getKey(), count);
+                here = here.given(each.getKey().term(), count);
             }
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
@@ -2508,12 +2515,16 @@ public final class Generator {
             for (NumericTerm term : cut.cut().form().coefs().keySet()) {
                 // This very number already stands somewhere: the item asked for it, or an earlier
                 // cut did. Nothing to place, and the cut is answered at it either way.
-                if (out.containsKey(term)) {
+                if (out.containsKey(RealizationTarget.of(term))) {
                     continue;
                 }
-                // A number no single position answers. What is composed here is a value written
-                // somewhere, so there is nowhere to put one — the cut goes unrepresented for the
-                // same reason a cut whose positions nothing composed a value for does.
+                // A number this reader cannot place beside the ones already standing. What it can
+                // do is choose a value for a position ({@link NumericWitness}); what a number over a
+                // run asks for is a container built to come to it, which is a second demand to
+                // compose beside the item's own and not a value to choose. So the cut goes
+                // unrepresented for the same reason a cut whose positions nothing composed a value
+                // for does — and the reason is that two demands were asked of one row here, not
+                // that the number has nowhere to be written.
                 NumericTerm.FromOnePosition at = term.atOnePosition();
                 if (at == null) {
                     placeable = false;
@@ -2523,7 +2534,14 @@ public final class Generator {
                 // location is, and that one value would have to answer both — a string of a length
                 // and the string itself is the shape of it. Nothing here composes a value to two
                 // numbers at once, so the cut is one this could not put a value under.
-                if (taken.contains(at.position())) {
+                //
+                // Which locations are one is asked of the reader that owns it, because a container
+                // written whole and a position inside it are one location spelled two ways. Kept
+                // here as a lookup of the path, this would place a cut the writing then refuses,
+                // and a cut that cannot be represented would sink the whole point rather than being
+                // reported as the one thing it is.
+                if (taken.stream().anyMatch(
+                        each -> LocationWrites.oneLocation(each, at.position()))) {
                     shared = true;
                     break;
                 }
@@ -2546,7 +2564,7 @@ public final class Generator {
                     here = here.given(each.getKey(), count);
                 }
                 taken.add(each.getKey().position());
-                out.put(each.getKey(), each.getValue());
+                out.put(new RealizationTarget.AtOnePosition(each.getKey()), each.getValue());
             }
         }
         return new Standing(out, unrepresented);
@@ -2561,7 +2579,7 @@ public final class Generator {
      * arrive there, and an account of the attempt that did not say so would have an author reading
      * "no row was seen reaching it" beside a way that says everything on it was taken in.
      */
-    private record Standing(Map<NumericTerm.FromOnePosition, Place> at,
+    private record Standing(Map<RealizationTarget, Place> at,
                             List<ReachabilityGap.Uncomposed> unrepresented) {}
 
     /**
@@ -2608,7 +2626,7 @@ public final class Generator {
      *                tells a search that ran out of candidates from one that certified none
      */
     private static CandidateCheck certifying(CandidateCheck check, Subject subject, int parameter,
-                                             Map<NumericTerm.FromOnePosition, Place> fixing,
+                                             Map<RealizationTarget, Place> fixing,
                                              Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn,
                                              boolean[] refused) {
         return (at, candidate) -> {
@@ -2618,12 +2636,12 @@ public final class Generator {
             if (at != parameter || !(built instanceof CandidateCheck.Built.Value(var observed))) {
                 return built;
             }
-            for (Map.Entry<NumericTerm.FromOnePosition, Place> each : fixing.entrySet()) {
-                if (!subject.parameters().get(parameter).equals(each.getKey().position().head())) {
+            for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
+                if (!subject.parameters().get(parameter).equals(each.getKey().writeRoot().head())) {
                     continue;
                 }
                 String elsewhere = readsElsewhere(subject, parameter, observed, each.getKey(),
-                        each.getValue(), builtOn.get(each.getKey()));
+                        each.getValue(), builtOn.get(each.getKey().term()));
                 if (elsewhere != null) {
                     refused[0] = true;
                     return new CandidateCheck.Built.Refused(elsewhere);
@@ -2650,7 +2668,7 @@ public final class Generator {
      */
     private static String readsElsewhere(Subject subject, int parameter,
                                          souther.compiler.observe.ObservedValue observed,
-                                         NumericTerm.FromOnePosition term, Place at,
+                                         RealizationTarget target, Place at,
                                          souther.compiler.inputs.TermOrders on) {
         if (on == null) {
             return null;
@@ -2661,17 +2679,31 @@ public final class Generator {
                 java.util.Collections.nCopies(subject.parameters().size(), null));
         row.set(parameter, observed);
         List<souther.compiler.observe.ObservedValue> values =
-                subject.inputs().valuesAt(row, term.position());
+                subject.inputs().valuesAt(row, target.term().subjectPath());
         if (values == null || values.isEmpty()) {
             return null;
         }
-        for (souther.compiler.observe.ObservedValue value : values) {
-            if (term.read(value, on) instanceof NumericTerm.Reading.Number number
-                    && number.value().compareTo(at) == 0) {
-                return null;
+        // What the number is of, asked the way the term's own reader asks it. A number one position
+        // answers is read at each value standing there, and a row stands at a point where one of its
+        // readings does; a number over a run is read of all of them at once, since that is what the
+        // walk was given and any one of them is not it.
+        boolean stands = switch (target) {
+            case RealizationTarget.AtOnePosition one -> {
+                boolean any = false;
+                for (souther.compiler.observe.ObservedValue value : values) {
+                    any |= one.term().read(value, on)
+                            instanceof NumericTerm.Reading.Number number
+                            && number.value().compareTo(at) == 0;
+                }
+                yield any;
             }
-        }
-        return "it was composed to put " + term + " at " + at + " and does not stand there";
+            case RealizationTarget.OverARun over ->
+                    over.term().readOver(values, on) instanceof NumericTerm.Reading.Number number
+                            && number.value().compareTo(at) == 0;
+        };
+        return stands ? null
+                : "it was composed to put " + target.term() + " at " + at
+                        + " and does not stand there";
     }
 
     /**
@@ -2689,48 +2721,41 @@ public final class Generator {
      *                      collapsing the two searches into one changed nothing, and removing it is
      *                      its own answer to give
      */
-    private static Edge edgeAt(Subject subject, Carrier carrier,
-                               NumericTerm.FromOnePosition term, Place at,
-                               boolean besideAnother) {
+    private static Edge edgeAt(Subject subject, Carrier carrier, RealizationTarget target, Place at,
+                               boolean besideAnother,
+                               souther.compiler.inputs.SearchRegion within) {
         // A number met by several values can offer only one of them beside a second position being
         // fixed as well. Whether it is met by several is the realization's question and not the kind
         // of term's: an operation whose inverse is single-valued would be the same kind of term and
         // would have been turned away here with nothing saying so (#1027).
-        if (besideAnother && !TermRealizations.onlyOneValueAnswersIt(term)) {
+        if (besideAnother && !TermRealizations.onlyOneValueAnswersIt(target)) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         for (Axis axis : subject.axes()) {
-            if (axis.term().equals(term)) {
-                return edgeOf(axis, carrier, at, subject.symbols(), subject.inputs().policy());
+            if (axis.term().equals(target.term())) {
+                return edgeOf(axis, carrier, at, within, subject.symbols(),
+                        subject.inputs().policy());
             }
         }
-        // No axis at this position, which a behavior whose inputs nothing bounds has none of while
-        // its body still draws lines between them. What this path writes is the number itself at the
-        // position, and a number an operation answered is not that: four is not what goes there, it
-        // is four characters — or some time within the fourth hour — somebody has to choose.
+        // No axis here, which a behavior whose inputs nothing bounds has none of while its body
+        // still draws lines between them. What is written is the value the target's root holds, and
+        // which value answers the number is `TermRealizations`' one answer — asked of it whatever
+        // kind of number this is, so that what can be built is settled in one place. Read off the
+        // kind of term here as well, an operation would gain a value nothing writes for it on the
+        // day the arm for it was written, with nothing failing to say so.
         //
-        // Which something could now do, since building such a value is `TermRealizations`' answer
-        // and it needs no axis to give it. Left refused so that moving the building out of here
-        // changed nothing; removing it is its own answer to give, beside the limit above.
-        //
-        // The position itself is read wherever the declarations reach it and not only where it is a
-        // parameter. What a position is declared to be is the inputs' to say, and a walk of its own
-        // that stopped at the parameter left a condition above a line over a field as one nothing
-        // could put a value under.
-        // Exhaustive over the numbers one position answers, with no `default`. What each of them
-        // writes at the position is a different thing, so a number of a new kind is one this has to
-        // be told about rather than one that takes whichever answer the condition left it on.
-        Type declared = switch (term) {
-            case NumericTerm.ValueOf _ -> subject.inputs().declaredAt(term.position());
-            case NumericTerm.TakenOf _ -> null;
-        };
+        // The root is read wherever the declarations reach it and not only where it is a parameter.
+        // What is declared there is the inputs' to say, and a walk of its own that stopped at the
+        // parameter left a condition above a line over a field as one nothing could put a value
+        // under.
+        Type declared = subject.inputs().declaredAt(target.writeRoot());
         if (declared == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
-                term.observedOn(declared, subject.symbols()), carrier);
-        return edgeFrom(TermRealizations.at(term, declared, on, at, subject.symbols(),
-                subject.inputs().policy()), term, at, on);
+                target.term().observedOn(declared, subject.symbols()), carrier);
+        return edgeFrom(TermRealizations.at(target, declared, on, at, within, subject.symbols(),
+                subject.inputs().policy()), target, at, on);
     }
 
     /**
@@ -3340,8 +3365,9 @@ public final class Generator {
         TermPath at = TermPath.of(subject.parameters().get(p));
         Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
         for (Axis axis : axes) {
-            if (axis.path().head().equals(at.head()) && decided.holds(axis.path())) {
-                here.put(axis.path(), decided.at(axis.path()));
+            List<FixtureTemplate> already = decided.at(axis.path());
+            if (axis.path().head().equals(at.head()) && already != null) {
+                here.put(axis.path(), already);
             }
         }
         return valueAt(subject, p, here, settledIn(here), required, check);
@@ -4157,32 +4183,35 @@ public final class Generator {
      * carries a count is {@link Witnesses}'s to answer — asked rather than decided here, so that a
      * value it learns to build is a boundary this reaches without being told again.
      */
-    private static Edge edgeOf(Axis axis, Carrier carrier, Place at, Symbols symbols,
+    private static Edge edgeOf(Axis axis, Carrier carrier, Place at,
+                               souther.compiler.inputs.SearchRegion within, Symbols symbols,
                                ReadingPolicy policy) {
         // The order the line was drawn on is the caller's — a cut carries the one the rule was read
         // on — and the order the value at the position is written on is the position's. Both, so
         // neither stands in for the other.
         souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
                 axis.term().observedOn(axis.type(), symbols), carrier);
-        return edgeFrom(TermRealizations.at(axis.term(), axis.type(), on, at, symbols, policy),
-                axis.term(), at, on);
+        RealizationTarget target = new RealizationTarget.AtOnePosition(axis.term());
+        return edgeFrom(TermRealizations.at(target, axis.type(), on, at, within, symbols, policy),
+                target, at, on);
     }
 
     /**
      * One realization as an edge of the search.
      *
-     * <p>Where the position itself is settled, and where it is not. A term that is a location's
-     * content is fixed at the place the line was drawn on; a term that is what an operation answered
-     * leaves the position free — three characters is not the position standing at three — so what
-     * the search records as settled is the one and not the other. The one question here the variant
-     * genuinely settles, and asked of the variant.
+     * <p>Where the root itself is settled, and where it is not. A term that is a location's content
+     * is fixed at the place the line was drawn on; a term that is what an operation answered leaves
+     * the root free, since the number is not what stands there — so what the search records as
+     * settled is the one and not the other. The one question here the variant genuinely settles, and
+     * asked of the variant.
      */
-    private static Edge edgeFrom(TermRealizations.Realization made,
-                                 NumericTerm.FromOnePosition term, Place at,
-                                 souther.compiler.inputs.TermOrders on) {
-        Place settled = switch (term) {
+    private static Edge edgeFrom(TermRealizations.Realization made, RealizationTarget target,
+                                 Place at, souther.compiler.inputs.TermOrders on) {
+        Place settled = switch (target.term()) {
             case NumericTerm.ValueOf _ -> at;
-            case NumericTerm.TakenOf _ -> null;
+            // What an operation answered is not what its root holds — three characters is not the
+            // position standing at three, and a hundred is not what the list adding up to it holds.
+            case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;
         };
         return switch (made) {
             case TermRealizations.Realization.BuiltNone none -> Edge.none(none.why());

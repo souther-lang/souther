@@ -524,7 +524,7 @@ final class Coverages {
                 String label,
                 java.util.function.Function<souther.compiler.inputs.NumericTerm,
                         souther.compiler.check.Carrier> on,
-                Map<souther.compiler.inputs.NumericTerm.FromOnePosition, Place> fixing,
+                Map<souther.compiler.partition.RealizationTarget, Place> fixing,
                 souther.compiler.partition.Reachability.Reaching reaching);
 
         /**
