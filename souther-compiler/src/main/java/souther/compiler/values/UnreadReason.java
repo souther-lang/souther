@@ -134,6 +134,29 @@ public enum UnreadReason {
         NEITHER
     }
 
+    /**
+     * The same reasons, with {@code these} left open by an alternative nothing could read — where
+     * nothing has spoiled them already.
+     *
+     * <p>The one rule for what an unread alternative does to the account beside it, stated once for
+     * every carrier that joins a choice: a value satisfying the branch nothing read is under no
+     * obligation from the branch that was read, so the positions that branch reached are left open.
+     * The one place a reason is not added beside the reasons already there — what this says is that
+     * the choice offered an alternative nothing could read, which is one fact about the choice
+     * however many positions it reaches, and a position whose own rules already stopped a reading
+     * is not stopped a second time by it. A reason recorded there is a rule that named the
+     * position, which is nearer than a branch that widened it from outside.
+     */
+    public static <A> java.util.Map<A, java.util.List<UnreadReason>> leftOpen(
+            java.util.Map<A, java.util.List<UnreadReason>> had, java.util.Set<A> these) {
+        if (these.isEmpty()) {
+            return had;
+        }
+        java.util.Map<A, java.util.List<UnreadReason>> out = new java.util.LinkedHashMap<>(had);
+        these.forEach(each -> out.putIfAbsent(each, java.util.List.of(ALTERNATIVE_NOT_READ)));
+        return out;
+    }
+
     /** What this reason is a fact about — see {@link About}. */
     public About about() {
         return switch (this) {
