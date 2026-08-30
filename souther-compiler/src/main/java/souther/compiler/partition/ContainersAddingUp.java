@@ -118,12 +118,12 @@ final class ContainersAddingUp {
         // whose other decompositions were never made — cannot both be seen, and a container offered
         // and refused was reported as every container having been refused.
         boolean left = cap < howMany.most();
-        int many = Math.max(howMany.least(), 0);
-        for (; many <= cap; many++) {
-            if (built.size() >= HOW_MANY_SHAPES_ARE_OFFERED) {
-                left = true;
-                break;
-            }
+        // Asked where a container is added and nowhere else. What the budget counts is containers,
+        // and a walk that asked at the top of the counts was asking about containers in a place that
+        // steps by counts — so a count offering two of them stepped past the figure by one, and how
+        // many were offered was the inner walk's grain rather than what is written down here.
+        offering:
+        for (int many = Math.max(howMany.least(), 0); many <= cap; many++) {
             // More than one element is more than one decomposition, whether or not this made a
             // second: what is offered is two shapes of the many, and the many are what a rule taking
             // a value out of the middle of a run tells apart.
@@ -132,9 +132,14 @@ final class ContainersAddingUp {
                 List<BigDecimal> split = splitting(total.at(), many, ends, how, elements);
                 FixtureTemplate one = split == null ? null
                         : filled(split, holding, container, under, elements, symbols, policy);
-                if (one != null && !built.contains(one)) {
-                    built.add(one);
+                if (one == null || built.contains(one)) {
+                    continue;
                 }
+                if (built.size() == HOW_MANY_SHAPES_ARE_OFFERED) {
+                    left = true;
+                    break offering;
+                }
+                built.add(one);
             }
         }
         Generator.UnresolvedCombination.Reason held =
