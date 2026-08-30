@@ -122,15 +122,6 @@ public sealed interface Recognition {
     record Nothing() implements Recognition {}
 
     /**
-     * The number this meaning is intrinsically about, or null where it is about a value.
-     *
-     * <p>Not which measure a class of this divides — that is said where the class is built and is
-     * never read off a meaning, because a truth means the same thing at every position. What this
-     * answers is narrower: a class about a count carries the number it counts inside its meaning,
-     * and a class said to divide some other number would answer membership about one number while
-     * being owed to another. So this is only ever held against what the class was said to be of.
-     *
-    /**
      * Whether this can be asked about a place on the order the position's values are counted on.
      *
      * <p>Two things a "no" from such a question could mean — the place is not in the class, or the
