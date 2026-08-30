@@ -76,7 +76,10 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
         for (ComparisonReadings.Reading each
                 : ComparisonReadings.of("read", body, plan,
                         InputReads.of(inputs, checked.elementBindings().get("read")),
-                        symbols, inputs.quantities(symbols)).all()) {
+                        symbols, inputs.quantities(symbols),
+                        // What arrives is not what this is about: read with nothing said about it,
+                        // every line is held to the declarations alone.
+                        souther.compiler.check.PathReachability.Answers.NONE).all()) {
             byLine.put(each.comparison().pos().line(), each.standing());
         }
         return byLine;

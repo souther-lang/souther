@@ -117,23 +117,29 @@ public final class GuardThresholds {
     /**
      * The same, reading the input's rules here.
      *
-     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
-     * reads them once and hands the same one to everything that asks, since each of these reading
-     * its own is every rule of every parameter read again to arrive at the same answers.
+     * <p>For a caller that has no reading of them in hand — nor of what arrives at each comparison,
+     * which reads as restricting nothing, so every line such a caller reads is kept as the
+     * declarations alone leave it. The pipeline that measures a behavior reads both once and hands
+     * the same ones to everything that asks, since each of these reading its own is every rule of
+     * every parameter read again to arrive at the same answers.
      */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
         return of(behavior, body, plan, inputs, inputs.quantities(symbols), symbols,
-                souther.compiler.check.ElementBindings.NONE);
+                souther.compiler.check.ElementBindings.NONE,
+                souther.compiler.check.PathReachability.Answers.NONE);
     }
 
     /** The thresholds one behavior's body compares its parameters against. {@code plan} supplies
      * the site each comparison's own value is recorded at, so a boundary can later ask whether the
-     * comparison ran — which is not something the arms of anything standing round it record. */
+     * comparison ran — which is not something the arms of anything standing round it record.
+     * {@code arrives} says what the paths leave arriving at each of those sites, which is what a
+     * line is dropped by ({@link ComparisonAssessment.NothingArrivesAtItsLine}). */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, souther.compiler.inputs.Quantities quantities,
                             Symbols symbols,
-                            souther.compiler.check.ElementBindings elements) {
+                            souther.compiler.check.ElementBindings elements,
+                            souther.compiler.check.PathReachability.Answers arrives) {
         List<LineEvidence> found = new ArrayList<>();
         List<RuleWithoutALine> withoutALine = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
@@ -142,7 +148,7 @@ public final class GuardThresholds {
         // whether a line may be drawn on it and what it came to are five questions about one
         // position, and one walk answers them about one position.
         ComparisonReadings read = ComparisonReadings.of(behavior, body, plan,
-                InputReads.of(inputs, elements), symbols, quantities);
+                InputReads.of(inputs, elements), symbols, quantities, arrives);
         for (ComparisonReadings.Reading each : read.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
@@ -418,6 +424,7 @@ public final class GuardThresholds {
             }
             case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
                  ComparisonAssessment.CutsNothing _, ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.NothingArrivesAtItsLine _,
                  ComparisonAssessment.NoFeasibleInput _,
                  ComparisonAssessment.Unread _ -> { }
         }

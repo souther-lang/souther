@@ -517,6 +517,22 @@ public sealed interface BlockReason {
     record ComparisonCuttingOutsideDomain() implements ReadToEndWithoutLine {}
 
     /**
+     * The comparison was read to the end, the quantity runs as far as the line it draws — and no
+     * row that arrives at the comparison holds a value at the line.
+     *
+     * <p>{@code guard value >= 10} above {@code guard value >= 5} leaves the second guard's line
+     * with nothing against it: every row that gets there is already past it. The line is inside
+     * what the declarations leave, so this is not {@link ComparisonCuttingOutsideDomain} — an
+     * author reading that one would look at the rule for a line their declarations refuse, and
+     * what refuses it is the conditions on the way to the comparison.
+     *
+     * <p>Said only on a proof. The values that arrive were read off the paths, and either nothing
+     * arrives at all or what arrives stops short of the line; a comparison whose arrival nothing
+     * could read keeps its line and its rows.
+     */
+    record ComparisonNothingArrivesAtItsLine() implements ReadToEndWithoutLine {}
+
+    /**
      * The comparison relates two positions rather than dividing one.
      *
      * <p>Nothing is missing from the carrier: both sides are ordered, and a line drawn on either

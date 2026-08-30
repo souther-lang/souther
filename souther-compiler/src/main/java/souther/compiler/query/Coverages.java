@@ -96,7 +96,7 @@ final class Coverages {
                 EnsuresThresholds.of(stated, inputs, quantities, symbols);
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
                 : GuardThresholds.of(behavior.name(), body, plan, inputs, quantities,
-                        symbols, elements);
+                        symbols, elements, arrives);
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
@@ -122,7 +122,7 @@ final class Coverages {
                 // of the model that came to no line at a position it is about.
                 both(both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),
                         filed.notPlaced()),
-                filed.between(), arrives,
+                filed.between(),
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.

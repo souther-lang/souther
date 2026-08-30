@@ -42,7 +42,10 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons, Symbols sym
                 CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                         checked.supplied()),
                 InputReads.of(inputs, checked.elementBindings().get(behavior)),
-                symbols, inputs.quantities(symbols)).all(), symbols);
+                symbols, inputs.quantities(symbols),
+                // Nothing said about what arrives, so every line here is held to what the
+                // declarations leave — which is what a fixture about standing wants.
+                souther.compiler.check.PathReachability.Answers.NONE).all(), symbols);
     }
 
     /** The one comparison the body writes. A body writing two would leave a caller picking one of
