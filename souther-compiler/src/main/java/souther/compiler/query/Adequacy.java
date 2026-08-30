@@ -4291,7 +4291,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             Level level = levelOf(db);
-            Map<String, List<BorderAssessment>> readings = new LinkedHashMap<>();
+            List<BorderAssessment> readings = new ArrayList<>();
             // Every behavior's lines, and values composed at the ones the scope admits. How many
             // readings a point has is a fact about the model, so a scope that left the other
             // behaviors' lines unread would hand back a point that has one reading — and a walk of
@@ -4307,10 +4307,9 @@ public final class Adequacy {
             // How far finding them got is carried by whoever keeps an account, not here: what is
             // gathered is the points, and being short of some of them is a fact about the reading.
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                readings.computeIfAbsent(behavior.name(), _ -> new ArrayList<>())
-                        .addAll(linesReadIn(db, name, behavior, sigs.value(),
-                                level.composesValues() && scope.admits(behavior.name()))
-                                .made().orElseGet(List::of));
+                readings.addAll(linesReadIn(db, name, behavior, sigs.value(),
+                        level.composesValues() && scope.admits(behavior.name()))
+                        .made().orElseGet(List::of));
             }
             if (readings.isEmpty()) {
                 return Answer.of(List.of());

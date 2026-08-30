@@ -102,7 +102,7 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
         twice.addAll(lines);
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> BorderObligationPointAssessment.across(Map.of("check", twice)));
+                () -> BorderObligationPointAssessment.across(twice));
         assertTrue(refused.getMessage().contains("never merged"), refused::getMessage);
     }
 

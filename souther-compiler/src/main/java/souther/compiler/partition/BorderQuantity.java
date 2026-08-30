@@ -31,7 +31,8 @@ import java.util.Map;
  * probe method, an assessment path and a report arm apiece.
  *
  * <p><b>Sealed, so a quantity added is one this file answers for.</b> Sealed here and nowhere else:
- * what a variant costs is the four answers below, and nothing downstream gains an arm.
+ * what a variant costs is the answers this interface asks for below, and nothing downstream gains
+ * an arm.
  */
 public sealed interface BorderQuantity {
 
