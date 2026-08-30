@@ -1729,9 +1729,14 @@ public final class InvariantChecker {
         for (FactSubject atom : whole.coefs().keySet()) {
             over.add(byName.get(atom).path());
         }
-        return over.isEmpty()
-                ? new Arithmetic(new UnreadComparison.Quantity.CutsNothing<>(), whole.constant())
-                : new Arithmetic(new UnreadComparison.Quantity.Over<>(over), null);
+        if (over.isEmpty()) {
+            return new Arithmetic(new UnreadComparison.Quantity.CutsNothing<>(), whole.constant());
+        }
+        if (over.size() == 1) {
+            return new Arithmetic(new UnreadComparison.Quantity.OverOne<>(over.iterator().next()),
+                    null);
+        }
+        return new Arithmetic(new UnreadComparison.Quantity.OverSeveral<>(over), null);
     }
 
     /**

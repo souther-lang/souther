@@ -109,8 +109,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // And only here does how it was written decide anything. The arithmetic stopped, which
             // is what a date against a written date and a case of an enumeration do: the values are
             // ones it cannot count, and the comparison still states a line.
-            case AffineReading.OfAComparison.Stopped _ ->
-                    asWritten(behavior, comparison, canonical, reads, symbols, quantities);
+            case AffineReading.OfAComparison.Stopped stopped ->
+                    asWritten(behavior, comparison, stopped, reads, symbols, quantities);
         };
     }
 
@@ -173,7 +173,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * stopped, so a spelling never answers a question the canonical form has already answered.
      */
     private static Read asWritten(String behavior, Core.Binary comparison,
-                                  AffineReading.OfAComparison canonical, InputReads reads,
+                                  AffineReading.OfAComparison.Stopped canonical, InputReads reads,
                                   Symbols symbols,
                                   souther.compiler.inputs.Quantities quantities) {
         Cutting drawn = atAPosition(behavior, ComparedLine.asWritten(comparison, reads, symbols),

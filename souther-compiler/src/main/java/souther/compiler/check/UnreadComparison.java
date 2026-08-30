@@ -48,16 +48,43 @@ public final class UnreadComparison {
      */
     public sealed interface Quantity<K> {
 
-        /** The positions the quantity this comparison cuts is over. */
-        record Over<K>(Set<K> positions) implements Quantity<K> {
+        /**
+         * The quantity this comparison cuts is over several positions, so it divides none of them.
+         *
+         * <p>Several and not one, by the type. A form over one position is a line on that
+         * position as far as the arithmetic goes, and what a caller could make of it is a
+         * different question with a different answer ({@link OverOne}) — counted as one of these
+         * by the size of a set, the two were told apart by whoever held the set.
+         */
+        record OverSeveral<K>(Set<K> positions) implements Quantity<K> {
 
-            public Over {
+            public OverSeveral {
                 positions = java.util.Collections.unmodifiableSet(new LinkedHashSet<>(positions));
-                if (positions.isEmpty()) {
-                    // A quantity over no position is what {@link CutsNothing} says, and saying it
-                    // twice lets a reader answer one of them for the other.
+                if (positions.size() < 2) {
+                    // A quantity over no position is what {@link CutsNothing} says and one over a
+                    // single position is {@link OverOne}; saying either here lets a reader answer
+                    // one of them for the other.
                     throw new IllegalArgumentException(
-                            "a quantity is over something; nothing cut is CutsNothing");
+                            "a quantity over several positions is over at least two");
+                }
+            }
+        }
+
+        /**
+         * The quantity this comparison cuts is over one position: the arithmetic read a line on it.
+         *
+         * <p>A caller holding one of these and still asking what would have to change is one whose
+         * own reading of the line placed none — a reader of ends that takes a coordinate against
+         * a written constant, handed {@code x + 1 <= 10}. That reading stopped, on a form the
+         * arithmetic reads, and what it stopped on is the position and its carrier: nothing about
+         * how the sides were spelled adds to that, and asked of the sides this answered about a
+         * shape the arithmetic had already got past.
+         */
+        record OverOne<K>(K position) implements Quantity<K> {
+
+            public OverOne {
+                if (position == null) {
+                    throw new IllegalArgumentException("a quantity over one position names it");
                 }
             }
         }
@@ -122,11 +149,13 @@ public final class UnreadComparison {
      * the same division of labour {@link ValueOrigin} already has. Where the arithmetic reads
      * nothing there is no quantity to count, and the sides answer: {@code a > b} over strings
      * relates two positions on an order with no numbers, and {@code a * b > 5} names two and is
-     * stopped by neither of them.
+     * stopped by neither of them. Where it reads a line on one position, that position answers,
+     * and the sides are not consulted at all: a spelling can only disagree with a form that was
+     * read, and a reader that consulted it answered about a shape the arithmetic had got past.
      *
      * @param ordered whether a line can be drawn on what a position carries, asked of the carrier.
      *                Asked of the reader because a position is looked up there, and asked at all
-     *                only about a side that is one
+     *                only about a position the quantity is over or a side that is one
      */
     public static <K> BlockReason.RuleWithoutLineReason why(ValueOrigin<K> left, ValueOrigin<K> right,
                                                  Quantity<K> quantity, Predicate<K> ordered) {
@@ -140,27 +169,36 @@ public final class UnreadComparison {
             // Read to the end and there is no quantity. Nothing about how it was written adds to
             // that: no reading fell short, so no question about what could not be read arises.
             case Quantity.CutsNothing<K> _ -> new BlockReason.ComparisonCuttingNothing();
-            // Over one position, that one is what the rule divides however many the spelling
-            // mentions: `a + b > b` cuts `a`, and counted off the sides it was a relation the model
-            // does not state.
-            case Quantity.Over<K> over -> over.positions().size() > 1
-                    ? new BlockReason.ComparisonBetweenPositions()
-                    : whatThisSideSays(speakingSide(left, right), ordered);
+            case Quantity.OverSeveral<K> _ -> new BlockReason.ComparisonBetweenPositions();
+            // A line on one position that the caller's own reading placed nowhere: that reading
+            // stopped, and what it stopped on is the position. The carrier says which limit — a
+            // position nothing draws a line on wants the carrier, and one lines are drawn on all
+            // through the file wants a reader of the form.
+            case Quantity.OverOne<K> one -> ordered.test(one.position())
+                    ? new BlockReason.UnreadComparisonForm()
+                    : new BlockReason.UnreadComparisonDomain();
             // No quantity was read, so what the sides name is the only account there is.
-            case Quantity.NotRead<K> notRead -> whatTheSidesSay(left, right, notRead, ordered);
+            case Quantity.NotRead<K> notRead -> whatStopped(left, right, notRead, ordered);
         };
     }
 
     /**
-     * What a comparison whose arithmetic went unread comes to, off what its sides name.
+     * What stopped a reading whose arithmetic read no form, off what its sides name.
      *
-     * <p>Only here. Where the canonical form was read it has already said what the rule cuts, and a
-     * spelling saying otherwise is the spelling being wrong about the rule.
+     * <p>The one arm of {@link #why} a caller holding a stopped reading may ask for on its own, and
+     * typed as a stop: every answer here is one, because the arithmetic stopped and what the sides
+     * name only says which limit it stopped on. A caller that has met a stop and wants the words
+     * for it asks this, and cannot be handed the words for a rule read to the end — those are
+     * answers about a quantity, and this is never given one.
+     *
+     * <p>Only here is the spelling consulted. Where the canonical form was read it has already said
+     * what the rule cuts, and a spelling saying otherwise is the spelling being wrong about the
+     * rule.
      */
-    private static <K> BlockReason.RuleWithoutLineReason whatTheSidesSay(ValueOrigin<K> left,
-                                                              ValueOrigin<K> right,
-                                                              Quantity.NotRead<K> notRead,
-                                                              Predicate<K> ordered) {
+    public static <K> BlockReason.RuleReadingStopped whatStopped(ValueOrigin<K> left,
+                                                               ValueOrigin<K> right,
+                                                               Quantity.NotRead<K> notRead,
+                                                               Predicate<K> ordered) {
         // What the sides name says nothing about whether anything fell short, and here something
         // did: the arithmetic stopped. A comparison naming two positions whose form was read is a
         // rule that relates them and leaves nothing missing, and one whose form was not read is a
@@ -200,9 +238,10 @@ public final class UnreadComparison {
         return left.madeFrom() != null ? left : right;
     }
 
-    /** What one side leaves to say. */
-    private static <K> BlockReason.RuleWithoutLineReason whatThisSideSays(ValueOrigin<K> side,
-                                                               Predicate<K> ordered) {
+    /** What one side leaves to say, which is always a stop: a side is asked only where no quantity
+     *  answered for the rule. */
+    private static <K> BlockReason.RuleReadingStopped whatThisSideSays(ValueOrigin<K> side,
+                                                             Predicate<K> ordered) {
         return switch (side) {
             // The position itself against something no end came out of. The carrier, asked of the
             // carrier: `at < DateTime(...)` stops because nothing draws a line on a date-time,
