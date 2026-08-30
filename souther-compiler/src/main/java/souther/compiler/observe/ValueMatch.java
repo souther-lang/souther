@@ -34,6 +34,35 @@ final class ValueMatch {
         this.types = types;
     }
 
+    /**
+     * Whether {@code answered} is what {@code stated} states.
+     *
+     * <p>The two grains in one place, so that what being the same answer means is settled once: a
+     * reader that told them apart itself would have the other grain's comparison somewhere else,
+     * and two comparisons of one statement can disagree.
+     */
+    Verdict verdict(Expectation stated, ObservedValue answered, Position answers) {
+        return switch (stated) {
+            case Expectation.TheValue(Asserted value) -> {
+                Mismatch differs = compare(value, answered, answers);
+                yield differs == null ? Verdict.HELD : new Verdict.NotHeld(differs);
+            }
+            // The case, and nothing under it: there is no value under a case to compare, and
+            // holding a whole value against one would report a difference nobody stated. Which case
+            // an answer is is the declaration it is of, which the reading that produced the answer
+            // already settled.
+            case Expectation.TheCase(souther.compiler.types.TypeSymbol name) -> {
+                if (answered.unread() != null) {
+                    yield new Verdict.NotHeld(new Mismatch(List.of(), Mismatch.Reason.UNREADABLE,
+                            stated, answered, answers));
+                }
+                yield name.equals(answered.declaredAs()) ? Verdict.HELD
+                        : new Verdict.NotHeld(new Mismatch(List.of(), Mismatch.Reason.TYPE, stated,
+                                answered, answers));
+            }
+        };
+    }
+
     /** Null where the two are the same value. */
     Mismatch compare(Asserted stated, ObservedValue observed, Position position) {
         return at(List.of(), stated, observed, position);
@@ -121,10 +150,14 @@ final class ValueMatch {
         for (String name : names) {
             Asserted x = built.fields().get(name);
             ObservedValue y = b.field(name);
-            List<PathElement> inside = into(path, new PathElement.Field(name));
             if (x == null || y == null) {
-                return differs(inside, Mismatch.Reason.SHAPE, a, o, position);
+                // At the construction and not at the field: what differs is which places the two
+                // hold, which is a fact about them rather than about a place one of them has not
+                // got. Said at the field, the path would name somewhere the values beside it are
+                // not from — and there is no value there to name it with.
+                return differs(path, Mismatch.Reason.SHAPE, a, o, position);
             }
+            List<PathElement> inside = into(path, new PathElement.Field(name));
             // The child's position comes from what this value's own type declares that field to be,
             // so nothing outside the value supplies one for what stands under it.
             Mismatch under = at(inside, x, y, types.field(built.type(), name));

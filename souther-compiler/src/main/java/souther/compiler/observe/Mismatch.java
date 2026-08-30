@@ -8,6 +8,11 @@ import java.util.List;
  * <p>The place inside the two values, what was stated there, what stood there, and which of the
  * questions being the same value is made of it fails.
  *
+ * <p>All four are about one place. A difference reported at a place the values beside it are not
+ * from is a reader told two things that do not go together — and where the difference is that one
+ * side holds a place the other has not got, the place there is to report it at is the value whose
+ * places they are ({@link Reason#SHAPE}).
+ *
  * <p>{@link #position} is what the declaration says stands at that place. It is carried rather than
  * left to be worked out again, because what a value is there was already decided by the comparison:
  * an observation does not say whether its sequence is a list or a set, and a reader asking that

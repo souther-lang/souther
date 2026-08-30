@@ -2,32 +2,21 @@ package souther.compiler.observe;
 
 import souther.compiler.types.TypeSymbol;
 
-import java.util.List;
 
 /**
  * What a text stated of an answer, at the grain it stated it.
  *
- * <p>Two grains and one place they are told apart. A statement writes a value, or it names the case
- * the answer is and nothing under it — {@code | Approved} says which case and says nothing about
- * what is in it, and that is weaker evidence and still evidence. Whether an answer keeps what was
- * stated is asked here, so the two grains are one question with one answer: a reader that tested
- * for one of them would have the other grain's comparison somewhere else, and two comparisons of
- * one statement can disagree.
+ * <p>Two grains. A statement writes a value, or it names the case the answer is and nothing under
+ * it — {@code | Approved} says which case and says nothing about what is in it, and that is weaker
+ * evidence and still evidence.
  *
- * <p>Asked with what it needs rather than with whoever holds it. {@link ValueTypes} says what a
- * declaration reads a place through and {@code answers} is where the answer stands, and those are
- * the whole of the context: nothing here reads a program, a module or a compiler.
+ * <p>What it states and nothing more. Whether an answer keeps it is asked of what is bound to the
+ * declarations the row was read against ({@code CheckedRow.Reproducible#holds}), and not of this:
+ * a comparison reachable from a statement is one a reader can make with declarations of its own,
+ * and two readings of one row would then answer differently about one answer — which is the whole
+ * of what asking the language rather than the reader means.
  */
 public sealed interface Expectation {
-
-    /**
-     * Whether {@code answered} is what this states.
-     *
-     * @param answered what came out, as it was observed
-     * @param types    what the declarations say stands inside a value
-     * @param answers  where the answer stands, which says what a sequence there is
-     */
-    Verdict compare(ObservedValue answered, ValueTypes types, Position answers);
 
     /** The whole value. */
     record TheValue(Asserted value) implements Expectation {
@@ -36,12 +25,6 @@ public sealed interface Expectation {
             if (value == null) {
                 throw new IllegalArgumentException("a stated value is a value");
             }
-        }
-
-        @Override
-        public Verdict compare(ObservedValue answered, ValueTypes types, Position answers) {
-            Mismatch differs = new ValueMatch(types).compare(value, answered, answers);
-            return differs == null ? Verdict.HELD : new Verdict.NotHeld(differs);
         }
     }
 
@@ -58,17 +41,6 @@ public sealed interface Expectation {
             if (name == null) {
                 throw new IllegalArgumentException("a stated case is a case");
             }
-        }
-
-        @Override
-        public Verdict compare(ObservedValue answered, ValueTypes types, Position answers) {
-            if (answered.unread() != null) {
-                return new Verdict.NotHeld(new Mismatch(List.of(), Mismatch.Reason.UNREADABLE,
-                        this, answered, answers));
-            }
-            return name.equals(answered.declaredAs()) ? Verdict.HELD
-                    : new Verdict.NotHeld(new Mismatch(List.of(), Mismatch.Reason.TYPE, this,
-                            answered, answers));
         }
     }
 }

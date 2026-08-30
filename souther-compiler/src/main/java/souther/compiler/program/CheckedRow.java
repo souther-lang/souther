@@ -112,7 +112,8 @@ public final class CheckedRow {
             if (answered == null) {
                 throw new IllegalArgumentException("a row is held against an answer");
             }
-            return stated.expects().compare(answered, types, answers);
+            return souther.compiler.observe.Comparisons.verdict(stated.expects(), answered, types,
+                    answers);
         }
 
         @Override

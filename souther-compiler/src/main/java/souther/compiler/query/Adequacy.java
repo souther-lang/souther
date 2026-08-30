@@ -2760,8 +2760,11 @@ public final class Adequacy {
             return Map.of();
         }
         Map<String, RowReading> out = new LinkedHashMap<>();
+        // What ran, which is what a measure is counted over. A row nothing came back for is not a
+        // row a measure reads and is not one it may pass over either: what it would have covered is
+        // unknown, which is what the gaps beside it say.
         read.byBehavior().forEach((behavior, its) ->
-                out.put(behavior, RowReading.of(its.rows(), read.gapsFor(behavior))));
+                out.put(behavior, RowReading.of(its.ran(), read.gapsFor(behavior))));
         return new WithFallback(out, read.everywhere());
     }
 

@@ -189,7 +189,7 @@ final class CheckedProgramAssembler {
                                  Map<ValueName.Behavior, Composition> compositions,
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                  List<CheckedData> data,
-                                 Map<String, List<RowOutcome>> rows) {}
+                                 Map<String, List<Output.RowsRead.ReadRow>> rows) {}
 
     /**
      * The rows this compile read for {@code module}, by the behavior each is a row of.
@@ -203,13 +203,13 @@ final class CheckedProgramAssembler {
      * second run would apply them again — counted twice against the row and doing whatever they do
      * twice. What comes back is what the compile already answered.
      */
-    private static Map<String, List<RowOutcome>> rowsOf(Db db, String module) {
+    private static Map<String, List<Output.RowsRead.ReadRow>> rowsOf(Db db, String module) {
         Output.RowsRead.Of read = db.ask(new Output.RowsRead(module)).value();
         if (read == null) {
             throw new IllegalStateException("`" + module + "` was taken as checked and its rows"
                     + " were not read");
         }
-        Map<String, List<RowOutcome>> byBehavior = new LinkedHashMap<>();
+        Map<String, List<Output.RowsRead.ReadRow>> byBehavior = new LinkedHashMap<>();
         read.byBehavior().forEach((behavior, its) -> byBehavior.put(behavior, its.rows()));
         return byBehavior;
     }
@@ -285,11 +285,12 @@ final class CheckedProgramAssembler {
      * behavior's answer stands — so that asking is not a question about the program the row came
      * from.
      */
-    private static List<CheckedRow> rowsOf(List<RowOutcome> read, ValueTypes types,
+    private static List<CheckedRow> rowsOf(List<Output.RowsRead.ReadRow> read, ValueTypes types,
                                            CheckedSignature signature) {
         List<CheckedRow> rows = new ArrayList<>();
-        for (RowOutcome row : read) {
-            rows.add(new CheckedRow(row.identity(), row.at(), statementOf(row, types, signature)));
+        for (Output.RowsRead.ReadRow row : read) {
+            rows.add(new CheckedRow(row.identity(), row.at(),
+                    statementOf(row, types, signature)));
         }
         return rows;
     }
@@ -306,12 +307,20 @@ final class CheckedProgramAssembler {
      * <p>A switch, so a way of stating a row added later is written down here rather than falling
      * into whichever arm it happens to reach.
      */
-    private static CheckedRow.Statement statementOf(RowOutcome row, ValueTypes types,
+    private static CheckedRow.Statement statementOf(Output.RowsRead.ReadRow row, ValueTypes types,
                                                     CheckedSignature signature) {
-        return switch (row.statement()) {
-            case RowStatement.Stated stated -> new CheckedRow.Reproducible(stated, types,
-                    Position.at(signature.answers()));
-            case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
+        // A switch over both sums, so a row nothing came back for is written down here rather than
+        // being whatever falls out of reading a list of the ones that did — which is a row an output
+        // would never hear of, and a behavior reading as having said nothing about an input someone
+        // wrote down.
+        return switch (row) {
+            case Output.RowsRead.ReadRow.Ran(RowOutcome outcome) -> switch (outcome.statement()) {
+                case RowStatement.Stated stated -> new CheckedRow.Reproducible(stated, types,
+                        Position.at(signature.answers()));
+                case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
+            };
+            case Output.RowsRead.ReadRow.NotRun notRun ->
+                    new CheckedRow.NotReproducible(new RowStatement.NotRead(notRun.why()));
         };
     }
 

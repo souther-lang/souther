@@ -877,16 +877,93 @@ public final class Output {
         /**
          * One behavior's rows, and what stopped a reading of that behavior's own.
          *
-         * <p>Its own, and not everything that counts against it. What stopped a reading of the
-         * whole source is larger than any behavior in it and is said once, beside these; a reader
-         * that wants both asks {@link Of#gapsFor}.
+         * <p>Every row the module wrote for it, in the order they are written, and not only the
+         * ones something came back for. A reading that stopped leaves rows nothing was seen of —
+         * the classes would not link, the source produced no observation at all — and those rows
+         * are still rows someone wrote: listed as what was read, a reader would be handed a
+         * behavior that says nothing about an input that is written down in front of it.
+         *
+         * <p>{@code gaps} is its own, and not everything that counts against it. What stopped a
+         * reading of the whole source is larger than any behavior in it and is said once, beside
+         * these; a reader that wants both asks {@link Of#gapsFor}.
          */
-        public record ReadRows(List<souther.compiler.observe.RowOutcome> rows,
+        public record ReadRows(List<ReadRow> rows,
                                List<souther.compiler.observe.Incompleteness> gaps) {
 
             public ReadRows {
                 rows = List.copyOf(rows);
                 gaps = List.copyOf(gaps);
+            }
+
+            /** The rows something came back for, which is what a measurement is counted over. */
+            public List<souther.compiler.observe.RowOutcome> ran() {
+                List<souther.compiler.observe.RowOutcome> out = new ArrayList<>();
+                for (ReadRow row : rows) {
+                    if (row instanceof ReadRow.Ran(souther.compiler.observe.RowOutcome outcome)) {
+                        out.add(outcome);
+                    }
+                }
+                return out;
+            }
+        }
+
+        /**
+         * One written row, and what became of reading it.
+         *
+         * <p>Two arms and no third: something came back for the row, or nothing did and this says
+         * why. Written as a sum so that a reader deciding what to do with a module's rows has to
+         * say what it does with the ones nothing came back for — dropped, they are rows an output
+         * would never hear of, and a behavior would read as having nothing to say about them.
+         */
+        public sealed interface ReadRow {
+
+            /** What the row names itself. */
+            souther.compiler.observe.RowIdentity identity();
+
+            /** Where it is written. */
+            souther.compiler.diag.SourcePos at();
+
+            /** The row ran, and this is what it came to. */
+            record Ran(souther.compiler.observe.RowOutcome outcome) implements ReadRow {
+
+                public Ran {
+                    if (outcome == null) {
+                        throw new IllegalArgumentException("a row that ran came to something");
+                    }
+                }
+
+                @Override
+                public souther.compiler.observe.RowIdentity identity() {
+                    return outcome.identity();
+                }
+
+                @Override
+                public souther.compiler.diag.SourcePos at() {
+                    return outcome.at();
+                }
+            }
+
+            /**
+             * Nothing came back for the row, and why nothing did.
+             *
+             * <p>The reason is the reading's and not the row's: what the row states was never read,
+             * so there is nothing about it to say beyond which row it is and that this compile did
+             * not get to it.
+             */
+            record NotRun(souther.compiler.observe.RowIdentity identity,
+                          souther.compiler.diag.SourcePos at,
+                          souther.compiler.observe.Incompleteness.Code why) implements ReadRow {
+
+                public NotRun {
+                    if (identity == null || at == null || why == null) {
+                        throw new IllegalArgumentException("a row nothing came back for is still a"
+                                + " row, written somewhere, for a reason it was not read");
+                    }
+                    if (!why.leftNoRowRead()) {
+                        throw new IllegalArgumentException(why + " is a reason a row that was read"
+                                + " fell short, and this row was not read");
+                    }
+                }
             }
         }
 
@@ -939,12 +1016,95 @@ public final class Output {
             if (prepared.present() && prepared.value() != null) {
                 prepared.value().behaviors().forEach(each -> named.add(each.name()));
             }
+            Map<String, List<ReadRow>> written = writtenRows(prepared, rows,
+                    distinct(everywhere), stopped);
             Map<String, ReadRows> out = new LinkedHashMap<>();
             for (String behavior : named) {
-                out.put(behavior, new ReadRows(rows.getOrDefault(behavior, List.of()),
+                out.put(behavior, new ReadRows(written.getOrDefault(behavior, List.of()),
                         stopped.getOrDefault(behavior, List.of())));
             }
             return Answer.of(new Of(out, distinct(everywhere)));
+        }
+
+        /**
+         * Every row the module wrote, by the behavior it is a row of, each with what came back for
+         * it.
+         *
+         * <p>Read off what was written rather than off what came back, because those are two sets
+         * and only the first is the model. A reading that stopped leaves the second short — the
+         * classes would not link, a source produced no observation at all — and a row missing from
+         * it is a row someone wrote that nothing downstream would ever hear of.
+         *
+         * <p>What is attached to a written row is the outcome recorded for it, found by what a row
+         * names itself and where it is written, which is what an outcome is made with. A row with
+         * none takes the reason its reading fell short for: whatever stopped that behavior's rows,
+         * or what stopped the whole reading where nothing was said of the behavior.
+         */
+        static Map<String, List<ReadRow>> writtenRows(
+                Answer<souther.compiler.check.Prepared> prepared,
+                Map<String, List<souther.compiler.observe.RowOutcome>> ran,
+                List<souther.compiler.observe.Incompleteness> everywhere,
+                Map<String, List<souther.compiler.observe.Incompleteness>> stopped) {
+            Map<String, List<ReadRow>> out = new LinkedHashMap<>();
+            if (!prepared.present() || prepared.value() == null) {
+                // Nothing says what was written, so what came back is all there is to say — and a
+                // module whose declarations could not be read is one every reader is already told
+                // about.
+                ran.forEach((behavior, outcomes) -> out.put(behavior,
+                        outcomes.stream().map(each -> (ReadRow) new ReadRow.Ran(each)).toList()));
+                return out;
+            }
+            for (souther.compiler.check.Prepared.Rows block : prepared.value().forExamples().rows()) {
+                souther.compiler.ast.Hir.Example written = block.read();
+                List<ReadRow> mine = out.computeIfAbsent(written.target(),
+                        _ -> new ArrayList<>());
+                for (souther.compiler.ast.Hir.ExampleRow row : written.rows()) {
+                    souther.compiler.observe.RowOutcome came =
+                            among(ran.getOrDefault(written.target(), List.of()), row);
+                    mine.add(came != null ? new ReadRow.Ran(came)
+                            : new ReadRow.NotRun(row.identity(), row.pos(),
+                                    whyNothingCameBack(stopped.getOrDefault(written.target(),
+                                            List.of()), everywhere)));
+                }
+            }
+            return out;
+        }
+
+        /** The outcome recorded for {@code row}, or null where nothing came back for it. A row is
+         * what it names itself and where it is written, which is what an outcome carries of it. */
+        private static souther.compiler.observe.RowOutcome among(
+                List<souther.compiler.observe.RowOutcome> outcomes,
+                souther.compiler.ast.Hir.ExampleRow row) {
+            for (souther.compiler.observe.RowOutcome each : outcomes) {
+                if (each.identity().equals(row.identity()) && each.at().equals(row.pos())) {
+                    return each;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Why nothing came back for a row, read off what stopped the reading it would have been
+         * part of.
+         *
+         * <p>The behavior's own reasons first and then what stopped a reading larger than any
+         * behavior, since the nearer one says more. Where neither says anything, nothing was
+         * observed of it — which is what a row nothing came back for and nothing was said about is.
+         */
+        private static souther.compiler.observe.Incompleteness.Code whyNothingCameBack(
+                List<souther.compiler.observe.Incompleteness> mine,
+                List<souther.compiler.observe.Incompleteness> everywhere) {
+            for (souther.compiler.observe.Incompleteness gap : mine) {
+                if (gap.code().leftNoRowRead()) {
+                    return gap.code();
+                }
+            }
+            for (souther.compiler.observe.Incompleteness gap : everywhere) {
+                if (gap.code().leftNoRowRead()) {
+                    return gap.code();
+                }
+            }
+            return souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT;
         }
 
         /** One entry per reason. A module's classes failing to be instrumented is one fact, and

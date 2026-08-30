@@ -32,9 +32,10 @@ public sealed interface RowStatement {
      * questions answered in two places would be a {@code Stated} that means one thing where it was
      * built and another where it was read.
      *
-     * <p>A class and not a record, so that the only way to have one is to have had a row read. Its
-     * canonical constructor would otherwise be as public as it is, and a value nothing read could
-     * be written straight past the reading that decides what a row states.
+     * <p>A class and not a record, so that the one rule about what these hold cannot be gone round.
+     * A record's canonical constructor is as public as the record, and a value larger than what is
+     * kept would be written straight past the reading that decides what a row states; made only by
+     * {@link #of}, it is that reading whichever side makes one.
      *
      * <p>A value all the same, and it says so itself. What a query stops work on is whether an
      * answer equals the one before it, and this rides inside one — so a statement that answered
@@ -134,19 +135,27 @@ public sealed interface RowStatement {
     }
 
     /**
-     * This compile did not come away with the row's values.
+     * This compile did not come away with the row's values, and why it did not.
      *
-     * <p>Carries no reason. How far the evaluation got is what the outcome around this already says
-     * — the stage it reached, how it ended, and where it stopped — and a word for it here would be
-     * that fact restated in a vocabulary that says less: a row refused before its values were read
-     * and a row whose reading ran out of time would be spelled the same, or be spelled apart by a
-     * word about values that neither is about.
+     * <p>The reason is about the reading and not about any of the row's values: the classes a row
+     * would have run would not link, or nothing was observed of the source it is written in. Which
+     * is why it is said as a reason a reading fell short and not as one of the ways a value falls
+     * short — nothing here was read far enough to say anything about a value.
      *
-     * <p>A program the language accepted holds none of these. Every way of reaching one is a way a
-     * compile refuses the program, so what an output is handed never says this — which is what
-     * makes it a state of the compile rather than something about the model.
+     * <p>Said rather than left out. A row nothing came back for is a row someone wrote, and one
+     * arriving as no row would have a reader count a set it never walked as one it walked and found
+     * empty. A compile that refused the program before reading a row says this too, and there the
+     * stage and the phase beside it say how far it got.
      */
-    record NotRead() implements NotStated {}
+    record NotRead(Incompleteness.Code why) implements NotStated {
+
+        public NotRead {
+            if (why == null || !why.leftNoRowRead()) {
+                throw new IllegalArgumentException("a row that was not read says why nothing was"
+                        + " read of it, and " + why + " is a reason a row that was read fell short");
+            }
+        }
+    }
 
     /** Which of the values a row states. */
     sealed interface Side {

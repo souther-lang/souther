@@ -1206,7 +1206,8 @@ public final class ExampleVerifier {
          * {@link #reached} is — except that a row given up on is read while the worker still holds
          * it, and what it says then is what it said before the row began.
          */
-        private volatile RowStatement statement = new RowStatement.NotRead();
+        private volatile RowStatement statement =
+                new RowStatement.NotRead(Incompleteness.Code.OBSERVATION_ABSENT);
         /** What this row was seen to do, where the classes it ran were generated to say. Empty
          * otherwise, and empty for a row that did not finish — a snapshot read from a row still
          * running would be some of what it did rather than what it did. */

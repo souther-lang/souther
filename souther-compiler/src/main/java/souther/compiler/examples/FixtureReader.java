@@ -2011,7 +2011,8 @@ public final class FixtureReader {
      * itself would be a second place that decided it.
      */
     Verdict holds(Expectation stated, Object result, Type position) {
-        return stated.compare(structured(result), neutral, Position.at(position));
+        return souther.compiler.observe.Comparisons.verdict(stated, structured(result), neutral,
+                Position.at(position));
     }
 
     /** What a row stated, as it stated it: the value it wrote, or the case it named. */
