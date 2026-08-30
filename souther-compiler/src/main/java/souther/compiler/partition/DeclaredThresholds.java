@@ -75,8 +75,11 @@ public final class DeclaredThresholds {
         }
         // No answer to be read, because a declaration's clause is about the values a type admits and
         // there is nothing a behavior answered for it to be about.
+        // And no arrival: a declaration's clause stands in no body for anything to be on the way
+        // to, which reads as an arrival that restricts nothing.
         ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison,
-                InputReads.ofADeclaredClause(inputs, roots), symbols, quantities, null, true);
+                InputReads.ofADeclaredClause(inputs, roots), symbols, quantities, null, true,
+                new souther.compiler.reach.ComparisonArrival.NoProjection());
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
         // and a second sentence about one rule is two answers to one question.

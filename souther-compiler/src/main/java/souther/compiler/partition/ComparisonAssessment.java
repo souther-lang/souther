@@ -37,11 +37,12 @@ import java.util.Optional;
  * geometry and not a coverage question standing against an answer: carried as both, one decision
  * had two representations again, and the second had no reader once it could never go unanswered.
  *
- * <p><b>Five ways a comparison leaves the positions nothing, and they are five.</b> Read to the end
+ * <p><b>Six ways a comparison leaves the positions nothing, and they are six.</b> Read to the end
  * and cutting nothing, naming no position at all, reading the answer, cutting where the quantity
- * does not run, and not read — each is a different sentence to whoever is told it, and only the last
- * is about a limit of this compiler. Held as one, a tautology was owed a row where the relation
- * changes and a rule this could not read was described as naming no position.
+ * does not run, cutting where the rows that arrive stop short, and not read — each is a different
+ * sentence to whoever is told it, and only the last is about a limit of this compiler. Held as one,
+ * a tautology was owed a row where the relation changes and a rule this could not read was
+ * described as naming no position.
  */
 sealed interface ComparisonAssessment {
 
@@ -142,6 +143,31 @@ sealed interface ComparisonAssessment {
     }
 
     /**
+     * Read in full, the quantity runs as far as the line — and no row that arrives at the
+     * comparison holds a value at it.
+     *
+     * <p>Its own answer and not {@link OutsideTheDomain}, which is a fact about the declarations
+     * alone and holds wherever the comparison stands. This one is about the place: the guards above
+     * the comparison rule the line's values out, so the classes it would make are classes of
+     * nothing and the rows they would ask for are rows nothing can write. An author told the first
+     * would look at the rule for a line their declarations refuse, and the line is fine — what
+     * refuses it is on the way.
+     *
+     * <p>Only a proof lands here: the whole state at the comparison shown empty, or the values that
+     * arrive shown to stop short of the line. A comparison nothing could project an arrival for
+     * keeps its line ({@link souther.compiler.reach.ComparisonArrival.NoProjection}).
+     */
+    record NothingArrivesAtItsLine(Cutting cutting) implements ComparisonAssessment {
+
+        public NothingArrivesAtItsLine {
+            if (cutting == null) {
+                throw new IllegalArgumentException(
+                        "a line nothing arrives at is still a line somebody wrote");
+            }
+        }
+    }
+
+    /**
      * Read in full, and the rules leave no input for any line to be about.
      *
      * <p>Its own answer and not {@link OutsideTheDomain}, which says the quantity exists and does
@@ -206,7 +232,8 @@ sealed interface ComparisonAssessment {
      */
     static ComparisonAssessment of(String behavior, Core.Binary comparison, InputReads reads,
                                    Symbols symbols, Quantities quantities, BindingId answer,
-                                   boolean drawnByAnInvariant) {
+                                   boolean drawnByAnInvariant,
+                                   souther.compiler.reach.ComparisonArrival arrival) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
@@ -216,7 +243,8 @@ sealed interface ComparisonAssessment {
         }
         return switch (Cutting.read(behavior, comparison, reads, symbols, quantities)) {
             case Cutting.Read.Cuts cuts ->
-                    onTheQuantity(comparison, cuts.cutting(), quantities, drawnByAnInvariant);
+                    onTheQuantity(comparison, cuts.cutting(), quantities, drawnByAnInvariant,
+                            arrival);
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
             // of this compiler: `a <= a` holds of every row. Where the comparison names no position
             // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
@@ -259,9 +287,9 @@ sealed interface ComparisonAssessment {
     }
 
     /** What a line comes to on the input space, from the quantity it is on. */
-    private static ComparisonAssessment onTheQuantity(Core.Binary comparison, Cutting cutting,
-                                                      Quantities quantities,
-                                                      boolean drawnByAnInvariant) {
+    private static ComparisonAssessment onTheQuantity(
+            Core.Binary comparison, Cutting cutting, Quantities quantities,
+            boolean drawnByAnInvariant, souther.compiler.reach.ComparisonArrival arrival) {
         // Whether there is an input at all, before anything is asked about where its values run.
         // A quantity is a function of the input, so where the rules admit no input they admit no
         // value of any quantity — and every question below is about one quantity's values against
@@ -278,6 +306,26 @@ sealed interface ComparisonAssessment {
                 Border.ordersAroundTheCut(drawnByAnInvariant, cutting.singles()),
                 cutting.within())) {
             return new OutsideTheDomain(cutting);
+        }
+        // The declarations first and the place second, because the two are different sentences and
+        // the first holds wherever the comparison stands. The place answers as two nested domains
+        // around one line: what the declarations leave, and that met with what arrives — the same
+        // predicate on the narrower domain, not a second reading of the rule. Only a proof drops a
+        // line; an arrival nothing could project restricts nothing and the line stands.
+        switch (arrival) {
+            case souther.compiler.reach.ComparisonArrival.NothingArrives _ -> {
+                return new NothingArrivesAtItsLine(cutting);
+            }
+            case souther.compiler.reach.ComparisonArrival.Values values -> {
+                if (!Border.reaches(cutting.at(), cutting.seam(),
+                        Border.satisfyingSide(cutting.holdsAtTheValue(),
+                                cutting.valueBelongsBelow()),
+                        Border.ordersAroundTheCut(drawnByAnInvariant, cutting.singles()),
+                        cutting.withinGiven(values))) {
+                    return new NothingArrivesAtItsLine(cutting);
+                }
+            }
+            case souther.compiler.reach.ComparisonArrival.NoProjection _ -> { }
         }
         NumericTerm.FromOnePosition divided = cutting.dividedPosition();
         if (divided == null) {
@@ -332,6 +380,7 @@ sealed interface ComparisonAssessment {
         return switch (this) {
             case AcrossPositions over -> over.cutting().over();
             case OutsideTheDomain outside -> outside.cutting().over();
+            case NothingArrivesAtItsLine unarrived -> unarrived.cutting().over();
             // The positions its quantity is over, as every read rule's are. That the rules leave
             // the input empty says nothing about which positions this rule is about.
             case NoFeasibleInput none -> none.cutting().over();
@@ -376,6 +425,12 @@ sealed interface ComparisonAssessment {
             case CutsNothing _ -> Optional.of(new BlockReason.ComparisonCuttingNothing());
             case OutsideTheDomain _ ->
                     Optional.of(new BlockReason.ComparisonCuttingOutsideDomain());
+            // Not the reason above: there the declarations never run as far as the line, and here
+            // they do — what stops short of it is the values that arrive at the comparison, ruled
+            // out by the guards on the way. An author reading the first would look at one rule for
+            // a contradiction with their declarations that is not in it.
+            case NothingArrivesAtItsLine _ ->
+                    Optional.of(new BlockReason.ComparisonNothingArrivesAtItsLine());
             // Nothing about this rule fell short, and nothing about this rule is what happened. The
             // rules of the input admit no value between them, which is one fact about the behavior
             // and not one per rule at each position it names — said here, a model with two clauses
@@ -403,7 +458,7 @@ sealed interface ComparisonAssessment {
             case AtAPosition at -> at.places() == Places.ACROSS_THE_VALUE;
             case AcrossPositions over -> over.places() == Places.ACROSS_THE_VALUE;
             case AnswerDependent _, NoInput _, CutsNothing _, OutsideTheDomain _,
-                 NoFeasibleInput _, Unread _ -> false;
+                 NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _ -> false;
         };
     }
 
