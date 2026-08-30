@@ -73,17 +73,26 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * and this cannot come apart: they are one equivalence written once, rather than two that agree
      * while every quantity has one position.
      */
-    public record Reading(String behavior, souther.compiler.partition.BoundaryTarget target) {
+    public record Reading(souther.compiler.partition.BoundaryTarget target) {
 
         public Reading {
-            if (behavior == null || target == null) {
-                throw new IllegalArgumentException("a reading is some behavior's, somewhere in it");
+            if (target == null) {
+                throw new IllegalArgumentException("a reading is of some line, somewhere");
             }
         }
 
-        /** The reading a behavior made where it met {@code line}. */
-        public static Reading of(String behavior, souther.compiler.partition.Border line) {
-            return new Reading(behavior, line.cut());
+        /** The reading made where {@code line} was met. */
+        public static Reading of(souther.compiler.partition.Border line) {
+            return new Reading(line.cut());
+        }
+
+        /**
+         * Which behavior read it. The target's answer and not a second field: a quantity is some
+         * behavior's input, so a reading holding the behavior beside it would hold one fact twice
+         * and check nowhere that the two agree.
+         */
+        public String behavior() {
+            return target.behavior();
         }
 
         /**
@@ -93,7 +102,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
          */
         @Override
         public String toString() {
-            return behavior + "/" + target.label();
+            return behavior() + "/" + target.label();
         }
     }
 
@@ -136,43 +145,41 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * about; it is not a fold, and joining two such entries would put the order of a walk into what
      * a row is offered for.
      */
-    public static List<BorderObligationPointAssessment> across(
-            Map<String, List<BorderAssessment>> byBehavior) {
+    public static List<BorderObligationPointAssessment> across(List<BorderAssessment> readings) {
         Map<BorderObligationPoint, java.util.SequencedMap<Reading, BorderAssessment>> byPoint =
                 new LinkedHashMap<>();
         Map<BorderObligationPoint, souther.compiler.partition.PointAttribution> attribution =
                 new LinkedHashMap<>();
-        byBehavior.forEach((behavior, readings) -> {
-            for (BorderAssessment reading : readings) {
-                Reading where = Reading.of(behavior, reading.border());
-                // Every arm answered, for the reason the readings are: a point whose arm nothing
-                // names is a point gathered nowhere, and everything downstream would go on
-                // compiling.
-                for (souther.compiler.partition.OwedPoint each : reading.border().owes()) {
-                    BorderObligationPoint owed = each.point();
-                    // What settled the point is the reading's, so a point read twice is owed to
-                    // what either reading says owes it. Kept as the first reading's, a point one
-                    // module's declaration narrowed at one position and another's at another would
-                    // be attributed to whichever the walk reached first.
-                    attribution.merge(owed, each.attribution(),
-                            souther.compiler.partition.PointAttribution::and);
-                    BorderAssessment already = byPoint
-                            .computeIfAbsent(owed, _ -> new LinkedHashMap<>()).put(where, reading);
-                    if (already != null) {
-                        // One line, one behavior, one place, twice — which the lines handed in were
-                        // folded on and so cannot be. What is wrong is upstream: these are the
-                        // readings a behavior's lines came to after Coverages merged them, and two
-                        // entries under one key say the list was never merged. Refused rather than
-                        // kept, because keeping one of them means
-                        // what a search of it came to stands for the other, chosen by the order the
-                        // walk took.
-                        throw new IllegalStateException("two of one behavior's lines are the same"
-                                + " line read at the same place, so they were never merged: " + owed
-                                + " at " + where);
-                    }
+        // The lines alone, not filed under behaviors. Which behavior read a line is the line's own
+        // answer, so a caller filing it under one would be saying that fact a second time.
+        for (BorderAssessment reading : readings) {
+            Reading where = Reading.of(reading.border());
+            // Every arm answered, for the reason the readings are: a point whose arm nothing
+            // names is a point gathered nowhere, and everything downstream would go on
+            // compiling.
+            for (souther.compiler.partition.OwedPoint each : reading.border().owes()) {
+                BorderObligationPoint owed = each.point();
+                // What settled the point is the reading's, so a point read twice is owed to
+                // what either reading says owes it. Kept as the first reading's, a point one
+                // module's declaration narrowed at one position and another's at another would
+                // be attributed to whichever the walk reached first.
+                attribution.merge(owed, each.attribution(),
+                        souther.compiler.partition.PointAttribution::and);
+                BorderAssessment already = byPoint
+                        .computeIfAbsent(owed, _ -> new LinkedHashMap<>()).put(where, reading);
+                if (already != null) {
+                    // One line, one behavior, one place, twice — which the lines handed in were
+                    // folded on and so cannot be. What is wrong is upstream: these are the
+                    // readings a behavior's lines came to after Coverages merged them, and two
+                    // entries under one key say the list was never merged. Refused rather than
+                    // kept, because keeping one of them means what a search of it came to stands
+                    // for the other, chosen by the order the walk took.
+                    throw new IllegalStateException("two of one behavior's lines are the same"
+                            + " line read at the same place, so they were never merged: " + owed
+                            + " at " + where);
                 }
             }
-        });
+        }
         List<BorderObligationPointAssessment> out = new ArrayList<>();
         byPoint.forEach((point, met) -> out.add(of(point, attribution.get(point), met)));
         return List.copyOf(out);
