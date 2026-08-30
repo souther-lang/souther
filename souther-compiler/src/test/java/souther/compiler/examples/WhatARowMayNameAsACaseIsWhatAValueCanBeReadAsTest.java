@@ -76,26 +76,29 @@ class WhatARowMayNameAsACaseIsWhatAValueCanBeReadAsTest {
     }
 
     /**
-     * A row this compile did not read is a row the language refuses the program for.
+     * A row whose evaluation stopped before its values is a row the language refuses the program
+     * for.
      *
-     * <p>What such a row states is nothing, and it says so carrying no reason: how far the
-     * evaluation got is what the outcome around it says. That is only true while every way of
-     * leaving a row unread is a way the program is refused — a warning among them would put a row
-     * that states nothing into a program an output is handed, and the output would be told a
-     * behavior owes nothing for an input someone wrote down.
+     * <p>What such a row states is nothing, and it says so carrying no reason: there is an
+     * evaluation of it and how far it got is what that says. Which is only worth saying while every
+     * way of stopping there is a way the program is refused — a warning among them would put a row
+     * with no values into a program an output is handed, beside no reason for having none.
      *
-     * <p>Each code is one of those ways: a row that hands over another number of inputs or whose
-     * fixture would not build (E1903), one naming a case the behavior cannot answer with (E1904),
-     * one that spent its budget (E1910), one that did not answer within its wait (E1923), and one
-     * whose stack ran out (E1924).
+     * <p>Not every row an output is handed with no values: a reading can never reach a row at all,
+     * which the language accepts, and such a row crosses saying why nothing read it. What is
+     * checked here is the other kind, and each code is one of its ways — a row that hands over
+     * another number of inputs or whose fixture would not build (E1903), one naming a case the
+     * behavior cannot answer with (E1904), one that spent its budget (E1910), one that did not
+     * answer within its wait (E1923), and one whose stack ran out (E1924).
      */
     @Test
-    void aRowThatWasNotReadIsOneTheLanguageRefusesTheProgramFor() {
+    void aRowThatStoppedBeforeItsValuesIsOneTheLanguageRefusesTheProgramFor() {
         for (DiagnosticCode code : new DiagnosticCode[] {DiagnosticCode.E1903,
                 DiagnosticCode.E1904, DiagnosticCode.E1910, DiagnosticCode.E1923,
                 DiagnosticCode.E1924}) {
             assertEquals(Severity.ERROR, code.severity(),
-                    () -> code + " leaves a row unread, so a program carrying one is refused");
+                    () -> code + " stops a row before its values, so a program carrying one is"
+                            + " refused");
         }
     }
 }

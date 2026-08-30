@@ -135,17 +135,32 @@ public sealed interface RowStatement {
     }
 
     /**
-     * This compile did not come away with the row's values, and why it did not.
+     * The row was read and stopped before its values were.
      *
-     * <p>The reason is about the reading and not about any of the row's values: the classes a row
-     * would have run would not link, or nothing was observed of the source it is written in. Which
-     * is why it is said as a reason a reading fell short and not as one of the ways a value falls
-     * short — nothing here was read far enough to say anything about a value.
+     * <p>Carries no reason. There is an evaluation of this row and it says how far it got — the
+     * stage it reached, how it ended, and where it stopped — so a word for it here would be that
+     * fact restated in a vocabulary that says less.
+     *
+     * <p>Told apart from {@link NotRead}, which is a row there is no evaluation of at all. The two
+     * are one sentence in English and two facts: one is a reading that stopped, the other a reading
+     * that never reached the row, and only the second has to say why.
+     *
+     * <p>A program the language accepted holds none of these: every way of stopping before a row's
+     * values is a way a compile refuses the program.
+     */
+    record StoppedBeforeItsValues() implements NotStated {}
+
+    /**
+     * Nothing read the row at all, and why nothing did.
+     *
+     * <p>There is no evaluation of it: the classes it would have run would not link, or nothing was
+     * observed of the source it is written in. So the reason is about the reading rather than about
+     * any of the row's values, and it is said here because there is no evaluation beside this to
+     * say it.
      *
      * <p>Said rather than left out. A row nothing came back for is a row someone wrote, and one
      * arriving as no row would have a reader count a set it never walked as one it walked and found
-     * empty. A compile that refused the program before reading a row says this too, and there the
-     * stage and the phase beside it say how far it got.
+     * empty.
      */
     record NotRead(Incompleteness.Code why) implements NotStated {
 
