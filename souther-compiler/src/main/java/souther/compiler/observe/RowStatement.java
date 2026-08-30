@@ -12,12 +12,18 @@ import java.util.List;
  * the behavior. So what a row states is a fact about the model, and this is that fact taken once —
  * where the row was read — rather than a source text something else would have to read again.
  *
- * <p>Two arms, and the second is three. A row hands over values or it does not, which is the one
+ * <p>Three arms, and the second is three. A row hands over values or it does not, which is the one
  * thing a reader has to know before it can do anything with the row; why it does not is the second
  * question, and each answer to it has a different owner — what the behavior requires, what a limit
- * keeps, and how far this compile got. A row that cannot be handed over must not arrive as no row
- * all the same: a reader given nothing for it would count a row it never saw among the ones it
- * walked and found nothing wrong with.
+ * keeps, and what read the row. A row that cannot be handed over must not arrive as no row all the
+ * same: a reader given nothing for it would count a row it never saw among the ones it walked and
+ * found nothing wrong with.
+ *
+ * <p>The third is not one of those. {@link StoppedBeforeItsValues} is how far an evaluation got and
+ * not something about the row, and it is beside {@link NotStated} rather than among its arms
+ * because what an output is handed is a {@link Stated} or a {@link NotStated} — so a state that
+ * belongs to a compile in progress is one a reader of a checked program cannot be given, by the
+ * static type and not by a rule about which of them arise.
  *
  * <p>What it is not: running the row. Nothing here applies anything, and what a reader does with a
  * row it was given is the reader's.
@@ -135,20 +141,23 @@ public sealed interface RowStatement {
     }
 
     /**
-     * The row was read and stopped before its values were.
+     * The row was read and the evaluation stopped before its values were.
      *
      * <p>Carries no reason. There is an evaluation of this row and it says how far it got — the
      * stage it reached, how it ended, and where it stopped — so a word for it here would be that
      * fact restated in a vocabulary that says less.
      *
+     * <p>Not a {@link NotStated}. That is what a row states where it states no values, and this is
+     * not about the row at all: it is a compile that has not finished with it. A program the
+     * language accepted holds none of these — every way of stopping before a row's values is a way
+     * a compile refuses the program — and what makes that a fact rather than a rule to keep is that
+     * what an output is handed cannot be one.
+     *
      * <p>Told apart from {@link NotRead}, which is a row there is no evaluation of at all. The two
      * are one sentence in English and two facts: one is a reading that stopped, the other a reading
      * that never reached the row, and only the second has to say why.
-     *
-     * <p>A program the language accepted holds none of these: every way of stopping before a row's
-     * values is a way a compile refuses the program.
      */
-    record StoppedBeforeItsValues() implements NotStated {}
+    record StoppedBeforeItsValues() implements RowStatement {}
 
     /**
      * Nothing read the row at all, and why nothing did.

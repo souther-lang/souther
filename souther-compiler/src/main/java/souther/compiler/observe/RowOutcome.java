@@ -107,6 +107,15 @@ public record RowOutcome(SourcePos at,
 
     public RowOutcome {
         java.util.Objects.requireNonNull(statement, "a row states something");
+        if (stage.reached(Stage.FIXTURES_VALIDATED)
+                == statement instanceof RowStatement.StoppedBeforeItsValues) {
+            // The two are one evaluation read apart, and they are written a line from each other:
+            // what the row states is taken as its values are read, and the stage says they were.
+            // Kept apart, a reader meets a row whose values were read saying the reading stopped
+            // before them, or one that says what it states beside a stage that never got there.
+            throw new IllegalArgumentException("a row whose values were read states them, and one"
+                    + " the reading stopped before does not: " + stage + " with " + statement);
+        }
         // A list that keeps a null in it cannot be List.copyOf'd, and an input whose case the text does
         // not say is exactly that — so the unmodifiable wrapper is taken rather than the copying factory.
         inputCases = inputCases == null ? List.of()

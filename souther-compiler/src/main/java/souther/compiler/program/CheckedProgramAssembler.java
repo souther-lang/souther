@@ -318,6 +318,15 @@ final class CheckedProgramAssembler {
                 case RowStatement.Stated stated -> new CheckedRow.Reproducible(stated, types,
                         Position.at(signature.answers()));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
+                // What acceptance guarantees, asserted where the guarantee is relied on. A row an
+                // evaluation stopped before the values of is one the language refuses the program
+                // for, so meeting one here is that guarantee having moved — and the row would
+                // otherwise be published as a state whose reason is in a compile nobody outside
+                // this one can read.
+                case RowStatement.StoppedBeforeItsValues _ -> throw new IllegalStateException(
+                        "a program the language accepted holds a row its evaluation stopped before"
+                                + " the values of: " + outcome.target() + " "
+                                + outcome.identity().shown() + " at " + outcome.at());
             };
             case Output.RowsRead.ReadRow.NotRun notRun ->
                     new CheckedRow.NotReproducible(new RowStatement.NotRead(notRun.why()));
