@@ -427,15 +427,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * What the rules leave this quantity, narrowed by what actually arrives at the comparison —
-     * where the arrival can be read as this quantity at all, and {@link #within} untouched where it
-     * cannot.
+     * where the arrival is an interval of this quantity at all, and {@link #within} untouched where
+     * it is not.
      *
-     * <p>The identity match and the change of units both live here, because both are readings of
-     * the quantity and the quantity is this record's one answer. The arrival states an interval of
-     * the value at one path; it is this quantity's exactly when the quantity is that path's own
-     * value taken some number of times, and then the interval arrives in the quantity's units by
-     * taking it that many times too. Asked anywhere else, a second reader of the direction stands
+     * <p>Whether it is lives here, because it is a reading of the quantity and the quantity is this
+     * record's one answer. Asked by the caller instead, a second reader of the direction would stand
      * beside this one, free to disagree with it about what the rule is about.
+     *
+     * <p><b>The quantity is the position's own value, and nothing else is taken.</b> An arrival
+     * states an interval of the value at one path, so it is an interval of this quantity exactly
+     * where the two are the same value — a quantity that is some multiple of the position is on
+     * another order, and its line is a level of that one. Taken with a change of units, the
+     * arithmetic would be written for a shape no reader produces: what publishes an arrival is one
+     * side of the comparison being that position, and the quantity such a comparison cuts is the
+     * position itself. So the narrower rule is the whole of what is reachable, and what a multiple
+     * costs is precision on a line that stands rather than an answer that is wrong.
      *
      * <p>Total over what it takes. An arrival this cannot project restricts nothing — not being
      * able to read a fact is not a proof — so the answer is what the declarations leave, unchanged.
@@ -453,45 +459,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         java.util.Map.Entry<NumericTerm, java.math.BigDecimal> only =
                 direction.coefs().entrySet().iterator().next();
-        if (!(only.getKey() instanceof NumericTerm.ValueOf(var position))
+        if (only.getValue().compareTo(java.math.BigDecimal.ONE) != 0
+                || !(only.getKey() instanceof NumericTerm.ValueOf(var position))
+                // The one thing this cannot read off its own quantity: which position the interval
+                // is of. Both are the position the comparison turns on today and the check is what
+                // says so — the day the two readings part, a line would be held inside the values of
+                // somewhere else.
                 || !position.equals(arriving.path())) {
             return within;
         }
-        souther.compiler.numeric.NumericDomain.Bounds scaled =
-                scaledBy(arriving.bounds(), only.getValue());
-        if (scaled == null) {
-            return within;
-        }
-        return within == null ? scaled : within.meet(scaled);
-    }
-
-    /**
-     * {@code bounds} taken {@code times} over, or null where an end is at no number to take.
-     *
-     * <p>Taken a negative number of times, the ends change places: the least of the values is
-     * {@code times} the greatest of what they were. Whether an end is one of the counts it stops at
-     * is unchanged either way — the map between the two orders is one to one.
-     */
-    private static souther.compiler.numeric.NumericDomain.Bounds scaledBy(
-            souther.compiler.numeric.NumericDomain.Bounds bounds, java.math.BigDecimal times) {
-        souther.compiler.numeric.Endpoint low = timesAt(bounds.min(), times);
-        souther.compiler.numeric.Endpoint high = timesAt(bounds.max(), times);
-        if (low == null && bounds.min() != null || high == null && bounds.max() != null) {
-            return null;
-        }
-        return times.signum() < 0
-                ? new souther.compiler.numeric.NumericDomain.Bounds(high, low)
-                : new souther.compiler.numeric.NumericDomain.Bounds(low, high);
-    }
-
-    /** One end taken {@code times} over, or null where it stands at no number. */
-    private static souther.compiler.numeric.Endpoint timesAt(
-            souther.compiler.numeric.Endpoint end, java.math.BigDecimal times) {
-        if (end == null || !(end.at() instanceof Count(java.math.BigDecimal at))) {
-            return null;
-        }
-        return new souther.compiler.numeric.Endpoint(new Count(at.multiply(times)),
-                end.inclusive());
+        return within == null ? arriving.bounds() : within.meet(arriving.bounds());
     }
 
     /** Whether the rule singles a value out rather than ordering the values around it. */
