@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 
+import java.util.Optional;
+
 /**
  * Whether the rules of a model are read off one comparison, and why not where they are not.
  *
@@ -51,17 +53,18 @@ final class BoundaryPolicy {
      * what the line is, or why there is none, is the reading's ({@link ComparisonAssessment}) — and
      * the second is asked only of a comparison the first admits, so a reason for bearing no line is
      * never worked out from a reading that was never made. A comparison this refuses is not a rule
-     * with no line here: no row reaches its outcome, so it states nothing about any row, and a
-     * report saying nothing of it is right. Nor could it be said in the reading's words: what
-     * refuses it is where it stands, and the arithmetic has no answer to that.
+     * with no line here: its outcome is about no row ({@link NotABoundary}), so a report saying
+     * nothing of it is right. Nor could it be said in the reading's words: what refuses it is where
+     * it stands, and the arithmetic has no answer to that.
+     *
+     * <p>Which comparison it is about is not held here. The reading that holds this holds the
+     * comparison beside it ({@link ComparisonReadings.Reading}), and a second copy would be one
+     * nothing keeps equal to the first.
      */
     sealed interface Standing {
 
-        /** The comparison this is about, whichever answer it got. */
-        Core.Binary comparison();
-
         /** A line may be drawn on it, and {@code read} is what the one reading of it came to. */
-        record Admitted(Core.Binary comparison, ComparisonAssessment read) implements Standing {
+        record Admitted(ComparisonAssessment read) implements Standing {
 
             public Admitted {
                 if (read == null) {
@@ -71,7 +74,14 @@ final class BoundaryPolicy {
         }
 
         /** No line may be drawn on it, and this is which of the reasons it is. */
-        record Refused(Core.Binary comparison, NotABoundary why) implements Standing {}
+        record Refused(NotABoundary why) implements Standing {
+
+            public Refused {
+                if (why == null) {
+                    throw new IllegalArgumentException("a comparison is refused for a reason");
+                }
+            }
+        }
     }
 
     /**
@@ -102,22 +112,24 @@ final class BoundaryPolicy {
      * occurrence of a position where the passes stand at different occurrences of one, and at the
      * same values where they do not — and a pass reading anything else is one no line came of.
      *
-     * @param live    whether what is computed at this position is read on the way to what the
-     *                behavior answers with, which is {@link LiveFlow}'s answer carried down the walk
-     * @param reading the one reading of the comparison, made only where it is admitted
+     * @param live whether what is computed at this position is read on the way to what the behavior
+     *             answers with, which is {@link LiveFlow}'s answer carried down the walk
+     * @return why the comparison is refused, or empty where a line may be drawn on it. Decided from
+     *         what is passed in and nothing else: the reading of the comparison is made by the
+     *         caller, and only where this is empty
      */
-    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, boolean live,
-                               java.util.function.Supplier<ComparisonAssessment> reading) {
+    static Optional<NotABoundary> refuses(Core.Binary comparison, CoverageSites.Plan plan,
+                                          boolean live) {
         if (!live) {
-            return new Standing.Refused(comparison, NotABoundary.NOTHING_READS_IT);
+            return Optional.of(NotABoundary.NOTHING_READS_IT);
         }
         // Meeting a line takes getting the comparison to answer, and whether it answered is what a
-        // site records — so a comparison with no site is one no row could ever be shown to have
-        // reached, and a border on it would owe a row nothing can measure.
+        // site records — and the plan numbers no site where the expression the comparison decides
+        // never answers, so a comparison with no site is one no run answers through.
         if (plan.comparisonAt(comparison).isEmpty()) {
-            return new Standing.Refused(comparison, NotABoundary.NOTHING_RECORDS_IT);
+            return Optional.of(NotABoundary.NO_RUN_ANSWERS_THROUGH_IT);
         }
-        return new Standing.Admitted(comparison, reading.get());
+        return Optional.empty();
     }
 
     private BoundaryPolicy() {}

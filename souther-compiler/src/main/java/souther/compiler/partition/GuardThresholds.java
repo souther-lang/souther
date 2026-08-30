@@ -140,17 +140,17 @@ public final class GuardThresholds {
         // One reading of the body, and everything below is that reading asked something. Where a
         // comparison is written, what its names point at, what a row had satisfied to get there,
         // whether a line may be drawn on it and what it came to are five questions about one
-        // position, and a walk apiece was a walk apiece to disagree about what a `let` does.
+        // position, and one walk answers them about one position.
         ComparisonReadings read = ComparisonReadings.of(behavior, body, plan,
                 InputReads.of(inputs, elements), symbols, quantities);
         for (ComparisonReadings.Reading each : read.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
-                        lineAt(behavior, admitted.comparison(), plan, each.reads(), symbols,
+                        lineAt(behavior, each.comparison(), plan, each.reads(), symbols,
                                 admitted.read(), found, between, withoutALine);
-                // Not a rule with no line here: no row reaches its outcome, so it states nothing
-                // about any row, and there is nothing for a report to say of it. Which of the
-                // reasons it is stays with the standing, for a reader that asks the standing.
+                // Not a rule with no line here: its outcome is about no row, whichever of the
+                // reasons refused it ({@link NotABoundary}), so there is nothing for a report to
+                // say of it.
                 case BoundaryPolicy.Standing.Refused _ -> { }
             }
         }
@@ -276,17 +276,9 @@ public final class GuardThresholds {
         java.util.Map<TermPath, Type> met = new java.util.LinkedHashMap<>(left.met());
         right.met().forEach(met::putIfAbsent);
         here.met().forEach(met::putIfAbsent);
-        BlockReason.RuleWithoutLineReason said = UnreadComparison.why(left.origin(),
-                right.origin(), new UnreadComparison.Quantity.NotRead<>(here.origin()),
+        return UnreadComparison.whatStopped(left.origin(), right.origin(),
+                new UnreadComparison.Quantity.NotRead<>(here.origin()),
                 at -> met.containsKey(at) && orderable(met.get(at), symbols));
-        // What this reader is asked for is why it stopped, and the words for a rule read to the end
-        // are not answers to that. Reached with one, the caller has met an absence this reading did
-        // not produce — so it is refused rather than passed on as a reason nothing fell short.
-        if (said instanceof BlockReason.RuleReadingStopped why) {
-            return why;
-        }
-        throw new IllegalStateException(
-                "a reading that stopped cannot say it read the rule to the end: " + said);
     }
 
     /**

@@ -18,10 +18,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 /**
  * A comparison that bears no line says which of the reasons it is.
  *
- * <p>They are not one answer. A truth nothing reads is one the behavior draws no boundary on at all,
- * and a report that stayed silent about it is right. A comparison no run through can be recorded is
- * one the behavior may well draw a boundary on and this cannot show a row to have met. Folded into
- * one {@code false}, the second becomes silence that reads like the first.
+ * <p>They are not one answer. A truth nothing reads is one the behavior draws no boundary on at all;
+ * a comparison no run answers through is one whose outcome is about no row, arrived at from where
+ * it stands rather than from what reads it. Neither is reported, and which of the two refused a
+ * comparison is a fact the policy has when it refuses — folded into one {@code false}, whoever
+ * needs it next works it out again.
  *
  * <p>What a comparison is written inside is no part of this. A step a combinator applies once per
  * element is passed as many times as there are elements, and the two written here stand together to

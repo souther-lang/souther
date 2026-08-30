@@ -147,20 +147,27 @@ public final class UnreadComparison {
                     ? new BlockReason.ComparisonBetweenPositions()
                     : whatThisSideSays(speakingSide(left, right), ordered);
             // No quantity was read, so what the sides name is the only account there is.
-            case Quantity.NotRead<K> notRead -> whatTheSidesSay(left, right, notRead, ordered);
+            case Quantity.NotRead<K> notRead -> whatStopped(left, right, notRead, ordered);
         };
     }
 
     /**
-     * What a comparison whose arithmetic went unread comes to, off what its sides name.
+     * What stopped a reading whose arithmetic read no form, off what its sides name.
      *
-     * <p>Only here. Where the canonical form was read it has already said what the rule cuts, and a
-     * spelling saying otherwise is the spelling being wrong about the rule.
+     * <p>The one arm of {@link #why} a caller holding a stopped reading may ask for on its own, and
+     * typed as a stop: every answer here is one, because the arithmetic stopped and what the sides
+     * name only says which limit it stopped on. A caller that has met a stop and wants the words
+     * for it asks this, and cannot be handed the words for a rule read to the end — those are
+     * answers about a quantity, and this is never given one.
+     *
+     * <p>Only here is the spelling consulted. Where the canonical form was read it has already said
+     * what the rule cuts, and a spelling saying otherwise is the spelling being wrong about the
+     * rule.
      */
-    private static <K> BlockReason.RuleWithoutLineReason whatTheSidesSay(ValueOrigin<K> left,
-                                                              ValueOrigin<K> right,
-                                                              Quantity.NotRead<K> notRead,
-                                                              Predicate<K> ordered) {
+    public static <K> BlockReason.RuleReadingStopped whatStopped(ValueOrigin<K> left,
+                                                               ValueOrigin<K> right,
+                                                               Quantity.NotRead<K> notRead,
+                                                               Predicate<K> ordered) {
         // What the sides name says nothing about whether anything fell short, and here something
         // did: the arithmetic stopped. A comparison naming two positions whose form was read is a
         // rule that relates them and leaves nothing missing, and one whose form was not read is a
@@ -200,9 +207,10 @@ public final class UnreadComparison {
         return left.madeFrom() != null ? left : right;
     }
 
-    /** What one side leaves to say. */
-    private static <K> BlockReason.RuleWithoutLineReason whatThisSideSays(ValueOrigin<K> side,
-                                                               Predicate<K> ordered) {
+    /** What one side leaves to say, which is always a stop: a side is asked only where no quantity
+     *  answered for the rule. */
+    private static <K> BlockReason.RuleReadingStopped whatThisSideSays(ValueOrigin<K> side,
+                                                             Predicate<K> ordered) {
         return switch (side) {
             // The position itself against something no end came out of. The carrier, asked of the
             // carrier: `at < DateTime(...)` stops because nothing draws a line on a date-time,

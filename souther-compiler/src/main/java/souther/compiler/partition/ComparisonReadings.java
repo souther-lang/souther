@@ -108,12 +108,15 @@ final class ComparisonReadings {
         CoverageSites.Plan plan = in.plan();
         Symbols symbols = in.symbols();
         if (e instanceof Core.Binary comparison && plan.comparisons().at(comparison).isPresent()) {
-            // Read under the names in force here, which is the one environment the comparison is
-            // about. `answer` is null: a body has nothing that is the answer.
-            out.add(new Reading(comparison, reads, assumed,
-                    BoundaryPolicy.standingOf(comparison, plan, live, () ->
+            // Read only where the policy admits it, and under the names in force here, which is
+            // the one environment the comparison is about. `answer` is null: a body has nothing
+            // that is the answer.
+            BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(comparison, plan, live)
+                    .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
+                    .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
                             ComparisonAssessment.of(in.behavior(), comparison, reads, symbols,
-                                    in.quantities(), null, false))));
+                                    in.quantities(), null, false)));
+            out.add(new Reading(comparison, reads, assumed, standing));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer
