@@ -90,7 +90,9 @@ public final class Recognitions {
             case Recognition.AtAValue one -> one.at() != null && one.at().sameAs(place);
             case Recognition.Truth ignored -> false;
             case Recognition.Held ignored -> false;
-            case Recognition.OfCase ignored -> false;
+            // A case of an ordered enumeration sits at a place on that order, written down when the
+            // class was built; a case of a sum with no order sits nowhere and is asked nothing.
+            case Recognition.OfCase one -> one.at() != null && one.at().sameAs(place);
             case Recognition.Nothing ignored -> false;
         };
     }

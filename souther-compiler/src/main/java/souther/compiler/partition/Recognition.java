@@ -39,7 +39,7 @@ public sealed interface Recognition {
     record Held(boolean present) implements Recognition {}
 
     /** One case of a sum, told by the construction the row wrote. */
-    record OfCase(TypeSymbol leaf) implements Recognition {}
+    record OfCase(TypeSymbol leaf, Place at) implements Recognition {}
 
     /**
      * The one value a reading singled out, told by reading the value itself.
@@ -120,6 +120,38 @@ public sealed interface Recognition {
 
     /** A class that exists and cannot be told from another by looking. */
     record Nothing() implements Recognition {}
+
+    /**
+     * The number this meaning is intrinsically about, or null where it is about a value.
+     *
+     * <p>Not which measure a class of this divides — that is said where the class is built and is
+     * never read off a meaning, because a truth means the same thing at every position. What this
+     * answers is narrower: a class about a count carries the number it counts inside its meaning,
+     * and a class said to divide some other number would answer membership about one number while
+     * being owed to another. So this is only ever held against what the class was said to be of.
+     *
+    /**
+     * Whether this can be asked about a place on the order the position's values are counted on.
+     *
+     * <p>Two things a "no" from such a question could mean — the place is not in the class, or the
+     * class has no way of being asked — and only the first is an answer. This is the second said on
+     * its own, so that an axis carrying lines can refuse a class that could never hold one of them
+     * rather than let every line fall in no class at all. A class about a count is asked on that
+     * count's order; a case of an ordered enumeration and a value the rules named are asked at the
+     * place written down when the class was built; a truth, an absence and a class nothing tells
+     * apart are on no order.
+     */
+    default boolean answersAboutAPlace() {
+        return switch (this) {
+            case OfACount ignored -> true;
+            case Under under -> under.inner().answersAboutAPlace();
+            case OfCase one -> one.at() != null;
+            case AtAValue one -> one.at() != null;
+            case Truth ignored -> false;
+            case Held ignored -> false;
+            case Nothing ignored -> false;
+        };
+    }
 
     /**
      * The number this meaning is intrinsically about, or null where it is about a value.

@@ -213,6 +213,32 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
     }
 
     /**
+     * A class that cannot be asked where on the number it lies is not put on an axis with lines.
+     *
+     * <p>Every line on an axis falls in the class holding its place, so a class with no place to be
+     * asked about holds no line at all, and an axis of such classes with a line on it would answer
+     * that the line falls nowhere. Refused where the axis is built, where the two are in hand
+     * together.
+     */
+    @Test
+    void aClassWithNoPlaceIsRefusedWhereTheAxisHasLines() {
+        Partitions.Partitioning read = divided();
+        Axis count = axisOf(read, "gate/slot.n");
+        assertFalse(count.cuts().isEmpty(), "the guard drew a line on the number");
+        List<PartitionClass> placeless = count.classes().stream()
+                .map(each -> PartitionClass.of(each.id(), each.label(), new Recognition.Nothing(),
+                        each.representatives()).ofTheNumber(count.term()))
+                .toList();
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> count.carrying(placeless, count.cuts(), List.of()));
+
+        assertTrue(refused.getMessage().contains("lines"), refused.getMessage());
+        assertEquals(placeless, count.carrying(placeless, List.of(), List.of()).classes(),
+                "while with no line to hold, such classes are what a position with no order has");
+    }
+
+    /**
      * Which number a class is of is said once.
      *
      * <p>A class of one number is not made a class of another by saying so. Were it, the rule the

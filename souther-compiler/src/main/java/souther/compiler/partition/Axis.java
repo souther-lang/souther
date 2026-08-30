@@ -64,6 +64,14 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
         }
         for (PartitionClass one : classes) {
             subjectHeld(term, one);
+            // A line is a place on the number's order and falls in whichever class holds that
+            // place. A class that cannot be asked about a place holds none of them, and every line
+            // would fall in no class — which reads as the rules dividing the position nowhere,
+            // where what happened is that a class was built without the order it sits on.
+            if (!cuts.isEmpty() && !one.recognises().answersAboutAPlace()) {
+                throw new IllegalArgumentException("`" + one.id() + "` cannot be asked where on "
+                        + term + " it lies, and this axis has lines on it");
+            }
         }
     }
 

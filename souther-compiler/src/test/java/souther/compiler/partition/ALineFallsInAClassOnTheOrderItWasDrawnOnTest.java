@@ -161,6 +161,42 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
                 own.holding(own.line()).stream().map(PartitionClass::id).toList());
     }
 
+    private static final String ORDERED = """
+            module example.ordered
+
+            data Prospecting
+            data Qualified
+            data Won
+            data Stage = Prospecting | Qualified | Won
+
+            data Bigger
+            data Smaller
+            data Size = Bigger | Smaller
+
+            behavior gate : (s: Stage) -> Size
+            let gate (s) = {
+                guard s < Qualified else Bigger
+                Smaller
+            }
+            """;
+
+    /**
+     * A case of an ordered enumeration holds the line drawn at it.
+     *
+     * <p>The classes here are the cases, which are finer than the two sides the guard makes; the
+     * line is at the place {@code Qualified} has on the enumeration's order. A case's class is asked
+     * at the place it was given when it was built, and a class that could not be asked would leave
+     * the line in no class — where a reader turning the place back into a value had, by the way,
+     * found it.
+     */
+    @Test
+    void aCaseOfAnOrderedEnumerationHoldsTheLineDrawnAtIt() {
+        Measured stage = measured(ORDERED, "gate/s");
+
+        assertEquals(List.of("Qualified"),
+                stage.holding(stage.line()).stream().map(PartitionClass::id).toList());
+    }
+
     /**
      * A class of a value the rules named holds the line drawn at that value.
      *

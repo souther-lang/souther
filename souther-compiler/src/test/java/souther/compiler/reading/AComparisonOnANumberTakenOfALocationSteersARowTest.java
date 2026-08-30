@@ -179,6 +179,29 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
                 read(reversed).sides().stream().map(Condition.Side::at).toList());
     }
 
+    /**
+     * A comparison on an ordered enumeration steers a row the same way.
+     *
+     * <p>The one kind of position whose classes are the cases and whose lines are at places on the
+     * order the cases are counted on. The cell for the arm behind the guard is found by asking each
+     * case where it lies, and a case that could not be asked left the line in no class — so the
+     * arms behind the guard were left without rows, while the partition showed every case.
+     */
+    @Test
+    void aComparisonOnAnOrderedEnumerationSteersARow() {
+        String ordered = TAKEN
+                .replace("module example.taken", "module example.ordered")
+                .replace("data Slot = { c: String }", """
+                        data Low
+                        data High
+                        data Slot = Low | High""")
+                .replace("let base = Slot { c = \"abcde\" }", "let base = High")
+                .replace("guard String.length(slot.c) <= 3", "guard slot < High");
+
+        assertEquals(armsAnsweredIn(OWN), armsAnsweredIn(ordered),
+                "the arms behind the guard are answered as they are for a number");
+    }
+
     /** And a row is offered for an arm behind it, the way one is where the number stands at the
      *  position. */
     @Test

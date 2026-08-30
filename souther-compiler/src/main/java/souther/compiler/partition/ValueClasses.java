@@ -70,16 +70,26 @@ final class ValueClasses {
      * than reasons to stop building it — the class is still what a row is read against.
      */
     private static souther.compiler.numeric.Place placeOf(Value value, Type type, Symbols symbols) {
-        souther.compiler.check.Carrier carrier = souther.compiler.check.Carrier.ofValue(type, symbols);
-        if (carrier == null) {
-            return null;
-        }
-        return carrier.placeOf(switch (value) {
+        return placeOf(switch (value) {
             case Value.Text text -> new ObservedValue.Text(text.value());
             case Value.Truth truth -> new ObservedValue.Bool(truth.value());
             case Value.Number number -> new ObservedValue.Decimal(number.value());
             case Value.Case one -> new ObservedValue.Unit(one.data());
-        });
+        }, type, symbols);
+    }
+
+    /**
+     * Where {@code value} sits on the order a position of {@code type} is counted on, or null where
+     * the type has no order or the value is not on it.
+     *
+     * <p>The one place a class is given its place, for every kind of class that has one. Asked here
+     * with the position's type rather than with a carrier, so that no builder of a class picks the
+     * order: which order a case of an enumeration is placed on is the enumeration's, and a unit data
+     * that is a case of two sums is at a different place in each.
+     */
+    static souther.compiler.numeric.Place placeOf(ObservedValue value, Type type, Symbols symbols) {
+        souther.compiler.check.Carrier carrier = souther.compiler.check.Carrier.ofValue(type, symbols);
+        return carrier == null ? null : carrier.placeOf(value);
     }
 
     /**
