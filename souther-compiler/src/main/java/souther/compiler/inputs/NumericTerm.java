@@ -331,7 +331,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
                 }
             }
             return switch (takenAs()) {
-                case TakenAs.TheSumOfWhatItHolds _ -> addedUp(values, on.answered());
+                case TakenAs.TheSumOfWhatItHolds _ -> addedUp(values, on);
                 case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
                         new Reading.NotNumber();
             };
@@ -502,7 +502,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
         }
         return switch (term) {
             case ValueOf _ -> asItStands(at, observed);
-            case TakenOf taken -> taken(taken.takenAs(), at, observed);
+            case TakenOf taken -> taken(taken.takenAs(), at, on);
         };
     }
 
@@ -523,13 +523,20 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * from being read as whichever arm was written first — the state {@code SizeOf} left the reader
      * in, where a term standing for anything but a size would have been read as the observation
      * itself (#1027).
+     *
+     * <p>The pair and not one end of it, because which end an account reads its values on is the
+     * account's own answer. A part of a time is a number of the value as it is written; what a
+     * container adds up to is a number of the values it holds, and those are places of the order the
+     * total is measured on. Handed one carrier for every arm, the arms that want the other end have
+     * nothing to say so with — and a container is written on no order at all, so the one that adds
+     * its elements up is handed nothing.
      */
-    private static Reading taken(TakenAs how, ObservedValue at, Carrier observed) {
+    private static Reading taken(TakenAs how, ObservedValue at, TermOrders on) {
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> howMany(at);
-            case TakenAs.TheSumOfWhatItHolds _ -> addedUp(at, observed);
-            case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, observed);
-            case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, observed);
+            case TakenAs.TheSumOfWhatItHolds _ -> addedUp(at, on);
+            case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, on.observed());
+            case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, on.observed());
         };
     }
 
@@ -568,14 +575,22 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * value the model may write, and answering that it holds no number would put a row the author
      * can write outside every class of the number a rule is about.
      */
-    private static Reading addedUp(ObservedValue at, Carrier observed) {
+    private static Reading addedUp(ObservedValue at, TermOrders on) {
         return at instanceof ObservedValue.Sequence held
-                ? addedUp(held.elements(), observed) : new Reading.NotNumber();
+                ? addedUp(held.elements(), on) : new Reading.NotNumber();
     }
 
-    /** The same, over values a caller gathered rather than over a container standing somewhere. */
-    private static Reading addedUp(java.util.List<ObservedValue> values, Carrier observed) {
-        if (observed == null) {
+    /**
+     * The same, over values a caller gathered rather than over a container standing somewhere.
+     *
+     * <p>Where the end is taken, for both readers at once. A total of what a place holds and a total
+     * over the values of a run are one account of one operation, so which order their elements are
+     * places of is one answer. Taken apiece, the two are free to add the same values up on different
+     * orders.
+     */
+    private static Reading addedUp(java.util.List<ObservedValue> values, TermOrders on) {
+        Carrier elements = on.answered();
+        if (elements == null) {
             return new Reading.NotNumber();
         }
         java.math.BigDecimal total = java.math.BigDecimal.ZERO;
@@ -589,7 +604,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             // number each carries is one inside.
             ObservedValue value = each instanceof ObservedValue.Constructed c
                     && c.field("value") != null ? c.field("value") : each;
-            Place read = observed.placeOf(value);
+            Place read = elements.placeOf(value);
             if (!(read instanceof Count count)) {
                 return new Reading.NotNumber();
             }
