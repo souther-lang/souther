@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 8,
+  "schemaVersion" : 9,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "undetermined",
@@ -249,6 +249,267 @@
             "reason" : "no_rows"
           } ]
         } ],
+        "obligations" : [ {
+          "point" : "in",
+          "rule" : "invariant WorkDays #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.staffing",
+            "declaredOn" : "WorkDays",
+            "clause" : 0
+          },
+          "level" : "1",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/worked",
+            "relation" : "in",
+            "against" : "1 < worked < 5",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "invariant WorkDays #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.staffing",
+            "declaredOn" : "WorkDays",
+            "clause" : 0
+          },
+          "level" : "7",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/worked",
+            "relation" : "in",
+            "against" : "5 <= worked < 7",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "on",
+          "rule" : "comparison@0:36:30",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "grantLeave",
+            "ordinal" : 13,
+            "lowered" : 0
+          },
+          "level" : "5",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/worked",
+            "relation" : "=",
+            "against" : "5",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "off",
+          "rule" : "comparison@0:36:30",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "grantLeave",
+            "ordinal" : 13,
+            "lowered" : 0
+          },
+          "level" : "4",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/worked",
+            "relation" : "=",
+            "against" : "4",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "comparison@0:36:30",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "grantLeave",
+            "ordinal" : 13,
+            "lowered" : 0
+          },
+          "level" : "5",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/worked",
+            "relation" : "in",
+            "against" : "5 < worked <= 7",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "out",
+          "rule" : "comparison@0:36:30",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "grantLeave",
+            "ordinal" : 13,
+            "lowered" : 0
+          },
+          "level" : "5",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/worked",
+            "relation" : "in",
+            "against" : "1 <= worked < 4",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "invariant Rate #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.staffing",
+            "declaredOn" : "Rate",
+            "clause" : 0
+          },
+          "level" : "0",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/rate",
+            "relation" : "in",
+            "against" : "0 < rate < 0.8",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "invariant Rate #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.staffing",
+            "declaredOn" : "Rate",
+            "clause" : 0
+          },
+          "level" : "1",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/rate",
+            "relation" : "in",
+            "against" : "0.8 <= rate < 1",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "on",
+          "rule" : "comparison@0:35:16",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "grantLeave",
+            "ordinal" : 15,
+            "lowered" : 0
+          },
+          "level" : "0.8",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/rate",
+            "relation" : "=",
+            "against" : "0.8",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "comparison@0:35:16",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "grantLeave",
+            "ordinal" : 15,
+            "lowered" : 0
+          },
+          "level" : "0.8",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/rate",
+            "relation" : "in",
+            "against" : "0.8 < rate <= 1",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "out",
+          "rule" : "comparison@0:35:16",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "grantLeave",
+            "ordinal" : 15,
+            "lowered" : 0
+          },
+          "level" : "0.8",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "grantLeave",
+            "axis" : "grantLeave/rate",
+            "relation" : "in",
+            "against" : "0 <= rate < 0.8",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        } ],
         "pairs" : {
           "total" : 4,
           "status" : "unavailable",
@@ -448,6 +709,245 @@
             "against" : "0 <= hours < 45",
             "knownWritable" : true,
             "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        } ],
+        "obligations" : [ {
+          "point" : "in",
+          "rule" : "invariant Hours #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.staffing",
+            "declaredOn" : "Hours",
+            "clause" : 0
+          },
+          "level" : "0",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "in",
+            "against" : "0 < hours <= 45",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "invariant Hours #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.staffing",
+            "declaredOn" : "Hours",
+            "clause" : 0
+          },
+          "level" : "200",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "in",
+            "against" : "100 < hours < 200",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "on",
+          "rule" : "comparison@0:52:32",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "judgeHours",
+            "ordinal" : 17,
+            "lowered" : 0
+          },
+          "level" : "101",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "=",
+            "against" : "101",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "off",
+          "rule" : "comparison@0:52:32",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "judgeHours",
+            "ordinal" : 17,
+            "lowered" : 0
+          },
+          "level" : "100",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "=",
+            "against" : "100",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "comparison@0:52:32",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "judgeHours",
+            "ordinal" : 17,
+            "lowered" : 0
+          },
+          "level" : "100",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "in",
+            "against" : "101 < hours <= 200",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "out",
+          "rule" : "comparison@0:52:32",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "judgeHours",
+            "ordinal" : 17,
+            "lowered" : 0
+          },
+          "level" : "100",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "in",
+            "against" : "45 < hours < 100",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "on",
+          "rule" : "comparison@0:53:32",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "judgeHours",
+            "ordinal" : 19,
+            "lowered" : 0
+          },
+          "level" : "46",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "=",
+            "against" : "46",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "off",
+          "rule" : "comparison@0:53:32",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "judgeHours",
+            "ordinal" : 19,
+            "lowered" : 0
+          },
+          "level" : "45",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "=",
+            "against" : "45",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "comparison@0:53:32",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "judgeHours",
+            "ordinal" : 19,
+            "lowered" : 0
+          },
+          "level" : "45",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "in",
+            "against" : "46 < hours <= 100",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "point" : "out",
+          "rule" : "comparison@0:53:32",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.staffing",
+            "behavior" : "judgeHours",
+            "ordinal" : 19,
+            "lowered" : 0
+          },
+          "level" : "45",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "readings" : [ {
+            "behavior" : "judgeHours",
+            "axis" : "judgeHours/hours",
+            "relation" : "in",
+            "against" : "0 <= hours < 45",
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]

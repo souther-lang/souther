@@ -75,8 +75,6 @@ class EveryPointOwedIsInOneAccountTest {
     @Test
     void abehaviorIsOwedNothingThatIsOwedToTheDeclarations() {
         Compilation compilation = measured();
-        Map<String, PartitionEvidence> partitions =
-                compilation.db().ask(new Adequacy.Coverage("example.both")).value();
         Map<String, List<BorderAssessment>> lines =
                 Adequacy.readingsOf(compilation.db(), "example.both");
 
@@ -98,10 +96,12 @@ class EveryPointOwedIsInOneAccountTest {
         assertFalse(theReadings.isEmpty(), "and the guard's line is owed to the body that drew it");
 
         List<BorderObligationPoint> account = new ArrayList<>();
-        partitions.forEach((behavior, evidence) ->
-                evidence.owedPoints().forEach(owed -> account.add(owed.owed())));
-        assertEquals(theReadings.stream().map(OwedPoint::point).toList(), account,
-                "a behavior's account is the points its own rules settled, and no others");
+        compilation.db().ask(new Adequacy.BodyBorders("example.both")).value()
+                .forEach((behavior, owed) -> owed.made().orElseGet(List::of)
+                        .forEach(point -> account.add(point.point())));
+        assertEquals(theReadings.stream().map(OwedPoint::point).distinct().toList(), account,
+                "a behavior's account is the points its own rules settled, once each, and no"
+                        + " others");
 
         Set<BorderObligationPoint> owedToDeclarations = new LinkedHashSet<>(
                 theDeclarations.stream().map(OwedPoint::point).toList());
@@ -212,17 +212,19 @@ class EveryPointOwedIsInOneAccountTest {
                 compilation.db().ask(new Adequacy.Coverage("example.both")).value();
         Map<String, Measure<List<BorderAssessment>>> lines = compilation.db()
                 .ask(new Adequacy.BoundaryReadings("example.both")).value();
+        Map<String, Measure<List<BorderObligationPointAssessment>>> accounts = compilation.db()
+                .ask(new Adequacy.BodyBorders("example.both")).value();
 
         // The two behaviors meet different lines, so one's account is not the other's — which is
         // what makes the refusal below about something.
-        assertNotEquals(partitions.get("keep").owes(), partitions.get("hold").owes(),
+        assertNotEquals(accounts.get("keep"), accounts.get("hold"),
                 "the two behaviors are owed different rows");
 
         assertDoesNotThrow(() -> new BehaviorEvidence(Adequacy.RowReading.NONE, null,
-                partitions.get("keep"), lines.get("keep"), null));
+                partitions.get("keep"), lines.get("keep"), accounts.get("keep"), null));
         assertThrows(IllegalArgumentException.class,
                 () -> new BehaviorEvidence(Adequacy.RowReading.NONE, null,
-                        partitions.get("keep"), lines.get("hold"), null),
+                        partitions.get("keep"), lines.get("hold"), accounts.get("keep"), null),
                 "an account and the lines of another behavior are two measurements");
     }
 

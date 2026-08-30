@@ -73,7 +73,7 @@ class ARowAtAFormsPointIsSearchedForWhereTheRulesLeaveOneTest {
     void aPointTheRulesLeaveAPairAtIsNotReportedAsRefused() {
         String report = report(APART);
 
-        assertTrue(report.contains("p.x + p.y = 4"), report);
+        assertTrue(report.contains("read as f/p.x + p.y: = 4"), report);
         assertFalse(report.contains("every value tried at p.x + p.y = 4 was refused"), report);
     }
 

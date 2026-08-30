@@ -66,7 +66,7 @@ class ADiagnosticNamesThePointInTheReportsWordsTest {
     void aForksOnPointSaysItIsTheOnPoint() {
         Diagnostic said = theOneAt("100");
 
-        assertInstanceOf(ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew.class, said.said(),
+        assertInstanceOf(ExampleMessage.NoRowIsAtThePointOfTheLineAConstructDrew.class, said.said(),
                 () -> "a fork has no name, so its sentence says the construct: " + said.said());
         assertEquals("ON", said.values().get("point"),
                 () -> "the report calls this the ON point: " + said.values());
@@ -77,7 +77,7 @@ class ADiagnosticNamesThePointInTheReportsWordsTest {
     void aClausesOffPointSaysItIsTheOffPoint() {
         Diagnostic said = theOneAt("0");
 
-        assertInstanceOf(ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew.class, said.said(),
+        assertInstanceOf(ExampleMessage.NoRowIsAtThePointOfTheLineARuleDrew.class, said.said(),
                 () -> "a clause has a name, so its sentence names the rule: " + said.said());
         assertEquals("OFF", said.values().get("point"),
                 () -> "the report calls this the OFF point: " + said.values());
@@ -120,7 +120,7 @@ class ADiagnosticNamesThePointInTheReportsWordsTest {
     private static Diagnostic theOneAt(String value) {
         List<Diagnostic> found = new ArrayList<>();
         for (Diagnostic d : WARNED) {
-            if ("E1916".equals(d.code()) && value.equals(d.values().get("value"))) {
+            if ("E1916".equals(d.code()) && value.equals(d.values().get("level"))) {
                 found.add(d);
             }
         }

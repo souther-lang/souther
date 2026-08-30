@@ -351,7 +351,31 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "items", "items", "properties", "writableBecause", "items"),
                     List.of(ItemAssessment.WritabilityEvidence.Ground.class), groundWords(),
-                    Set.of()));
+                    Set.of()),
+            // The account beside the geometry: one entry per point a behavior is owed, with every
+            // reading of it. The same words as a border's items, since an obligation's measurement
+            // is folded from its readings' and each reading's is one of those items.
+            new Vocabulary("partition.obligations[].point",
+                    List.of("$defs", "partition", "properties", "obligations", "items",
+                            "properties", "point"),
+                    souther.compiler.partition.PointRole.class),
+            new Vocabulary("partition.obligations[].reason",
+                    List.of("$defs", "partition", "properties", "obligations", "items",
+                            "properties", "reason"),
+                    Set.of("no_arm_witnesses_it"),
+                    ItemAssessment.Coverage.NotAsked.class,
+                    ItemAssessment.Coverage.CouldNotAsk.class),
+            new Vocabulary("partition.obligations[].writableBecause",
+                    List.of("$defs", "partition", "properties", "obligations", "items",
+                            "properties", "writableBecause", "items"),
+                    List.of(ItemAssessment.WritabilityEvidence.Ground.class), groundWords(),
+                    Set.of()),
+            new Vocabulary("partition.obligations[].readings[].reason",
+                    List.of("$defs", "partition", "properties", "obligations", "items",
+                            "properties", "readings", "items", "properties", "reason"),
+                    Set.of("no_arm_witnesses_it"),
+                    ItemAssessment.Coverage.NotAsked.class,
+                    ItemAssessment.Coverage.CouldNotAsk.class));
 
     /** The grounds a document may name, spelled by the one writer of the field. */
     private static Set<String> groundWords() {

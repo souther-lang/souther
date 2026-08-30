@@ -622,20 +622,21 @@ public final class Analyzer {
                     parts.add("out " + cases.specified().size() + "/"
                             + signature.output().declared().size()));
         }
-        souther.compiler.query.PartitionEvidence partition =
-                adequacy.partitions() == null ? null : adequacy.partitions().get(behavior);
-        if (partition != null) {
+        souther.compiler.query.Measure<List<souther.compiler.query.BorderObligationPointAssessment>>
+                account = adequacy.accounts() == null ? null : adequacy.accounts().get(behavior);
+        if (account != null) {
             // What this behavior is owed a row for, and not every point of every line it met. A
             // line the declarations drew is answered once for the module by a row written for any
             // behavior carrying the type, so a lens over a behavior that counted those would be
             // telling this author about work that is not theirs.
             //
-            // Over the points and not over the borders. A border owes a row at up to four of them,
-            // and counting borders would call one with a single point met as covered as one that
-            // owes only that point.
+            // Over the points and not over the borders or the readings. A border owes a row at up
+            // to four of them, and a line is owed once however many positions read it, so
+            // counting either would call a line with one point met as covered as one that owes
+            // only that point, or one guard over a sum as many rows as the sum has cases.
             List<souther.compiler.query.ItemAssessment.Owed> settled =
-                    partition.owedPoints().stream()
-                            .map(souther.compiler.query.OwedBoundaryPoint::item)
+                    account.made().orElseGet(List::of).stream()
+                            .map(souther.compiler.query.BorderObligationPointAssessment::item)
                             .filter(Analyzer::settled).toList();
             long met = settled.stream()
                     .filter(souther.compiler.query.ItemAssessment.Owed::hasRowWitness)

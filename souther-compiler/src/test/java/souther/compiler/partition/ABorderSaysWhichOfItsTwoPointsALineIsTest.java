@@ -82,8 +82,10 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void aClosedBorderIsAtItsOwnOnPoint() {
         String report = report(CLOSED);
 
-        assertTrue(report.contains("no row is at the ON point sized/n = 100"), report);
-        assertTrue(report.contains("no row is at the OFF point sized/n = 101"), report);
+        assertTrue(report.contains("no row is at the ON point at 100 (comparison"), report);
+        assertTrue(report.contains("no row is at the OFF point at 101 (comparison"), report);
+        assertTrue(report.contains("read as sized/n: = 100"), report);
+        assertTrue(report.contains("read as sized/n: = 101"), report);
     }
 
     /**
@@ -97,8 +99,10 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void anOpenBorderIsAtItsOwnOffPoint() {
         String report = report(OPENED);
 
-        assertTrue(report.contains("no row is at the OFF point sized/n = 100"), report);
-        assertTrue(report.contains("no row is at the ON point sized/n = 99"), report);
+        assertTrue(report.contains("no row is at the OFF point at 100 (comparison"), report);
+        assertTrue(report.contains("no row is at the ON point at 99 (comparison"), report);
+        assertTrue(report.contains("read as sized/n: = 100"), report);
+        assertTrue(report.contains("read as sized/n: = 99"), report);
     }
 
     /**
@@ -110,8 +114,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      */
     @Test
     void theSameValueIsTheOtherPointUnderTheOtherOperator() {
-        assertTrue(report(CLOSED).contains("the ON point sized/n = 100"), report(CLOSED));
-        assertTrue(report(OPENED).contains("the OFF point sized/n = 100"), report(OPENED));
+        assertTrue(report(CLOSED).contains("the ON point at 100 (comparison"), report(CLOSED));
+        assertTrue(report(OPENED).contains("the OFF point at 100 (comparison"), report(OPENED));
     }
 
     /**

@@ -13,10 +13,15 @@ import java.util.EnumSet;
 import java.util.Map;
 
 /**
- * Everything known about one border: the line, and what became of each of its four coverage items.
+ * Everything known about one reading of one border: the line as this position met it, and what
+ * became of each of its four coverage items at this reading.
  *
- * <p>One of these per border, made in one place. What a report prints, what a build is warned about
- * and what the generator offers are three readings of this and not three measurements.
+ * <p>One of these per border, made in one place. It is the occurrence: where a row can be written
+ * and what the search there came to, which is what a block that shows a border whole prints and
+ * what a generation composes from. What is owed is not here — a line is owed once however many
+ * positions read it — and what a finding is about, what a verdict counts and what a report marks is
+ * the point across its readings ({@link BorderObligationPointAssessment}), which is gathered from
+ * these and never read off one of them.
  *
  * <p><b>Total over {@link PointRole}, the way the border it is about is.</b> A border answers for
  * every role and so does this, so a reader asking what one of them came to is never answered by an

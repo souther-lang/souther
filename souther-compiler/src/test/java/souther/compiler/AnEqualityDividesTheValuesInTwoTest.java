@@ -114,7 +114,7 @@ class AnEqualityDividesTheValuesInTwoTest {
     void theValueIsOwedAndItsNeighbourIsNot() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("border      borders 1   coverage items 2/2   excluded 1"), human);
+        assertTrue(human.contains("border      borders 1   obligations 2/2"), human);
     }
 
     /**

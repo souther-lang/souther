@@ -111,8 +111,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void aConstantAddedToThePositionMovesTheLine() {
         String report = report(guarded("a.value + 1 <= 10"));
 
-        assertTrue(report.contains("no row is at the ON point f/a = 9"), report);
-        assertTrue(report.contains("no row is at the OFF point f/a = 10 (comparison"),
+        assertTrue(report.contains("read as f/a: = 9"), report);
+        assertTrue(report.contains("read as f/a: = 10"),
                 report);
         assertTrue(report.contains("equivalence partitions"),
                 "a line at one position divides it:\n" + report);
@@ -134,8 +134,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void aScaledPositionIsThePositionItScales() {
         String report = report(guarded("Int.multiply(2, a.value) <= 10"));
 
-        assertTrue(report.contains("no row is at the ON point f/a = 5"), report);
-        assertTrue(report.contains("no row is at the OFF point f/a = 6"), report);
+        assertTrue(report.contains("read as f/a: = 5"), report);
+        assertTrue(report.contains("read as f/a: = 6"), report);
         assertTrue(report.contains("`a/5 < x <= 10`"),
                 "and the position is divided at five, not left undivided:\n" + report);
         assertFalse(report.contains("2 * a"),
@@ -156,8 +156,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void aThresholdTheWrittenFormNeverTakesPartsThePositionsOwnValues() {
         String report = report(guarded("Int.multiply(2, a.value) <= 9"));
 
-        assertTrue(report.contains("no row is at the ON point f/a = 4"), report);
-        assertTrue(report.contains("no row is at the OFF point f/a = 5"), report);
+        assertTrue(report.contains("read as f/a: = 4"), report);
+        assertTrue(report.contains("read as f/a: = 5"), report);
         assertFalse(report.contains("4.5"),
                 "nine halved is no value of the position, so nothing names one:\n" + report);
     }
@@ -168,8 +168,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void aConstantOnOneSideOfARelationMovesTheLineAlongTheDistance() {
         String report = report(guarded("a.value + 1 > b.value"));
 
-        assertTrue(report.contains("point f/a = b"), report);
-        assertTrue(report.contains("point f/a = b - 1"), report);
+        assertTrue(report.contains("read as f/a: = b"), report);
+        assertTrue(report.contains("read as f/a: = b - 1"), report);
     }
 
     /**
@@ -184,8 +184,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String report = report(guarded(
                 "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"));
 
-        assertTrue(report.contains("no row is at the ON point f/3 * a + 6 * b = 48"), report);
-        assertTrue(report.contains("no row is at the OFF point f/3 * a + 6 * b = 51"), report);
+        assertTrue(report.contains("read as f/3 * a + 6 * b: = 48"), report);
+        assertTrue(report.contains("read as f/3 * a + 6 * b: = 51"), report);
         // And what it leaves the positions is said in the same words as well. A rule over a quantity
         // that is not one position's own values divides none of them, whoever wrote it.
         assertTrue(report.contains(
@@ -204,7 +204,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value))"
                         + " <= Int.add(b.value, 48)"));
 
-        assertTrue(report.contains("no row is at the ON point f/3 * a + 5 * b = 48"), report);
+        assertTrue(report.contains("read as f/3 * a + 5 * b: = 48"), report);
     }
 
     /**
@@ -237,7 +237,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                     | "under" : ("b", "m") -> No { why = 0 }
                 """);
 
-        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
+        assertTrue(report.contains("read as cmp/a: = b"), report);
         assertTrue(report.contains("no ON point is owed at a = b")
                         && report.contains("names no value there"),
                 "a string has no next string, so the point one along is not owed:\n" + report);
@@ -259,10 +259,10 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String rows = generated(BASKET);
 
         assertTrue(report.contains(
-                "no row is at the ON point price/600 * order.choco + 300 * order.straw = 4800"),
+                "read as price/600 * order.choco + 300 * order.straw: = 4800"),
                 report);
         assertTrue(report.contains(
-                "no row is at the OFF point price/600 * order.choco + 300 * order.straw = 5100"),
+                "read as price/600 * order.choco + 300 * order.straw: = 5100"),
                 report);
         assertTrue(rows.contains("Strawberry(10), choco = Choco(3)"), rows);
         assertTrue(rows.contains("Strawberry(9), choco = Choco(4)"), rows);
@@ -325,7 +325,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void aDistanceOverAnOrderWithNoStepIsStillADistance() {
         String report = report(dense("a.value <= b.value - 1m"));
 
-        assertTrue(report.contains("point f/a = b - 1"), report);
+        assertTrue(report.contains("read as f/a: = b - 1"), report);
         assertFalse(report.contains("nothing composed one"),
                 "a pair one apart is composable over decimals:\n" + report);
     }
@@ -340,7 +340,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void aDistanceNeedNotBeAWholeNumberOfSteps() {
         String report = report(dense("a.value <= b.value - 0.5m"));
 
-        assertTrue(report.contains("point f/a = b - 0.5"), report);
+        assertTrue(report.contains("read as f/a: = b - 0.5"), report);
     }
 
     /**
@@ -371,7 +371,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void aFormOverAnOrderThatFillsIsNotProvedEmptyByAWalkOverWholeNumbers() {
         String report = report(dense("a.value * 2m + b.value * 4m <= 9m"));
 
-        assertTrue(report.contains("point f/2 * a + 4 * b = 9"), report);
+        assertTrue(report.contains("read as f/2 * a + 4 * b: = 9"), report);
         assertFalse(report.contains("the rules leave no value at 2 * a + 4 * b"),
                 "nothing walked the whole of this box, so nothing was proved about it:\n" + report);
     }
@@ -389,7 +389,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String report = report(guarded(
                 "48 >= Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value))"));
 
-        assertTrue(report.contains("no row is at the ON point f/3 * a + 6 * b = 48"), report);
+        assertTrue(report.contains("read as f/3 * a + 6 * b: = 48"), report);
         assertFalse(report.contains("-3 * a"), report);
     }
 
@@ -421,8 +421,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                     | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
                 """);
 
-        assertTrue(report.contains("no row is at the ON point f/3 * a + 6 * b = 48"), report);
-        assertTrue(report.contains("no row is at the OFF point f/3 * a + 6 * b = 51"), report);
+        assertTrue(report.contains("read as f/3 * a + 6 * b: = 48"), report);
+        assertTrue(report.contains("read as f/3 * a + 6 * b: = 51"), report);
     }
 
     /**
@@ -439,8 +439,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String turned = report(guarded(
                 "12 >= Int.subtract(Int.multiply(3, a.value), Int.multiply(6, b.value))"));
 
-        assertTrue(written.contains("point f/3 * a - 6 * b = 12"), written);
-        assertTrue(turned.contains("point f/3 * a - 6 * b = 12"), turned);
+        assertTrue(written.contains("read as f/3 * a - 6 * b: = 12"), written);
+        assertTrue(turned.contains("read as f/3 * a - 6 * b: = 12"), turned);
         assertFalse(turned.contains("-3 * a"), turned);
     }
 
@@ -455,8 +455,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     void theSubjectIsTheOneTheSourceNames() {
         String report = report(guarded("b.value > a.value"));
 
-        assertTrue(report.contains("point f/b = a"), report);
-        assertFalse(report.contains("point f/a = b"), report);
+        assertTrue(report.contains("read as f/b: = a"), report);
+        assertFalse(report.contains("read as f/a: = b"), report);
     }
 
     /**
@@ -554,7 +554,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                     | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
                 """);
 
-        assertTrue(report.contains("no row is at the ON point f/a + b = 2000000"), report);
+        assertTrue(report.contains("read as f/a + b: = 2000000"), report);
         assertFalse(report.contains("the search stopped before reaching a + b = 2000000"),
                 "one equation with one answer, in a box a million wide:\n" + report);
     }
@@ -681,7 +681,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(report.contains("no ON point is owed at 3 * a = 1"), report);
         assertTrue(report.contains("no OFF point is owed at 3 * a = 1"), report);
-        assertFalse(report.contains("no row is at the ON point f/3 * a = 1"),
+        assertFalse(report.contains("read as f/3 * a: = 1"),
                 "a third is no decimal, so no row is owed where the quantity never arrives:\n"
                         + report);
     }
@@ -747,7 +747,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                     | "one" : (Big(1), Nought(0)) -> Yes { v = 1 }
                 """);
 
-        assertTrue(report.contains("no row is at the ON point f/a + b = 10000000000000001"), report);
+        assertTrue(report.contains("read as f/a + b: = 10000000000000001"), report);
         assertFalse(report.contains("the rules leave no value at a + b = 10000000000000001"),
                 "the box holds exactly one pair at this line, so nothing proves it holds none:\n"
                         + report);

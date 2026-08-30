@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 8,
+  "schemaVersion" : 9,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread" ],
@@ -193,6 +193,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         } ],
+        "obligations" : [ ],
         "pairs" : {
           "total" : 0,
           "status" : "complete",
@@ -322,6 +323,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         } ],
+        "obligations" : [ ],
         "pairs" : {
           "total" : 0,
           "status" : "complete",
@@ -478,6 +480,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         } ],
+        "obligations" : [ ],
         "pairs" : {
           "total" : 0,
           "status" : "complete",
@@ -746,6 +749,222 @@
             "hit" : true
           } ]
         } ],
+        "obligations" : [ {
+          "point" : "in",
+          "rule" : "invariant Weight #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.catalog",
+            "declaredOn" : "Weight",
+            "clause" : 0
+          },
+          "level" : "1",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/指示.重量",
+            "relation" : "in",
+            "against" : "1 < 指示.重量 <= 30000",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "point" : "on",
+          "rule" : "comparison@1:78:17",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 13,
+            "lowered" : 0
+          },
+          "level" : "30000",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/指示.重量",
+            "relation" : "=",
+            "against" : "30000",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "point" : "off",
+          "rule" : "comparison@1:78:17",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 13,
+            "lowered" : 0
+          },
+          "level" : "30001",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/指示.重量",
+            "relation" : "=",
+            "against" : "30001",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "comparison@1:78:17",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 13,
+            "lowered" : 0
+          },
+          "level" : "30000",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/指示.重量",
+            "relation" : "in",
+            "against" : "1 <= 指示.重量 < 30000",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "point" : "out",
+          "rule" : "comparison@1:78:17",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 13,
+            "lowered" : 0
+          },
+          "level" : "30000",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "complete",
+          "hit" : false,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/指示.重量",
+            "relation" : "in",
+            "against" : "30001 < 指示.重量",
+            "status" : "complete",
+            "hit" : false
+          } ]
+        }, {
+          "point" : "on",
+          "rule" : "comparison@1:57:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 5,
+            "lowered" : 0
+          },
+          "level" : "11",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "complete",
+          "hit" : false,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/Time.hour(指示.集荷時刻)",
+            "relation" : "=",
+            "against" : "11",
+            "status" : "complete",
+            "hit" : false
+          } ]
+        }, {
+          "point" : "off",
+          "rule" : "comparison@1:57:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 5,
+            "lowered" : 0
+          },
+          "level" : "12",
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "complete",
+          "hit" : false,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/Time.hour(指示.集荷時刻)",
+            "relation" : "=",
+            "against" : "12",
+            "status" : "complete",
+            "hit" : false
+          } ]
+        }, {
+          "point" : "in",
+          "rule" : "comparison@1:57:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 5,
+            "lowered" : 0
+          },
+          "level" : "12",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/Time.hour(指示.集荷時刻)",
+            "relation" : "in",
+            "against" : "0 <= Time.hour(指示.集荷時刻) < 11",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "point" : "out",
+          "rule" : "comparison@1:57:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 5,
+            "lowered" : 0
+          },
+          "level" : "12",
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "readings" : [ {
+            "behavior" : "出荷する",
+            "axis" : "出荷する/Time.hour(指示.集荷時刻)",
+            "relation" : "in",
+            "against" : "12 < Time.hour(指示.集荷時刻) <= 23",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
         "pairs" : {
           "total" : 16,
           "status" : "complete",
@@ -800,17 +1019,17 @@
       "findings" : [ {
         "kind" : "domain_point_uncovered",
         "disposition" : "refused",
-        "subject" : "出荷する/指示.重量 in 30001 < 指示.重量",
+        "subject" : "OUT point beside 30000 of comparison@1:78:17",
         "code" : "E1917"
       }, {
         "kind" : "boundary_unmet",
         "disposition" : "refused",
-        "subject" : "出荷する/Time.hour(指示.集荷時刻) = 11",
+        "subject" : "ON point at 11 of comparison@1:57:50",
         "code" : "E1916"
       }, {
         "kind" : "boundary_unmet",
         "disposition" : "refused",
-        "subject" : "出荷する/Time.hour(指示.集荷時刻) = 12",
+        "subject" : "OFF point at 12 of comparison@1:57:50",
         "code" : "E1916"
       }, {
         "kind" : "partition_not_derivable",

@@ -152,20 +152,21 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
                 if (behavior.partition() != null) {
                     PartitionEvidence partition = behavior.partition();
                     parts = parts.union(partition.partitioned().weakening())
-                            .union(partition.owes().weakening())
                             .union(partition.pairs().counted().weakening());
                     for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
                         parts = parts.union(axis.reached().weakening());
                     }
+                    apart.add(partition.partitioned().weakening());
+                    apart.add(partition.pairs().counted().weakening());
+                }
+                if (behavior.evidence().account() != null) {
                     // This behavior's own account, which is what its weakening is over. A row owed
                     // to the declarations that drew a line is short or not short in the module's
                     // account of them.
-                    for (souther.compiler.query.OwedBoundaryPoint point : partition.owedPoints()) {
+                    for (souther.compiler.query.BorderObligationPointAssessment point
+                            : behavior.account()) {
                         parts = parts.union(point.item().weakening());
                     }
-                    apart.add(partition.partitioned().weakening());
-                    apart.add(partition.owes().weakening());
-                    apart.add(partition.pairs().counted().weakening());
                 }
                 loadBearing += loadBearing(apart);
                 holds(lost, "behavior " + behavior.name(), behavior.weakenedBy(), parts);

@@ -189,7 +189,6 @@ final class AReportOfOneBorder {
                                 new souther.compiler.partition.ClosureGap.RulesNotReached("b",
                                         new souther.compiler.inputs.PositionId(
                                                 souther.compiler.inputs.TermPath.of("t")))))),
-                souther.compiler.query.OwedBoundaryPoint.accountOf(border),
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of());
@@ -220,10 +219,17 @@ final class AReportOfOneBorder {
     static AdequacyReport.AdequacyStatus verdictOf(Measurement<List<BorderAssessment>> lines,
                                                    Adequacy.AdequacyBar held) {
         PartitionEvidence partition = partition(lines);
+        // The account is the module's one relation projected to this behavior, which over one
+        // behavior's lines is the points its own rules settled, gathered across their readings.
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
                 new souther.compiler.query.BehaviorEvidence(
-                        Adequacy.RowReading.NONE, null, partition, lines, null),
+                        Adequacy.RowReading.NONE, null, partition, lines,
+                        lines.readAs(read -> souther.compiler.query
+                                .BorderObligationPointAssessment.across(read).stream()
+                                .filter(point -> point.belongsToBehaviorAccount("weigh"))
+                                .toList()),
+                        null),
                 souther.compiler.query.ClaimAnnotations.NONE, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
                 held, WeakeningSet.none(),

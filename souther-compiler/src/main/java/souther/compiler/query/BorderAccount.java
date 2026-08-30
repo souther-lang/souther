@@ -319,10 +319,10 @@ public record BorderAccount(String module, GenerationScope scope,
      * the point came to; and a row that already stands where the point is owed is the point's work
      * done.
      *
-     * <p>Asked of the line, which is a declaration's question: what an {@code invariant} states is
-     * the same wherever the type is carried, so a finding about it is about the line and any row
-     * standing at the line answers it. A finding standing at one coordinate is a different question
-     * and asks {@link #outcomeAtTheReading}.
+     * <p>Asked of the line, whosever it is: what an {@code invariant} states is the same wherever
+     * the type is carried, and a body's guard on a name every case spreads is one line read under
+     * each case. A finding is about the line, and a row standing at it under any reading answers
+     * it.
      *
      * <p>Refused rather than answered where this holds no resolution, or holds one saying nothing
      * measured the point. A finding stands where the point was measured and missed, so a
@@ -334,29 +334,6 @@ public record BorderAccount(String module, GenerationScope scope,
         return switch (answerAt(at).resolution()) {
             case PointResolution.Generated(var _, var row) ->
                     new GenerationOutcome.Generated(List.of(row));
-            case PointResolution.Unresolved(var coverage) -> cannot(coverage);
-            case PointResolution.NoSearch(var cause) -> settledOr(cause, at);
-        };
-    }
-
-    /**
-     * The same resolution read as an answer about one coordinate of the line.
-     *
-     * <p>What a finding standing at a position asks. A rule read at two positions is met at both and
-     * owes one row, so a row composed at one of them settles the line while the other position stays
-     * a coordinate no row stands at — a finding, and nothing for a generation to do here, at once.
-     *
-     * <p>So a row is this coordinate's answer only where this coordinate is where it was composed.
-     * Handed on without that test, the row written for the other position is offered as the answer
-     * here: it is written in that position's terms and named for that position's point, and an
-     * author who writes it finds the coordinate they were shown still uncovered.
-     */
-    GenerationOutcome outcomeAtTheReading(BorderObligationPoint at,
-            BorderObligationPointAssessment.Reading asked) {
-        return switch (answerAt(at).resolution()) {
-            case PointResolution.Generated(var composedAt, var row) ->
-                    composedAt.equals(asked) ? new GenerationOutcome.Generated(List.of(row))
-                            : new GenerationOutcome.ObligationAlreadySettled();
             case PointResolution.Unresolved(var coverage) -> cannot(coverage);
             case PointResolution.NoSearch(var cause) -> settledOr(cause, at);
         };

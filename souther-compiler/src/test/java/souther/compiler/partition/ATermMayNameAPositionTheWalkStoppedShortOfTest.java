@@ -69,7 +69,7 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
         String report = report(BELOW_WHERE_THE_READING_STOPS);
 
         assertTrue(report.contains("borders 1"), report);
-        assertTrue(report.contains("f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b"), report);
+        assertTrue(report.contains("read as f/c@Cons.tail@Cons.a: = c@Cons.tail@Cons.b"), report);
     }
 
     /**
@@ -83,9 +83,8 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     void aRowIsAskedForAtThePointTheLineDraws() {
         String report = report(BELOW_WHERE_THE_READING_STOPS);
 
-        assertTrue(report.contains("no row is at the OFF point"
-                        + " f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b"),
-                report);
+        assertTrue(report.contains("no row is at the OFF point at c@Cons.tail@Cons.b"), report);
+        assertTrue(report.contains("read as f/c@Cons.tail@Cons.a: = c@Cons.tail@Cons.b"), report);
     }
 
     /** The same two fields, held one apart, which is a rule no operand of the comparison names. */
@@ -110,7 +109,8 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
 
         // The line is where `a` is one below `b`, so the point on it is the pair two apart: the
         // rule is written `<` and the last pair satisfying it is the one before they are one apart.
-        assertTrue(report.contains("f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b - 2"), report);
+        assertTrue(report.contains("read as f/c@Cons.tail@Cons.a: = c@Cons.tail@Cons.b - 2"),
+                report);
     }
 
     /** Two fields of what a list holds, compared inside a closure. The path reaches them through

@@ -13,17 +13,15 @@ import java.util.Set;
  * everything downstream would recompute on every ask. What a report needs is the names and the
  * numbers; the functions are used on the way here and left behind.
  *
- * <p><b>This behavior's account and not the lines it was read from.</b> Two of a border's four
- * points can be owed to the declarations that drew the line rather than to any body carrying the
- * type, and a row for one of those is written once for the module. So what is here is what this
- * behavior is owed a row for, and the lines themselves — every point of them, whosever they are —
- * are what a reader that describes them asks for ({@link BehaviorEvidence#boundaryReadings}).
- * Handed the lines, every reader that measures a behavior, counts what it covers or raises a finding
- * about it had to remember to leave the declarations' points out.
+ * <p><b>The classes, and nothing about the lines.</b> What a behavior is owed a row for at the
+ * lines its rules drew is the module's one relation projected to it
+ * ({@link Adequacy.BodyBorders}), and the lines themselves — every point of them, whosever they
+ * are — are what a reader that describes them asks for ({@link BehaviorEvidence#boundaryReadings}).
+ * Neither is here. An account kept beside the classes was read off the lines a second time, and a
+ * reader holding one of its entries could walk back to the border and the roles beside it; asked
+ * for by name, each is one answer with one owner.
  *
  * @param axes         one entry per position the model divides
- * @param owes         one entry per thing this behavior is owed a row for at the lines its
- *                     positions meet
  * @param notDerivable positions no class came back for, each saying whether the model divides them
  *                     no way at all or this could not read what it divides them by. Both used to be
  *                     one list of paths, and the sentence written from it claimed the first about
@@ -48,7 +46,6 @@ import java.util.Set;
  *                     everything else a module could not read happens where that list is built
  */
 public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
-                                Measure<List<OwedBoundaryPoint>> owes,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
@@ -68,7 +65,6 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(
             PartitionDerivation.noSubject(),
-            OwedBoundaryPoint.accountOf(BoundaryDerivation.noSubject()),
             PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of());
 
@@ -93,7 +89,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public static PartitionEvidence boundaryNotDerived(String behavior) {
         return new PartitionEvidence(
-                BoundaryForMeasurement.failed(behavior), BoundaryForMeasurement.failed(behavior),
+                BoundaryForMeasurement.failed(behavior),
                 PairSpace.boundaryNotDerived(behavior), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of());
     }
@@ -365,13 +361,9 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public WeakeningSet weakening() {
         WeakeningSet out = partitioned.weakening()
-                .union(owes.weakening())
                 .union(pairs.counted().weakening());
         for (AxisCoverage axis : axes()) {
             out = out.union(axis.reached().weakening());
-        }
-        for (OwedBoundaryPoint owed : owedPoints()) {
-            out = out.union(owed.item().weakening());
         }
         return out;
     }
@@ -380,11 +372,6 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      *  where the measure has none to show, which its own answer says the reason for. */
     public List<AxisCoverage> axes() {
         return PartitionDerivation.at(partitioned);
-    }
-
-    /** What this behavior is owed a row for, likewise. */
-    public List<OwedBoundaryPoint> owedPoints() {
-        return owes.made().orElseGet(List::of);
     }
 
     /**

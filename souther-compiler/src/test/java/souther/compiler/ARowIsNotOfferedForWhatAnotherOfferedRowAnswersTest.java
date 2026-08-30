@@ -132,7 +132,7 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
         for (Adequacy.Finding finding : findings) {
             OfferItem item = switch (finding.about()) {
                 case souther.compiler.query.About.APointOfABorder(var point) ->
-                        new OfferItem.APointOfALine(point.owed());
+                        new OfferItem.APointOfALine(point.point());
                 case souther.compiler.query.About.APointOfADeclaredBorder(var owed) ->
                         new OfferItem.APointOfALine(owed.debt().point());
                 case souther.compiler.query.About.AnArmNoRowGoesThrough(var arm) ->

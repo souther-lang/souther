@@ -416,13 +416,30 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     }
 
     /**
+     * Whether this point is one of the things {@code behavior} is owed a row for.
+     *
+     * <p>The one spelling of a behavior's account. A point is in it where the row is the reading's
+     * own to write — a line a body's rule drew, and not one a declaration is owed — and that
+     * behavior is one of the readings carrying it. Two facts, and every reader of the account wants
+     * their conjunction: a report's count, its findings, the strict verdict and the offering. Spelled
+     * at each of them, two of the four would drift apart the way {@link #keptBy} records the
+     * module's question once did.
+     *
+     * <p>Not {@link #keptBy}: a point one of this module's declarations owns is that account's and
+     * not any behavior's, however many behaviors carry it.
+     */
+    public boolean belongsToBehaviorAccount(String behavior) {
+        return owedToTheReading() && carriedBy(behavior);
+    }
+
+    /**
      * Which behaviors read the line at this point, in the order the module declares them.
      *
      * <p>Not part of what the point is — a line is owed once however many behaviors carry the type —
-     * and here because an editor's offer stands beside a behavior. What a row written for that
-     * behavior settles is this point, so an offer there has to know the point is one of the things
-     * it would answer. Without it the offer beside a behavior went quiet as soon as the only work
-     * left was a line the declaration is owed.
+     * and not an account either: which behavior's work this point is takes whose the point is as
+     * well, which is {@link #belongsToBehaviorAccount}. This is the fact under it, and is what an
+     * editor's offer beside a behavior asks about a declaration's line, since a row written for that
+     * behavior settles it whoever owes it.
      */
     public boolean carriedBy(String behavior) {
         return met.keySet().stream().anyMatch(each -> each.behavior().equals(behavior));
@@ -437,6 +454,70 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     /** How this point relates a row's value to what it is against. */
     public String operator() {
         return demand.criterion().operator();
+    }
+
+    /**
+     * Where the point is, as the quantity every reading cuts writes that place.
+     *
+     * <p>The one word about the point that names no reading. A reading says what it is on —
+     * {@code r@P.deadline} — and there are as many of those as there are positions carrying the
+     * type, so a point that took one would be named after a place it is not owed at. Where on the
+     * quantity the rule cut is part of what the point is, and the readings of one point cut one
+     * carrier at one place (checked where their demands are), so the carrier's own spelling of it
+     * is the one answer they all give.
+     *
+     * <p>A point against the line is at its own value, which for one of the two is a step off the
+     * line — {@code ON} at 100 and {@code OFF} at 101 of a rule written {@code <= 100} — and a point
+     * beside the line asks for a run, so what places it is the line's own value, which the run is
+     * bounded by. What a row here has to do is {@link #against}, on a quantity the caller has a
+     * word for.
+     */
+    public String level() {
+        souther.compiler.partition.BorderQuantity of =
+                met.firstEntry().getValue().border().cut().of();
+        return role().againstTheLine() ? demand.criterion().written(of)
+                : of.writtenAt(point.line().at());
+    }
+
+    /**
+     * One reading of the point as a surface says it: where it was read, and what a row there has
+     * to do, in that position's own terms.
+     *
+     * <p>Words for a reader and never a key. Two readings that happen to say the same words are
+     * still two entries here — what tells them apart is {@link #where}, and a surface that folded
+     * them by their words would be deciding identity from a rendering.
+     */
+    public record ReadingSaid(Reading where, String at, String asks) {}
+
+    /**
+     * How many readings a surface says under the point before saying how many are left.
+     *
+     * <p>One number, because two surfaces say the readings: a report under its mark and a warning
+     * under its sentence. Over {@code crm} one clause is read at 133 positions, and neither surface
+     * is a place to list them.
+     */
+    public static final int READINGS_SAID = 4;
+
+    /**
+     * Every reading of the point, as the sentences a surface prints under it, in the order the
+     * sentences sort.
+     *
+     * <p>Sorted by what is printed and by nothing else. The order the readings were made in is the
+     * order a walk took, which is what this value exists to keep out of what anybody is shown; and
+     * sorting by anything the sentence does not show would give two runs that print the same words
+     * in a different order for a reason no reader can see. Whether two of these are one reading is
+     * not asked here: the sentence is not the identity, and a sort key need not be one.
+     *
+     * <p>All of them. Which to show is the surface's ({@link #READINGS_SAID}), so that what is left
+     * out is a count the surface says rather than a reading this dropped.
+     */
+    public List<ReadingSaid> readingsSaid() {
+        List<ReadingSaid> out = new ArrayList<>();
+        met.forEach((where, at) -> out.add(new ReadingSaid(where, at.axis(),
+                new BorderAssessment.Point(at, role(), at.at(role())).asked())));
+        out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
+                .thenComparing(ReadingSaid::asks));
+        return List.copyOf(out);
     }
 
     /**
@@ -463,5 +544,21 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     public String said(String axis) {
         return role().againstTheLine() ? axis + " = " + against(axis)
                 : axis + " " + operator() + " " + against(axis);
+    }
+
+    /**
+     * The point, as a surface names it with no word for the quantity: which of the four it is,
+     * where on the line, and which rule drew the line, with the sources under the names
+     * {@code names} gives them.
+     *
+     * <p>What a body's line gets, since it has no authored spelling of what it is on
+     * ({@link #said(String)} is for a line a declaration wrote). Three things and not two: two
+     * lines of one rule can be at two places, and two rules can draw a line at one place, so
+     * neither the rule nor the level alone tells the points of a report apart.
+     */
+    public String said(souther.compiler.diag.SourceNameResolver names,
+                       souther.compiler.source.SourceId sectionSource) {
+        return role() + " point " + (role().againstTheLine() ? "at " : "beside ") + level()
+                + " of " + describe(names, sectionSource);
     }
 }

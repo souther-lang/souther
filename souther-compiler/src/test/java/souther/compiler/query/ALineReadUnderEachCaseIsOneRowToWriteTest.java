@@ -10,10 +10,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -121,6 +124,10 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
                     .filter(one -> one.point().equals(each.point())).findFirst().orElseThrow();
             assertEquals(each.met().keySet(), also.met().keySet(),
                     () -> "and every reading of each of them: " + each.point());
+            // What a surface says under the point is in the order the sentences sort, so a walk
+            // that met the readings the other way round prints the same page.
+            assertEquals(each.readingsSaid(), also.readingsSaid(),
+                    () -> "and the readings as a surface says them: " + each.point());
             assertEquals(each.owed().hasRowWitness(), also.owed().hasRowWitness(),
                     () -> "and what each came to: " + each.point());
         }
@@ -148,66 +155,37 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
     }
 
     /**
-     * A row composed at one position is not offered as the answer at another.
+     * A point some row answers under one case is not a finding, and the points none answers are
+     * one finding each, with a row composed for each.
      *
-     * <p>The other half of the same split. A row is written in the terms of the position it was
-     * composed at and named for that position's point, so a coordinate handed the row composed
-     * somewhere else is shown something that does not stand at it: an author writes {@code P { … }},
-     * and the {@code T} coordinate they were pointed at is exactly as uncovered as before.
-     *
-     * <p>Nothing throws when this is wrong, which is why it is fixed here. The line is answered
-     * either way and the offer looks the same in a block.
+     * <p>The report, the strict verdict and the offering reading one relation. The rows under
+     * {@code P} stand at the ON and OFF points, so those are answered — however many cases the
+     * line is read under — and nothing is found or offered about them. The IN and OUT points no
+     * row stands at are one obligation each, and the generation composes one row for each at
+     * whichever reading answers. Counted per reading instead, the report marked the {@code T}
+     * readings of the ON and OFF points as gaps a strict build refused over, while the offering
+     * said the line was answered and composed nothing: a model nobody could make pass.
      */
     @Test
-    void theRowComposedAtOnePositionIsNotTheAnswerAtAnother() {
-        Map<PointRole, GenerationOutcome> away = new LinkedHashMap<>();
-        compiled(UNDER_P).db().ask(new Adequacy.Generated("example.line", "check")).value()
-                .generation().forEach(each -> {
-                    if (each.finding().about() instanceof About.APointOfABorder(var point)
-                            && !point.role().againstTheLine()
-                            && point.line().cut().left().equals("r@T.deadline")) {
-                        away.put(point.role(), each.outcome());
-                    }
-                });
-
-        assertEquals(Map.of(PointRole.IN, new GenerationOutcome.ObligationAlreadySettled(),
-                        PointRole.OUT, new GenerationOutcome.ObligationAlreadySettled()),
-                away,
-                () -> "the row for these was composed under the other case, so it is not what"
-                        + " stands here: " + away);
-    }
-
-    /**
-     * A coordinate the row was not written under is a finding, and no second row is offered for it.
-     *
-     * <p>The two questions coming apart. A finding stands at a coordinate — {@code T}'s side of the
-     * guard has no row at it — and a row is owed once for the line, which the row under {@code P}
-     * answered. Both are true at once, so an offering that took the finding for a claim about the
-     * line would refuse to run, and one that took the line's answer for the finding's would write
-     * {@code T} a row for work already done.
-     */
-    @Test
-    void aCoordinateNoRowStandsAtIsNotOfferedASecondRowForTheSameLine() {
+    void whatIsAnsweredUnderOneCaseIsNotAFindingAndWhatIsNotIsOne() {
         Compilation compilation = compiled(UNDER_P);
-        // Run at all, which is half of what this fixes: a request that read the finding as a claim
-        // about the line met a line already answered and refused to go on.
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("example.line", true));
         assertNotNull(offering, "an offering is made for a model in this state");
 
-        Map<PointRole, GenerationOutcome> againstTheLine = new LinkedHashMap<>();
+        Map<PointRole, GenerationOutcome> found = new LinkedHashMap<>();
         compilation.db().ask(new Adequacy.Generated("example.line", "check")).value()
                 .generation().forEach(each -> {
-                    if (each.finding().about() instanceof About.APointOfABorder(var point)
-                            && point.role().againstTheLine()) {
-                        againstTheLine.put(point.role(), each.outcome());
+                    if (each.finding().about() instanceof About.APointOfABorder(var point)) {
+                        assertNull(found.put(point.role(), each.outcome()),
+                                () -> "one finding per point, however many readings: "
+                                        + point.role());
                     }
                 });
-        assertEquals(Map.of(PointRole.ON, new GenerationOutcome.ObligationAlreadySettled(),
-                        PointRole.OFF, new GenerationOutcome.ObligationAlreadySettled()),
-                againstTheLine,
-                () -> "the coordinates under `T` are findings whose line is answered, and no row"
-                        + " is composed a second time for them: " + againstTheLine);
+        assertEquals(Set.of(PointRole.IN, PointRole.OUT), found.keySet(),
+                () -> "the points the rows under `P` do not answer, and no other: " + found);
+        found.forEach((role, outcome) -> assertInstanceOf(GenerationOutcome.Generated.class,
+                outcome, () -> "a row is composed for the " + role + " point: " + outcome));
     }
 
     private static List<BorderAssessment> readingsOf(String rows) {

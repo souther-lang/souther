@@ -16,21 +16,21 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a behavior's account hands out does not reach the points beside the ones in it.
+ * The classes measure hands out no line, and what a behavior is owed at the lines is asked for by
+ * name.
  *
  * <p>A behavior is measured against what it is owed a row for, and two of a border's four points can
- * be owed to the declarations that drew the line instead. Naming the account {@code owes} says which
- * question it answers; it does not stop a reader holding one of its entries from walking back to the
- * border and reading the roles beside it, and a reader that did would be measuring a body against a
- * row nothing written for it is owed — which is the whole of what this account exists to prevent.
+ * be owed to the declarations that drew the line instead. The account used to sit inside the
+ * partition evidence beside the classes, as a list of the points a body's own rules settled — and a
+ * reader holding one of its entries could walk back to the border and read the roles beside it,
+ * measuring a body against a row nothing written for it is owed. Now the account is the module's one
+ * relation projected to the behavior ({@link Adequacy.BodyBorders}), whose membership is the
+ * point's own answer ({@link BorderObligationPointAssessment#belongsToBehaviorAccount}), and the
+ * classes measure holds nothing about a line at all. What a reader that shows a border whole reads
+ * is {@link BehaviorEvidence#boundaryReadings}, and it asks for that by name too.
  *
- * <p>So an entry carries the line and not the assessment of it. The line is what a report writes
- * about a point — the position, the rule, what the point asks for — and what became of the border's
- * other roles is no part of it. What a reader that shows a border whole reads is
- * {@link BehaviorEvidence#boundaryReadings}, and it asks for that by name.
- *
- * <p>Read as a closure from the account rather than as a list of what is allowed: a field or a
- * reader added later that reaches an assessment is caught by having been added, not by anybody
+ * <p>Read as a closure from the classes measure rather than as a list of what is allowed: a field
+ * or a reader added later that reaches a line is caught by having been added, not by anybody
  * remembering to name it here.
  */
 class ABehaviorsAccountDoesNotReachTheLinesOtherPointsTest {
@@ -41,22 +41,29 @@ class ABehaviorsAccountDoesNotReachTheLinesOtherPointsTest {
             "souther.compiler.query", "souther.compiler.partition");
 
     @Test
-    void nothingReachableFromWhatABehaviorIsOwedIsAnAssessmentOfALine() {
+    void nothingReachableFromTheClassesMeasureIsAnAccountOrAnAssessmentOfALine() {
         Set<Class<?>> reached = reachableFrom(PartitionEvidence.class);
 
         // The walk went somewhere. A closure that came back holding nothing would pass every
         // assertion below by having read no method at all.
-        assertTrue(reached.contains(OwedBoundaryPoint.class),
-                () -> "the account is what a behavior's evidence hands out: " + named(reached));
-        assertTrue(reached.contains(souther.compiler.partition.Border.class),
-                () -> "and an entry carries the line it is a point of: " + named(reached));
+        assertTrue(reached.contains(PartitionEvidence.AxisCoverage.class),
+                () -> "the classes are what the measure hands out: " + named(reached));
 
+        // A line itself stays reachable, through the cause a measurement carries when it could not
+        // read a value at one ({@link Weakening.BorderValueUnreadable}). That is provenance about
+        // why a measure is weaker than it looks, and naming the line is the whole of what it says;
+        // what must not be here is an account of what a row at one is owed for.
+        assertFalse(reached.contains(OwedBoundaryPoint.class),
+                () -> "the classes measure reaches a place a row is composed at: "
+                        + named(reached));
+        assertFalse(reached.contains(BorderObligationPointAssessment.class),
+                () -> "the classes measure reaches what a behavior is owed, which is asked for by"
+                        + " name: " + named(reached));
         assertFalse(reached.contains(BorderAssessment.class),
-                () -> "a behavior's account reaches an assessment of a whole line: "
+                () -> "the classes measure reaches an assessment of a whole line: "
                         + named(reached));
         assertFalse(reached.contains(BorderAssessment.Point.class),
-                () -> "a behavior's account reaches a point of one it may not be measured for: "
-                        + named(reached));
+                () -> "the classes measure reaches a point of a line: " + named(reached));
     }
 
     /** Every type this compiler's own vocabulary reaches from {@code from}, through what its public

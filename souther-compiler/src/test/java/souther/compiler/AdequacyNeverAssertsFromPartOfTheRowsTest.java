@@ -216,10 +216,13 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     wrong.add("axis " + axis.path() + ": " + axis.uncovered());
                 }
             }
-            for (souther.compiler.query.OwedBoundaryPoint point : partition.owedPoints()) {
+            for (souther.compiler.query.BorderObligationPointAssessment point
+                    : compilation.db().ask(new Adequacy.BodyBorders(module)).value().get("take")
+                            .made().orElseGet(List::of)) {
                 if (point.item().weakeningSource() instanceof Measurement.Complete<?>
-                        && !point.item().hasRowWitness()) {
-                    wrong.add("boundary " + point.axis() + " " + point.asked());
+                        && !point.owed().hasRowWitness()) {
+                    wrong.add("boundary "
+                            + point.said(souther.compiler.source.SourceId::value, null));
                 }
             }
             if (partition.pairs().counted() instanceof Measurement.Complete<?>
@@ -314,8 +317,9 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.of(compilation).status());
         assertTrue(partition.axes().stream().anyMatch(a -> !a.uncovered().isEmpty()),
                 "a class nothing is in");
-        assertTrue(partition.owedPoints().stream()
-                        .anyMatch(p -> !p.item().hasRowWitness()),
+        assertTrue(compilation.db().ask(new Adequacy.BodyBorders(module)).value().get("take")
+                        .made().orElseGet(List::of).stream()
+                        .anyMatch(p -> !p.owed().hasRowWitness()),
                 "a boundary nothing is at");
         assertTrue(partition.pairs().counts().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
