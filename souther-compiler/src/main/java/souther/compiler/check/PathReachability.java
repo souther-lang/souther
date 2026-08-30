@@ -649,7 +649,10 @@ public final class PathReachability {
         if (path == null) {
             return;   // not a position of this input: nothing here has rules about it
         }
-        Position at = reads.read().at(path);
+        // The reading this walk was given, which is the one held here. Which location the name
+        // stands for is the environment's answer and what the rules leave there is the reading's,
+        // and neither is asked of the other.
+        Position at = read.at(path);
         for (int i = 0; i < match.cases().size() && i < arms.length; i++) {
             // A position this reading never got to — deeper than it reads into what a parameter
             // holds — states no such distinction, which is the position's own answer and not this
