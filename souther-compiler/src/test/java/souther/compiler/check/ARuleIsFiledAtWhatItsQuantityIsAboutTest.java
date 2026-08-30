@@ -13,6 +13,7 @@ import souther.compiler.types.TypeSymbols;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A comparison the arithmetic read is filed at the quantity it cuts, and nowhere else.
@@ -94,6 +95,23 @@ class ARuleIsFiledAtWhatItsQuantityIsAboutTest {
                 UnreadComparison.filedAt(new UnreadComparison.Quantity.CutsNothing<>(), met),
                 "a quantity over nothing has no place of its own, and what is worth saying is that "
                         + "the model names these and cuts none of them");
+    }
+
+    /**
+     * A quantity running over a place the walk never met is two readings of one comparison
+     * disagreeing, and it is refused.
+     *
+     * <p>Which is what makes the walk the ordering and not the membership. Kept as an intersection,
+     * the two would be reconciled to whatever they have in common: the rule would go out filed at
+     * one place short, and nothing would say a second was ever expected.
+     */
+    @Test
+    void aQuantityOverAPlaceTheWalkNeverMetIsRefused() {
+        assertThrows(IllegalStateException.class, () -> UnreadComparison.filedAt(
+                new UnreadComparison.Quantity.OverSeveral<>(java.util.Set.of("x", "z")),
+                List.of("x", "y")));
+        assertThrows(IllegalStateException.class, () -> UnreadComparison.filedAt(
+                new UnreadComparison.Quantity.OverOne<>("z"), List.of("x", "y")));
     }
 
     private static List<BlockReason.RuleWithoutLineReason> reasonsAt(FieldDomains read, String path) {

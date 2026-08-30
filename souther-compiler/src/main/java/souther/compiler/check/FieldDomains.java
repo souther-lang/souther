@@ -504,6 +504,13 @@ public final class FieldDomains {
      * the answer was whatever the rows filed under a finer key came to, and the day two of them
      * differed a reader would have been handed both with nothing saying which the question's is.
      *
+     * <p><b>A part met afterwards adds itself and cannot bring a reason.</b> {@link #and} takes the
+     * part and nothing else, so there is never a second word to reconcile — and no place where one
+     * could be dropped for being second. Written the other way, with each part making a whole
+     * answer and the two merged, the merge had to choose, and choosing quietly is a worse version
+     * of the gathering this replaced: it turns a producer that has come apart into one word decided
+     * by the order the conjuncts are written in.
+     *
      * @param conjuncts the parts of the rule still standing behind it, in the order they are
      *                  written
      */
@@ -521,10 +528,13 @@ public final class FieldDomains {
             conjuncts = List.copyOf(conjuncts);
         }
 
-        /** The same, with {@code one} standing behind it too. */
-        BoundaryStanding and(BoundaryStanding one) {
+        /** The same answer, with the part written at {@code conjunct} standing behind it too. */
+        BoundaryStanding and(int conjunct) {
+            if (conjuncts.contains(conjunct)) {
+                return this;
+            }
             List<Integer> both = new ArrayList<>(conjuncts);
-            one.conjuncts().stream().filter(each -> !both.contains(each)).forEach(both::add);
+            both.add(conjunct);
             return new BoundaryStanding(why, both);
         }
     }

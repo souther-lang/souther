@@ -1428,17 +1428,19 @@ public final class InvariantChecker {
             shape = new ClauseStates.ABound(about.at(), positions);
         }
         // And where this part raises the question of where the values there stop and no end came of
-        // it, the answer to that question, made here. Which limit it is is read off the coordinate
-        // and not off this part — every part raising this question comes to the same word — so what
-        // each part adds is itself, standing behind an answer that is already whole. Put together
-        // afterwards from the findings, the answer was whatever rows a finer key happened to hold.
+        // it, the answer to that question. Made once, when the question is first met: which limit
+        // it is is read off the coordinate the question is keyed by, and the coordinate is what
+        // carries the carrier — so the same reading of the same carrier is what any part raising
+        // this question would come to, and it is done once rather than done again and reconciled.
+        // What a part met afterwards adds is itself.
         if (shape instanceof ClauseStates.ABound stated
                 && end instanceof InvariantBound.Read.NoEnd) {
-            standing.merge(new FieldDomains.BoundaryQuestion(from, stated.line()),
-                    new FieldDomains.BoundaryStanding(
-                            UnreadComparison.whereALineWouldFall(about.carrier() != null),
-                            List.of(part)),
-                    FieldDomains.BoundaryStanding::and);
+            standing.compute(new FieldDomains.BoundaryQuestion(from, stated.line()),
+                    (question, had) -> had == null
+                            ? new FieldDomains.BoundaryStanding(
+                                    UnreadComparison.whereALineWouldFall(about.carrier() != null),
+                                    List.of(part))
+                            : had.and(part));
         }
         settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
