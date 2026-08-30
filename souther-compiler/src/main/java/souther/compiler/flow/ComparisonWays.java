@@ -41,16 +41,34 @@ public interface ComparisonWays {
      * leaving the way unheld under a binding and held without one, which is a {@code let} changing
      * what the body does.
      */
-    default ComparisonWays under(Core.Binder binder, Core value) {
-        return this;
-    }
+    ComparisonWays under(Core.Binder binder, Core value);
+
+    /** The same, inside {@code arm} of {@code match}. The other place what a name means changes,
+     *  and a reading that has one of the two and not the other is scoped like nothing else here. */
+    ComparisonWays insideArm(Core.Match match, Core.Case arm);
 
     /**
      * What the body's own text says, for a reading with no input to ask about.
      *
      * <p>Under-reading: what it is sure of is the primitives' ranges, and a way it cannot place a
      * value behind is one it says nothing about. A reader that has the input's rules in hand answers
-     * more of them and answers them the same way.
+     * more of them and answers them the same way. Nothing a name is bound to changes what the text
+     * says, so this is the same reading inside every scope.
      */
-    ComparisonWays OF_THE_TREE = Witnessed::comesOut;
+    ComparisonWays OF_THE_TREE = new ComparisonWays() {
+        @Override
+        public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
+            return Witnessed.comesOut(e, want, settledBy);
+        }
+
+        @Override
+        public ComparisonWays under(Core.Binder binder, Core value) {
+            return this;
+        }
+
+        @Override
+        public ComparisonWays insideArm(Core.Match match, Core.Case arm) {
+            return this;
+        }
+    };
 }

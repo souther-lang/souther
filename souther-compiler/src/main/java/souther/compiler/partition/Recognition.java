@@ -121,4 +121,26 @@ public sealed interface Recognition {
     /** A class that exists and cannot be told from another by looking. */
     record Nothing() implements Recognition {}
 
+    /**
+     * The number this meaning is intrinsically about, or null where it is about a value.
+     *
+     * <p>Not which measure a class of this divides — that is said where the class is built and is
+     * never read off a meaning, because a truth means the same thing at every position. What this
+     * answers is narrower: a class about a count carries the number it counts inside its meaning,
+     * and a class said to divide some other number would answer membership about one number while
+     * being owed to another. So this is only ever held against what the class was said to be of.
+     *
+     * <p>Exhaustive with no {@code default}: a meaning added later says whether it carries a number.
+     */
+    default NumericTerm.FromOnePosition numberInside() {
+        return switch (this) {
+            case OfACount count -> count.term();
+            case Under under -> under.inner().numberInside();
+            case Truth ignored -> null;
+            case Held ignored -> null;
+            case OfCase ignored -> null;
+            case AtAValue ignored -> null;
+            case Nothing ignored -> null;
+        };
+    }
 }

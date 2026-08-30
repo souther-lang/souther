@@ -140,6 +140,11 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
         }
 
         @Override
+        public Naming<Marks> insideArm(Core.Match match, Core.Case arm) {
+            return this;
+        }
+
+        @Override
         public Marks side(Core value, boolean held) {
             return mark(value, "cmp", held ? 1 : 0);
         }

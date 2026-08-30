@@ -41,14 +41,24 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonClai
      * takes the number and needs no more.
      */
     public static ComparedNumber of(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        BinOp op = comparison.op();
-        Named named = namedBy(comparison.left(), reads, symbols);
-        Core other = comparison.right();
-        if (named == null) {
-            named = namedBy(comparison.right(), reads, symbols);
-            other = comparison.left();
-            op = mirrored(op);
+        // Whichever side draws a line, and the left where neither does and it names a number. A
+        // number on the left that the right is not a value of is still the number the comparison
+        // is about, unless the right is a number the left is a value of — then the line is on that
+        // one, and the comparison is read turned round.
+        ComparedNumber left = onOneSide(comparison.left(), comparison.right(), comparison.op(),
+                reads, symbols);
+        if (left != null && left.at() != null) {
+            return left;
         }
+        ComparedNumber right = onOneSide(comparison.right(), comparison.left(),
+                mirrored(comparison.op()), reads, symbols);
+        return right != null && right.at() != null ? right : left != null ? left : right;
+    }
+
+    /** The comparison read as being about a number {@code side} names, or null where it names none. */
+    private static ComparedNumber onOneSide(Core side, Core other, BinOp op, InputReads reads,
+                                            Symbols symbols) {
+        Named named = namedBy(side, reads, symbols);
         if (named == null) {
             return null;
         }

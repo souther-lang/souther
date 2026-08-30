@@ -51,6 +51,11 @@ final class NumberWays implements ComparisonWays {
     }
 
     @Override
+    public ComparisonWays insideArm(Core.Match match, Core.Case arm) {
+        return new NumberWays(numbers.insideArm(match, arm), quantities);
+    }
+
+    @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
         ComparedNumber drawn = e instanceof Core.Binary comparison ? numbers.of(comparison) : null;
         return drawn == null || !drawn.drawsALine()
@@ -88,10 +93,11 @@ final class NumberWays implements ComparisonWays {
      * however far the run's low end is raised, so a side that reaches past the far end is a side
      * with a value on it.
      *
-     * <p>Where the end falls exactly on the line and the side does not take it, this answers that a
-     * value stands there — the run may step to the next one or fill towards it, and which is the
-     * carrier's to say. Answering the other way would close a way over a step this does not know
-     * about, and a way closed wrongly is an arm nothing is asked for.
+     * <p>Where the end falls exactly on the line, what is beyond it is the line itself and nothing
+     * else, so a side that takes the line has a value there where the run does, and a side that does
+     * not has none. That is the one place this closes a way on the run's word: strictly past an end
+     * the run stops at, no value stands. Everywhere short of the end this answers that a value
+     * stands, whether the run steps or fills there, because that much the end says on its own.
      */
     private static boolean anythingBeyond(NumericDomain.Bounds runs, Place at, boolean up,
                                           boolean inclusive) {

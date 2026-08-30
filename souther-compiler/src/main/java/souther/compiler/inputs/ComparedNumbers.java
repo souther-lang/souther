@@ -51,6 +51,14 @@ public final class ComparedNumbers {
         return inside.equals(reads) ? this : new ComparedNumbers(inside, symbols, said);
     }
 
+    /** What a name reads inside {@code arm} of {@code match}, where the arm's name stands for the
+     *  value matched read as the case the arm selects. The other of the two scope transitions the
+     *  reading of the input has, and this has both for the same reason it is scoped at all. */
+    public ComparedNumbers insideArm(Core.Match match, Core.Case arm) {
+        InputReads inside = reads.insideArm(match, arm, symbols);
+        return inside.equals(reads) ? this : new ComparedNumbers(inside, symbols, said);
+    }
+
     /** The reading of {@code comparison}, or null where it names no number of this input. */
     public ComparedNumber of(Core.Binary comparison) {
         Read had = said.get(comparison);

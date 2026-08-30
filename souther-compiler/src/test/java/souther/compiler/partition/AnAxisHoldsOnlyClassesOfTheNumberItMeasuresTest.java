@@ -206,7 +206,56 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
 
         assertEquals(List.of(), elsewhere.classes());
         assertEquals(List.of(), elsewhere.cuts());
+        assertEquals(List.of(), elsewhere.parted());
+        assertSame(souther.compiler.check.NarrowedBounds.NOTHING, elsewhere.narrowed(),
+                "where the rules leave the first number's ends is an answer about that number");
         assertSame(length.at(), elsewhere.at(), "and the position is the position");
+    }
+
+    /**
+     * Which number a class is of is said once.
+     *
+     * <p>A class of one number is not made a class of another by saying so. Were it, the rule the
+     * axis holds would be a label the last writer owns, and nothing an axis could do with it would
+     * be worth more than that writer's word.
+     */
+    @Test
+    void aClassOfOneNumberIsNotMadeAClassOfAnother() {
+        Partitions.Partitioning read = divided();
+        Axis count = axisOf(read, "gate/slot.n");
+        Axis truth = axisOf(read, "gate/slot.on");
+        PartitionClass ofTheTruth = truth.classes().get(0);
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> ofTheTruth.ofTheNumber(count.term()));
+
+        assertTrue(refused.getMessage().contains("slot.on")
+                && refused.getMessage().contains("slot.n"), refused.getMessage());
+        assertEquals(ofTheTruth, ofTheTruth.ofTheNumber(truth.term()),
+                "while saying the number it is of again says nothing new");
+    }
+
+    /**
+     * A meaning that carries a number is a class of that number and of no other.
+     *
+     * <p>A class about a count reads that count out of a row, and it is owed to whichever number it
+     * was said to be of. Let those differ and the two readers an axis keeps together — which class
+     * a line falls in, and which row is owed for it — are about different numbers again.
+     */
+    @Test
+    void aClassAboutOneCountIsNotSaidToBeOfAnother() {
+        Partitions.Partitioning read = divided();
+        Axis length = axisOf(read, "gate/String.length(slot.c)");
+        Axis count = axisOf(read, "gate/slot.n");
+        PartitionClass ofTheLength = length.classes().get(0);
+        PartitionClass unsaid = PartitionClass.of(ofTheLength.id(), ofTheLength.label(),
+                ofTheLength.recognises(), ofTheLength.representatives());
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> unsaid.ofTheNumber(count.term()));
+
+        assertTrue(refused.getMessage().contains("String.length(slot.c)")
+                && refused.getMessage().contains("slot.n"), refused.getMessage());
     }
 
     /**

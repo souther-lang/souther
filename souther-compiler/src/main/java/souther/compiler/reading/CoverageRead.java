@@ -237,7 +237,8 @@ public final class CoverageRead {
                             ? new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED)
                             : under(reach, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     arms.at(match, part, into);
-                    walk(match.cases().get(part).body(), naming, into, observed);
+                    Core.Case arm = match.cases().get(part);
+                    walk(arm.body(), naming.insideArm(match, arm), into, observed);
                 }
             }
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {

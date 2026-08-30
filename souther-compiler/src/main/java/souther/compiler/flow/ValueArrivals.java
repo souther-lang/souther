@@ -211,7 +211,8 @@ public final class ValueArrivals<P> {
             case Core.Match match -> {
                 fill(match.scrutinee(), naming, comparisons, bound);
                 for (Core.Case arm : match.cases()) {
-                    fill(arm.body(), naming, comparisons,
+                    fill(arm.body(), naming.insideArm(match, arm),
+                            comparisons.insideArm(match, arm),
                             with(bound, arm.binder(), oneWay(), null));
                 }
             }
@@ -503,7 +504,8 @@ public final class ValueArrivals<P> {
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
             Paths<P> body =
-                    settle(arm.body(), naming, comparisons,
+                    settle(arm.body(), naming.insideArm(match, arm),
+                            comparisons.insideArm(match, arm),
                             with(bound, arm.binder(), oneWay(), null));
             if (!arrivesAt(arm.body())) {
                 continue;

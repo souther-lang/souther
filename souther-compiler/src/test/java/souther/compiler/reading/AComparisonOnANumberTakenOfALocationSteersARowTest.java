@@ -126,6 +126,59 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
                 "the number is the location's, whichever name the body reached it through");
     }
 
+    /**
+     * The same decision where the location is reached through the name an arm binds.
+     *
+     * <p>The other place what a name means changes. Inside {@code | Some c -> } the name stands for
+     * the value matched read as that case, and the reading of the input already says so; a reading
+     * of the comparisons that followed a {@code let} and not an arm was scoped like half of it.
+     */
+    @Test
+    void aNumberReachedThroughAnArmsBindingIsTheSameDecision() {
+        String inArm = """
+                module example.arm
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                data Named = { c: String }
+                data Empty
+                data Slot = Named | Empty
+
+                behavior gate : (slot: Slot) -> Answer
+                let gate (slot) =
+                    match slot with
+                        | Named as s -> if String.length(s.c) <= 3 then Yes else No
+                        | Empty -> No
+                """;
+        Read read = read(inArm);
+        TermPath underNamed = TermPath.of("slot").refine(souther.compiler.inputs.Refinement.sumCase(
+                souther.compiler.types.TypeSymbols.declared(
+                        new souther.compiler.types.TypeKey("example.arm", "Named")))).then("c");
+
+        assertEquals(List.of(read.lengthAt(underNamed)),
+                read.sides().stream().map(Condition.Side::at).distinct().toList(),
+                "the number is the length of the field under the case the arm selects");
+    }
+
+    /**
+     * Which side of the operator the number was written on is not part of what it says.
+     *
+     * <p>Read as written, {@code 3 >= String.length(slot.c)} has the number on the right; read
+     * into what it says, it is the comparison above turned round. Held to the shape, a second
+     * spelling of one rule would be a second rule.
+     */
+    @Test
+    void theNumberIsTheSameWhicheverSideItIsWrittenOn() {
+        String reversed = TAKEN.replace("module example.taken", "module example.reversed")
+                .replace("guard String.length(slot.c) <= 3", "guard 3 >= String.length(slot.c)");
+
+        assertEquals(armsAnsweredIn(TAKEN), armsAnsweredIn(reversed));
+        assertEquals(read(TAKEN).sides().stream().map(Condition.Side::at).toList(),
+                read(reversed).sides().stream().map(Condition.Side::at).toList());
+    }
+
     /** And a row is offered for an arm behind it, the way one is where the number stands at the
      *  position. */
     @Test
@@ -231,9 +284,12 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
 
         /** The number a string's length is, built here rather than matched by how it is written. */
         NumericTerm lengthOf(String parameter, String field) {
+            return lengthAt(TermPath.of(parameter).then(field));
+        }
+
+        NumericTerm lengthAt(TermPath at) {
             NumericTerm.TakenOf taken = NumericTerm.TakenOf.of(
-                    NumericMeasures.takenOf(Type.STRING, symbols),
-                    TermPath.of(parameter).then(field), Type.STRING, symbols);
+                    NumericMeasures.takenOf(Type.STRING, symbols), at, Type.STRING, symbols);
             assertNotNull(taken, "the length of a string is a number this compiler names");
             return taken;
         }

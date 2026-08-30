@@ -45,6 +45,17 @@ public record PartitionClass(String id, String label, Recognition recognises,
                              Refinement selects,
                              souther.compiler.inputs.NumericTerm.FromOnePosition of) {
 
+    public PartitionClass {
+        // A meaning that carries a number is a class of that number and of no other. Said to divide
+        // some other one, the class would answer membership about the number inside it while being
+        // owed to the one it was said to be of — the two readers an axis exists to keep together.
+        souther.compiler.inputs.NumericTerm.FromOnePosition inside = recognises.numberInside();
+        if (of != null && inside != null && !inside.equals(of)) {
+            throw new IllegalArgumentException("`" + id + "` is about " + inside
+                    + " and was said to be a class of " + of);
+        }
+    }
+
     public static PartitionClass of(String id, String label, Recognition recognises,
                                     RepresentativeSource representatives) {
         return new PartitionClass(id, label, recognises, representatives, null, null, null);
@@ -65,8 +76,19 @@ public record PartitionClass(String id, String label, Recognition recognises,
      * position's own value is divided into is the producer's to say. Written by whoever builds the
      * classes of a measure, and required by the measure ({@link Axis}) — so a class of one number
      * cannot be put among another's, and a class built for no measure at all cannot be put on one.
+     *
+     * <p>Said once. A class already of one number is not made a class of another by saying so —
+     * that would be a label whoever wrote last owns, and an axis could trust it no further than the
+     * last writer. Saying the same number again is nothing said.
      */
     public PartitionClass ofTheNumber(souther.compiler.inputs.NumericTerm.FromOnePosition number) {
+        if (number == null) {
+            throw new IllegalArgumentException("`" + id + "` said to be a class of no number");
+        }
+        if (of != null && !of.equals(number)) {
+            throw new IllegalArgumentException("`" + id + "` is a class of " + of
+                    + " and cannot be made a class of " + number);
+        }
         return new PartitionClass(id, label, recognises, representatives, denotes, selects, number);
     }
 

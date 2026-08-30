@@ -136,15 +136,16 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
      * and a caller rebuilding an axis from its parts drops whatever it does not think to name. What
      * the position came to is one field, so a rebuild names it or does not compile.
      *
-     * <p>The classes and the lines go where the number goes. They are what the rules divided one
-     * number into and where they cut it, so at another number they answer a question nobody asked —
-     * and carried over they would be classes of one number on an axis of another. What is kept is
-     * the position's: where it is, what stands there, and what its own reading came to. What that
-     * leaves the axis short of is what the reading measuring it at the new number puts there.
+     * <p>Everything answered about the number goes where the number goes: the classes it was
+     * divided into, the lines cut on it, where the rules part it and where they leave its ends. At
+     * another number they answer a question nobody asked, and carried over they would be answers
+     * about one number on an axis of another. What is kept is the one thing here that is the
+     * position's, {@link #at}. What that leaves the axis short of is what the reading measuring it
+     * at the new number puts there.
      */
     public Axis measuredAt(AxisId id, NumericTerm.FromOnePosition term) {
         return term.equals(this.term) ? new Axis(id, term, at, classes, cuts, parted, narrowed)
-                : new Axis(id, term, at, List.of(), List.of(), List.of(), narrowed);
+                : new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */

@@ -79,6 +79,12 @@ final class CoverageNaming implements Naming<Outcome> {
                 numbers.under(binder, value));
     }
 
+    @Override
+    public CoverageNaming insideArm(Core.Match match, Core.Case arm) {
+        return new CoverageNaming(plan, symbols, reads.insideArm(match, arm, symbols),
+                numbers.insideArm(match, arm));
+    }
+
     /**
      * That {@code comparison} came out {@code held}, said of the position it is about, or null where
      * this cannot say which position that is or where no run through it could be recorded.
