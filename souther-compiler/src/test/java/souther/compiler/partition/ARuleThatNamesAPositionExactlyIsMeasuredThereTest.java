@@ -76,9 +76,9 @@ class ARuleThatNamesAPositionExactlyIsMeasuredThereTest {
     void aThresholdOneLinkDownIsMeasured() {
         String report = report(ONE_LINK);
 
-        assertTrue(report.contains("no row is at the ON point at 10 (comparison"), report);
+        assertTrue(report.contains("no row is at the ON point (comparison"), report);
         assertTrue(report.contains("read as f/c@Cons.tail@Cons.head: = 10"), report);
-        assertTrue(report.contains("no row is at the OFF point at 9 (comparison"), report);
+        assertTrue(report.contains("no row is at the OFF point (comparison"), report);
         assertTrue(report.contains("read as f/c@Cons.tail@Cons.head: = 9"), report);
     }
 

@@ -804,7 +804,6 @@
             "declaredOn" : "Weight",
             "clause" : 0
           },
-          "level" : "1",
           "relation" : "in",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
@@ -852,7 +851,6 @@
             "ordinal" : 13,
             "lowered" : 0
           },
-          "level" : "30000",
           "relation" : "=",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
@@ -900,7 +898,6 @@
             "ordinal" : 13,
             "lowered" : 0
           },
-          "level" : "30001",
           "relation" : "=",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
@@ -961,7 +958,6 @@
             "ordinal" : 13,
             "lowered" : 0
           },
-          "level" : "30000",
           "relation" : "in",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
@@ -1016,7 +1012,6 @@
             "ordinal" : 13,
             "lowered" : 0
           },
-          "level" : "30000",
           "relation" : "in",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
@@ -1064,7 +1059,6 @@
             "ordinal" : 5,
             "lowered" : 0
           },
-          "level" : "11",
           "relation" : "=",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
@@ -1112,7 +1106,6 @@
             "ordinal" : 5,
             "lowered" : 0
           },
-          "level" : "12",
           "relation" : "=",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
@@ -1173,7 +1166,6 @@
             "ordinal" : 5,
             "lowered" : 0
           },
-          "level" : "12",
           "relation" : "in",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
@@ -1234,7 +1226,6 @@
             "ordinal" : 5,
             "lowered" : 0
           },
-          "level" : "12",
           "relation" : "in",
           "knownWritable" : true,
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
@@ -1303,7 +1294,7 @@
       "findings" : [ {
         "kind" : "domain_point_uncovered",
         "disposition" : "refused",
-        "subject" : "OUT point beside 30000 of comparison@1:78:17",
+        "subject" : "OUT point of comparison@1:78:17",
         "obligationId" : {
           "line" : {
             "rule" : {
@@ -1339,7 +1330,7 @@
       }, {
         "kind" : "boundary_unmet",
         "disposition" : "refused",
-        "subject" : "ON point at 11 of comparison@1:57:50",
+        "subject" : "ON point of comparison@1:57:50",
         "obligationId" : {
           "line" : {
             "rule" : {
@@ -1368,7 +1359,7 @@
       }, {
         "kind" : "boundary_unmet",
         "disposition" : "refused",
-        "subject" : "OFF point at 12 of comparison@1:57:50",
+        "subject" : "OFF point of comparison@1:57:50",
         "obligationId" : {
           "line" : {
             "rule" : {

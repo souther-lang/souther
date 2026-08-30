@@ -120,7 +120,13 @@ class ADiagnosticNamesThePointInTheReportsWordsTest {
     private static Diagnostic theOneAt(String value) {
         List<Diagnostic> found = new ArrayList<>();
         for (Diagnostic d : WARNED) {
-            if ("E1916".equals(d.code()) && value.equals(d.values().get("level"))) {
+            // Asked of what the readings say, because that is where a value is written. The
+            // sentence names which point and which rule and no quantity: writing where the point
+            // is takes a quantity, and a quantity belongs to the position that read the line.
+            if ("E1916".equals(d.code()) && d.notes().stream()
+                    .anyMatch(note -> note.said()
+                            instanceof ExampleMessage.TheLineAsReadAt(var _, var asks)
+                            && asks.equals("= " + value))) {
                 found.add(d);
             }
         }

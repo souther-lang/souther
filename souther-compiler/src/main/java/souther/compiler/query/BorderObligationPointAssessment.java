@@ -34,6 +34,19 @@ import java.util.Map;
  * border whole groups these by the line and joins them with the border's four answers, because a
  * role nobody is owed a row in has no point here to be found by.
  *
+ * <p><b>And a point has no word for where it is.</b> Where on the quantity the rule cut is part of
+ * what a point is, and it is published as the identity it is. What it has no word for is a
+ * <em>reader's</em> spelling of that place, because writing one takes a quantity and a quantity is
+ * a reading's: a distance writes its levels as how far the row stands from the other position —
+ * {@code d.to - 1} — and which position that is differs between the readings. Over {@code crm} one
+ * point of one line has twenty-five such spellings. Written from the level alone instead, the
+ * number comes out true and unreadable: the {@code ON} point of {@code from < to} is a distance of
+ * −1, which is no value any position holds and nothing an author can write. So a point says which
+ * of the four it is and which rule drew the line, and every word with a quantity in it is said
+ * under it by the reading whose quantity it is ({@link #readingsSaid}). A line a declaration drew
+ * is the exception the author makes: there the quantity is one they wrote, and {@link #said(String)}
+ * takes it from them.
+ *
  * <p><b>What is owed is the same at every reading, and that is checked rather than folded.</b> A
  * {@link Demand} is what the point asks — a criterion over the levels of the quantity the line cut,
  * or a reason no row is asked for — and none of it is about where the line was read. So two readings
@@ -457,40 +470,6 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     }
 
     /**
-     * Where the point is, as the quantity every reading cuts writes that place.
-     *
-     * <p>The one word about the point that names no reading. A reading says what it is on —
-     * {@code r@P.deadline} — and there are as many of those as there are positions carrying the
-     * type, so a point that took one would be named after a place it is not owed at. Where on the
-     * quantity the rule cut is part of what the point is, and the readings of one point cut one
-     * carrier at one place (checked where their demands are), so the carrier's own spelling of it
-     * is the one answer they all give.
-     *
-     * <p>A point against the line is at its own value, which for one of the two is a step off the
-     * line — {@code ON} at 100 and {@code OFF} at 101 of a rule written {@code <= 100} — and a point
-     * beside the line asks for a run, so what places it is the line's own value, which the run is
-     * bounded by. What a row here has to do is {@link #against}, on a quantity the caller has a
-     * word for.
-     *
-     * <p>Written by the level itself ({@link souther.compiler.partition.Level#written}) and never
-     * by a quantity, which is a reading's. A distance writes its levels as how far the row stands
-     * from the other position, and which position that is differs between the readings — over
-     * {@code crm} one point of one line has twenty-five such spellings — so a level written on one
-     * of them would be this point named after wherever a walk arrived first.
-     */
-    public String level() {
-        souther.compiler.partition.Level at = role().againstTheLine()
-                ? demand.criterion().against() : point.line().at();
-        if (at == null) {
-            // A point beside the line asks for a run, and the line's own value is what bounds it,
-            // which the point holds. A point against the line names a level and the criterion has
-            // it. Neither is a shape with no level at all.
-            throw new IllegalStateException("a point against the line with no level: " + point);
-        }
-        return at.written();
-    }
-
-    /**
      * One reading of the point as a surface says it: where it was read, and what a row there has
      * to do, in that position's own terms.
      *
@@ -574,18 +553,19 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     }
 
     /**
-     * The point, as a surface names it with no word for the quantity: which of the four it is,
-     * where on the line, and which rule drew the line, with the sources under the names
-     * {@code names} gives them.
+     * The point, as a surface names it: which of the four it is, and which rule drew the line,
+     * with the sources under the names {@code names} gives them.
      *
      * <p>What a body's line gets, since it has no authored spelling of what it is on
-     * ({@link #said(String)} is for a line a declaration wrote). Three things and not two: two
-     * lines of one rule can be at two places, and two rules can draw a line at one place, so
-     * neither the rule nor the level alone tells the points of a report apart.
+     * ({@link #said(String)} is for a line a declaration wrote). No word for where it is either,
+     * for the reason above: what a reader is shown of that is each reading's, said under this.
+     *
+     * <p>Which is why these words are not what tells two points apart. Two lines of one rule can
+     * be at two places, and two runs beside one line can stop in two places, and this says the
+     * same of both — a consumer joins on {@code obligationId} and shows this.
      */
     public String said(souther.compiler.diag.SourceNameResolver names,
                        souther.compiler.source.SourceId sectionSource) {
-        return role() + " point " + (role().againstTheLine() ? "at " : "beside ") + level()
-                + " of " + describe(names, sectionSource);
+        return role() + " point of " + describe(names, sectionSource);
     }
 }

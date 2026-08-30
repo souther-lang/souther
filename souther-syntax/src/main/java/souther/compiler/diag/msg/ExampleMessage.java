@@ -315,7 +315,7 @@ public sealed interface ExampleMessage extends Message {
      * <p>{@code rule} is the name the author gave it, where the rule has one ({@code ensures}).
      */
     @Code(DiagnosticCode.E1916)
-    record NoRowIsAtThePointOfTheLineARuleDrew(String point, String level, String rule)
+    record NoRowIsAtThePointOfTheLineARuleDrew(String point, String rule)
             implements ExampleMessage, Reported {}
 
     /**
@@ -335,7 +335,7 @@ public sealed interface ExampleMessage extends Message {
      * <p>Where the construct is written is not here either. It is a place, and a place is pointed at.
      */
     @Code(DiagnosticCode.E1916)
-    record NoRowIsAtThePointOfTheLineAConstructDrew(String point, String level,
+    record NoRowIsAtThePointOfTheLineAConstructDrew(String point,
                                                    souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
 
@@ -370,12 +370,12 @@ public sealed interface ExampleMessage extends Message {
     /** The same, of a line a body's own rule drew and named, which names no quantity for the
      *  reason {@link NoRowIsAtThePointOfTheLineARuleDrew} does not. */
     @Code(DiagnosticCode.E1917)
-    record NoRowIsAtThePointAwayFromTheLineARuleDrew(String point, String level, String rule)
+    record NoRowIsAtThePointAwayFromTheLineARuleDrew(String point, String rule)
             implements ExampleMessage, Reported {}
 
     /** The same again, where a fork of a body drew the line and there is no name to put in the slot. */
     @Code(DiagnosticCode.E1917)
-    record NoRowIsAtThePointAwayFromTheLineAConstructDrew(String point, String level,
+    record NoRowIsAtThePointAwayFromTheLineAConstructDrew(String point,
                                                          souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
 

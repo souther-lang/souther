@@ -1236,21 +1236,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.APointOfABorder(var point)
                         && point.role().againstTheLine() == againstTheLine) {
-                    // The point and the line, and no quantity. A body's line has no authored
-                    // spelling of what it is on — each reading names the position it met the line
-                    // at, and none can stand for the rest — so the mark says which point, where on
-                    // the line and which rule, and the readings say the rest under it.
+                    // The point and the rule, and no word with a quantity in it. Writing where the
+                    // point is takes a quantity, and a quantity is a reading's — so the mark says
+                    // which of the four and which rule drew the line, and every word an author
+                    // acts on is said under it by the reading whose word it is.
                     //
                     // `the` for a point and `an` for a run. Two of the four are one value and the
                     // other two are met anywhere in a run of them, so a reader told there is no row
                     // at `the IN point` is being sent after a value that does not exist.
-                    out.append(againstTheLine
-                            ? String.format("      %s no row is at the %s point at %s (%s)%n",
-                                    mark(f), point.role(), point.level(),
-                                    point.describe(names, declaredIn))
-                            : String.format("      %s no row is at an %s point beside %s (%s)%n",
-                                    mark(f), point.role(), point.level(),
-                                    point.describe(names, declaredIn)));
+                    out.append(String.format("      %s no row is at %s %s point (%s)%n",
+                            mark(f), againstTheLine ? "the" : "an", point.role(),
+                            point.describe(names, declaredIn)));
                     readings(out, point, _ -> true, _ -> "");
                 }
             }
@@ -1263,9 +1259,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             if (point.owed().hasRowWitness()
                     && point.readings().stream().anyMatch(
                             at -> !at.owedAt(point.role()).hasRowWitness())) {
-                out.append(String.format("      · the %s point at %s (%s) is answered, and not"
-                                + " at every reading of the line%n",
-                        point.role(), point.level(), point.describe(names, declaredIn)));
+                out.append(String.format("      · the %s point (%s) is answered, and not at every"
+                                + " reading of the line%n",
+                        point.role(), point.describe(names, declaredIn)));
                 readings(out, point, at -> !at.owedAt(point.role()).hasRowWitness(), _ -> "");
             }
         }
@@ -1274,9 +1270,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // rows anybody is owed, and they are still the only thing there is to say about the
         // position.
         for (BorderObligationPointAssessment p : unpromised) {
-            out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%n",
-                    p.role(), p.role().againstTheLine() ? "at" : "beside", p.level(),
-                    p.describe(names, declaredIn)));
+            out.append(String.format("      · not known to be writable: the %s point (%s)%n",
+                    p.role(), p.describe(names, declaredIn)));
             // What each reading's search came to, beside the verdict none of them decided. Whether
             // this point is counted turns on whether a concrete value was accepted at it, so a
             // reader looking at two models that differ here is looking at what the compiler could
@@ -2535,7 +2530,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             o.put("point", word(point.role()));
             o.put("rule", point.describe(sources::written, null));
             ruleId(o.putObject("ruleId"), point.id().provenance());
-            o.put("level", point.level());
             o.put("relation", point.operator());
             ItemAssessment.WritabilityEvidence evidence = point.owed().writabilityEvidence();
             o.put("knownWritable", evidence.known());

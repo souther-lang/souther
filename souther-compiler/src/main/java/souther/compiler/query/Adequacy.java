@@ -4759,29 +4759,27 @@ public final class Adequacy {
                                                 owed.debt().role().name(), owed.axis(),
                                                 owed.against(), owed.debt().id().named());
                         // A body's line, owed once wherever it is read, so the sentence names no
-                        // quantity: where on the line the point is, and which rule — by name where
-                        // the author gave it one, and as the construct where it is a comparison
-                        // found by where it is written. What each reading asks is said under it.
+                        // quantity: which of the four points, and which rule — by name where the
+                        // author gave it one, and as the construct where it is a comparison found
+                        // by where it is written. Writing where the point is takes a quantity and
+                        // a quantity is a reading's, so that is said under this, by the reading
+                        // whose word it is.
                         case About.APointOfABorder(var point) -> switch (point.cited()) {
                             case souther.compiler.check.RuleCitation.Named named ->
                                     point.role().againstTheLine()
                                             ? new ExampleMessage.NoRowIsAtThePointOfTheLineARuleDrew(
-                                                    point.role().name(), point.level(),
-                                                    named.name())
+                                                    point.role().name(), named.name())
                                             : new ExampleMessage
                                                     .NoRowIsAtThePointAwayFromTheLineARuleDrew(
-                                                    point.role().name(), point.level(),
-                                                    named.name());
+                                                    point.role().name(), named.name());
                             case souther.compiler.check.RuleCitation.WrittenAt _ ->
                                     point.role().againstTheLine()
                                             ? new ExampleMessage
                                                     .NoRowIsAtThePointOfTheLineAConstructDrew(
-                                                    point.role().name(), point.level(),
-                                                    theComparison())
+                                                    point.role().name(), theComparison())
                                             : new ExampleMessage
                                                     .NoRowIsAtThePointAwayFromTheLineAConstructDrew(
-                                                    point.role().name(), point.level(),
-                                                    theComparison());
+                                                    point.role().name(), theComparison());
                         };
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(

@@ -35,10 +35,10 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      */
     private static String atAHundredThousand(String comparison) {
         return "[n/x < 100000, n/100000 <= x] unread [] points ["
-                + "ON point at 100000 of " + comparison + ", "
-                + "OFF point at 99999 of " + comparison + ", "
-                + "IN point beside 100000 of " + comparison + ", "
-                + "OUT point beside 100000 of " + comparison + "]";
+                + "ON point of " + comparison + ", "
+                + "OFF point of " + comparison + ", "
+                + "IN point of " + comparison + ", "
+                + "OUT point of " + comparison + "]";
     }
 
     /** A rule no element enters, written inside a step applied per element of a written list. */
@@ -79,10 +79,10 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
     @Test
     void membersWritingOneFormTwoWaysAreStillTheSameLine() {
         assertEquals("[n/x <= 49999, n/49999 < x] unread [] points ["
-                        + "ON point at 50000 of comparison@0:19:40, "
-                        + "OFF point at 49999 of comparison@0:19:40, "
-                        + "IN point beside 50000 of comparison@0:19:40, "
-                        + "OUT point beside 50000 of comparison@0:19:40]", reading("""
+                        + "ON point of comparison@0:19:40, "
+                        + "OFF point of comparison@0:19:40, "
+                        + "IN point of comparison@0:19:40, "
+                        + "OUT point of comparison@0:19:40]", reading("""
                 {
                         let ks = [ Big { threshold = n + n }, Big { threshold = 2 * n } ]
                         if List.any((k) -> k.threshold >= 100000, ks) then Yes else No
@@ -123,14 +123,14 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
     void aModelReachesItsThresholdThroughACandidateListAndAnArm() {
         assertEquals("[予定費用/x < 100000, 予定費用/100000 <= x, 役職/x <= 3, 役職/3 < x] "
                         + "unread [] points ["
-                        + "ON point at 100000 of comparison@0:16:44, "
-                        + "OFF point at 99999 of comparison@0:16:44, "
-                        + "IN point beside 100000 of comparison@0:16:44, "
-                        + "OUT point beside 100000 of comparison@0:16:44, "
-                        + "ON point at 4 of comparison@0:21:33, "
-                        + "OFF point at 3 of comparison@0:21:33, "
-                        + "IN point beside 3 of comparison@0:21:33, "
-                        + "OUT point beside 3 of comparison@0:21:33]",
+                        + "ON point of comparison@0:16:44, "
+                        + "OFF point of comparison@0:16:44, "
+                        + "IN point of comparison@0:16:44, "
+                        + "OUT point of comparison@0:16:44, "
+                        + "ON point of comparison@0:21:33, "
+                        + "OFF point of comparison@0:21:33, "
+                        + "IN point of comparison@0:21:33, "
+                        + "OUT point of comparison@0:21:33]",
                 readingOf("""
                 module g
 

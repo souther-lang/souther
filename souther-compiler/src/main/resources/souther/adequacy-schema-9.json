@@ -527,7 +527,7 @@
           "description": "What this behavior is owed a row for at the lines its own rules drew, once per point however many of its positions read the line — a guard on a name every case of a sum spreads is one entry here and one `boundaries` entry per case. The account, beside the geometry: `boundaries` is the lines at coordinates and this is the work, and the two are not one multiplied. A finding of kind `boundary_unmet` or `domain_point_uncovered` under a behavior is about one of these, and its `subject` names the entry by `point`, `level` and `rule`. Every reading is here; a text report says the first few and how many it left out.",
           "items": {
             "type": "object",
-            "required": ["obligationId", "point", "rule", "ruleId", "level", "relation",
+            "required": ["obligationId", "point", "rule", "ruleId", "relation",
                          "knownWritable", "status", "readings"],
             "additionalProperties": false,
             "properties": {
@@ -540,10 +540,6 @@
                 "description": "The rule that drew the line, as `boundaries[].origin` writes it."
               },
               "ruleId": { "$ref": "#/$defs/ruleId" },
-              "level": {
-                "type": "string",
-                "description": "Where on the line the point is, as the quantity every reading cuts writes that place. Not what the point asks — a point beside the line asks for a run — and no reading's name for the quantity: a line a body drew has none that stands for the rest."
-              },
               "relation": {
                 "type": "string",
                 "description": "How a row's value relates to what it is against, the word `boundaries[].items[].relation` uses."

@@ -451,10 +451,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(MEASURED);
         String rows = generated(MEASURED);
 
-        assertFalse(report.contains("no row is at the OFF point at String.length(b)"), report);
+        assertFalse(report.contains("no row is at the OFF point ("), report);
         // The point is at a distance of nothing, which is what a level of a distance is — how far
         // the row stands from the other position, and which position that is is each reading's.
-        assertTrue(report.contains("not known to be writable: the OFF point at 0"), report);
+        assertTrue(report.contains("not known to be writable: the OFF point ("), report);
         assertTrue(report.contains("read as cmp/String.length(a): = String.length(b)"), report);
         assertTrue(rows.contains("nothing here could build a representative for it"), rows);
         assertTrue(rows.contains("does not make one unwritable"), rows);
@@ -474,9 +474,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleTheRangesCouldNotTakeInIsNotAProofEither() {
         String report = report(A_HOLE_AND_A_POINT);
 
-        assertFalse(report.contains("no row is at the OFF point at b"),
+        assertFalse(report.contains("no row is at the OFF point ("),
                 "zero is the only place both ranges hold and one position refuses it:\n" + report);
-        assertTrue(report.contains("not known to be writable: the OFF point at 0"), report);
+        assertTrue(report.contains("not known to be writable: the OFF point ("), report);
         assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 

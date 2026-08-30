@@ -83,7 +83,7 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     void aRowIsAskedForAtThePointTheLineDraws() {
         String report = report(BELOW_WHERE_THE_READING_STOPS);
 
-        assertTrue(report.contains("no row is at the OFF point at 0"), report);
+        assertTrue(report.contains("no row is at the OFF point ("), report);
         assertTrue(report.contains("read as f/c@Cons.tail@Cons.a: = c@Cons.tail@Cons.b"), report);
     }
 
