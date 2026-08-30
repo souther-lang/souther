@@ -177,6 +177,58 @@
         }
       ]
     },
+    "typeId": {
+      "type": "object",
+      "description": "Which declaration a type is. The module and the name, because that pair is what a type's identity is: two modules may each declare a `Status` and they are two types. Not one word — a module name has dots in it, so a joined spelling cannot be taken apart again. A type the language declares has no module: it is one of a closed set the language fixes, and its name is its identity.",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "declared",
+            "primitive",
+            "language_case"
+          ]
+        },
+        "module": {
+          "type": "string",
+          "description": "Present exactly where `kind` is `declared`."
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "description": "Only a declaration of a module has one to name.",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "declared"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "module"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "module"
+              ]
+            }
+          }
+        }
+      ]
+    },
     "carrier": {
       "type": "object",
       "description": "Which order a level is counted on, said in this document's own words rather than in whatever a compiler calls one to itself. `ordinal` carries the enumeration and the cases it declares, because two enumerations are two orders however alike their cases count and where a case comes in the declaration is what the order is.",
@@ -198,12 +250,12 @@
           ]
         },
         "enumeration": {
-          "type": "string"
+          "$ref": "#/$defs/typeId"
         },
         "cases": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/typeId"
           }
         }
       },
@@ -285,8 +337,9 @@
         "narrowedWithin": {
           "type": "array",
           "items": {
-            "type": "string"
-          }
+            "$ref": "#/$defs/typeId"
+          },
+          "description": "The declarations that took an end in, each by its identity."
         }
       }
     },
@@ -616,7 +669,7 @@
           },
           "readings": {
             "type": "array",
-            "description": "Every position that read the line, in the order the entries' words sort. Not an order anything promises: a consumer reads these as a set, and two entries that print alike are two readings.",
+            "description": "Every position that read the line, as an unordered bag. Two entries that print alike are two readings.",
             "items": {
               "type": "object",
               "required": [
@@ -661,8 +714,74 @@
                   "type": "boolean",
                   "description": "Whether some row stands at the point as read here."
                 }
-              }
-            }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "status": {
+                            "const": "complete"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "status": {
+                            "const": "partial"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      }
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "hit"
+                    ]
+                  },
+                  "else": {
+                    "not": {
+                      "required": [
+                        "hit"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "status": {
+                        "const": "unavailable"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "reason"
+                    ]
+                  },
+                  "else": {
+                    "not": {
+                      "required": [
+                        "reason"
+                      ]
+                    }
+                  }
+                }
+              ],
+              "description": "One position that read the line, and what a row there has to do in that position's terms. A bag and not a set: two readings that print alike are two readings — what tells them apart is where the line was met, which this document does not carry — so a consumer may count these but may not deduplicate them. The order is not a contract."
+            },
+            "minItems": 1
           },
           "axis": {
             "type": "string",
@@ -691,6 +810,112 @@
                 "required": [
                   "against"
                 ]
+              }
+            }
+          },
+          {
+            "description": "Whether some row stands at the point is written exactly where the measurement has a value.",
+            "if": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "status": {
+                      "const": "complete"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                {
+                  "properties": {
+                    "status": {
+                      "const": "partial"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "required": [
+                "hit"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "hit"
+                ]
+              }
+            }
+          },
+          {
+            "description": "Why there is no answer is written exactly where there is none.",
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "unavailable"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "reason"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          },
+          {
+            "description": "A ground is named exactly where one was established.",
+            "if": {
+              "required": [
+                "knownWritable",
+                "writableBecause"
+              ],
+              "properties": {
+                "knownWritable": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "writableBecause": {
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "description": "And none where none was.",
+            "if": {
+              "required": [
+                "knownWritable",
+                "writableBecause"
+              ],
+              "properties": {
+                "knownWritable": {
+                  "const": false
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "writableBecause": {
+                  "maxItems": 0
+                }
               }
             }
           }
@@ -893,10 +1118,11 @@
         },
         "declarations": {
           "type": "array",
-          "description": "What each of the module's own declarations is short of. A line an `invariant` drew is a fact about the type wherever the type is carried, so it is owed once and is not any behavior's: published under one of them it would be published under whichever a walk reached first. Under the declaration and not in one flat list, because what a finding says of itself is what the line asks of a row — two declarations bounding a string's length at one say it the same way, and which declaration a reader is being sent to would be gone. Not in `required`: a document written before this array existed is still a document of this version.",
+          "description": "What each of the module's own declarations is owed and is short of. A line an `invariant` drew is a fact about the type wherever the type is carried, so it is owed once and is not any behavior's: published under one of them it would be published under whichever a walk reached first. Grouped by who owes it, since a line two declarations took an end in together is owed to both. Not in `required`: a document written before this array existed is still a document of this version.",
           "items": {
             "type": "object",
             "required": [
+              "owners",
               "name",
               "obligations",
               "findings"
@@ -905,14 +1131,34 @@
             "properties": {
               "name": {
                 "type": "string",
-                "description": "The declaration whose clause drew the lines below."
+                "description": "What a report calls the owners above. A rendering and never a key: two sets of declarations a report writes alike are two sets."
               },
               "obligations": {
-                "$ref": "#/$defs/obligations",
-                "description": "What this declaration's lines are owed, once each however many positions carry the type — the declarations' side of the same relation a behavior's `partition.obligations` is the body's side of, and where a finding of kind `boundary_unmet` or `domain_point_uncovered` about one of them joins. Every one of them, and not only what the module is short of: a line a row already stands at raises no finding, so a section written from the findings alone could not tell a module whose declarations owe nothing from one whose every line is answered."
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/obligations"
+                  },
+                  {
+                    "items": {
+                      "required": [
+                        "axis",
+                        "against"
+                      ]
+                    }
+                  }
+                ],
+                "description": "What these declarations' lines are owed, once each however many positions carry the type — the declarations' side of the same relation a behavior's `partition.obligations` is the body's side of, and where a finding of kind `boundary_unmet` or `domain_point_uncovered` about one of them joins. Every one of them and not only what the module is short of: a line a row already stands at raises no finding, so a section written from the findings alone could not tell a module whose declarations owe nothing from one whose every line is answered. Each carries `axis`, the words the declaration wrote for what its line is on."
               },
               "findings": {
                 "$ref": "#/$defs/findings"
+              },
+              "owners": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/$defs/typeId"
+                },
+                "description": "Which of the module's declarations owe the lines below. A list, because a line two declarations took an end in together is owed to both and is one entry here — `name` beside it is how a report says such a pair and is not the name of a declaration."
               }
             }
           }
@@ -1747,8 +1993,30 @@
           }
         },
         "obligations": {
-          "$ref": "#/$defs/obligations",
-          "description": "What this behavior is owed a row for at the lines its own rules drew, once per point however many of its positions read the line — a guard on a name every case of a sum spreads is one entry here and one `boundaries` entry per case. The account, beside the geometry: `boundaries` is the lines at coordinates and this is the work, and the two are not one multiplied. A line one of the module's declarations owns is in no behavior's account and is under `declarations` instead."
+          "allOf": [
+            {
+              "$ref": "#/$defs/obligations"
+            },
+            {
+              "items": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "axis"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "against"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "description": "What this behavior is owed a row for at the lines its own rules drew, once per point however many of its positions read the line — a guard on a name every case of a sum spreads is one entry here and one `boundaries` entry per case. The account, beside the geometry: `boundaries` is the lines at coordinates and this is the work, and the two are not one multiplied. No `axis`: a body's rule has no authored word for what its line is on, and each reading names the position it met it at. A line one of the module's declarations owns is in no behavior's account and is under `declarations` instead."
         },
         "pairs": {
           "type": "object",

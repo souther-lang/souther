@@ -10,6 +10,11 @@
     "weakening" : [ "rule_unread" ],
     "incompleteness" : [ ],
     "declarations" : [ {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.catalog",
+        "name" : "Sku"
+      } ],
       "name" : "Sku",
       "obligations" : [ {
         "obligationId" : {
@@ -133,6 +138,11 @@
       } ],
       "findings" : [ ]
     }, {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.catalog",
+        "name" : "Price"
+      } ],
       "name" : "Price",
       "obligations" : [ {
         "obligationId" : {
@@ -242,6 +252,11 @@
       } ],
       "findings" : [ ]
     }, {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.catalog",
+        "name" : "Weight"
+      } ],
       "name" : "Weight",
       "obligations" : [ {
         "obligationId" : {
@@ -351,6 +366,11 @@
       } ],
       "findings" : [ ]
     }, {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.catalog",
+        "name" : "Rate"
+      } ],
       "name" : "Rate",
       "obligations" : [ {
         "obligationId" : {
@@ -824,6 +844,11 @@
     "weakening" : [ "rule_unread" ],
     "incompleteness" : [ ],
     "declarations" : [ {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.shipping",
+        "name" : "送り状番号"
+      } ],
       "name" : "送り状番号",
       "obligations" : [ {
         "obligationId" : {

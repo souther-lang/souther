@@ -8,6 +8,11 @@
     "status" : "complete",
     "incompleteness" : [ ],
     "declarations" : [ {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.staffing",
+        "name" : "WorkDays"
+      } ],
       "name" : "WorkDays",
       "obligations" : [ {
         "obligationId" : {
@@ -110,6 +115,11 @@
       } ],
       "findings" : [ ]
     }, {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.staffing",
+        "name" : "Rate"
+      } ],
       "name" : "Rate",
       "obligations" : [ {
         "obligationId" : {
@@ -212,6 +222,11 @@
       } ],
       "findings" : [ ]
     }, {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.staffing",
+        "name" : "Hours"
+      } ],
       "name" : "Hours",
       "obligations" : [ {
         "obligationId" : {

@@ -2009,7 +2009,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         facts.put("holdsAtTheValue", line.facts().holdsAtTheValue());
         facts.put("singles", line.facts().singles());
         ArrayNode within = into.putArray("narrowedWithin");
-        line.narrowedWithin().forEach(each -> within.add(each.module() + "." + each.name()));
+        line.narrowedWithin().forEach(each -> typeId(within.addObject(), each));
     }
 
     /** A level, as the thing it is a level of writes it: a place on a carrier, or a number. */
@@ -2023,6 +2023,36 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case souther.compiler.partition.Level.ACount count -> {
                 into.put("kind", "a_count");
                 into.put("at", count.at().key());
+            }
+        }
+    }
+
+    /**
+     * Which declaration a type is, as this document carries it.
+     *
+     * <p>The pair, because that is what a type's identity is: two modules may each declare a
+     * {@code Status} and they are two types. Written as one word — the name alone, or the two
+     * joined — the two project onto one identity, and a module name has dots in it so a joined
+     * spelling cannot even be taken apart again. One writer, because every place a published
+     * identity names a type wants the same answer.
+     *
+     * <p>A type the language declares has no module to name. It is one of a closed set the
+     * language fixes, so its name is its identity and {@code kind} says which sort it is.
+     */
+    private static void typeId(ObjectNode into, souther.compiler.types.TypeSymbol type) {
+        switch (type) {
+            case souther.compiler.types.TypeSymbol.AtModule at -> {
+                into.put("kind", "declared");
+                into.put("module", at.module());
+                into.put("name", at.name());
+            }
+            case souther.compiler.types.TypeSymbol.Primitive it -> {
+                into.put("kind", "primitive");
+                into.put("name", it.name());
+            }
+            case souther.compiler.types.TypeSymbol.LanguageCase it -> {
+                into.put("kind", "language_case");
+                into.put("name", it.name());
             }
         }
     }
@@ -2052,9 +2082,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // The enumeration and the places it declares, because two enumerations are two
                 // orders however alike their cases count, and where a case comes in the
                 // declaration is what the order is.
-                into.put("enumeration", it.enumeration().name());
+                typeId(into.putObject("enumeration"), it.enumeration());
                 ArrayNode cases = into.putArray("cases");
-                it.cases().forEach(each -> cases.add(each.name()));
+                it.cases().forEach(each -> typeId(cases.addObject(), each));
             }
         }
     }
@@ -2747,32 +2777,56 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // module whose declarations owe nothing from one whose every line is answered, and a
         // finding's `obligationId` had nothing in the document to join to. The behavior blocks are
         // written from their account for the same reason; this is the declarations' side of it.
-        Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
-        for (Adequacy.Finding each : written) {
-            byDeclaration.computeIfAbsent(each.named(), _ -> new ArrayList<>()).add(each);
-        }
-        // Every declaration that owes something or is short of something, in the order the module
-        // answered for them.
-        Map<String, List<Adequacy.Finding>> named = new LinkedHashMap<>();
+        // Keyed on who owes it, which is a list of declarations and not a word. A line two of the
+        // module's declarations took an end in together is owed to both — `Cap or Held` is how a
+        // report says that pair and not the name of a declaration — so a section keyed on the
+        // words would put one entry under a name nothing declares, and two pairs a report happens
+        // to write alike under one. The words are the last thing written and nothing is grouped by
+        // them.
+        Map<List<souther.compiler.types.TypeSymbol.AtModule>, Entry> byOwners = new LinkedHashMap<>();
         for (Adequacy.DeclaredDebt each : owed) {
-            named.computeIfAbsent(each.subject().named(), _ -> new ArrayList<>());
+            byOwners.computeIfAbsent(each.subject().declarations(), _ -> new Entry())
+                    .owed.add(each);
         }
-        byDeclaration.forEach((declaration, findings) ->
-                named.computeIfAbsent(declaration, _ -> new ArrayList<>()).addAll(findings));
-        named.forEach((declaration, findings) -> {
+        for (Adequacy.Finding each : written) {
+            List<souther.compiler.types.TypeSymbol.AtModule> owners =
+                    each.subject() instanceof souther.compiler.query.FindingSubject.OfADeclaration it
+                            ? it.declarations() : List.of();
+            byOwners.computeIfAbsent(owners, _ -> new Entry()).found.add(each);
+        }
+        byOwners.forEach((owners, entry) -> {
             ObjectNode one = out.addObject();
-            one.put("name", declaration);
-            obligations(one.putArray("obligations"), owed.stream()
-                            .filter(each -> each.subject().named().equals(declaration))
-                            .map(Adequacy.DeclaredDebt::debt).toList(),
-                    owed.stream()
-                            .filter(each -> each.subject().named().equals(declaration))
-                            .collect(java.util.stream.Collectors.toMap(
-                                    each -> each.debt().point(), Adequacy.DeclaredDebt::axis,
-                                    (a, _) -> a)),
+            ArrayNode declared = one.putArray("owners");
+            owners.forEach(each -> typeId(declared.addObject(), each));
+            one.put("name", entry.named(owners));
+            obligations(one.putArray("obligations"),
+                    entry.owed.stream().map(Adequacy.DeclaredDebt::debt).toList(),
+                    entry.owed.stream().collect(java.util.stream.Collectors.toMap(
+                            each -> each.debt().point(), Adequacy.DeclaredDebt::axis, (a, _) -> a)),
                     sources);
-            findings(one.putArray("findings"), findings, sources);
+            findings(one.putArray("findings"), entry.found, sources);
         });
+    }
+
+    /** What one set of owners owes and is short of, gathered before anything is written. */
+    private static final class Entry {
+        private final List<Adequacy.DeclaredDebt> owed = new ArrayList<>();
+        private final List<Adequacy.Finding> found = new ArrayList<>();
+
+        /**
+         * What a report calls this set, taken from whoever already says it.
+         *
+         * <p>A presentation of the owners and never the key they were gathered by: two sets a
+         * report writes alike are two sets, and the words are what a reader sees rather than what
+         * tells them apart.
+         */
+        String named(List<souther.compiler.types.TypeSymbol.AtModule> owners) {
+            if (!owed.isEmpty()) {
+                return owed.getFirst().subject().named();
+            }
+            return found.isEmpty()
+                    ? souther.compiler.partition.AuthoredLine.naming(owners) : found.getFirst().named();
+        }
     }
 
     /**
