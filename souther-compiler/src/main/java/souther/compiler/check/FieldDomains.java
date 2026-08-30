@@ -66,7 +66,7 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
-                    Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), Set.of(),
+                    Map.of(), Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), Set.of(),
                     NO_POSITIONS,
                     ConstraintState.<FactSubject>top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
                     Map.of(), Map.of(), Map.of(), Map.of());
@@ -83,6 +83,9 @@ public final class FieldDomains {
     /** The same per part of each clause. A reader that found one conjunct wanting names what that
      *  conjunct is about, and not what the conjunct written beside it raised. */
     private final Map<RuleRef, Map<Core, Required>> raisedByPart;
+
+    /** What the reading answered for each boundary question it raised and left standing. */
+    private final Map<BoundaryQuestion, BoundaryStanding> standing;
     /** Which readings took each clause in, as each of them said so. */
     private final ReadingEvidence took;
     /** The accounting, worked out once. Every position of a value asks the same question of it. */
@@ -152,7 +155,8 @@ public final class FieldDomains {
                          Set<String> notSeparatedByField,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          Map<RuleRef, Required> raised,
-                         Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
+                         Map<RuleRef, Map<Core, Required>> raisedByPart,
+                         Map<BoundaryQuestion, BoundaryStanding> standing, ReadingEvidence took,
                          Map<String, List<TypeSymbol.AtModule>> narrowers,
                          Set<String> notGathered, Set<String> handedOn,
                          SequencedMap<FactSubject, String> positions,
@@ -172,6 +176,7 @@ public final class FieldDomains {
         this.noLines = noLines;
         this.raised = raised;
         this.raisedByPart = raisedByPart;
+        this.standing = standing;
         this.took = took;
         this.narrowers = narrowers;
         this.notGathered = notGathered;
@@ -396,7 +401,8 @@ public final class FieldDomains {
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
-                seeded.reading().raised(), seeded.reading().raisedByPart(), seeded.took(),
+                seeded.reading().raised(), seeded.reading().raisedByPart(),
+                seeded.reading().standing(), seeded.took(),
                 seeded.reading().narrowers(),
                 seeded.notGathered(), seeded.handedOn(), placeOf,
                 seeded.constraints(), named, data, symbols, policy, settled,
@@ -471,6 +477,55 @@ public final class FieldDomains {
         /** Where in the value the end was to have been placed. */
         public String path() {
             return at.path();
+        }
+    }
+
+    /**
+     * One rule, one coordinate: the question of where the values there stop.
+     *
+     * <p>What a reader of an accounting asks about, and the key its answer is held under. A rule is
+     * read a conjunct at a time and any number of them may draw the same line, so the parts are not
+     * this — held under them, an answer had to be put back together from whatever rows a finer key
+     * happened to hold.
+     */
+    public record BoundaryQuestion(RuleRef.Invariant from, Coordinate at) {}
+
+    /**
+     * A boundary question the reading of ends did not answer, and everything behind it.
+     *
+     * <p><b>One reason and several conjuncts, which are two different multiplicities.</b> Which
+     * limit stopped the reading is read off the coordinate — a carrier lines are drawn on wants a
+     * reader for the form, and one nothing draws a line on wants the carrier
+     * ({@link UnreadComparison#whereALineWouldFall}) — so every part of the rule that raises this
+     * question comes to the same word. How many parts are standing behind it is what an author has
+     * left to lift, and that is its own count.
+     *
+     * <p>Made where the question is raised and not gathered from the findings afterwards. Gathered,
+     * the answer was whatever the rows filed under a finer key came to, and the day two of them
+     * differed a reader would have been handed both with nothing saying which the question's is.
+     *
+     * @param conjuncts the parts of the rule still standing behind it, in the order they are
+     *                  written
+     */
+    public record BoundaryStanding(
+            souther.compiler.inputs.BlockReason.RuleReadingStopped why, List<Integer> conjuncts) {
+
+        public BoundaryStanding {
+            if (why == null) {
+                throw new IllegalArgumentException("a question left standing says why");
+            }
+            if (conjuncts.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "and says which part of the rule is standing behind it");
+            }
+            conjuncts = List.copyOf(conjuncts);
+        }
+
+        /** The same, with {@code one} standing behind it too. */
+        BoundaryStanding and(BoundaryStanding one) {
+            List<Integer> both = new ArrayList<>(conjuncts);
+            one.conjuncts().stream().filter(each -> !both.contains(each)).forEach(both::add);
+            return new BoundaryStanding(why, both);
         }
     }
 
@@ -744,73 +799,21 @@ public final class FieldDomains {
      * <p>Asked per rule and per position, as the admission question is. A bound on a field's own
      * type and a clause of the record about the same field are two rules, and an end read for one
      * says nothing about the other.
+     *
+     * <p><b>Looked up and not worked out.</b> The reading made this answer where it raised the
+     * question, so what is here is a lookup under the question's own key. Put together from the
+     * findings instead, an answer keyed at {@code (rule, coordinate)} was rebuilt out of rows keyed
+     * at {@code (rule, conjunct, coordinate)} and came to whatever those rows held — which made a
+     * question's word depend on a table nobody had asked it of, and left every reader downstream
+     * looking at a list where the model has one answer.
      */
     private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, Coordinate where) {
-        // Every conjunct that asked, and not whichever one happened to be read. A rule is read a
-        // conjunct at a time and files one question about its line, so the two ways of reading the
-        // record are both wrong: asked of what went unread alone, `value >= 1 && Int.abs(value) >= 2`
-        // left its own line unanswered by the half that draws none, and asked of the ends alone,
-        // `value >= 1 && value <= 10 * 2` reported the half nothing could read as answered by the
-        // half beside it. The parts each say what they raised, and an end says which part placed it.
-        //
-        // And every conjunct that was stopped, not the first of them. One question is answered when
-        // every part that asked it has been read, so a part still standing behind another is a
-        // second thing an author has to lift — and stopping at the first said one of them while the
-        // rest went out under an answer that was true of their neighbour.
-        List<souther.compiler.inputs.BlockReason.RuleReadingStopped> stopped = new ArrayList<>();
-        for (Map.Entry<Core, Required> part : raisedByPart
-                .getOrDefault(rule, Map.of()).entrySet()) {
-            // One arm each, so that a question added later is decided about rather than answered
-            // "not this one" by a test it also fails.
-            boolean asked = part.getValue().obligations().stream()
-                    .anyMatch(owed -> switch (owed) {
-                        case Owed.Boundary line -> line.on().equals(where);
-                        case Owed.AdmittedValues _ -> false;
-                    });
-            if (!asked) {
-                continue;
-            }
-            if (directs.stream().noneMatch(d -> d.from().equals(rule) && d.part() == part.getKey()
-                    && d.at().equals(where))) {
-                whatStopped(rule, part.getKey(), where).forEach(each -> {
-                    if (!stopped.contains(each)) {
-                        stopped.add(each);
-                    }
-                });
-            }
-        }
-        return stopped.isEmpty()
+        BoundaryStanding said = rule instanceof RuleRef.Invariant invariant
+                ? standing.get(new BoundaryQuestion(invariant, where)) : null;
+        return said == null
                 ? new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING)
                 : new RuleAccounting.Outcome.Unaccounted(
-                        new RuleAccounting.Why.TheEndReadingSays(stopped));
-    }
-
-    /**
-     * What the reading of ends was stopped by at this position, of one part of the rule.
-     *
-     * <p>Empty where that reading was not stopped. A rule it read from end to end and drew no line
-     * from has answered the question that reading answers: the rule places no line, so there is
-     * none to be owed at, and a reader sent after it would be looking for a limit of this compiler
-     * that is not there.
-     *
-     * <p>Which is the second of two places that has to hold. A rule read to the end raises no such
-     * question in the first place ({@link ClauseStates.NoRestriction},
-     * {@link ClauseStates.ARelation}), so nothing reaches here to be answered this way — and the
-     * question being unaskable is what makes the answer unreachable rather than the other way
-     * about. Both are written, because the day one of them slips the other is what is left.
-     */
-    private List<souther.compiler.inputs.BlockReason.RuleReadingStopped> whatStopped(
-            RuleRef rule, Core part, Coordinate where) {
-        List<souther.compiler.inputs.BlockReason.RuleReadingStopped> out = new ArrayList<>();
-        for (NoLine said : noLines) {
-            if (said.from().equals(rule) && said.part() == part
-                    && said.at().equals(where)
-                    && said.why() instanceof souther.compiler.inputs.BlockReason
-                            .RuleReadingStopped stopped) {
-                out.add(stopped);
-            }
-        }
-        return out;
+                        new RuleAccounting.Why.TheEndReadingSays(said));
     }
 
     /**

@@ -148,10 +148,13 @@ public final class UnreadComparison {
     /**
      * Which of the places a walk met a read comparison is filed at, in the order it met them.
      *
-     * <p>The quantity decides, and the walk only says what each place is called and which came
-     * first. Membership taken from the walk instead, a rule was filed at positions its own
-     * canonical form had cancelled — and the word it left there was the word for the position the
-     * quantity does cut.
+     * <p><b>The quantity says which, and the walk says only which came first.</b> Membership taken
+     * from the walk, a rule was filed at positions its own canonical form had cancelled — and the
+     * word it left there was the word for the position the quantity does cut. Taken as an
+     * intersection, the walk keeps a veto it is not entitled to: a place the quantity runs over
+     * that the walk did not name would go quietly missing, and the answer would be a filing the
+     * rule is short of with nothing saying so. So a quantity running over a place the walk never
+     * met is a disagreement between two readings of one comparison, and it is refused here.
      *
      * <p>{@link Quantity.CutsNothing} is the exception, and a deliberate one: its support is empty
      * and there would be nothing to file, while what the rule is worth saying for is that the model
@@ -160,18 +163,26 @@ public final class UnreadComparison {
     public static <K> List<K> filedAt(Quantity.Read<K> read, List<K> met) {
         return switch (read) {
             case Quantity.CutsNothing<K> _ -> List.copyOf(met);
-            case Quantity.OverOne<K> one -> over(met, one.position()::equals);
-            case Quantity.OverSeveral<K> several -> over(met, several.positions()::contains);
+            case Quantity.OverOne<K> one -> over(met, Set.of(one.position()));
+            case Quantity.OverSeveral<K> several -> over(met, several.positions());
         };
     }
 
-    /** The places of {@code met} the quantity runs over, in the order the walk met them. */
-    private static <K> List<K> over(List<K> met, Predicate<K> runsOver) {
+    /** The places {@code runsOver} names, in the order the walk met them. */
+    private static <K> List<K> over(List<K> met, Set<K> runsOver) {
         List<K> out = new ArrayList<>();
         for (K each : met) {
-            if (runsOver.test(each)) {
+            if (runsOver.contains(each)) {
                 out.add(each);
             }
+        }
+        if (out.size() != runsOver.size()) {
+            // The walk names the places and the quantity says which of them the rule is about, so
+            // one of them holding a place the other has never heard of is two readings of one
+            // comparison disagreeing. Filed as whatever they have in common, the rule would go out
+            // short of a place with nothing to say it was ever expected.
+            throw new IllegalStateException(
+                    "the quantity runs over " + runsOver + ", which the walk met as " + met);
         }
         return out;
     }
@@ -229,10 +240,23 @@ public final class UnreadComparison {
             // stopped, and what it stopped on is the position. The carrier says which limit — a
             // position nothing draws a line on wants the carrier, and one lines are drawn on all
             // through the file wants a reader of the form.
-            case Quantity.OverOne<K> one -> ordered.test(one.position())
-                    ? new BlockReason.UnreadComparisonForm()
-                    : new BlockReason.UnreadComparisonDomain();
+            case Quantity.OverOne<K> one -> whereALineWouldFall(ordered.test(one.position()));
         };
+    }
+
+    /**
+     * What a rule stating where the values at one place stop is left with, where no line came of
+     * it.
+     *
+     * <p>The carrier and nothing else. A position nothing draws a line on wants that carrier read;
+     * one lines are drawn on all through the file wants a reader for the form the rule is written
+     * in. Which of the two it is turns on the place and on nothing about the comparison, so a
+     * question raised at one coordinate has one answer however many parts of a rule raise it — and
+     * that is what lets such a question be answered rather than gathered.
+     */
+    public static BlockReason.RuleReadingStopped whereALineWouldFall(boolean ordered) {
+        return ordered ? new BlockReason.UnreadComparisonForm()
+                : new BlockReason.UnreadComparisonDomain();
     }
 
     /**
@@ -243,42 +267,41 @@ public final class UnreadComparison {
      * the words for it asks this, and cannot be handed the words for a rule read to the end —
      * those are answers about a quantity, and this is never given one.
      *
-     * <p><b>What the reading stopped at first, and the carrier only after.</b> Where the value the
-     * rule speaks of was made by an operation, following the rule back through that operation is
-     * the capability that is missing, and it is missing whatever the position carries. Asked the
-     * other way round, a rule about what a call answered of a field with no order of its own was
-     * reported as a rule this could draw no line on — sending its author to values the rule never
-     * mentions.
+     * <p><b>Every answer is about the place, and none about the expression as a whole.</b> The
+     * carrier is asked only where the rule states something about the values standing there, which
+     * the reader says: asked at every place, a rule about {@code n} answered about what
+     * {@code l1.l2.leaf} carries, because that is where a walk met a position on its way through an
+     * expression it could not take apart.
      *
-     * <p>And the carrier is asked only where the rule is about the values at the place it is filed
-     * at, which the reader says. Asked at every place, a rule about {@code n} answered about what
-     * {@code l1.l2.leaf} carries, because that is where the walk met a position on its way through
-     * an expression it could not take apart.
+     * <p>And whether an operation made the value the rule speaks of is asked only where the rule is
+     * not about the values standing here. Asked first, of the stopped expression, it answered over
+     * a place whose own values the rule plainly states something about: {@code s < Won} would be a
+     * rule about a value an operation made the day an operation appeared beside it.
+     *
+     * <p><b>So the answer at a place a rule is about the values of is a function of that place.</b>
+     * Both of the words such a place can be left with are read off the carrier, and the carrier is
+     * the position's. Which is what lets a question raised at one coordinate be answered once
+     * rather than gathered from the conjuncts that asked it.
      */
     public static <K> BlockReason.RuleReadingStopped whereItStopped(RuleAt<K> at,
                                                                    Quantity.NotRead<K> notRead,
                                                                    Predicate<K> ordered) {
-        // A value an operation made of what stands at a position, and a rule written about that
-        // value. Where it came from is known; what the rule says about the values there is not,
-        // and working it out means following the rule back through the operation. One answer for
-        // an operation over a position and for an element an operation handed out alike: a rule
-        // about a sequence's elements is not a different kind of thing from a rule about a number.
-        if (madeByAnOperation(notRead.stoppedAt())) {
-            return new BlockReason.RuleAboutADerivedValue();
-        }
         return switch (at) {
             // The values here are what the rule speaks of, so what they are carried on says which
             // limit stopped the reading: `at < DateTime(...)` stops because nothing draws a line on
             // a date-time, while `p.x < 1 + 2` stops because the other side is not a form a
             // threshold is read out of and `p.x` is an `Int` — a carrier lines are drawn on all
             // through the file.
-            case RuleAt.AboutOwnValues<K> own -> ordered.test(own.position())
-                    ? new BlockReason.UnreadComparisonForm()
-                    : new BlockReason.UnreadComparisonDomain();
-            // And where they are not, there is no question about this carrier to answer. What is
-            // left is the form: something is written here that this did not read, and which of the
-            // position's numbers it was about is the part that went unread.
-            case RuleAt.NotAboutOwnValues<K> _ -> new BlockReason.UnreadComparisonForm();
+            case RuleAt.AboutOwnValues<K> own ->
+                    whereALineWouldFall(ordered.test(own.position()));
+            // And where they are not, what is left is which of two ways they are not. A value an
+            // operation made of what stands here is a rule to be followed back through that
+            // operation; anything else is a form this did not read, and which number of the
+            // position it was about is the part that went unread.
+            case RuleAt.NotAboutOwnValues<K> _ ->
+                    madeByAnOperation(notRead.stoppedAt())
+                            ? new BlockReason.RuleAboutADerivedValue()
+                            : new BlockReason.UnreadComparisonForm();
         };
     }
 

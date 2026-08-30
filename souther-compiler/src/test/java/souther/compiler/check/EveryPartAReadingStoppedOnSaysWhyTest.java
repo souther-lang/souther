@@ -133,8 +133,7 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
                             && unaccounted.why()
                                     instanceof RuleAccounting.Why.TheEndReadingSays says) {
                         out.put(((RuleCitation.Named) accounting.cited()).name() + " at " + owed,
-                                says.why().stream()
-                                        .map(each -> each.getClass().getSimpleName()).toList());
+                                List.of(says.why().getClass().getSimpleName()));
                     }
                 }));
         return out;

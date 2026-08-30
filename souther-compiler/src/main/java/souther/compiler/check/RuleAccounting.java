@@ -239,7 +239,7 @@ public final class RuleAccounting {
                 case TheValueReadingSays it -> it.why().stream()
                         .map(souther.compiler.inputs.BlockReason::ofARuleTheValueReadingLeft)
                         .toList();
-                case TheEndReadingSays it -> it.why();
+                case TheEndReadingSays it -> List.of(it.why());
                 case NothingTookItIn _ ->
                         List.of(new souther.compiler.inputs.BlockReason.NoReadingTookItIn());
             }) {
@@ -283,15 +283,17 @@ public final class RuleAccounting {
          * every one of them has been read — so a part still standing behind another is a second
          * thing to lift and not a repeat of the first.
          */
-        record TheEndReadingSays(
-                List<souther.compiler.inputs.BlockReason.RuleReadingStopped> why)
-                implements Why {
+        record TheEndReadingSays(FieldDomains.BoundaryStanding standing) implements Why {
 
             public TheEndReadingSays {
-                if (why == null || why.isEmpty()) {
+                if (standing == null) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
-                why = List.copyOf(why);
+            }
+
+            /** Which limit stopped it, which is one word however many parts are behind it. */
+            public souther.compiler.inputs.BlockReason.RuleReadingStopped why() {
+                return standing.why();
             }
         }
 

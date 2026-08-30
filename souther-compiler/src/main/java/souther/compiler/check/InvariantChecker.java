@@ -450,7 +450,7 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
+                    new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
                     Set.of(), Map.of(), Map.of());
@@ -1210,7 +1210,8 @@ public final class InvariantChecker {
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
                    Map<String, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
-                   Map<RuleRef, Map<Core, Required>> raisedByPart) {}
+                   Map<RuleRef, Map<Core, Required>> raisedByPart,
+                   Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
@@ -1238,14 +1239,17 @@ public final class InvariantChecker {
         Map<String, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
+        Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing =
+                new LinkedHashMap<>();
         stated.forEach(each ->
                 direct(each.clause(), each.from(), new int[1], at, byName, out, noLines, narrowers, raised,
-                        took, typeAt, parts, raisedByPart));
+                        took, typeAt, parts, raisedByPart, standing));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), Map.copyOf(narrowers),
                 java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)));
+                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
+                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
@@ -1344,7 +1348,9 @@ public final class InvariantChecker {
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<String, Type> typeAt,
                         PartsRead parts,
-                        Map<RuleRef, Map<Core, Required>> raisedByPart) {
+                        Map<RuleRef, Map<Core, Required>> raisedByPart,
+                        Map<FieldDomains.BoundaryQuestion,
+                                FieldDomains.BoundaryStanding> standing) {
         if (clause instanceof Core.Binary and && and.op() == BinOp.AND) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
             // Left before right, which is the order the clause was written in and the order
@@ -1352,9 +1358,9 @@ public final class InvariantChecker {
             // its conjuncts alike, which is what lets a line drawn here be recognised as the line
             // the declaration's own reading drew (issue #1062).
             direct(and.left(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
-                    typeAt, parts, raisedByPart);
+                    typeAt, parts, raisedByPart, standing);
             direct(and.right(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
-                    typeAt, parts, raisedByPart);
+                    typeAt, parts, raisedByPart, standing);
             return;
         }
         // Which conjunct of the clause this is, taken here so that every one of them is numbered —
@@ -1420,6 +1426,19 @@ public final class InvariantChecker {
             // rebuilt from the path: which of a position's numbers a line is on is what the operation
             // beside it says, and a reader handed the path alone has to go and ask something else.
             shape = new ClauseStates.ABound(about.at(), positions);
+        }
+        // And where this part raises the question of where the values there stop and no end came of
+        // it, the answer to that question, made here. Which limit it is is read off the coordinate
+        // and not off this part — every part raising this question comes to the same word — so what
+        // each part adds is itself, standing behind an answer that is already whole. Put together
+        // afterwards from the findings, the answer was whatever rows a finer key happened to hold.
+        if (shape instanceof ClauseStates.ABound stated
+                && end instanceof InvariantBound.Read.NoEnd) {
+            standing.merge(new FieldDomains.BoundaryQuestion(from, stated.line()),
+                    new FieldDomains.BoundaryStanding(
+                            UnreadComparison.whereALineWouldFall(about.carrier() != null),
+                            List.of(part)),
+                    FieldDomains.BoundaryStanding::and);
         }
         settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
