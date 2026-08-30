@@ -24,8 +24,9 @@ import java.util.Set;
  * the conjunction across rules is not written over this type at all: the value derivation is a
  * projection ({@link #together()}) onto {@link StatedTogether}, which is where clauses meet, and
  * the one thing this tree takes back from there is the fate of its own choices
- * ({@link Settlement}). The conjunction inside one clause is this type's ({@link #meet}), reached
- * only through the fold that reads the clause.
+ * ({@link Settlement}). The conjunction inside one clause exists only inside the fold that reads
+ * the clause ({@code Reading}), so there is no operation on this type by which a neighbouring
+ * rule's reading could arrive.
  *
  * <p><b>The connectives are over this and not over either of them.</b> A choice between two
  * alternatives is a choice between two readings of the whole value, so an alternative that cannot be
@@ -110,19 +111,17 @@ sealed interface StatedByClauses {
         Part either(Part other) {
             Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> why =
                     ReadByClauses.alsoSaying(standing, other.standing());
-            // Spoiled by there having been an alternative this could not read, which is the rule
-            // the values join by ({@code PlannedValues}), said of the part: a value satisfying the
-            // branch nothing read is under no obligation from this one, so what this side's copy
-            // reached is left open. Not what it settled — a position a dead branch settled is an
-            // answer, and an unread alternative widens a constraint, not an answer ({@link
-            // Adoption#either} makes the same distinction). Only where nothing has spoiled the
-            // position already: a reason recorded there is a rule that named it, which is nearer
-            // than a branch that widened it from outside.
+            // What an unread alternative does to the reasons is the vocabulary's rule, stated once
+            // ({@code UnreadReason.leftOpen}); which positions it happens to is this carrier's.
+            // What this side's copy reached — not what it settled: a position a dead branch
+            // settled is an answer, and an unread alternative widens a constraint, not an answer
+            // ({@link Adoption#either} makes the same distinction).
             if (other.byValues().dropped()) {
-                why = leftOpen(why, reachedBy(byValues()));
+                why = souther.compiler.values.UnreadReason.leftOpen(why, reachedBy(byValues()));
             }
             if (byValues().dropped()) {
-                why = leftOpen(why, reachedBy(other.byValues()));
+                why = souther.compiler.values.UnreadReason.leftOpen(why,
+                        reachedBy(other.byValues()));
             }
             return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
                     why);
@@ -136,18 +135,6 @@ sealed interface StatedByClauses {
             return out;
         }
 
-        private static Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>
-                leftOpen(Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> had,
-                         java.util.Set<FactSubject> these) {
-            if (these.isEmpty()) {
-                return had;
-            }
-            Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> out =
-                    new java.util.LinkedHashMap<>(had);
-            these.forEach(each -> out.putIfAbsent(each, java.util.List.of(
-                    souther.compiler.values.UnreadReason.ALTERNATIVE_NOT_READ)));
-            return out;
-        }
     }
 
     /**
@@ -213,29 +200,6 @@ sealed interface StatedByClauses {
      * it gave before anybody knew.
      */
     StatedByClauses from(Core e);
-
-    /**
-     * Both holding at once, distributed over a choice this could not settle.
-     *
-     * <p>A conjunction of a choice is the choice between the conjunctions. Merged into one first,
-     * the reading would be answering about a branch that may not be there.
-     */
-    default StatedByClauses meet(StatedByClauses other) {
-        if (this instanceof Choice it) {
-            return new Choice(it.id(), it.left().meet(other), it.right().meet(other));
-        }
-        if (other instanceof Choice it) {
-            return new Choice(it.id(), meet(it.left()), meet(it.right()));
-        }
-        Said here = (Said) this;
-        Said there = (Said) other;
-        return new Said(here.values().meet(there.values()),
-                here.ordered().meet(there.ordered()),
-                here.byValues().both(there.byValues()), here.byOrder().both(there.byOrder()),
-                // The parts of both, since a conjunction is every clause of it holding at once and
-                // each of them is still the part it was.
-                bothParts(here.parts(), there.parts()));
-    }
 
     /**
      * The same clauses with the account left behind, which is what the rules of a declaration are
@@ -329,7 +293,34 @@ sealed interface StatedByClauses {
 
         @Override
         public StatedByClauses both(StatedByClauses one, StatedByClauses other) {
-            return one.meet(other);
+            return met(one, other);
+        }
+
+        /**
+         * Both holding at once, distributed over a choice this could not settle.
+         *
+         * <p>A conjunction of a choice is the choice between the conjunctions. Merged into one
+         * first, the reading would be answering about a branch that may not be there.
+         *
+         * <p>Reachable only through the fold that reads one clause, which is what keeps this tree
+         * one rule's: the conjunction across rules has no operation here to arrive by, and is
+         * written where the rules of a declaration meet ({@link StatedTogether#meet}).
+         */
+        private static StatedByClauses met(StatedByClauses one, StatedByClauses other) {
+            if (one instanceof Choice it) {
+                return new Choice(it.id(), met(it.left(), other), met(it.right(), other));
+            }
+            if (other instanceof Choice it) {
+                return new Choice(it.id(), met(one, it.left()), met(one, it.right()));
+            }
+            Said here = (Said) one;
+            Said there = (Said) other;
+            return new Said(here.values().meet(there.values()),
+                    here.ordered().meet(there.ordered()),
+                    here.byValues().both(there.byValues()), here.byOrder().both(there.byOrder()),
+                    // The parts of both, since a conjunction is every clause of it holding at once
+                    // and each of them is still the part it was.
+                    bothParts(here.parts(), there.parts()));
         }
 
         /**
@@ -373,16 +364,15 @@ sealed interface StatedByClauses {
          */
         @Override
         public StatedByClauses either(StatedByClauses one, StatedByClauses other) {
-            // Held apart, every choice is held open past the clause: whether anybody can be in a
-            // branch is settled by the rules of every clause together, and a clause written later
-            // can be the one that shows a branch here impossible. Decided now instead, the branch
-            // structure is gone by the time that clause arrives, and its refinement has nothing to
-            // reach. The expansion this defers was counted over the whole declaration before any
-            // clause was read, which is what admitted the declaration as APART at all.
-            if (alternatives == Alternatives.MERGED
-                    && one instanceof Said here && other instanceof Said there) {
+            if (one instanceof Said here && other instanceof Said there) {
                 Emptiness a = here.emptiness();
                 Emptiness b = there.emptiness();
+                // A branch the descriptions already show empty is decided here whichever way the
+                // declaration holds its choices. The answer is definitive — a description empty
+                // before anything is built admits nothing however the other clauses refine it —
+                // and a clause written later can only show more branches impossible, never fewer,
+                // so nothing a deferral waits for can reach a different decision. Deferred anyway,
+                // the dead branch would widen the met-together tree for nothing.
                 if (a == Emptiness.EMPTY && b == Emptiness.EMPTY) {
                     return bothDead(here, there);
                 }
@@ -392,7 +382,14 @@ sealed interface StatedByClauses {
                 if (b == Emptiness.EMPTY) {
                     return beside(here, there);
                 }
-                if (a == Emptiness.NONEMPTY && b == Emptiness.NONEMPTY) {
+                // Two live branches are another matter: merging them is the one decision a clause
+                // written later can be too late for, since it is the branch structure the later
+                // clause's conjunction would have refined. Held apart, the choice is held open past
+                // the clause and settled by the rules of every clause together; the expansion the
+                // deferral costs was counted over the whole declaration before any clause was
+                // read, which is what admitted the declaration as APART at all.
+                if (alternatives == Alternatives.MERGED
+                        && a == Emptiness.NONEMPTY && b == Emptiness.NONEMPTY) {
                     return live(here, there);
                 }
             }

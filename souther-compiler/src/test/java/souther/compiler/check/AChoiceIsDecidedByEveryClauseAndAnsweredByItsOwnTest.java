@@ -185,6 +185,29 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
                 "the constraint is left open and the answer stands");
     }
 
+    /**
+     * A fate aggregates the same whichever occurrence comes first — the reasons included.
+     *
+     * <p>{@code Emptiness.joined} alone being commutative is not enough: the reasons probing two
+     * occurrences left behind travel with the fate, and two occurrences of one branch can be
+     * stopped by two limits. Kept in the order the occurrences were met, the same model written
+     * with its clauses the other way round would say the same reasons in a different order — a
+     * neighbouring clause's order, which is no order of this rule's.
+     */
+    @Test
+    void aFateAggregatesTheSameWhicheverOccurrenceComesFirst() {
+        Settlement.Sided one = new Settlement.Sided(
+                souther.compiler.values.Emptiness.UNDECIDED,
+                Map.of(UNREAD, List.of(UnreadReason.PATTERN_TOO_COSTLY)), java.util.Set.of());
+        Settlement.Sided other = new Settlement.Sided(
+                souther.compiler.values.Emptiness.UNDECIDED,
+                Map.of(UNREAD, List.of(UnreadReason.EXACT_VALUES_TOO_COSTLY)),
+                java.util.Set.of());
+
+        assertEquals(one.alsoSeen(other), other.alsoSeen(one),
+                "one branch, one aggregate, whichever copy was settled first");
+    }
+
     /** Every question of every rule that nothing answered, and what stopped this reading of it. */
     private static Map<String, List<UnreadReason>> byQuestion(FieldDomains read) {
         Map<String, List<UnreadReason>> out = new LinkedHashMap<>();

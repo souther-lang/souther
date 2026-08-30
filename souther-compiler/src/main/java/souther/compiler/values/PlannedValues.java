@@ -329,10 +329,10 @@ public sealed interface PlannedValues<A> {
                 List.of(here.defaultGuaranteed(), there.defaultGuaranteed()));
         Map<A, List<UnreadReason>> spoiled = union(here.standing(), there.standing());
         if (there.dropped()) {
-            spoiled = spoiling(spoiled, promisedAt(here));
+            spoiled = UnreadReason.leftOpen(spoiled, promisedAt(here));
         }
         if (here.dropped()) {
-            spoiled = spoiling(spoiled, promisedAt(there));
+            spoiled = UnreadReason.leftOpen(spoiled, promisedAt(there));
         }
         Set<A> shapedBy = new LinkedHashSet<>(promisedAt(here));
         shapedBy.addAll(promisedAt(there));
@@ -384,14 +384,6 @@ public sealed interface PlannedValues<A> {
      *  {@link AdmissibleValues}. */
     private static <A> Set<A> promisedAt(Settled<A> of) {
         return of.guaranteed().keySet();
-    }
-
-    /** The same reasons, and one more at each position an unread alternative stood beside. */
-    private static <A> Map<A, List<UnreadReason>> spoiling(Map<A, List<UnreadReason>> standing,
-                                                           Set<A> named) {
-        Map<A, List<UnreadReason>> out = new LinkedHashMap<>(standing);
-        named.forEach(each -> out.putIfAbsent(each, List.of(UnreadReason.ALTERNATIVE_NOT_READ)));
-        return out;
     }
 
     /**

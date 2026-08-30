@@ -914,10 +914,10 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         // the unread rule was about — a rule relating two other positions relates this one to
         // nothing, and lending its reason here would say that it did.
         if (other.dropped) {
-            spoiled = spoiling(spoiled, promisedAt());
+            spoiled = UnreadReason.leftOpen(spoiled, promisedAt());
         }
         if (dropped) {
-            spoiled = spoiling(spoiled, other.promisedAt());
+            spoiled = UnreadReason.leftOpen(spoiled, other.promisedAt());
         }
         // What each rule left standing is kept whole. Whether a position is answerable for it is
         // read off the two ends where the question is asked ({@link #speaksFor}) rather than
@@ -1089,27 +1089,6 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      */
     private Set<A> promisedAt() {
         return guaranteed.keySet();
-    }
-
-    /**
-     * The same, with {@code these} left open by an alternative — where nothing has spoiled them
-     * already. A reason already recorded for a position is a rule that named it, which is nearer
-     * than a branch that widened it from outside.
-     *
-     * <p>The one place a reason is not added beside the reasons already there. What this says is
-     * that the choice offered an alternative nothing could read, which is one fact about the choice
-     * however many positions it reaches — a position whose own rules already stopped this reading
-     * is not stopped a second time by it.
-     */
-    private static <A> Map<A, List<UnreadReason>> spoiling(Map<A, List<UnreadReason>> had,
-                                                           Set<A> these) {
-        if (these.isEmpty()) {
-            return had;
-        }
-        Map<A, List<UnreadReason>> out = new LinkedHashMap<>(had);
-        these.forEach(each ->
-                out.putIfAbsent(each, List.of(UnreadReason.ALTERNATIVE_NOT_READ)));
-        return out;
     }
 
     /**

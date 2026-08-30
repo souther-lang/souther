@@ -25,8 +25,9 @@ import java.util.Set;
  * inside the left of {@code A} is refined by {@code A}'s left, and the same branch inside the right
  * by {@code A}'s right. What the written branch's author can act on is the whole declaration's
  * answer: nobody can be in it only if nobody can be in it anywhere it stands. So the sides join over
- * occurrences by {@link Emptiness#joined}, which is associative, commutative and idempotent — the
- * order the copies are met in, and how the conjunctions were bracketed, cannot reach the answer.
+ * occurrences by {@link Emptiness#joined}, which is associative, commutative and idempotent — and
+ * so is every other component of a side ({@link Sided#alsoSeen}), so the order the copies are met
+ * in, and how the conjunctions were bracketed, cannot reach the answer.
  *
  * @param made     the whole reading worked out, with what could not be built beside it
  * @param ordered  where every position stops, settled by the same work
@@ -62,12 +63,22 @@ record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> orde
             return new Sided(emptiness, Map.of(), Set.of());
         }
 
-        /** The same branch with one more occurrence of it taken in. */
+        /**
+         * The same branch with one more occurrence of it taken in.
+         *
+         * <p>Associative, commutative and idempotent in every component, which is what lets the
+         * class doc promise that the order the copies are met in cannot reach the answer:
+         * {@link Emptiness#joined} is, a set union is, and the reasons are joined as a set and then
+         * said in the vocabulary's declared order — kept in the order the occurrences were met,
+         * they would be said in a neighbouring clause's order.
+         */
         Sided alsoSeen(Sided other) {
             Set<FactSubject> gaveUp = new java.util.LinkedHashSet<>(unbuilt);
             gaveUp.addAll(other.unbuilt());
-            return new Sided(emptiness.joined(other.emptiness()),
-                    ReadByClauses.alsoSaying(standing, other.standing()), gaveUp);
+            Map<FactSubject, List<UnreadReason>> why = new java.util.LinkedHashMap<>();
+            ReadByClauses.alsoSaying(standing, other.standing()).forEach((position, reasons) ->
+                    why.put(position, reasons.stream().sorted().toList()));
+            return new Sided(emptiness.joined(other.emptiness()), why, gaveUp);
         }
     }
 }
