@@ -12,7 +12,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * What one comparison comes to on the input space: one reading, and everything read off it.
@@ -200,17 +199,24 @@ sealed interface ComparisonAssessment {
      * fell short — handed to this one, a comparison whose carrier could not be read was described
      * as relating two positions, and a model short of a border came back complete.
      *
-     * @param filedAt where the reading was looking, which is a diagnostic position and never the
-     *                subject of a question. What such a rule is about is the part that was not read
+     * <p>One reason per place and not one for the comparison. Where a reading stopped there is no
+     * quantity for the places to be one subject of, so each of them says what stopped it there — a
+     * position met inside an expression this did not take apart is told nothing about what it
+     * carries, and one asked about for itself is.
+     *
+     * @param why where the reading was looking and what it left there. The places are diagnostic
+     *            positions and never the subject of a question: what such a rule is about is the
+     *            part that was not read
      */
-    record Unread(BlockReason.RuleReadingStopped why, List<FilingCoordinate> filedAt)
-            implements ComparisonAssessment {
+    record Unread(java.util.SequencedMap<FilingCoordinate,
+            BlockReason.RuleReadingStopped> why) implements ComparisonAssessment {
 
         public Unread {
-            if (why == null) {
-                throw new IllegalArgumentException("a reading that stopped says why");
+            if (why == null || why.isEmpty()) {
+                throw new IllegalArgumentException("a reading that stopped says where and why");
             }
-            filedAt = List.copyOf(filedAt);
+            why = java.util.Collections.unmodifiableSequencedMap(
+                    new java.util.LinkedHashMap<>(why));
         }
     }
 
@@ -257,13 +263,31 @@ sealed interface ComparisonAssessment {
             // stopped rather than worked out again from the comparison afterwards. Here the walk
             // over the expression is the only account of what the rule is about, which is what it
             // is for.
-            case Cutting.Read.Stopped stopped -> {
-                List<FilingCoordinate> filedAt =
-                        GuardThresholds.filedAt(comparison, inputs, reads, symbols);
-                yield filedAt.isEmpty() ? aboutNoPosition(comparison, reads, symbols)
-                        : new Unread(stopped.why(), filedAt);
-            }
+            case Cutting.Read.Stopped stopped -> stopped.why().isEmpty()
+                    ? aboutNoPosition(comparison, reads, symbols)
+                    : new Unread(stopped.why());
+            // And where the quantity was read and no line could be built on it, the carrier is
+            // what a reader is owed — at the quantity's own coordinates, because the quantity is
+            // what such a rule is about.
+            case Cutting.Read.NoLineOnTheQuantity over -> over.over().isEmpty()
+                    ? aboutNoPosition(comparison, reads, symbols)
+                    : new Unread(atEachOf(over.over(),
+                            new BlockReason.UnreadComparisonDomain()));
         };
+    }
+
+    /**
+     * One answer at every one of {@code places}, kept in the order they were given.
+     *
+     * <p>Sound where the places are one subject: the coordinates of one quantity, or the places a
+     * statement nothing read at all names. A reading that stopped has no such subject, and its
+     * places are answered one at a time where it stopped.
+     */
+    static <R extends BlockReason.RuleWithoutLineReason> java.util.SequencedMap<FilingCoordinate, R>
+            atEachOf(List<FilingCoordinate> places, R why) {
+        java.util.SequencedMap<FilingCoordinate, R> out = new java.util.LinkedHashMap<>();
+        places.forEach(each -> out.putIfAbsent(each, why));
+        return out;
     }
 
     /**
@@ -283,8 +307,11 @@ sealed interface ComparisonAssessment {
         if (from.isEmpty()) {
             return new NoInput();
         }
-        return new Unread(new BlockReason.RuleAboutADerivedValue(),
-                from.stream().map(FilingCoordinate::at).toList());
+        java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why =
+                new java.util.LinkedHashMap<>();
+        from.forEach(each -> why.putIfAbsent(FilingCoordinate.at(each),
+                new BlockReason.RuleAboutADerivedValue()));
+        return new Unread(why);
     }
 
     /** What a line comes to on the input space, from the quantity it is on. */
@@ -388,14 +415,15 @@ sealed interface ComparisonAssessment {
             // The positions its quantity is over, as every read rule's are. That the rules leave
             // the input empty says nothing about which positions this rule is about.
             case NoFeasibleInput none -> none.cutting().over();
-            case Unread unread -> unread.filedAt();
+            case Unread unread -> List.copyOf(unread.why().keySet());
             case CutsNothing cuts -> cuts.filedAt();
             case AtAPosition _, AnswerDependent _, NoInput _ -> List.of();
         };
     }
 
     /**
-     * Why the reading of lines drew none from this comparison, or empty where it drew one.
+     * What the reading of lines leaves at each place this comparison is filed at, and empty where
+     * it leaves nothing.
      *
      * <p><b>Named for the reading it is the answer of, and not for the assessment it is read
      * off.</b> What a comparison comes to is one decision; what a reading makes of it is that
@@ -404,6 +432,13 @@ sealed interface ComparisonAssessment {
      * into sets of values gets nothing it can hold from the same rule. A name saying only that a
      * reason was read off an assessment would be reached for by that reader too, and the answer it
      * would take is the one that says nothing fell short.
+     *
+     * <p><b>Per place, and the same at every place only where the places are one subject.</b> A
+     * comparison whose arithmetic reached a quantity is about that quantity, so its places are the
+     * quantity's coordinates and one answer holds at all of them. A reading that stopped has no
+     * quantity to be about, and each place it was left at says what stopped it there — handed one
+     * answer, a position met inside an expression this did not take apart was told what another
+     * position's carrier carries.
      *
      * <p>Answered once, here. Both producers of this evidence — a clause of an {@code ensures} and a
      * {@code guard}'s comparison — worked the same table out separately, so a case added to
@@ -417,37 +452,44 @@ sealed interface ComparisonAssessment {
      * method and in the value reading's own beside it, which is the point of neither having a
      * default.
      */
-    default Optional<BlockReason.RuleWithoutLineReason> whyTheLineReadingDrewNone() {
+    default java.util.SequencedMap<FilingCoordinate, BlockReason.RuleWithoutLineReason>
+            whatEachPlaceIsLeftWith() {
         return switch (this) {
             // Which of the two a form that divides nothing is: a line over a run is one number and
             // one line with no position under it, and a line over several positions is a relation
             // between them. Answered from what the quantity is over rather than by the count of its
             // terms, since a form of one term is either.
-            case AcrossPositions across -> Optional.of(across.overARun()
+            case AcrossPositions across -> sameAtEachPlace(across.overARun()
                     ? new BlockReason.ComparisonOverARun()
                     : new BlockReason.ComparisonBetweenPositions());
-            case CutsNothing _ -> Optional.of(new BlockReason.ComparisonCuttingNothing());
+            case CutsNothing _ -> sameAtEachPlace(new BlockReason.ComparisonCuttingNothing());
             case OutsideTheDomain _ ->
-                    Optional.of(new BlockReason.ComparisonCuttingOutsideDomain());
+                    sameAtEachPlace(new BlockReason.ComparisonCuttingOutsideDomain());
             // Not the reason above: there the declarations never run as far as the line, and here
             // they do — what stops short of it is the values that arrive at the comparison, ruled
             // out by the guards on the way. An author reading the first would look at one rule for
             // a contradiction with their declarations that is not in it.
             case NothingArrivesAtItsLine _ ->
-                    Optional.of(new BlockReason.ComparisonNothingArrivesAtItsLine());
+                    sameAtEachPlace(new BlockReason.ComparisonNothingArrivesAtItsLine());
+            // Its own answer for having stopped, decided where it stopped and at each place it was
+            // left at. Worked out again from the comparison afterwards, one whose carrier stopped
+            // the reading came back as a rule that relates two positions — a sentence saying no
+            // measure is short of anything, over a model missing a border.
+            case Unread unread -> new java.util.LinkedHashMap<>(unread.why());
             // Nothing about this rule fell short, and nothing about this rule is what happened. The
             // rules of the input admit no value between them, which is one fact about the behavior
             // and not one per rule at each position it names — said here, a model with two clauses
             // and four positions would be told eight times, and each time about a rule that is not
             // the one at fault.
-            case NoFeasibleInput _ -> Optional.empty();
-            // Its own answer for having stopped, decided where it stopped. Worked out again from
-            // the comparison afterwards, one whose carrier stopped the reading came back as a rule
-            // that relates two positions — a sentence saying no measure is short of anything, over
-            // a model missing a border.
-            case Unread unread -> Optional.of(unread.why());
-            case AtAPosition _, NoInput _, AnswerDependent _ -> Optional.empty();
+            case NoFeasibleInput _, AtAPosition _, NoInput _, AnswerDependent _ ->
+                    new java.util.LinkedHashMap<>();
         };
+    }
+
+    /** The same answer at every place this is filed at, which are one quantity's coordinates. */
+    private java.util.SequencedMap<FilingCoordinate, BlockReason.RuleWithoutLineReason>
+            sameAtEachPlace(BlockReason.RuleWithoutLineReason why) {
+        return atEachOf(filedAt(), why);
     }
 
     /**

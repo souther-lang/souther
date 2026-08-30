@@ -28,8 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  */
 class AReasonBelongsToTheConjunctItCameFromTest {
 
-    /** What the reading of ends said about the line of the one clause written here. */
-    private static List<String> whyTheLineStands(String clause) {
+    /** Which limit the reading of ends was stopped by, of the one clause written here. */
+    private static String whyTheLineStands(String clause) {
+        return standing(clause).why().getClass().getSimpleName();
+    }
+
+    /** The whole answer to the one boundary question the clause written here leaves standing. */
+    private static FieldDomains.BoundaryStanding standing(String clause) {
         Compilation compilation = Compilation.ofSource("""
                 module m
 
@@ -47,23 +52,45 @@ class AReasonBelongsToTheConjunctItCameFromTest {
                 .filter(e -> e.getKey().obligation() == CoverageObligation.BOUNDARY)
                 .map(e -> assertInstanceOf(RuleAccounting.Outcome.Unaccounted.class, e.getValue()))
                 .map(e -> assertInstanceOf(RuleAccounting.Why.TheEndReadingSays.class, e.why()))
-                .map(e -> e.why().stream().map(each -> each.getClass().getSimpleName()).toList())
+                .map(RuleAccounting.Why.TheEndReadingSays::standing)
                 .findFirst().orElseThrow(() -> new AssertionError("the line was answered"));
+    }
+
+    /** The parts of the clause standing behind that answer. */
+    private static List<Integer> partsBehindTheLine(String clause) {
+        return standing(clause).conjuncts();
     }
 
     /**
      * One model, two orders, one answer: the bound this could not fold is why.
      *
-     * <p>The whole of the answer and not its first entry. A question stands with every part that
-     * was stopped behind it, so asserting one of them would pass a reading that had added the
-     * conjunct beside it as well — and that conjunct was read from end to end.
+     * <p>One word and not a list of them. Which limit stopped the reading is read off the
+     * coordinate, so every part of the rule raising this question comes to the same one — and a
+     * reader is owed the limit rather than a tally of the parts that met it.
      */
     @Test
     void theOrderTheConjunctsAreWrittenInDoesNotDecideWhy() {
-        assertEquals(List.of("UnreadComparisonForm"), whyTheLineStands(
+        assertEquals("UnreadComparisonForm", whyTheLineStands(
                 "invariant said = x <= 10 * 2 && x <= y"));
-        assertEquals(List.of("UnreadComparisonForm"), whyTheLineStands(
+        assertEquals("UnreadComparisonForm", whyTheLineStands(
                 "invariant said = x <= y && x <= 10 * 2"),
                 "and not the reason of the conjunct beside it, which relates two positions");
+    }
+
+    /**
+     * And which parts are behind it is its own count.
+     *
+     * <p>Both conjuncts bound {@code x} and neither placed an end, so both are standing: a part
+     * behind another is a second thing an author has to lift. Read off the reason instead, two
+     * parts one limit stopped were one thing to do, and a rule half of which was read came out
+     * looking like a rule none of which was.
+     */
+    @Test
+    void everyPartStoppedBehindTheLineIsCounted() {
+        assertEquals(List.of(0, 1),
+                partsBehindTheLine("invariant said = x <= 10 * 2 && x <= 3 * 7"));
+        assertEquals(List.of(0),
+                partsBehindTheLine("invariant said = x <= 10 * 2 && x <= y"),
+                "the conjunct that relates two positions raises no question about this line");
     }
 }

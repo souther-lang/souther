@@ -197,10 +197,14 @@ public final class EnsuresThresholds {
             // A statement that is not a comparison was not assessed as one, so what stopped this
             // is the form it is written in — the one of the reasons that does not turn on what two
             // sides name — and the positions the walk met are all there is to file it at.
+            // One answer at every one of them, and not a copy of a decision made elsewhere: nothing
+            // here was read, so no place is one the rule is known to be about the values at, and
+            // the form is what each of them is left with.
             reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
-                    new BlockReason.UnreadComparisonForm(),
-                    GuardThresholds.mentionedIn(e, reads, symbols).stream()
-                            .map(FilingCoordinate::at).toList(),
+                    ComparisonAssessment.atEachOf(
+                            GuardThresholds.mentionedIn(e, reads, symbols).stream()
+                                    .map(FilingCoordinate::at).toList(),
+                            new BlockReason.UnreadComparisonForm()),
                     out.rulesWithoutALine());
             return line + 1;
         }
@@ -216,9 +220,8 @@ public final class EnsuresThresholds {
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
-        assessed.whyTheLineReadingDrewNone().ifPresent(why ->
-                reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), why,
-                        assessed.filedAt(), out.rulesWithoutALine()));
+        reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
+                assessed.whatEachPlaceIsLeftWith(), out.rulesWithoutALine());
         // And the geometry, which is this reader's own. Only the two arms that draw something have
         // anything to add here.
         switch (assessed) {
@@ -302,20 +305,20 @@ public final class EnsuresThresholds {
      * form is what stopped it: the one reason that does not turn on what two sides name.
      */
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     BlockReason.RuleWithoutLineReason why,
-                                     List<FilingCoordinate> at,
+                                     java.util.SequencedMap<FilingCoordinate,
+                                             BlockReason.RuleWithoutLineReason> left,
                                      List<RuleWithoutALine> withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);
-        for (FilingCoordinate named : at) {
+        left.forEach((named, why) -> {
             RuleWithoutALine here = new RuleWithoutALine(rule, cited, named, why);
             if (withoutALine.stream().noneMatch(had -> had.sameAs(here))) {
                 withoutALine.add(here);
             }
-        }
+        });
     }
 
 

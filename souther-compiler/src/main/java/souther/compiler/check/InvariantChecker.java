@@ -450,7 +450,7 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
+                    new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
                     Set.of(), Map.of(), Map.of());
@@ -1210,7 +1210,8 @@ public final class InvariantChecker {
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
                    Map<String, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
-                   Map<RuleRef, Map<Core, Required>> raisedByPart) {}
+                   Map<RuleRef, Map<Core, Required>> raisedByPart,
+                   Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
@@ -1238,14 +1239,17 @@ public final class InvariantChecker {
         Map<String, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
+        Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing =
+                new LinkedHashMap<>();
         stated.forEach(each ->
                 direct(each.clause(), each.from(), new int[1], at, byName, out, noLines, narrowers, raised,
-                        took, typeAt, parts, raisedByPart));
+                        took, typeAt, parts, raisedByPart, standing));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), Map.copyOf(narrowers),
                 java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)));
+                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
+                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
@@ -1344,7 +1348,9 @@ public final class InvariantChecker {
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<String, Type> typeAt,
                         PartsRead parts,
-                        Map<RuleRef, Map<Core, Required>> raisedByPart) {
+                        Map<RuleRef, Map<Core, Required>> raisedByPart,
+                        Map<FieldDomains.BoundaryQuestion,
+                                FieldDomains.BoundaryStanding> standing) {
         if (clause instanceof Core.Binary and && and.op() == BinOp.AND) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
             // Left before right, which is the order the clause was written in and the order
@@ -1352,9 +1358,9 @@ public final class InvariantChecker {
             // its conjuncts alike, which is what lets a line drawn here be recognised as the line
             // the declaration's own reading drew (issue #1062).
             direct(and.left(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
-                    typeAt, parts, raisedByPart);
+                    typeAt, parts, raisedByPart, standing);
             direct(and.right(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
-                    typeAt, parts, raisedByPart);
+                    typeAt, parts, raisedByPart, standing);
             return;
         }
         // Which conjunct of the clause this is, taken here so that every one of them is numbered —
@@ -1420,6 +1426,21 @@ public final class InvariantChecker {
             // rebuilt from the path: which of a position's numbers a line is on is what the operation
             // beside it says, and a reader handed the path alone has to go and ask something else.
             shape = new ClauseStates.ABound(about.at(), positions);
+        }
+        // And where this part raises the question of where the values there stop and no end came of
+        // it, the answer to that question. Made once, when the question is first met: which limit
+        // it is is read off the coordinate the question is keyed by, and the coordinate is what
+        // carries the carrier — so the same reading of the same carrier is what any part raising
+        // this question would come to, and it is done once rather than done again and reconciled.
+        // What a part met afterwards adds is itself.
+        if (shape instanceof ClauseStates.ABound stated
+                && end instanceof InvariantBound.Read.NoEnd) {
+            standing.compute(new FieldDomains.BoundaryQuestion(from, stated.line()),
+                    (question, had) -> had == null
+                            ? new FieldDomains.BoundaryStanding(
+                                    UnreadComparison.whereALineWouldFall(about.carrier() != null),
+                                    List.of(part))
+                            : had.and(part));
         }
         settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
@@ -1623,6 +1644,12 @@ public final class InvariantChecker {
      * <p>Which limit stopped it is {@link UnreadComparison}'s, so a {@code guard} of this shape
      * cannot come to a different answer. What is read here is only what each side of the comparison
      * came to, which is this reader's own way of looking a coordinate up.
+     *
+     * <p><b>And which positions there are findings for is the quantity's where there is one.</b>
+     * The walk says what each place the comparison mentions is called and which came first; the
+     * quantity says which of them the rule is about. Taken from the walk, {@code x + y - y <= 20}
+     * left a finding at {@code y} of a rule its own canonical form had cancelled — and the word
+     * left there was the word for {@code x}.
      */
     private void noLineDrawn(Core.Binary comparison, RuleRef.Invariant from, int conjunct,
                             Denotations at,
@@ -1633,15 +1660,51 @@ public final class InvariantChecker {
         }
         Places left = placesIn(comparison.left(), at, byName);
         Places right = placesIn(comparison.right(), at, byName);
-        BlockReason.RuleWithoutLineReason why = UnreadComparison.why(left.origin(), right.origin(),
-                read.quantity(),
-                place -> carrierAt(place, left, right) != null);
+        Predicate<String> ordered = place -> carrierAt(place, left, right) != null;
+        Map<String, Coordinate> met = new LinkedHashMap<>();
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
-            FieldDomains.NoLine said =
-                    new FieldDomains.NoLine(each.at(), from, comparison, conjunct, why);
-            if (!out.contains(said)) {
-                out.add(said);
+            met.putIfAbsent(each.path(), each);
+        }
+        switch (read.quantity()) {
+            case UnreadComparison.Quantity.Read<String> quantity -> {
+                BlockReason.RuleWithoutLineReason why =
+                        UnreadComparison.ofTheQuantity(quantity, ordered);
+                for (String path : UnreadComparison.filedAt(quantity, List.copyOf(met.keySet()))) {
+                    file(met.get(path), from, comparison, conjunct, why, out);
+                }
             }
+            // Where the reading stopped there is no quantity to be a subject, so every place the
+            // walk met is asked, and asked for itself.
+            case UnreadComparison.Quantity.NotRead<String> notRead -> {
+                for (Coordinate each : met.values()) {
+                    file(each, from, comparison, conjunct,
+                            UnreadComparison.whereItStopped(ruleAt(each, left, right), notRead,
+                                    ordered),
+                            out);
+                }
+            }
+        }
+    }
+
+    /**
+     * What a rule filed at {@code where} is about, as this reader knows it.
+     *
+     * <p>What this reader supplies is what it calls the place. Whether the rule states anything
+     * about the values standing there is the same question a body's comparison is held to, and is
+     * answered where both readers meet it.
+     */
+    private static RuleAt<String> ruleAt(Coordinate where, Places left, Places right) {
+        return UnreadComparison.subjectAt(where.path(), left.origin(), right.origin());
+    }
+
+    /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
+    private static void file(Coordinate where, RuleRef.Invariant from, Core.Binary comparison,
+                             int conjunct, BlockReason.RuleWithoutLineReason why,
+                             List<FieldDomains.NoLine> out) {
+        FieldDomains.NoLine said =
+                new FieldDomains.NoLine(where.at(), from, comparison, conjunct, why);
+        if (!out.contains(said)) {
+            out.add(said);
         }
     }
 
