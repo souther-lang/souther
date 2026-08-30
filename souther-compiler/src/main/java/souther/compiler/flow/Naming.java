@@ -38,7 +38,8 @@ public interface Naming<P> {
      * The naming inside a {@code let}, which may have words for the name it binds.
      *
      * <p>One of the two places what a name means changes, with {@link #insideArm}. The two are the
-     * reading of the input's ({@code InputPaths}), and a naming has both or is not scoped like it —
+     * ones a tree's names are read under ({@code InputReads}), and a naming has both or is not
+     * scoped like it —
      * a naming with one of them answers under a binding and stays outside an arm, which is a name
      * meaning one thing to the reading that found the positions and another to this.
      */
