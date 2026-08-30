@@ -51,11 +51,17 @@ public sealed interface PointAttribution {
     record TheDeclarations(List<TypeSymbol.AtModule> owners) implements PointAttribution {
 
         public TheDeclarations {
-            owners = List.copyOf(owners);
             if (owners.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a point owed to the declarations is owed to some declaration");
             }
+            // In the declarations' own order and never in the order they were met. Who owes a
+            // point is a set: two readings of one point can each name a different declaration and
+            // the point is owed to both, so a list built as they arrived is the walk's answer —
+            // and it is read as one. What a report calls the pair (`Cap or Held`), which module
+            // keeps the account, and which entry of a document they are gathered under would all
+            // turn on which reading came first.
+            owners = owners.stream().sorted().distinct().toList();
         }
 
         /**
@@ -78,8 +84,10 @@ public sealed interface PointAttribution {
          * declarations'.
          */
         public TheDeclarations and(TheDeclarations also) {
+            // Both sets, and the order they arrived in is not carried: what comes back is put in
+            // the declarations' own order where one of these is made.
             List<TypeSymbol.AtModule> both = new ArrayList<>(owners);
-            also.owners.stream().filter(each -> !both.contains(each)).forEach(both::add);
+            both.addAll(also.owners);
             return new TheDeclarations(both);
         }
     }

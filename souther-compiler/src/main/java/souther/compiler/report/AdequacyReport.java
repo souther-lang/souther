@@ -2746,7 +2746,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     node.put("hit", ItemAssessment.Coverage.hit(coverage)));
             // The readings, each as the position it met the line at and what a row there has to
             // do in that position's terms. In the order the sentences sort and never the walk's;
-            // the order is not a contract, and a consumer reads these as a set.
+            // the order is not a contract, and a consumer reads these as a bag: two entries that
+            // print alike are two readings, so they may be counted and may not be merged.
             ArrayNode readings = o.putArray("readings");
             for (BorderObligationPointAssessment.ReadingSaid said : point.readingsSaid()) {
                 BorderAssessment at = point.met().get(said.where());

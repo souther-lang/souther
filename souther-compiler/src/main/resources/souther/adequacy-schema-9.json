@@ -337,9 +337,23 @@
         "narrowedWithin": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/typeId"
+            "allOf": [
+              {
+                "$ref": "#/$defs/typeId"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "declared"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
           },
-          "description": "The declarations that took an end in, each by its identity."
+          "description": "The declarations that took an end in, each by its identity and in their own order — a set, so which reading was met first does not move them. Always a declaration of a module: a type the language fixes narrows nothing."
         }
       }
     },
@@ -1156,9 +1170,23 @@
                 "type": "array",
                 "minItems": 1,
                 "items": {
-                  "$ref": "#/$defs/typeId"
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/typeId"
+                    },
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "declared"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    }
+                  ]
                 },
-                "description": "Which of the module's declarations owe the lines below. A list, because a line two declarations took an end in together is owed to both and is one entry here — `name` beside it is how a report says such a pair and is not the name of a declaration."
+                "description": "Which of the module's declarations owe the lines below, in their own order. A list, because a line two declarations took an end in together is owed to both and is one entry here — `name` beside it is how a report says such a pair and is not the name of a declaration. Ordered by the declarations themselves and not by which reading of the line was met first, so the entry a reader finds them under does not turn on a walk."
               }
             }
           }
@@ -1356,7 +1384,7 @@
           },
           "obligationId": {
             "$ref": "#/$defs/obligationId",
-            "description": "Which thing a row is owed for the finding is about, written for `boundary_unmet` and `domain_point_uncovered` and for no other kind. What a consumer joins the finding to its `partition.obligations` entry by. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is the run beside the line: one rule at one level in one role owes two `in` points when two cases stop that run in different places."
+            "description": "Which thing a row is owed for the finding is about, written for `boundary_unmet` and `domain_point_uncovered` and for no other kind. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, and in `declarations[].obligations` where one of the module's declarations owns it. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is the run beside the line: one rule at one level in one role owes two `in` points when two cases stop that run in different places."
           },
           "ruleId": {
             "$ref": "#/$defs/ruleId",
@@ -1368,7 +1396,7 @@
           },
           "subject": {
             "type": "string",
-            "description": "What the finding is about, written to name what is already in this document: a class name is one of an axis's `classes`, an arm's label one in `branch.unreached`, `axis = value` names the point of a declaration's line the way the declaration wrote it, and `ON point at 11 of comparison@14:22` names a `partition.obligations` entry by its `point`, `level` and `rule` — a line a body drew is owed once wherever it is read and has no one quantity to be named by. An input's case carries its position — `C (in #1)` — because two parameters of one type give two findings a class name alone cannot tell apart."
+            "description": "What the finding is about, written to name what is already in this document: a class name is one of an axis's `classes`, an arm's label one in `branch.unreached`, `axis = value` names the point of a declaration's line the way the declaration wrote it, and `ON point of comparison@14:22` says which of the four points a boundary finding is about and which rule drew the line — a line a body drew is owed once wherever it is read and has no one quantity to be named by, so what a row there has to do is under the obligation's `readings`. These words are a presentation and never a key: which obligation such a finding is about is `obligationId`. An input's case carries its position — `C (in #1)` — because two parameters of one type give two findings a class name alone cannot tell apart."
           },
           "code": {
             "type": "string",

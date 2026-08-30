@@ -296,6 +296,42 @@ class EveryPointOwedIsInOneAccountTest {
                         + shown.weakening().causes());
     }
 
+    /**
+     * Who owes a point does not turn on which reading of it was met first.
+     *
+     * <p>Two readings of one point can each name a declaration the other does not, and the point is
+     * owed to both — so the owners are gathered by putting two sets together, and a set put together
+     * as its members arrive comes out in the order of the walk. That order is read: it is what a
+     * report calls the pair, which module keeps the account, and which entry of a document they are
+     * gathered under.
+     *
+     * <p>Asked of the value rather than of a page, because the value is what every one of those
+     * reads. Two attributions that differ only in the order they were merged are one attribution.
+     */
+    @Test
+    void whoOwesAPointIsTheSameWhicheverReadingWasMetFirst() {
+        souther.compiler.types.TypeSymbol.AtModule cap = souther.compiler.types.TypeSymbols
+                .declared(new souther.compiler.types.TypeKey("example.both", "Cap"));
+        souther.compiler.types.TypeSymbol.AtModule held = souther.compiler.types.TypeSymbols
+                .declared(new souther.compiler.types.TypeKey("example.both", "Held"));
+
+        PointAttribution forwards = new PointAttribution.TheDeclarations(List.of(cap))
+                .and(new PointAttribution.TheDeclarations(List.of(held)));
+        PointAttribution backwards = new PointAttribution.TheDeclarations(List.of(held))
+                .and(new PointAttribution.TheDeclarations(List.of(cap)));
+
+        assertEquals(forwards, backwards,
+                "who owes the point is a set, and a set is not the order it was gathered in");
+        assertEquals(((PointAttribution.TheDeclarations) forwards).ownersIn("example.both"),
+                ((PointAttribution.TheDeclarations) backwards).ownersIn("example.both"),
+                "so the module's account of it names them the same way round");
+        assertEquals(new souther.compiler.query.FindingSubject.OfADeclaration(
+                        ((PointAttribution.TheDeclarations) forwards).owners()).named(),
+                new souther.compiler.query.FindingSubject.OfADeclaration(
+                        ((PointAttribution.TheDeclarations) backwards).owners()).named(),
+                "and a report calls them the same thing");
+    }
+
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
