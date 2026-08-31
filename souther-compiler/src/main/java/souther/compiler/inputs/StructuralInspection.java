@@ -1,10 +1,11 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Shape;
-import souther.compiler.check.StructuralDescent;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,16 +41,16 @@ public sealed interface StructuralInspection {
      * The position is made of these, each of which is read the same way — in the order the
      * declaration writes them, which is the order they are walked and reported in.
      *
-     * <p>The descent's answer as it stands, rather than the fields taken out of it and put into a
-     * value of this reading's own. What is under a type is {@link StructuralDescent}'s to say, and
-     * unpacking its answer to repackage it leaves two values of one fact where the point of asking
-     * one owner was to have one.
+     * <p>Its own answer, and not the one the plan for building a value takes. Which positions a
+     * reading has under this one and what a value here is composed out of are two questions, and
+     * they come to the same fields at a record because a record is composed out of the positions it
+     * has — which is a law over the two and not a reason for one to be read off the other. Taken
+     * from the construction, a reading would follow whatever a plan learned to build next.
      */
-    record Decomposed(StructuralDescent.Children descent) implements StructuralInspection {
+    record Decomposed(Map<String, Type> under) implements StructuralInspection {
 
-        /** The fields, as the descent answered them. */
-        public Map<String, Type> under() {
-            return descent.under();
+        public Decomposed {
+            under = Collections.unmodifiableMap(new LinkedHashMap<>(under));
         }
     }
 
@@ -189,7 +190,7 @@ public sealed interface StructuralInspection {
     static StructuralInspection of(Shape.ReadablePositionShape shape, List<Case> declared) {
         return switch (shape) {
             // Made of positions, and read one level down.
-            case Shape.Product product -> new Decomposed(StructuralDescent.of(product));
+            case Shape.Product product -> new Decomposed(product.fields());
             // What a sequence holds is one position — and the sequence goes on standing beside it,
             // since its own length is a number rules are written about.
             case Shape.Sequence sequence ->

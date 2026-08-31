@@ -66,23 +66,20 @@ record PositionReading(TypeSymbol entering, List<Owner> owners, Map<String, Type
                     TypeOps.fieldTypes(worn.data(), symbols), false, List.of());
         }
         return switch (view.shape()) {
-            // Through the one step down a type, which the reading of a behavior's inputs and the
-            // plan for building a value already share.
+            // What is readable off a value here, which is the fields for a record.
             case Shape.Product product -> {
-                StructuralDescent.Children under = StructuralDescent.of(product);
-                yield new PositionReading(under.of(), owning(under.of(), symbols), under.under(),
-                        true, List.of());
+                ReadableFields readable = ReadableFields.of(product);
+                yield new PositionReading(product.name(), owning(readable.declaredBy(), symbols),
+                        readable.fields(), true, List.of());
             }
             // A sum is a common product times a choice of case. What the cases share is stated of
-            // every value standing here; what one case declares is under that case, and a reading of
-            // it is opened where a match opens the case.
-            case Shape.Sum sum -> switch (sum.common()) {
-                case Shape.CommonProduct.Shared shared -> new PositionReading(sum.name(),
-                        owning(shared.origins(), symbols), shared.fields(), true,
-                        cases(sum.name(), symbols));
-                case Shape.CommonProduct.None _ -> new PositionReading(sum.name(), List.of(),
-                        Map.of(), true, cases(sum.name(), symbols));
-            };
+            // every value standing here and is readable on one; what one case declares is under that
+            // case, and a reading of it is opened where a match opens the case.
+            case Shape.Sum sum -> {
+                ReadableFields readable = ReadableFields.of(sum);
+                yield new PositionReading(sum.name(), owning(readable.declaredBy(), symbols),
+                        readable.fields(), true, cases(sum.name(), symbols));
+            }
             // A unit data holds nothing and may write no rule about it (spec §unit-data), and a
             // primitive is written under no declaration of its own.
             case Shape.Unit unit -> nothing(unit.name());
