@@ -92,6 +92,30 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
             behavior read : (h: Holder) -> Ok
             """;
 
+    private static final String TWO_DEEP = """
+            module g
+
+            data Deep = { lo: Int, hi: Int }
+            data DA = { ...Deep, x: Int }
+            data DB = { ...Deep, y: Int }
+            data D = DA | DB
+
+            data Mid = { d: D }
+            data MA = { ...Mid, p: Int }
+            data MB = { ...Mid, q: Int }
+            data M = MA | MB
+
+            data Holder = { m: M }
+                invariant ordered = m.d.lo <= m.d.hi
+
+            data Ok
+
+            behavior read : (h: Holder) -> Ok
+            """;
+
+    private static final String TWO_DEEP_UNRULED =
+            TWO_DEEP.replace("    invariant ordered = m.d.lo <= m.d.hi\n", "");
+
     /** The rule the record wrote about the sum, read at the numbers one case stands at. */
     @Test
     void aRelationReachesTheCaseTheNumbersStandUnder() {
@@ -157,6 +181,81 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
 
         assertTrue(runs == null || runs.max() == null,
                 () -> "h.left@A.lo is stopped by nothing once the rule is gone, and runs " + runs);
+    }
+
+    /**
+     * A name that crosses two narrowings on the way down.
+     *
+     * <p>What the value above calls {@code m.d.lo} stands at {@code m@MA.d@DA.lo}, two cases in. The
+     * renamings compose or they do not: applied in an order that takes the second before the first
+     * has moved the name, the clause is left about a place no position of this input is at.
+     */
+    @Test
+    void aRelationCrossesTwoNarrowingsOneUnderTheOther() {
+        NumericDomain.Bounds runs =
+                stoppedAt(TWO_DEEP, "h.m@MA.d@DA.lo", "h.m@MA.d@DA.hi", 7);
+
+        assertNotNull(runs, "h.m@MA.d@DA.lo is a number this reading answers about");
+        assertNotNull(runs.max(),
+                () -> "h.m@MA.d@DA.lo stops where h.m@MA.d@DA.hi was fixed, and runs " + runs);
+        assertEquals("7", number(runs.max()),
+                "the rule reaches the numbers its names stand at, two narrowings down");
+    }
+
+    @Test
+    void andWithoutThatRuleNothingStopsItTwoDeepEither() {
+        NumericDomain.Bounds runs =
+                stoppedAt(TWO_DEEP_UNRULED, "h.m@MA.d@DA.lo", "h.m@MA.d@DA.hi", 7);
+
+        assertTrue(runs == null || runs.max() == null,
+                () -> "h.m@MA.d@DA.lo is stopped by nothing once the rule is gone, and runs "
+                        + runs);
+    }
+
+    private static final String BESIDE_A_SUM = """
+            module g
+
+            data A = { x: Int }
+            data B = { y: Int }
+            data Q = A | B
+
+            data Holder = { q: Q, note: Int }
+                invariant capped = note <= 5
+
+            data Ok
+
+            behavior read : (h: Holder) -> Ok
+            """;
+
+    /** The same, with one case of the sum left with no value, and with an element of one. */
+    private static final String BESIDE_A_DEAD_CASE = BESIDE_A_SUM.replace(
+            "data A = { x: Int }",
+            """
+                    data A = { x: Int }
+                        invariant impossible = x >= 1 && x <= 0""");
+
+    private static final String BESIDE_A_DEAD_ELEMENT = BESIDE_A_SUM.replace(
+            "data Holder = { q: Q, note: Int }",
+            """
+                    data Item = { charge: Int }
+                        invariant impossible = charge >= 1 && charge <= 0
+                    data Holder = { q: Q, note: Int, items: List<Item> }""");
+
+    /**
+     * A question about a position under no narrowing answers the same whatever became of the cases.
+     *
+     * <p>Which rules reach a position is settled by where it stands, so a case the rules refuse
+     * takes nothing away from a number beside it — and neither does an element declaration nothing
+     * can build. Read as one space met out of every reading, both of those emptied the answer here.
+     */
+    @Test
+    void aQuestionOutsideTheNarrowingDoesNotMove() {
+        NumericDomain.Bounds alone = stoppedAt(BESIDE_A_SUM, "h.note", "h.note", 3);
+
+        for (String beside : List.of(BESIDE_A_DEAD_CASE, BESIDE_A_DEAD_ELEMENT)) {
+            assertEquals(alone, stoppedAt(beside, "h.note", "h.note", 3),
+                    "h.note runs where its own rule leaves it, whatever stands beside it");
+        }
     }
 
     /** Where {@code asked} runs once {@code fixed} stands at {@code at}. */

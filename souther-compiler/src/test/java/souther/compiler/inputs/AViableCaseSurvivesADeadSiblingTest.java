@@ -88,6 +88,70 @@ class AViableCaseSurvivesADeadSiblingTest {
             behavior read : (h: Holder) -> Ok
             """;
 
+    /**
+     * A sum whose cases share nothing, one of which the rules refuse.
+     *
+     * <p>What says the case stands under a narrowing and what says a name crosses one are two facts.
+     * Recorded as one — a narrowing written down only where something crosses it — the reading of
+     * this model would have the case's rules holding of every row.
+     */
+    private static final String NOTHING_SHARED = """
+            module g
+
+            data A = { x: Int }
+                invariant impossible = x >= 1 && x <= 0
+            data B = { y: Int }
+            data Q = A | B
+
+            data Holder = { q: Q }
+
+            data Ok
+
+            behavior read : (h: Holder) -> Ok
+            """;
+
+    /**
+     * A sequence inside a case, of an element the rules refuse, that the case says holds something.
+     *
+     * <p>Both conditions at once: the element's rules are about the rows where {@code q} is an
+     * {@code A} and where the list holds something, and neither of those is every row. So {@code A}
+     * has no value and {@code B} is untouched.
+     */
+    private static final String A_SEQUENCE_INSIDE_A_CASE = """
+            module g
+
+            data Item = { charge: Int }
+                invariant impossible = charge >= 1 && charge <= 0
+            data A = { items: List<Item> }
+                invariant atLeastOne = List.length(items) >= 1
+            data B = { y: Int }
+            data Q = A | B
+
+            data Holder = { q: Q }
+
+            data Ok
+
+            behavior read : (h: Holder) -> Ok
+            """;
+
+    /** A sum inside a sequence, one case of which the rules refuse. */
+    private static final String A_CASE_INSIDE_A_SEQUENCE = """
+            module g
+
+            data A = { x: Int }
+                invariant impossible = x >= 1 && x <= 0
+            data B = { y: Int }
+            data Q = A | B
+
+            data Item = { q: Q }
+            data Holder = { items: List<Item> }
+                invariant atLeastOne = List.length(items) >= 1
+
+            data Ok
+
+            behavior read : (h: Holder) -> Ok
+            """;
+
     @Test
     void aCaseItsOwnRulesRefuseLeavesTheInputItsOtherCases() {
         assertEquals(Optional.empty(), emptinessOf(DEAD_CASE),
@@ -104,6 +168,24 @@ class AViableCaseSurvivesADeadSiblingTest {
     void anElementTheRulesRefuseLeavesTheEmptySequence() {
         assertEquals(Optional.empty(), emptinessOf(DEAD_ELEMENT),
                 "an empty list is a value this behavior takes, so the input is not proved empty");
+    }
+
+    @Test
+    void andSoDoesOneWhoseCasesShareNothing() {
+        assertEquals(Optional.empty(), emptinessOf(NOTHING_SHARED),
+                "a case stands under its narrowing whether or not a name crosses it");
+    }
+
+    @Test
+    void aSequenceInsideACaseIsRefusedNoFurtherThanTheCase() {
+        assertEquals(Optional.empty(), emptinessOf(A_SEQUENCE_INSIDE_A_CASE),
+                "every B is a row this behavior takes, whatever A's list would have to hold");
+    }
+
+    @Test
+    void andACaseInsideASequenceLeavesTheSequenceItsOtherCase() {
+        assertEquals(Optional.empty(), emptinessOf(A_CASE_INSIDE_A_SEQUENCE),
+                "a list of Items that are all B is a row this behavior takes");
     }
 
     private static Optional<EmptyInput> emptinessOf(String source) {

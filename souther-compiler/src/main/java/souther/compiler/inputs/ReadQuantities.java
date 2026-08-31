@@ -368,12 +368,18 @@ final class ReadQuantities implements Quantities {
      * where a fixing put a number, what a condition was taken in about, and — where a question is
      * being answered — what the question names. A reader working it out from the paths it happens to
      * hold would answer the same question two ways as soon as two of them were taken in.
+     *
+     * <p>In the order the terms are written down, which is a settled order and not the order they
+     * arrived in. Two things said under two cases contradict whichever was said first, and a
+     * disagreement carrying the order the questions were asked in would name the two narrowings one
+     * way round for one caller and the other way round for the next.
      */
     private StructuralContext.Merge accumulated() {
         StructuralContext.Merge merged = new StructuralContext.Merge.Together(
                 StructuralContext.NONE);
         List<NumericTerm> said = new ArrayList<>(fixed.keySet());
         assumed.forEach(each -> said.addAll(each.form().coefs().keySet()));
+        said.sort(java.util.Comparator.comparing(NumericTerm::toString));
         for (NumericTerm term : said) {
             if (!(merged instanceof StructuralContext.Merge.Together it)) {
                 return merged;
@@ -510,6 +516,11 @@ final class ReadQuantities implements Quantities {
      * <p>Nothing moves under a narrowing this context has not selected. A shared name whose case is
      * undecided is one number all the same, standing at the sum's own name — and the rules about it
      * stay one relation until a context says which case the value turned out to be.
+     *
+     * <p>Run to a fixed point rather than swept once, because a name two narrowings down is moved by
+     * the outer one before the inner one can see it. Today the readings are held in the order the
+     * walk opened them, outermost first, so one sweep settles every name — which is a fact about a
+     * map's order and not about what a name means.
      */
     private TermPath standingUnder(TermPath place, StructuralContext under) {
         boolean moved = true;
