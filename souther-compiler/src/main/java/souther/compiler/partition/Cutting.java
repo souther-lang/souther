@@ -93,21 +93,32 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
 
         /**
-         * The quantity was read and no line could be built on it: a position with no order to be
-         * counted on, or an order whose values this draws no line against.
+         * The quantity was read, and there is no order this compiler can realize it as a count on.
+         *
+         * <p><b>Named for what was found and not for what came of it.</b> "No line was built" is
+         * true of every way of failing to build one, so an arm carrying that name takes the next
+         * one added to it — and the word a document then prints was decided by whichever answers
+         * happened to be absent rather than by anything anybody established.
+         *
+         * <p>What is established here is one thing: some term of the form stands on no order, or on
+         * one whose values do not count, so a sum over the terms has nothing to be spaced by
+         * ({@link AffineReading#carriers}). A line on a single position and a distance between two
+         * are asked before this and reach orders this does not — two strings stand no measurable
+         * distance apart and are still one above the other — so what is left here is the general
+         * form, and the general form is what needs every term to count.
          *
          * <p>Its own answer and not {@link Stopped}. Nothing about the form fell short — it is
-         * right here, and it is the carrier that stopped this — so the quantity is the subject and
-         * the places are its own, which is what every read comparison's are. Said as a reading that
-         * stopped, the places would come from a walk over the operands, and which of two authorities
-         * a comparison's places came from would turn on which producer built the answer.
+         * right here — so the quantity is the subject and the places are its own, which is what
+         * every read comparison's are. Said as a reading that stopped, the places would come from a
+         * walk over the operands, and which of two authorities a comparison's places came from
+         * would turn on which producer built the answer.
          *
          * @param over the coordinates of the quantity, which is where a reader is sent
          */
-        record NoLineOnTheQuantity(
+        record NoOrderToCountOn(
                 java.util.List<souther.compiler.inputs.FilingCoordinate> over) implements Read {
 
-            public NoLineOnTheQuantity {
+            public NoOrderToCountOn {
                 over = java.util.List.copyOf(over);
             }
         }
@@ -177,6 +188,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read realized(String behavior, AffineReading read,
                                  Quantities quantities) {
+        // Which shape this quantity is, asked narrowest first. Both of these answer null for a form
+        // that is not theirs, and that is a dispatch and no fact about the model — read as one, a
+        // rule whose shape simply was not a line on one position came out as a rule about values
+        // nothing draws a line on.
         Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, quantities),
                 quantities);
         if (drawn == null) {
@@ -186,14 +201,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (drawn != null) {
             return new Read.Cuts(drawn);
         }
-        Cutting form = overAForm(behavior, read, quantities);
-        if (form != null) {
-            return new Read.Cuts(form);
+        // And what the general form needs, asked once and here. Not before the two above: they
+        // reach orders that do not count — two strings stand no measurable distance apart and the
+        // place they meet is a line — so a reader asking this first would refuse lines the model
+        // draws.
+        java.util.Map<NumericTerm, TermOrders> on = read.carriers(quantities);
+        if (on == null) {
+            return new Read.NoOrderToCountOn(
+                    AffineReading.filedAt(read.form().coefs().keySet()));
         }
-        // The quantity was read and no line could be built on it. Filed at the quantity, because
-        // the quantity is what the rule is about.
-        return new Read.NoLineOnTheQuantity(
-                AffineReading.filedAt(read.form().coefs().keySet()));
+        return new Read.Cuts(overAForm(behavior, read, on, quantities));
     }
 
     /**
@@ -288,17 +305,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * the form is right here.
      */
     private static Cutting overAForm(String behavior, AffineReading read,
+                                     java.util.Map<NumericTerm, TermOrders> on,
                                      Quantities quantities) {
-        if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
-            return null;
-        }
-        java.util.Map<NumericTerm, TermOrders> on =
-                read.carriers(quantities);
-        if (on == null) {
-            return null;
-        }
-        return made(new BorderQuantity.OverAForm(behavior, read.form(), on),
+        Cutting drawn = made(new BorderQuantity.OverAForm(behavior, read.form(), on),
                 new Level.ACount(new Count(read.cut())), read.claim(), quantities);
+        if (drawn == null) {
+            // Every term of this form stands on an order that counts, and an order that counts is
+            // parted anywhere. So this is the two saying different things about one order rather
+            // than a rule this compiler is short of — and told apart from one, it would go out as a
+            // rule about values nothing draws a line on, which is the opposite of what happened.
+            throw new IllegalStateException(
+                    "a form over orders that count produced a line its order has no place for: "
+                            + read.form() + " at " + read.cut());
+        }
+        return drawn;
     }
 
     /** What the operator of a line at a position states, which the reading of it already answered
