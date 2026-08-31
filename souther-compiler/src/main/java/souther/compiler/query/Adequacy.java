@@ -4406,7 +4406,7 @@ public final class Adequacy {
             }
             for (DeclaredDebt owed : account.owed()) {
                 ObligationAssessment item = owed.debt().item();
-                if (!item.isUnmetGap()) {
+                if (!(item.disposition() instanceof ObligationDisposition.Unmet)) {
                     continue;
                 }
                 out.add(Finding.by(owed.subject(), item.coverage(), owed.at(),
@@ -4510,11 +4510,10 @@ public final class Adequacy {
             for (BorderObligationPointAssessment owed
                     : account == null ? List.<BorderObligationPointAssessment>of()
                             : account.made().orElseGet(List::of)) {
-                // Both halves, asked of the two answers the assessment keeps apart. A point no
-                // row was measured against is not a gap, and neither is one nothing has shown a
-                // row can be written at — that point is where the reading stopped rather than
-                // where the model does, and a row at it may be one nobody can write.
-                if (!owed.item().isUnmetGap()) {
+                // The one state a finding is made of, and the account is what says which that is.
+                // A point no row was measured against is not a gap, neither is one nothing has
+                // shown a row can be written at, and neither is one the readings left undecided.
+                if (!(owed.item().disposition() instanceof ObligationDisposition.Unmet)) {
                     continue;
                 }
                 out.add(Finding.by(behavior.name(), owed.item().coverage(),

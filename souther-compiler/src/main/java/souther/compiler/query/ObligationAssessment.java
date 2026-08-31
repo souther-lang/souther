@@ -78,15 +78,12 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
     }
 
     /**
-     * Whether this is a row an author is owed: the point was measured and missed, and something has
-     * shown a row can be written there.
+     * Where this stands in the account a report counts it in.
      *
-     * <p>The two halves are asked of the two answers rather than of one flattened state. A missed
-     * point nothing promises is writable is not a gap — the point is where the reading stopped
-     * rather than where the model does — and a point nobody measured is not one either. Neither is
-     * one the readings left undecided: the row that answers it may be in the part nobody read.
+     * <p>Derived here and read everywhere. A count, a finding and a build's refusal put one question
+     * to the two answers this holds, and {@link ObligationDisposition} is that question asked once.
      */
-    public boolean isUnmetGap() {
-        return coverage instanceof ObligationCoverage.Missed && writabilityEvidence().known();
+    public ObligationDisposition disposition() {
+        return ObligationDisposition.of(coverage, writabilityEvidence());
     }
 }
