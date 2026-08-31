@@ -80,7 +80,9 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         int undecided = 0;
         for (Reported reported : reports()) {
             String page = reported.report().human(reported.names());
-            int openHere = 0;
+            // Which block each obligation nobody could decide belongs to, so that what is checked is
+            // the block naming its own and not the page holding the right number somewhere.
+            java.util.SequencedMap<String, Integer> openIn = new java.util.LinkedHashMap<>();
             for (AdequacyReport.ModuleReport module : reported.report().modules()) {
                 ObligationSummary<Adequacy.DeclaredDebt> declared =
                         ObligationSummary.of(module.debts(), each -> each.debt().owed());
@@ -97,7 +99,7 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                                 + gap.debt().point() + " carries " + found + " findings");
                     }
                 }
-                openHere += declared.undecided().size();
+                openIn.put(module.module() + "/declarations", declared.undecided().size());
                 for (Adequacy.DeclaredDebt open : declared.undecided()) {
                     carriesNoFinding(wrong, reported.name(), open.debt(),
                             module.declarations().stream()
@@ -120,14 +122,15 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                                     + gap.point() + " carries " + found + " findings");
                         }
                     }
-                    openHere += account.undecided().size();
+                    openIn.put(module.module() + "/" + behavior.name(),
+                            account.undecided().size());
                     for (BorderObligationPointAssessment open : account.undecided()) {
                         carriesNoFinding(wrong, reported.name(), open,
                                 findingsAbout(behavior, open));
                     }
                 }
             }
-            asManyLinesAsThereAre(wrong, reported.name(), "the report", page, openHere);
+            saidUnderEachBlock(wrong, reported.name(), page, openIn);
         }
 
         String reached = "met " + met + ", unmet " + unmet + ", undecided " + undecided;
@@ -145,20 +148,41 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
     }
 
     /**
-     * As many `?` lines under a block as it counted obligations nobody could decide.
+     * As many `?` lines under each block as that block counted obligations nobody could decide.
      *
-     * <p>Counted rather than looked for. A block owing ten of them and printing one says the
-     * sentence a reader searches for and answers for one of the ten, so what the law is about is the
-     * correspondence and not the wording being present somewhere.
+     * <p>Per block and counted, rather than looked for on the page. A block owing ten of them and
+     * printing one says the sentence a reader searches for and answers for one of the ten; a page
+     * holding the right total says nothing about which block a reader finds them under, and what
+     * the law is about is a reader walking from a number to the work it stands for.
+     *
+     * <p>The page is cut where the blocks are: a module begins at the left margin, and a block of it
+     * begins two spaces in, at a behavior this report holds or at the declarations. Nothing else is
+     * treated as a beginning, so the declaration names inside the last block stay inside it.
      */
-    private static void asManyLinesAsThereAre(List<String> wrong, String source, String where,
-                                              String block, int undecided) {
-        long said = block.lines()
-                .filter(line -> line.strip().startsWith("? undecided whether a row is at")).count();
-        if (said != undecided) {
-            wrong.add(source + " " + where + ": " + undecided + " obligations nobody could decide"
-                    + " and " + said + " lines saying so");
+    private static void saidUnderEachBlock(List<String> wrong, String source, String page,
+                                           java.util.SequencedMap<String, Integer> undecided) {
+        java.util.Map<String, Integer> said = new java.util.LinkedHashMap<>();
+        undecided.keySet().forEach(block -> said.put(block, 0));
+        String module = null;
+        String block = null;
+        for (String line : page.lines().toList()) {
+            if (!line.isBlank() && !line.startsWith(" ")) {
+                module = line.strip().split("\\s+")[0];
+                block = null;
+            } else if (line.startsWith("  ") && !line.startsWith("   ") && module != null) {
+                String named = module + "/" + line.strip().split("\\s+")[0];
+                block = undecided.containsKey(named) ? named : block;
+            } else if (block != null
+                    && line.strip().startsWith("? undecided whether a row is at")) {
+                said.merge(block, 1, Integer::sum);
+            }
         }
+        undecided.forEach((where, owed) -> {
+            if (!owed.equals(said.get(where))) {
+                wrong.add(source + " " + where + ": " + owed + " obligations nobody could decide"
+                        + " and " + said.get(where) + " lines saying so under that block");
+            }
+        });
     }
 
     private static long findingsAbout(AdequacyReport.BehaviorReport behavior,

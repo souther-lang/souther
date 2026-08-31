@@ -622,7 +622,6 @@
           "relation",
           "knownWritable",
           "status",
-          "disposition",
           "readings"
         ],
         "additionalProperties": false,
@@ -664,7 +663,7 @@
             }
           },
           "disposition": {
-            "description": "How an account treats this obligation, which the evidence beside it is why. `met`, `unmet` and `undecided` are the three a count holds; `not_counted` is out of it and says why under `notCountedBecause`. A build refuses over `unmet` and over nothing else here.",
+            "description": "How an account treats this obligation, which the evidence beside it is why. `met`, `unmet` and `undecided` are the three a count holds; `not_counted` is out of it and says why under `notCountedBecause`. `unmet` says the absence is established, so it is a finding; whether the bar the build asked for refuses over that finding is a separate question and is answered under `findings[].disposition`. Every document this compiler writes carries this. Not in `required`: a document written before this field existed is still a document of this version.",
             "enum": [
               "met",
               "unmet",
