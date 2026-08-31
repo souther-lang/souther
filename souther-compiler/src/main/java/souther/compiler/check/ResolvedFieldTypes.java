@@ -54,9 +54,10 @@ public final class ResolvedFieldTypes implements FieldTypes {
      * A data's fields as they are written, following the {@code ...includes} it composes in (spec
      * §data).
      *
-     * <p>A spread naming nothing brings in no fields, and a name repeated between two of them keeps
-     * the one reached first: both are refused where the declaration is checked, and this reading is
-     * for a text where that check has not run.
+     * <p>A spread naming nothing brings in no fields. What a name repeated between two spreads
+     * comes to is not decided here and nothing may read an answer off it: a declaration writing one
+     * is refused where it is checked, and what this walk hands back for a text that has not reached
+     * that check is whichever of them it read last.
      */
     static Map<String, Hir.TypeRef> written(TypeSymbol typeName, Symbols symbols) {
         Map<String, Hir.TypeRef> out = new LinkedHashMap<>();

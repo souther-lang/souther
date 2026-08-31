@@ -15,6 +15,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
@@ -79,7 +80,8 @@ final class CheckedProgramAssembler {
         for (ModuleReading module : read) {
             everyDeclaration.addAll(module.data());
         }
-        ValueTypes types = ValueTypes.over(DeclaredFields.over(everyDeclaration));
+        ValueTypes types =
+                ValueTypes.over(FieldTypes.over(DeclaredFields.over(everyDeclaration)));
         List<CheckedModule> modules = new ArrayList<>();
         for (ModuleReading module : read) {
             modules.add(moduleOf(module, types));

@@ -9,13 +9,16 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Crossing a {@code .} asks the world the reading is being made in, and answers with what it says.
@@ -89,11 +92,27 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
      */
     @Test
     void andAProductWithNoSettledShapeIsRefusedRatherThanAnsweredEmpty() {
-        FieldTypes nothingSettled = new CheckedFieldTypes(symbols, _ -> null);
+        FieldTypes nothingSettled =
+                FieldTypes.over(new CheckedDeclarations(symbols, _ -> null));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> nothingSettled.of(orderOf()));
-        assertEquals(true, refused.getMessage().contains("Order"),
+        assertTrue(refused.getMessage().contains("Order"),
                 "the refusal names the declaration nothing was settled about: " + refused.getMessage());
+    }
+
+    /**
+     * And a declaration this reading cannot reach is refused too, rather than read as a value with
+     * no fields.
+     *
+     * <p>The two are different answers about different things: a sum has no fields to take, and a
+     * data whose declaration is out of reach has fields nobody here can see. Read alike, the second
+     * becomes a value compared as whatever its parts happen to look like.
+     */
+    @Test
+    void andSoIsOneThisReadingCannotReach() {
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> checked().of(TypeSymbols.declared(new TypeKey("demo", "Missing"))));
+        assertTrue(refused.getMessage().contains("Missing"), refused.getMessage());
     }
 
     /** The declaration {@code Order}, as the reading of this module names it. */

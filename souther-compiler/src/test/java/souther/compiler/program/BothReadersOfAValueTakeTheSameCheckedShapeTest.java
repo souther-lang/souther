@@ -3,6 +3,7 @@ package souther.compiler.program;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Symbols;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -57,6 +58,22 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
                 }
             """;
 
+    /** A module that declares what another module's values hold. */
+    private static final String DECLARING = """
+            module up exposing ( Foreign )
+
+            data Foreign = { values: Set<String> }
+            """;
+
+    /** And one whose own data holds a value of it. */
+    private static final String HOLDING = """
+            module down
+
+            import up ( Foreign )
+
+            data Held = { foreign: Foreign }
+            """;
+
     /** Every declaration the snapshot holds. */
     private static List<CheckedData> declarationsOf(CheckedProgram program) {
         List<CheckedData> all = new ArrayList<>(program.languageDeclarations());
@@ -100,7 +117,7 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
         FieldTypes compile = compileSide(c);
         CheckedProgram program = CheckedProgram.of(List.of(MODULE));
         List<CheckedData> declarations = declarationsOf(program);
-        FieldTypes snapshot = DeclaredFields.over(declarations);
+        FieldTypes snapshot = FieldTypes.over(DeclaredFields.over(declarations));
         assertTrue(declarations.size() > 4, "the walk reached the declarations: " + declarations);
         for (CheckedData each : declarations) {
             assertEquals(snapshot.of(each.name()), compile.of(each.name()),
@@ -118,7 +135,7 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
      */
     @Test
     void andADeclarationTheProgramDoesNotHoldIsRefused() {
-        FieldTypes snapshot = DeclaredFields.over(List.of());
+        FieldTypes snapshot = FieldTypes.over(DeclaredFields.over(List.of()));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> snapshot.of(named("Wide")));
         assertTrue(refused.getMessage().contains("Wide"), refused.getMessage());
@@ -177,6 +194,36 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
         return out;
     }
 
+    /**
+     * A declaration another module wrote is read from that module's own check.
+     *
+     * <p>Which shape answers for an owner is the owner's identity to say: a data names the module
+     * that wrote it, and that module's check is what settled its fields. So a reading made in one
+     * module answers about another's declaration without searching — there is no order in which
+     * this module's shapes are tried first — and a reader that asked its own module for another's
+     * declaration would have nothing to answer with rather than the wrong thing.
+     */
+    @Test
+    void andADeclarationAnotherModuleWroteIsReadFromThatModulesCheck() {
+        Compilation c = Compilation.ofSources(List.of(DECLARING, HOLDING), ModulePath.EMPTY);
+        c.answerEverything();
+        Symbols down = Scopes.derived(c.db(), "down").value();
+        FieldTypes readInDown = Shapes.fieldTypes(c.db(), down);
+        TypeSymbol foreign = TypeSymbols.declared(new TypeKey("up", "Foreign"));
+
+        assertInstanceOf(Type.SetOf.class, readInDown.of(foreign).get("values"),
+                "a module reading another's declaration takes the fields that module was checked to"
+                        + " have");
+        assertEquals(readInDown.of(foreign),
+                Shapes.fieldTypes(c.db(), Scopes.derived(c.db(), "up").value()).of(foreign),
+                "and reads them the same as the module that declared it");
+
+        FieldTypes snapshot = FieldTypes.over(DeclaredFields.over(
+                declarationsOf(CheckedProgram.of(List.of(DECLARING, HOLDING)))));
+        assertEquals(readInDown.of(foreign), snapshot.of(foreign),
+                "and the snapshot carries that module's answer too");
+    }
+
     private static TypeSymbol named(String data) {
         return TypeSymbols.declared(new TypeKey("demo", data));
     }
@@ -185,7 +232,7 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
      *  question about this program's closure. */
     @Test
     void andWhatTheLanguageGivesIsAnsweredWithoutFields() {
-        assertEquals(Map.of(),
-                DeclaredFields.over(List.of()).of(new TypeSymbol.Primitive(Type.Prim.INT)));
+        assertEquals(Map.of(), FieldTypes.over(DeclaredFields.over(List.of()))
+                .of(new TypeSymbol.Primitive(Type.Prim.INT)));
     }
 }

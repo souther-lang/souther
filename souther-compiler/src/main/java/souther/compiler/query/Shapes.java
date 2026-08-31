@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.CheckedFieldTypes;
+import souther.compiler.check.CheckedDeclarations;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.ClauseHelpers;
@@ -49,11 +49,11 @@ public final class Shapes {
      *     whether a declaration is a data at all
      */
     public static FieldTypes fieldTypes(Db db, Symbols symbols) {
-        return new CheckedFieldTypes(symbols, declared -> {
+        return FieldTypes.over(new CheckedDeclarations(symbols, declared -> {
             Map<TypeSymbol.AtModule, ValueShape> shapes =
                     db.ask(new ValueShapes(declared.module())).value();
             return shapes == null ? null : shapes.get(declared);
-        });
+        }));
     }
 
     /**

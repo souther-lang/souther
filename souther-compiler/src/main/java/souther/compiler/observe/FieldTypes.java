@@ -29,6 +29,22 @@ import java.util.Map;
 public interface FieldTypes {
 
     /**
+     * The fields the declarations of an accepted program are made of.
+     *
+     * <p>The one step from a declaration to the fields under it, written here and not in either
+     * world. What a reader has in hand is a type, and only a module writes a declaration a value is
+     * built field by field out of — so what the language gives has no fields, which is an answer,
+     * and everything else is what the world says it is made of. Written in each world instead, the
+     * step would be two readings of one thing, and the one that read an absence as a declaration
+     * with no fields would be the one nobody noticed.
+     */
+    static FieldTypes over(Declarations declarations) {
+        return owner -> owner instanceof TypeSymbol.AtModule declared
+                && declarations.of(declared) instanceof Composed.OfFields(Map<String, Type> fields)
+                ? fields : Map.of();
+    }
+
+    /**
      * Every field a value of {@code owner} holds, in the order a value of it is laid out.
      *
      * <p>Empty for anything that is not a declared product — a sum, a unit, a type the language

@@ -1707,7 +1707,7 @@ public final class FixtureReader {
         // own neutral form — its inner value — not a field map.
         TypeSymbol built = nd.typeName().answered().type();
         if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
-                && nd.inits().get(0).name().equals("value")) {
+                && nd.inits().get(0).name().equals(NeutralForm.NEWTYPE_FIELD)) {
             Position base = NeutralForm.declaredBy(neutral.newtypeBaseType(built));
             return neutral.newtypeAt(at, built,
                     neutral.shaped(raw(nd.inits().get(0).value(), base, below(admission)), base));
