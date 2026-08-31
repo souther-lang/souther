@@ -64,6 +64,11 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
      * <p>The one thing that says which steps below a root are names a rule writes. A second would
      * be a second answer about a position inside a sequence or under a case, and those are exactly
      * the places where a name and a position part company.
+     *
+     * <p>An entry leaving this list is a finding as much as one arriving. A reader that stops
+     * asking has either been handed the answer — which is the shape to want, since a value chosen
+     * for naming a place carries the name it was chosen for — or has stopped needing it, and those
+     * are different things to know.
      */
     @Test
     void aPlaceBecomesANameInOnePlace() {
@@ -71,8 +76,7 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
                         "ruleKeyUnder").isEmpty(),
                 "a position is turned into a name somewhere, or this is watching a name nothing"
                         + " calls");
-        assertEquals(List.of("souther.compiler.inputs.InputDomain",
-                        "souther.compiler.inputs.PlacedRules",
+        assertEquals(List.of("souther.compiler.inputs.PlacedRules",
                         "souther.compiler.inputs.ReadQuantities",
                         "souther.compiler.inputs.RuleAddress",
                         "souther.compiler.partition.Generator"),

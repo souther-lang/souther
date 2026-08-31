@@ -472,7 +472,7 @@ public final class DataChecker {
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
             Hir.Def at = symbols.declarations().declaration(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
-                    RuleKey.THE_VALUE.toString(), group.why(),
+                    new Emptiness.AtAField.Where.TheValueItself(), group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));
         }
         return found;
@@ -502,10 +502,11 @@ public final class DataChecker {
      * @param alone whether the declaration this is said at has no other lack reported of it, which
      *              is what a suggestion has to be true of
      */
-    private static Diagnostic.Builder told(Diagnostic.Builder at, String data, String path,
-                                           Emptiness why, boolean alone) {
+    private static Diagnostic.Builder told(Diagnostic.Builder at, String data,
+                                           Emptiness.AtAField.Where path, Emptiness why,
+                                           boolean alone) {
         return switch (why) {
-            case Emptiness.AtAField it -> told(at, data, it.path(), it.under(), alone);
+            case Emptiness.AtAField it -> told(at, data, it.where(), it.under(), alone);
             case Emptiness.NoBaseInComponent it -> {
                 Diagnostic.Builder said = at.say(new DataMessage.DataCannotBeConstructed(data));
                 yield alone ? suggested(said, data, it.through()) : said;
@@ -545,24 +546,26 @@ public final class DataChecker {
     private static Diagnostic.Builder suggested(Diagnostic.Builder at, String data,
                                                 Emptiness through) {
         return switch (through) {
-            case Emptiness.AtAField it when it.under() instanceof Emptiness.TheNameHasNone
-                    && !RuleKey.THE_VALUE.toString().equals(it.path()) ->
-                    at.hint(new DataMessage.ItWouldHaveOneIfTheFieldCouldBeAbsent(
-                            data, written(it.path())));
+            case Emptiness.AtAField(Emptiness.AtAField.Where.In(String spelled), var under)
+                    when under instanceof Emptiness.TheNameHasNone ->
+                    at.hint(new DataMessage.ItWouldHaveOneIfTheFieldCouldBeAbsent(data, spelled));
             case Emptiness.AtAField it
                     when it.under() instanceof Emptiness.NonEmptyCollectionWithNoElement ->
                     at.hint(new DataMessage.ItWouldHaveOneIfTheCollectionCouldBeEmpty(
-                            data, written(it.path())));
+                            data, written(it.where())));
             case Emptiness.AcrossEveryCase _ ->
                     at.hint(new DataMessage.ACaseThatDoesNotHoldItWouldGiveItOne(data));
             default -> at;
         };
     }
 
-    /** How a name is written in the model, what a newtype wraps being spelled `value`. Of the
-     *  spelling a proof carries, which is what a message is built out of. */
-    private static String written(String path) {
-        return RuleKey.THE_VALUE.toString().equals(path) ? "value" : path;
+    /** How a place is written in the model, what a newtype wraps being spelled `value` — which is
+     *  what the model calls it, and is a fact about the newtype form rather than about the proof. */
+    private static String written(Emptiness.AtAField.Where where) {
+        return switch (where) {
+            case Emptiness.AtAField.Where.TheValueItself _ -> "value";
+            case Emptiness.AtAField.Where.In(String spelled) -> spelled;
+        };
     }
 
     static void checkData(CheckContext ctx) {

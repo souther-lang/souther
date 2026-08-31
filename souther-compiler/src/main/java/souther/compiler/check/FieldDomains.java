@@ -225,15 +225,18 @@ public final class FieldDomains {
     }
 
     /**
-     * What each subject is called, written the way a report writes it.
+     * Where each subject sits, as a proof of emptiness says it.
      *
-     * <p>A proof names a place to a reader, so what it carries out of here is the spelling. What a
-     * table is keyed by is the name itself, which is why the two are told apart at the one point
-     * where a name leaves for a report.
+     * <p>A proof names a place to a reader, so what it carries out of here is the spelling — except
+     * for the one thing every reading agrees on, which is whether the place is the value itself.
+     * That is a case and not an empty spelling, so no reader recovers it by comparing text.
      */
-    private static <A> SequencedMap<A, String> spelled(SequencedMap<A, RuleKey> named) {
-        SequencedMap<A, String> out = new LinkedHashMap<>();
-        named.forEach((subject, name) -> out.put(subject, name.toString()));
+    private static <A> SequencedMap<A, Emptiness.AtAField.Where> spelled(
+            SequencedMap<A, RuleKey> named) {
+        SequencedMap<A, Emptiness.AtAField.Where> out = new LinkedHashMap<>();
+        named.forEach((subject, name) -> out.put(subject,
+                name.isTheValueItself() ? new Emptiness.AtAField.Where.TheValueItself()
+                        : new Emptiness.AtAField.Where.In(name.toString())));
         return out;
     }
 

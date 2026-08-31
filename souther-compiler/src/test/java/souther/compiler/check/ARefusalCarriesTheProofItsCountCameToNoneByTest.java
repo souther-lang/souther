@@ -61,8 +61,10 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         return switch (why) {
             case null -> "has values";
             case Emptiness.NoBaseInComponent it -> "no base in " + named(it.members());
-            case Emptiness.AtAField it -> (it.path().isEmpty() ? "value" : it.path())
-                    + " " + shape(it.under());
+            case Emptiness.AtAField it -> switch (it.where()) {
+                case Emptiness.AtAField.Where.TheValueItself _ -> "value";
+                case Emptiness.AtAField.Where.In(String spelled) -> spelled;
+            } + " " + shape(it.under());
             case Emptiness.TheNameHasNone it -> "which is " + it.name().name();
             case Emptiness.NonEmptyCollectionWithNoElement it -> "cannot be empty, " + shape(it.element());
             case Emptiness.AcrossEveryCase it ->
@@ -89,7 +91,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
      */
     @Test
     void endsWithNothingBetweenThemAreCarriedAsThatAndNotAsRulesContradicting() {
-        assertEquals(new Emptiness.AtAField(RuleKey.THE_VALUE.toString(),
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.TheValueItself(),
                         new Emptiness.EmptyOrderedInterval()), only("""
                 module demo
 
@@ -108,7 +110,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
      */
     @Test
     void anOrderTheNumbersDoNotCarryIsShownByTheSameProof() {
-        assertEquals(new Emptiness.AtAField(RuleKey.THE_VALUE.toString(),
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.TheValueItself(),
                         new Emptiness.EmptyOrderedInterval()), only("""
                 module demo
 
@@ -120,7 +122,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
     /** And the place named is the field, where the rules were written about one. */
     @Test
     void thePlaceAnEmptyOrderNamesIsTheFieldTheRulesBound() {
-        assertEquals(new Emptiness.AtAField("at",
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("at"),
                         new Emptiness.EmptyOrderedInterval()), only("""
                 module demo
 
@@ -144,7 +146,8 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
      */
     @Test
     void thePositionAChoiceNamesIsTheOneEveryAlternativeLeavesNothingAt() {
-        Emptiness expected = new Emptiness.AtAField("a", new Emptiness.EmptyOrderedInterval());
+        Emptiness expected = new Emptiness.AtAField(new Emptiness.AtAField.Where.In("a"),
+                new Emptiness.EmptyOrderedInterval());
         assertEquals(expected, only("""
                 module demo
 
@@ -215,7 +218,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
     /** A set too small for what it holds, carried with the bound the comparison was made against. */
     @Test
     void aSetTooSmallForItsElementIsCarriedWithBothCounts() {
-        assertEquals(new Emptiness.AtAField(RuleKey.THE_VALUE.toString(),
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.TheValueItself(),
                         new Emptiness.SetRequiresTooManyDistinctValues(1)), only("""
                 module demo
 
@@ -230,7 +233,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
     /** And the same at a field, where the position the proof names is the field. */
     @Test
     void thePositionAProofNamesIsWhereTheRulesWereWritten() {
-        assertEquals(new Emptiness.AtAField("pair",
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("pair"),
                         new Emptiness.SetRequiresTooManyDistinctValues(1)), only("""
                 module demo
 
@@ -262,7 +265,8 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
             throw new AssertionError("shown by the rising and not by one of them naming the other: " + why);
         }
         assertEquals(List.of("A", "B"), named(it.members()));
-        assertEquals("b", ((Emptiness.AtAField) it.through()).path(),
+        assertEquals(new Emptiness.AtAField.Where.In("b"),
+                ((Emptiness.AtAField) it.through()).where(),
                 "and how the one reported reaches the rest, which is what a suggestion is read off");
     }
 
@@ -286,7 +290,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 """);
         assertEquals(List.of(List.of("Bad"), List.of("A", "B")),
                 reported.stream().map(each -> named(each.members())).toList());
-        assertEquals(new Emptiness.AtAField(RuleKey.THE_VALUE.toString(),
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.TheValueItself(),
                 new Emptiness.EmptyOrderedInterval()), reported.get(0).why());
         if (!(reported.get(1).why() instanceof Emptiness.NoBaseInComponent)) {
             throw new AssertionError("the cycle is left with nothing to bottom out: "
@@ -322,7 +326,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         assertEquals(List.of(List.of("A")), reported.stream()
                         .map(each -> named(each.members())).toList(),
                 "`B` and `C` come right when `A` does, so nothing is said of them");
-        assertEquals(new Emptiness.AtAField("s",
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("s"),
                 new Emptiness.SetRequiresTooManyDistinctValues(1)), reported.get(0).why());
     }
 
@@ -378,9 +382,9 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 data Both = { n: Int, held: Bad }
                     invariant no = n >= 2 && n <= 1
                 """;
-        assertEquals(new Emptiness.AtAField("n", new Emptiness.EmptyOrderedInterval()),
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("n"), new Emptiness.EmptyOrderedInterval()),
                 reported(before).get(1).why());
-        assertEquals(new Emptiness.AtAField("n", new Emptiness.EmptyOrderedInterval()),
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("n"), new Emptiness.EmptyOrderedInterval()),
                 reported(after).get(1).why(), "and the fields the other way round");
     }
 }

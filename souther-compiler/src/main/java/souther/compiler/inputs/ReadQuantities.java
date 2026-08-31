@@ -97,7 +97,8 @@ final class ReadQuantities implements Quantities {
     private volatile souther.compiler.check.ConstraintState<InputAtom> constraints;
     /** Where each position of the input sits, in the order the parameters and their positions are
      *  declared. What a proof of emptiness names a place out of. */
-    private volatile java.util.SequencedMap<InputAtom, String> positions;
+    private volatile java.util.SequencedMap<InputAtom,
+            souther.compiler.check.Emptiness.AtAField.Where> positions;
 
     /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
     private record Assumed(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {}
@@ -334,20 +335,28 @@ final class ReadQuantities implements Quantities {
      * the order its value declares them. Read off a map salted once per run, which position a
      * refusal names would move between runs of the same compiler.
      *
-     * <p>The parameter and the declaration's own path joined, because the two spellings are the same
+     * <p>The parameter and the declaration's own name joined, because the two spellings are the same
      * place or the report names one nobody wrote. A field of the record a clause was written on is
      * {@code x} there and {@code p.x} here, and this is where it becomes the second.
+     *
+     * <p>Everything here is somewhere in the input. The value a proof would call itself is the
+     * behavior's whole input, which no reading names and no parameter is — so a parameter carrying
+     * nothing of its own comes out as the parameter and not as the value the proof is about.
      */
-    private java.util.SequencedMap<InputAtom, String> positions() {
-        java.util.SequencedMap<InputAtom, String> read = positions;
+    private java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where>
+            positions() {
+        java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where> read =
+                positions;
         if (read != null) {
             return read;
         }
-        java.util.SequencedMap<InputAtom, String> made = new LinkedHashMap<>();
+        java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where> made =
+                new LinkedHashMap<>();
         conditioned().forEach((root, carried) -> carried.named().forEach(
-                // What a newtype wraps is at no name of its own, so the place is the value itself.
-                (atom, path) -> made.put(atom, path.isEmpty()
-                        ? root.toString() : root + "." + path)));
+                // What a newtype wraps is at no name of its own, so the place is the parameter.
+                (atom, path) -> made.put(atom,
+                        new souther.compiler.check.Emptiness.AtAField.Where.In(
+                                path.isEmpty() ? root.toString() : root + "." + path))));
         read = java.util.Collections.unmodifiableSequencedMap(made);
         positions = read;
         return read;

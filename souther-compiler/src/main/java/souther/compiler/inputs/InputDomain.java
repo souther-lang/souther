@@ -379,7 +379,8 @@ public final class InputDomain {
     }
 
     /**
-     * The value a rule naming {@code path} would be read of, or null where this reading has none.
+     * The address a rule naming {@code path} would write it at, or null where this reading has no
+     * value whose rules can name it.
      *
      * <p>Asked here and not worked out from how the path is spelled. Which value's rules reach which
      * positions is what {@link RuleRoot} settles, and a caller building one from the head of a path
@@ -389,11 +390,20 @@ public final class InputDomain {
      * <p>The value the path is under and not the innermost one it passes through. A rule written in
      * a behavior names a position from the parameter, so the parameter is what it is read of; a rule
      * of a case is written in the case and reaches this by naming nothing above it.
+     *
+     * <p><b>The name comes back with the value, because it is why that value was chosen.</b> A root
+     * is one of these only where its rules can name the place, so the name is already worked out
+     * when the answer is made. Handed back as the root alone, a caller writes the address itself
+     * and asks the same question again — and gets a "no name" answer for a root chosen because it
+     * had one.
      */
-    public RuleRoot rootNaming(TermPath path) {
+    public RuleAddress rootNaming(TermPath path) {
         for (RuleRoot root : roots) {
-            if (root.at().equals(TermPath.of(path.head())) && path.ruleKeyUnder(root.at()) != null) {
-                return root;
+            if (root.at().equals(TermPath.of(path.head()))) {
+                RuleAddress address = RuleAddress.of(root.at(), path);
+                if (address != null) {
+                    return address;
+                }
             }
         }
         return null;

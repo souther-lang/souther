@@ -165,7 +165,7 @@ final class CardinalityTransfer {
             }
         }
         return emptiest == null ? across
-                : Cardinality.none(new Emptiness.AtAField(emptiestAt.toString(), emptiest));
+                : Cardinality.none(new Emptiness.AtAField(where(emptiestAt), emptiest));
     }
 
     /**
@@ -181,11 +181,17 @@ final class CardinalityTransfer {
                 : Cardinality.atMost(every.size());
     }
 
-    /** {@code count} as it stands at {@code path}, which is the name a proof of none says it sits
-     *  at — spelled, since a proof is read by an author. */
+    /** {@code count} as it stands at {@code path}, which is where a proof of none says it sits. */
     private static Cardinality at(RuleKey path, Cardinality count) {
         return count instanceof Cardinality.None it
-                ? Cardinality.none(new Emptiness.AtAField(path.toString(), it.why())) : count;
+                ? Cardinality.none(new Emptiness.AtAField(where(path), it.why())) : count;
+    }
+
+    /** The place a proof names, said as the reading has it rather than as text a reader takes
+     *  apart again. */
+    private static Emptiness.AtAField.Where where(RuleKey path) {
+        return path.isTheValueItself() ? new Emptiness.AtAField.Where.TheValueItself()
+                : new Emptiness.AtAField.Where.In(path.toString());
     }
 
     /**

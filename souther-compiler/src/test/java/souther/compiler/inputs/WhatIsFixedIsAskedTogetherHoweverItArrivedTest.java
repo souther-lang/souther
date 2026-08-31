@@ -379,9 +379,13 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                                             .CoordinateKind.OfWhatAnOperationAnswers
                                     ? "#" + coordinate.path() : coordinate.path().toString(),
                             subject -> "?" + subject);
+            java.util.SequencedMap<String, Emptiness.AtAField.Where> where =
+                    new LinkedHashMap<>();
+            taken.named().forEach((subject, spelled) ->
+                    where.put(subject, new Emptiness.AtAField.Where.In(subject)));
 
             assertEquals(readIn.holdsNothing().isPresent(),
-                    taken.constraints().holdsNothing(taken.named()).isPresent(),
+                    taken.constraints().holdsNothing(where).isPresent(),
                     "whether anything is left, with x at " + at);
             assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
                             new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
@@ -406,7 +410,8 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         EmptyInput why = read.inputs().quantities(read.symbols()).emptiness().orElseThrow();
 
         assertEquals(new EmptyInput.ProvedByTheRules(
-                        new Emptiness.AtAField("p.x", new Emptiness.EmptyOrderedInterval())),
+                        new Emptiness.AtAField(new Emptiness.AtAField.Where.In("p.x"),
+                                new Emptiness.EmptyOrderedInterval())),
                 why);
     }
 

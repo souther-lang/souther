@@ -139,15 +139,40 @@ public sealed interface Emptiness {
      * is here rather than on the proofs below it so that one place in a value is written down once —
      * a proof carrying a path of its own beside this one would be the same fact in two spellings.
      *
-     * <p><b>Written out, and by two vocabularies.</b> A reading of a declaration spells what that
-     * declaration's own rules call the place ({@link RuleKey}); a reading of a behavior's input
-     * spells where the value stands under a parameter. Both reach here as text and nothing tells a
-     * reader which it has, which is why what is spelled empty is read back by comparing it.
+     * <p><b>Which place, and never the text of one.</b> Two readings make these and each writes the
+     * place in its own words — a declaration's rules call it {@code cap}, an input's reading calls
+     * it {@code p.cap} — and the one thing they agree on is whether the lack is at the value the
+     * reading is of or somewhere in it. That is the question a reader asks, so it is a case here
+     * rather than a spelling to be compared: read back off the text, what a value says about itself
+     * is whatever the two vocabularies happen to write it as.
      *
-     * @param path where the lack is, written out. Empty is the value the reading is of — what a
-     *             newtype wraps, or the parameter itself
+     * @param where where the lack is
      */
-    record AtAField(String path, Emptiness under) implements Emptiness {}
+    record AtAField(Where where, Emptiness under) implements Emptiness {
+
+        /** Where a lack is, in the words of whichever reading found it. */
+        public sealed interface Where {
+
+            /** The value the reading is of: what a newtype wraps, or a parameter. */
+            record TheValueItself() implements Where {}
+
+            /**
+             * Somewhere in it, written out.
+             *
+             * @param spelled what the reading that found it calls the place, for a reader
+             */
+            record In(String spelled) implements Where {
+
+                public In {
+                    if (spelled == null || spelled.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "somewhere in a value is somewhere, and the value itself is the "
+                                        + "case beside this one");
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * Every case of a sum, or every member of a union, has no value.

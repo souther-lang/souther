@@ -3804,12 +3804,16 @@ public final class Generator {
                 ? FieldDomains.of(named, data, symbols, policy, settled) : FieldDomains.NONE;
     }
 
-    /** What a position under a parameter is called where the parameter's own rules name it, or null
-     * where the position is the parameter itself and where no rule of the parameter can name it
-     * ({@link TermPath#ruleKey}). */
+    /**
+     * What the parameter's own rules call {@code path}, or null where none of them can name it
+     * ({@link TermPath#ruleKey}).
+     *
+     * <p>Null for that and for nothing else. The parameter itself is a name those rules do write —
+     * the one of no steps — and the readings asked by it answer about it like any other, so folding
+     * it in here would be this deciding that a value has nothing to say about itself.
+     */
     private static RuleKey fieldUnder(TermPath path) {
-        RuleKey where = path.ruleKey();
-        return where == null || where.isTheValueItself() ? null : where;
+        return path.ruleKey();
     }
 
     /** The settled positions of one parameter, named the way the reading of that parameter names
