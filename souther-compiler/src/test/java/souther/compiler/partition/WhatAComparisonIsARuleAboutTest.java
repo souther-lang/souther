@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Contract;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -68,8 +69,10 @@ class WhatAComparisonIsARuleAboutTest {
         StatedContract.StatedRule rule = stated.rules().get(0);
         assertEquals(1, rule.conjuncts().size(), "the rule states one comparison");
         Core read = rule.conjuncts().get(0).stated().orNull();
-        Core.Binary comparison = assertInstanceOf(Core.Binary.class, read,
+        Core.Binary binary = assertInstanceOf(Core.Binary.class, read,
                 () -> clause + " arrives as a comparison");
+        Comparison comparison = Comparison.of(binary)
+                .orElseThrow(() -> new AssertionError(clause + " compares its two sides"));
 
         Map<BindingId, String> roots = new LinkedHashMap<>();
         for (Contract.Param param : stated.params()) {

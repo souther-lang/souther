@@ -181,12 +181,12 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
     private static OnTheWay of(Condition.Compares comparison, InputDomain inputs, boolean holding,
                                Symbols symbols) {
         Citation at = Citation.of(comparison.at().pos());
-        AffineReading read =
-                AffineReading.of(comparison.at(), inputs, comparison.reads(), symbols);
-        Rel states = read == null ? null : relOf(read.claim());
-        if (states == null) {
+        AffineReading read = AffineReading.of(
+                comparison.comparison(), inputs, comparison.reads(), symbols);
+        if (read == null) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ComparisonNotRepresentedAsACut());
         }
+        Rel states = relOf(read.claim());
         // The form with the threshold moved into it, since what a domain is told is `f rel 0`.
         LinearForm<NumericTerm> against =
                 read.form().minus(LinearForm.constant(read.cut()));
@@ -209,7 +209,6 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
                     : (cut.holdsAtTheValue() ? Rel.GE : Rel.GT);
             case ComparisonClaim.Singled singled ->
                     singled.holdsAtTheValue() ? Rel.EQ : Rel.NE;
-            case ComparisonClaim.Nothing _ -> null;
         };
     }
 

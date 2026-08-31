@@ -80,7 +80,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                         // What arrives is not what this is about: read with nothing said about it,
                         // every line is held to the declarations alone.
                         souther.compiler.check.PathReachability.Answers.NONE).all()) {
-            byLine.put(each.comparison().pos().line(), each.standing());
+            byLine.put(each.at().pos().line(), each.standing());
         }
         return byLine;
     }

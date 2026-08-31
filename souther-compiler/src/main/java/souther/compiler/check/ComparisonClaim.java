@@ -1,9 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
-
 /**
- * What a comparison places on a position's values, read off the comparison and nothing else.
+ * What a comparison placed on a position's values, read off the comparison and nothing else.
  *
  * <p>One classification, asked wherever a rule compares a position to something: a clause of an
  * invariant, a comparison in a body, a clause of an {@code ensures}. A rule is read the same way
@@ -14,11 +12,12 @@ import souther.compiler.types.BinOp;
  * word. Three answers to one question drift, and two of them already had: an equality places a line
  * where a body writes it and placed nothing where a {@code data} did.
  *
- * <p><b>Nothing about a carrier, a term, or a number here.</b> Whether the other side can be read as
- * a value of the position's order, and where the position sits in the value, are what a reading
- * answers about the comparison — and a question the model raises may not be decided by what a
- * reading managed (#851). So this takes an operator and gives what the model states, and a reader
- * that could not find the number still knows a line was placed.
+ * <p><b>Two cases, because an operator that placed nothing is no comparison.</b> That an operator
+ * compares is settled where a comparison is recognised ({@link Comparison}), and this is what such
+ * an operator placed — so there is no arm here for one that placed nothing, and no reader below
+ * that point has one to answer for. Held as the wider {@link ComparisonPlacement}, every one of
+ * them did, and what each answered was invented: a {@code null} for a relation that does not exist,
+ * a {@code false} for a rule that holds at no value because there is no rule.
  *
  * <p><b>And nothing about which values exist.</b> Whether there is anything on the far side of the
  * line is not the comparison's to say: an invariant refuses everything outside its bound at
@@ -26,7 +25,20 @@ import souther.compiler.types.BinOp;
  * fact about the construct the rule is written in, asked beside this rather than inside it — read as
  * one question, a guard's classification would carry an invariant's reason.
  */
-public sealed interface ComparisonClaim {
+public sealed interface ComparisonClaim
+        extends ComparisonPlacement permits ComparisonClaim.Cut, ComparisonClaim.Singled {
+
+    /**
+     * Whether the comparison is true at the value it names.
+     *
+     * <p>Asked of either shape, because either answers it: {@code x <= c} and {@code x > c} agree
+     * about which class the value is in and disagree here, and {@code x == c} is met at the value
+     * where {@code x /= c} is not.
+     */
+    boolean holdsAtTheValue();
+
+    @Override
+    ComparisonClaim turned();
 
     /**
      * An order: the values either side of the line are different classes.
@@ -38,7 +50,15 @@ public sealed interface ComparisonClaim {
      *                          from the other: {@code x <= c} and {@code x > c} agree about which
      *                          class the number is in and disagree here
      */
-    record Cut(boolean valueBelongsBelow, boolean holdsAtTheValue) implements ComparisonClaim {}
+    record Cut(boolean valueBelongsBelow, boolean holdsAtTheValue) implements ComparisonClaim {
+
+        /** Turning the sides round moves the number named to the other class and leaves whether the
+         *  rule holds there alone: {@code x <= c} and {@code -x >= -c} are one statement. */
+        @Override
+        public ComparisonClaim turned() {
+            return new Cut(!valueBelongsBelow, holdsAtTheValue);
+        }
+    }
 
     /**
      * A value singled out: the number named, and every other value as one class.
@@ -53,40 +73,13 @@ public sealed interface ComparisonClaim {
      * and a refused one leaves a hole rather than an edge: the values beside it are on both sides,
      * which is not what a boundary with a low side and a high side can carry.
      */
-    record Singled(boolean holdsAtTheValue) implements ComparisonClaim {}
+    record Singled(boolean holdsAtTheValue) implements ComparisonClaim {
 
-    /** Not a comparison of values at all, so nothing was placed. */
-    record Nothing() implements ComparisonClaim {}
-
-    /**
-     * What {@code op} places, which is nothing where it is not a comparison.
-     *
-     * <p>Which operators compare is {@link BinOp#compares}'s answer and this asks it rather
-     * than listing them again. Two lists can be given different answers about one operator added
-     * later, and they fail in opposite directions: the numbering would leave it out of the
-     * comparisons of a body while this said what it cuts, so a line would be drawn on a comparison
-     * no run records and no row could ever meet it.
-     */
-    static ComparisonClaim of(BinOp op) {
-        if (!op.compares()) {
-            return new Nothing();
+        /** An equality names a value and orders nothing, so there is nothing to turn round. */
+        @Override
+        public ComparisonClaim turned() {
+            return this;
         }
-        return switch (op) {
-            case LE -> new Cut(true, true);
-            case GT -> new Cut(true, false);
-            case LT -> new Cut(false, false);
-            case GE -> new Cut(false, true);
-            case EQ -> new Singled(true);
-            case NE -> new Singled(false);
-            // Refused above and written out here so the switch stays exhaustive: an operator added
-            // to the language stops the compile here and is decided about rather than falling in.
-            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> new Nothing();
-        };
-    }
-
-    /** Whether {@code op} orders the values either side of what it names. */
-    static boolean orders(BinOp op) {
-        return of(op) instanceof Cut;
     }
 
 }

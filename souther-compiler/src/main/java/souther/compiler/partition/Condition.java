@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.check.Comparison;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.types.BinOp;
 
 /**
  * What a condition of a body is made of.
@@ -68,12 +69,21 @@ sealed interface Condition {
     /**
      * One comparison, and where the names in it point.
      *
-     * @param reads the reading in force where this comparison stands, which is the outer one with
-     *              every binding between here and the top taken in. A comparison inside an expanded
-     *              helper is about the argument the call handed it, and read against the outer names
-     *              it is about nothing
+     * @param comparison the comparison together with what its operator placed. Recognising it is
+     *                   what this shape is, so what the recognition established is carried rather
+     *                   than left at the test that established it
+     * @param reads      the reading in force where this comparison stands, which is the outer one
+     *                   with every binding between here and the top taken in. A comparison inside
+     *                   an expanded helper is about the argument the call handed it, and read
+     *                   against the outer names it is about nothing
      */
-    record Compares(Core.Binary at, InputReads reads) implements Condition {}
+    record Compares(Comparison comparison, InputReads reads) implements Condition {
+
+        @Override
+        public Core at() {
+            return comparison.at();
+        }
+    }
 
     /** Where this reading stops: a condition of a shape it has no words for. */
     record NotRead(Core at) implements Condition {}
@@ -107,8 +117,11 @@ sealed interface Condition {
             return binary.op() == BinOp.AND
                     ? new Both(binary, left, right) : new Either(binary, left, right);
         }
-        if (e instanceof Core.Binary comparison && comparison.op().compares()) {
-            return new Compares(comparison, reads);
+        if (e instanceof Core.Binary binary) {
+            Comparison comparison = Comparison.of(binary).orElse(null);
+            if (comparison != null) {
+                return new Compares(comparison, reads);
+            }
         }
         return new NotRead(e);
     }
@@ -118,7 +131,7 @@ sealed interface Condition {
         return op == BinOp.AND || op == BinOp.OR;
     }
 
-    // Which operators compare is `BinOp#compares` and is asked rather than spelled out again.
-    // Written here as "a binary that is not `&&` or `||`", this said arithmetic was a comparison —
-    // which nothing in a condition is, so it was a spelling that happened to be right.
+    // Which binaries are comparisons is `Comparison#of`'s answer and is asked rather than spelled
+    // out again. Written here as "a binary that is not `&&` or `||`", this said arithmetic was a
+    // comparison — which nothing in a condition is, so it was a spelling that happened to be right.
 }

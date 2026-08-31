@@ -30,15 +30,6 @@ import souther.compiler.check.ComparisonClaim;
  */
 public record LineFacts(ComparisonClaim claim) {
 
-    public LineFacts {
-        // A line is something a comparison placed. What an operator that compares nothing places is
-        // no line at all, and a reading that got here holding one has answered a question about a
-        // rule that never drew.
-        if (!(claim instanceof ComparisonClaim.Cut || claim instanceof ComparisonClaim.Singled)) {
-            throw new IllegalArgumentException("a line is what some comparison placed: " + claim);
-        }
-    }
-
     /**
      * The line a rule that keeps a run of the values drew, which is what a bound is.
      *
@@ -61,15 +52,7 @@ public record LineFacts(ComparisonClaim claim) {
      * where {@code x /= c} is not.
      */
     public boolean holdsAtTheValue() {
-        return switch (claim) {
-            case ComparisonClaim.Cut cut -> cut.holdsAtTheValue();
-            case ComparisonClaim.Singled singled -> singled.holdsAtTheValue();
-            // Refused where one of these is made, and written out here so the switch stays
-            // exhaustive: a shape added to the classification stops the compile at both places
-            // rather than falling into whichever arm was listed last.
-            case ComparisonClaim.Nothing _ -> throw new IllegalStateException(
-                    "a line that no comparison placed: " + claim);
-        };
+        return claim.holdsAtTheValue();
     }
 
     /** Whether the rule names a value rather than ordering the values either side of it. */

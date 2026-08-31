@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -65,7 +66,11 @@ public final class DeclaredThresholds {
     private static void drawn(String behavior, ClauseWithoutAnEnd clause,
                               InputReading read, List<LineDrawn> out) {
         Symbols symbols = read.symbols();
-        if (!(clause.part() instanceof Core.Binary comparison) || !comparison.op().compares()) {
+        if (!(clause.part() instanceof Core.Binary binary)) {
+            return;
+        }
+        Comparison comparison = Comparison.of(binary).orElse(null);
+        if (comparison == null) {
             return;
         }
         Map<BindingId, TermPath> roots = rootsOf(clause, symbols);

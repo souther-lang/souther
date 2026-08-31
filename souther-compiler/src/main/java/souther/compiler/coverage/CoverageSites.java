@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.check.Comparison;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -251,13 +252,19 @@ public final class CoverageSites {
 
         private static void requireIsACatalogued(Core node, ComparisonCatalog comparisons,
                                                  String what) {
-            if (!(node instanceof Core.Binary comparison) || !comparison.op().compares()) {
+            // Whether it is a comparison at all is asked where that is decided, so this reading
+            // holds no list of operators of its own. The two questions stay two: a node that is no
+            // comparison and a comparison outside this catalog are different breakages, and one
+            // answer for both would send a reader after the wrong one.
+            Comparison comparison = node instanceof Core.Binary binary
+                    ? Comparison.of(binary).orElse(null) : null;
+            if (comparison == null) {
                 throw new IllegalArgumentException(
                         "something that is not a comparison was " + what + ": " + node);
             }
-            if (comparisons.at(comparison).isEmpty()) {
+            if (comparisons.at(comparison.at()).isEmpty()) {
                 throw new IllegalArgumentException("a comparison this plan's catalog does not hold "
-                        + "was " + what + " at " + comparison.pos()
+                        + "was " + what + " at " + comparison.at().pos()
                         + "; the numbering and the catalog are one answer or they are two");
             }
         }

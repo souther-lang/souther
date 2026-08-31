@@ -66,17 +66,18 @@ final class NumberWays implements ComparisonWays {
 
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
-        ComparedNumber drawn =
-                e instanceof Core.Binary comparison ? numbers.of(comparison, reads) : null;
-        return drawn == null || !drawn.drawsALine()
+        ComparedNumber said =
+                e instanceof Core.Binary binary ? numbers.of(binary, reads) : null;
+        ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
+        return drawn == null
                 ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
                 : leaves(drawn, want);
     }
 
     /** Whether the values the rules leave the number include one the comparison comes out
      *  {@code want} at. */
-    private boolean leaves(ComparedNumber drawn, boolean want) {
-        NumericDomain.Bounds runs = quantities.runsBetween(drawn.atOnePosition());
+    private boolean leaves(ComparedNumber.DrawnLine drawn, boolean want) {
+        NumericDomain.Bounds runs = quantities.runsBetween(drawn.term());
         return switch (drawn.claim()) {
             case ComparisonClaim.Cut cut -> {
                 // Which side the way needs, from the two facts the claim carries: which side of the
@@ -90,8 +91,6 @@ final class NumberWays implements ComparisonWays {
             // and nothing else.
             case ComparisonClaim.Singled singled -> singled.holdsAtTheValue() == want
                     ? holds(runs, drawn.at()) : notOnlyOneValue(runs, drawn.at());
-            // Refused before this: a comparison claiming nothing draws no line.
-            case ComparisonClaim.Nothing ignored -> false;
         };
     }
 

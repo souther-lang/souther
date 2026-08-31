@@ -60,20 +60,16 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      */
     static ComparedLine asWritten(Core.Binary comparison,
                                   InputReading read, InputReads reads) {
-        return of(ComparedNumber.of(comparison, read, reads));
+        ComparedNumber said = ComparedNumber.of(comparison, read, reads);
+        return said == null ? null : of(said.line());
     }
 
     /** The same comparison as a line, or null where it says nothing a line is drawn from. */
-    private static ComparedLine of(ComparedNumber drawn) {
-        if (drawn == null || !drawn.drawsALine()) {
-            return null;
-        }
-        // A comparison that placed nothing draws no line, and the two that place one are carried as
-        // what they placed: a line here is the rule's own classification, so nothing along the way
-        // has a side to fill in for a rule that has none.
-        return drawn.claim() instanceof ComparisonClaim.Nothing ? null
-                : new ComparedLine(drawn.atOnePosition(), drawn.at(), drawn.orders(),
-                        drawn.claim());
+    private static ComparedLine of(ComparedNumber.DrawnLine drawn) {
+        // What the rule placed is carried as what it placed: a line here is the rule's own
+        // classification, so nothing along the way has a side to fill in for a rule that has none.
+        return drawn == null ? null
+                : new ComparedLine(drawn.term(), drawn.at(), drawn.orders(), drawn.claim());
     }
 
     /**
@@ -104,8 +100,7 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         }
         Carrier carrier = orders.answered();
         Place value = Count.of(read.cut());
-        return read.claim() instanceof ComparisonClaim.Nothing ? null
-                : new ComparedLine(term, value, orders, read.claim());
+        return new ComparedLine(term, value, orders, read.claim());
     }
 
 }
