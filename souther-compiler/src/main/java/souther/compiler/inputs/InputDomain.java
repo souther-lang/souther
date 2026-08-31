@@ -1042,7 +1042,12 @@ public final class InputDomain {
                 List<StructuralInspection.Branch> standing = new ArrayList<>();
                 List<TermPath> passedTo = new ArrayList<>();
                 for (StructuralInspection.Branch branch : branches.branches()) {
+                    // Said of every case, including the ones this walk turns back at, because what
+                    // a reader of a sum asks is answered over the whole list of them: a sum has a
+                    // value wherever any case does.
                     if (!reach.into(path.refine(branch.refinement()), stopped).enters()) {
+                        // How far the walk goes, and not anything the model says about this case.
+                        observed.became(path, branch.refinement(), new CaseOutcome.NotWalked());
                         continue;
                     }
                     // A branch that is the whole of a value puts no position anywhere, and one the
@@ -1052,17 +1057,18 @@ public final class InputDomain {
                         // A name has nowhere to stand under a case that holds nothing, which is not
                         // a shortfall and is not the answer below. Said apart from it so that a
                         // reader of what became of this case reads which it was.
-                        observed.didNotEnter(path, branch.refinement(),
-                                new NameReach.NotEntered.NothingStandsUnderIt());
+                        observed.became(path, branch.refinement(), new CaseOutcome.StandsAlone());
                         continue;
                     }
                     if (!owed(here, branch.refinement())) {
-                        observed.didNotEnter(path, branch.refinement(),
-                                new NameReach.NotEntered.TheRulesLeaveNothingAtIt());
+                        observed.became(path, branch.refinement(),
+                                new CaseOutcome.RefusedByTheRules());
                         continue;
                     }
                     standing.add(branch);
                     passedTo.add(path.refine(branch.refinement()));
+                    observed.became(path, branch.refinement(),
+                            new CaseOutcome.Opened(path.refine(branch.refinement())));
                 }
                 if (!stopped) {
                     handoffs.passesTo(placed.root(), path, passedTo);
