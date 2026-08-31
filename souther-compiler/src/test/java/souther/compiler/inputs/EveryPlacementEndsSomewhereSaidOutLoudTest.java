@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
@@ -71,7 +72,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
     void oneNameAtASumIsFiledUnderEachCase() {
         InputDomain read = reading(SHARED, "atTheSum");
         PlacementFiling filing = read.file(new PlacementSeed(
-                new RuleAddress(TermPath.of("q"), "limit"),
+                new RuleAddress(TermPath.of("q"), RuleKey.of("limit")),
                 new PlacementSeed.Placed.ANumberOfIt(
                         new FieldDomains.CoordinateKind.OfItsOwnValue()),
                 aRule(read), someCitation(aRule(read))));
@@ -92,7 +93,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
     void aNameFromTheValueAboveReachesTheSameCases() {
         InputDomain read = reading(SHARED, "read");
         PlacementFiling filing = read.file(new PlacementSeed(
-                new RuleAddress(TermPath.of("h"), "q.limit"),
+                new RuleAddress(TermPath.of("h"), new RuleKey(List.of("q", "limit"))),
                 new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of("h.q@A.limit", "h.q@B.limit"),
@@ -111,7 +112,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
         // A clause of `Cons` naming a field of the link below it. The link is where the input
         // returns to `Chain`, so the name gets that far and no further.
         PlacementFiling filing = read.file(new PlacementSeed(
-                new RuleAddress(pathOf(read, "c@Cons"), "tail.head"),
+                new RuleAddress(pathOf(read, "c@Cons"), new RuleKey(List.of("tail", "head"))),
                 new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of(), filedAt(filing));

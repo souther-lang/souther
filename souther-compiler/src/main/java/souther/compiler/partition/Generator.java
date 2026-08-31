@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -3393,14 +3394,14 @@ public final class Generator {
      * beside it that have nothing to do with it.
      */
     private static int mostHeld(FieldDomains rules, TermPath path, Type building, Symbols symbols) {
-        String field = fieldUnder(path);
+        RuleKey field = fieldUnder(path);
         return Partitions.mostHeld(building, symbols, field == null ? null : rules.heldAt(field));
     }
 
     /** How many the rules say the value built at {@code path} holds at the fewest, or zero where
      *  they say nothing about how many. Read the same two ways as the cap beside it. */
     private static int leastHeld(FieldDomains rules, TermPath path, Type building, Symbols symbols) {
-        String field = fieldUnder(path);
+        RuleKey field = fieldUnder(path);
         return Partitions.leastHeld(building, symbols, field == null ? null : rules.heldAt(field));
     }
 
@@ -3430,7 +3431,7 @@ public final class Generator {
             }
         }
         for (ConstructionPlan.Slot each : plan.slots()) {
-            String field = fieldUnder(each.at());
+            RuleKey field = fieldUnder(each.at());
             UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols(),
                     subject.inputs().policy(), field == null ? null : rules.heldAt(field));
             // Nothing of the shape having been built outranks some of it having been: the first says
@@ -3564,7 +3565,7 @@ public final class Generator {
         TermPath at = TermPath.of(subject.parameters().get(p));
         FieldDomains left = rulesOf(subject.types().get(p), subject.symbols(),
                 subject.inputs().policy(), under(at, settled));
-        String field = fieldUnder(position.at());
+        RuleKey field = fieldUnder(position.at());
         return Partitions.displacedRepresentativesOf(position.type(), subject.symbols(),
                 subject.inputs().policy(), field == null ? null : left.at(field).bounds(),
                 field == null ? null : left.heldAt(field));
@@ -3637,7 +3638,7 @@ public final class Generator {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
             }
-            String field = fieldUnder(slot.at());
+            RuleKey field = fieldUnder(slot.at());
             souther.compiler.numeric.NumericDomain.Bounds here =
                     field == null ? null : left.at(field).bounds();
             List<FixtureTemplate> stands = Partitions.representativesHolding(slot.type(), symbols,
@@ -3796,40 +3797,42 @@ public final class Generator {
      * halves this was already asymmetric about.
      */
     private static FieldDomains rulesOf(Type type, Symbols symbols, ReadingPolicy policy,
-                                        Map<String, Count> settled) {
+                                        Map<RuleKey, Count> settled) {
         return type instanceof Type.Ref(TypeSymbol.AtModule named)
                 && symbols.declarations().declaration(named) instanceof Hir.Data data
                 && !data.newtype()
                 ? FieldDomains.of(named, data, symbols, policy, settled) : FieldDomains.NONE;
     }
 
-    /** What a position under a parameter is called where the parameter's own rules name it, or null
-     * where the position is the parameter itself and where no rule of the parameter can name it
-     * ({@link TermPath#fieldKey}). */
-    private static String fieldUnder(TermPath path) {
-        String where = path.fieldKey();
-        return where == null || where.isEmpty() ? null : where;
+    /**
+     * What the parameter's own rules call {@code path}, or null where none of them can name it
+     * ({@link TermPath#ruleKey}).
+     *
+     * <p>Null for that and for nothing else. The parameter itself is a name those rules do write —
+     * the one of no steps — and the readings asked by it answer about it like any other, so folding
+     * it in here would be this deciding that a value has nothing to say about itself.
+     */
+    private static RuleKey fieldUnder(TermPath path) {
+        return path.ruleKey();
     }
 
     /** The settled positions of one parameter, named the way the reading of that parameter names
      * them: from the value itself, with the parameter dropped. */
-    private static Map<String, Count> under(TermPath root, Map<TermPath, Place> settled) {
+    private static Map<RuleKey, Count> under(TermPath root,
+                                                                    Map<TermPath, Place> settled) {
         if (settled.isEmpty()) {
             return Map.of();
         }
-        Map<String, Count> out = new LinkedHashMap<>();
-        // The numbers among them, at the positions of this parameter. Asked of the paths and not
-        // of how they are written: a rendering runs the steps together with whatever each wears, so
-        // a test on the text has to name every separator a step can have.
+        Map<RuleKey, Count> out = new LinkedHashMap<>();
         settled.forEach((path, at) -> {
             if (!path.isAtOrUnder(root) || !(at instanceof Count number)) {
                 return;
             }
-            String field = path.fieldKeyUnder(root);
+            RuleKey field = path.ruleKeyUnder(root);
             // Where no clause of the parameter can name the position, nothing of this parameter's
             // rules is about it and there is nothing to settle. A position inside a sequence is one,
             // and so is one under a narrowing: the rules that name it are the narrowed value's.
-            if (field != null && !field.isEmpty()) {
+            if (field != null && !field.isTheValueItself()) {
                 out.put(field, number);
             }
         });

@@ -174,6 +174,45 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         assertNotEquals(null, quantities().runsBetween(X));
     }
 
+    /** A record whose field is a list, so that a number inside the list is under a value of its
+     *  own. */
+    private static final String INSIDE_A_LIST = """
+            module example.inside
+
+            data N = Int
+                invariant atLeastNone = value >= 0
+
+            data Item = { charge: N }
+
+            data Cart = { items: List<Item> }
+
+            data Taken
+
+            behavior take : (c: Cart) -> Taken
+            """;
+
+    /**
+     * A number inside a sequence is asked about, and is not a place this reading has no name for.
+     *
+     * <p>What names it is the value it is a field of, and the reading roots that value inside the
+     * sequence — so the step into the sequence is above the root and what is left below it is a
+     * field. A reading that took the parameter for the root would have {@code items[*].charge} to
+     * name, which is no name any rule of the parameter writes, and the quantity would be one
+     * nothing could be asked about.
+     */
+    @Test
+    void aNumberInsideASequenceIsUnderAValueWhoseRulesNameIt() {
+        Read read = read(INSIDE_A_LIST, "take");
+        Quantities asked = read.inputs().quantities(read.symbols());
+        NumericTerm charge = new NumericTerm.ValueOf(
+                TermPath.of("c").then("items").element().then("charge"));
+
+        assertNotEquals(null, asked.runsBetween(charge),
+                "the number inside the list is one this reading answers about");
+        assertNotEquals(null, asked.given(charge, count(1)),
+                "and one it can be told a value for");
+    }
+
     private static NumericDomain.LinearForm<NumericTerm> sum() {
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(X, BigDecimal.ONE);
@@ -328,21 +367,28 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                 name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES);
 
         for (int at = 0; at <= 5; at++) {
-            Map<String, Count> settled = Map.of("x", count(at));
+            Map<souther.compiler.check.RuleKey, Count> settled =
+                    Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
                     name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES, settled);
             souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
-                    souther.compiler.check.FieldDomains.Coordinate.value("x"), count(at)))
+                    souther.compiler.check.FieldDomains.Coordinate
+                            .value(souther.compiler.check.RuleKey.of("x")), count(at)))
                     .constraintsOver(coordinate -> coordinate.kind()
                                     instanceof souther.compiler.check.FieldDomains
                                             .CoordinateKind.OfWhatAnOperationAnswers
-                                    ? "#" + coordinate.path() : coordinate.path(),
+                                    ? "#" + coordinate.path() : coordinate.path().toString(),
                             subject -> "?" + subject);
+            java.util.SequencedMap<String, Emptiness.AtAField.Where> where =
+                    new LinkedHashMap<>();
+            taken.named().forEach((subject, spelled) ->
+                    where.put(subject, new Emptiness.AtAField.Where.In(subject)));
 
             assertEquals(readIn.holdsNothing().isPresent(),
-                    taken.constraints().holdsNothing(taken.positions()).isPresent(),
+                    taken.constraints().holdsNothing(where).isPresent(),
                     "whether anything is left, with x at " + at);
-            assertEquals(readIn.leftAt("y", new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
+            assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
+                            new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
                     taken.constraints().numbers().boundsOf(
                             NumericDomain.LinearForm.<String>atom("y")),
                     "where y runs, with x at " + at);
@@ -364,7 +410,8 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         EmptyInput why = read.inputs().quantities(read.symbols()).emptiness().orElseThrow();
 
         assertEquals(new EmptyInput.ProvedByTheRules(
-                        new Emptiness.AtAField("p.x", new Emptiness.EmptyOrderedInterval())),
+                        new Emptiness.AtAField(new Emptiness.AtAField.Where.In("p.x"),
+                                new Emptiness.EmptyOrderedInterval())),
                 why);
     }
 

@@ -71,7 +71,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private final PathEngine engine = new PathEngine(symbols, Map.of(),
             Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-    private final GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees());
+    private final GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees(), symbols);
 
     private static Symbols symbols() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
@@ -100,8 +100,8 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private Map<String, List<String>> guaranteedUnder(String name, GuaranteeWalk.Scope scope) {
         Map<String, List<String>> out = new LinkedHashMap<>();
         Read read = place(name);
-        walk.from(read.root(), FieldDomains.THE_VALUE, read.at(), scope,
-                (path, guarantee) -> out.computeIfAbsent(path, _ -> new ArrayList<>())
+        walk.from(read.root(), RuleKey.THE_VALUE, read.at(), scope,
+                (path, guarantee) -> out.computeIfAbsent(path.toString(), _ -> new ArrayList<>())
                         .add(guarantee.rule().clause().toString()));
         return out;
     }
@@ -110,14 +110,14 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private Map<String, GuaranteeWalk.Stop> stoppedIn(String name, GuaranteeWalk.Scope scope) {
         Map<String, GuaranteeWalk.Stop> out = new LinkedHashMap<>();
         Read read = place(name);
-        walk.from(read.root(), FieldDomains.THE_VALUE, read.at(), scope,
+        walk.from(read.root(), RuleKey.THE_VALUE, read.at(), scope,
                 new GuaranteeWalk.Reader() {
                     @Override
-                    public void guaranteed(String path, TypeGuarantee guarantee) {}
+                    public void guaranteed(RuleKey path, TypeGuarantee guarantee) {}
 
                     @Override
-                    public void stopped(String path, Type type, GuaranteeWalk.Stop why) {
-                        out.put(path, why);
+                    public void stopped(RuleKey path, Type type, GuaranteeWalk.Stop why) {
+                        out.put(path.toString(), why);
                     }
                 });
         return out;
@@ -127,14 +127,14 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private List<String> handedOnIn(String name, GuaranteeWalk.Scope scope) {
         List<String> out = new ArrayList<>();
         Read read = place(name);
-        walk.from(read.root(), FieldDomains.THE_VALUE, read.at(), scope,
+        walk.from(read.root(), RuleKey.THE_VALUE, read.at(), scope,
                 new GuaranteeWalk.Reader() {
                     @Override
-                    public void guaranteed(String path, TypeGuarantee guarantee) {}
+                    public void guaranteed(RuleKey path, TypeGuarantee guarantee) {}
 
                     @Override
-                    public void handedOn(String path, Type type) {
-                        out.add(path);
+                    public void handedOn(RuleKey path, Type type) {
+                        out.add(path.toString());
                     }
                 });
         return out;
@@ -225,7 +225,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
      */
     @Test
     void aDeclarationsOwnClausesCanBeLeftOutWithoutLeavingWhatIsUnderIt() {
-        assertEquals(List.of(FieldDomains.THE_VALUE, "cap"),
+        assertEquals(List.of(RuleKey.THE_VALUE.toString(), "cap"),
                 List.copyOf(guaranteedUnder("Bounded", GuaranteeWalk.Scope.asFarAs(2)).keySet()),
                 "both rules stand: Bounded's own, and NonNegInt's about the field");
 
@@ -245,17 +245,17 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
      * the number a reader with a cost bound uses. Held as one {@code int}, "as far as I can afford"
      * and "as far as the model goes" are the same kind of answer and the first gets copied into the
      * second — which makes what a declaration is taken to say depend on how deeply an author nested
-     * a field. {@code Deeper} writes nothing, and the rule is three positions under it.
+     * a field. {@code Deeper} writes nothing, and the rule is three names under it.
      */
     @Test
-    void aReaderAskingForEveryPositionIsNotBoundedByWhatAnotherCanAfford() {
+    void aReaderAskingForEveryNameIsNotBoundedByWhatAnotherCanAfford() {
         assertEquals(List.of("mid.inner.amount"),
-                List.copyOf(guaranteedUnder("Deeper", GuaranteeWalk.Scope.everyPosition()).keySet()),
-                "the rule three positions down is read, and read at the position it governs");
+                List.copyOf(guaranteedUnder("Deeper", GuaranteeWalk.Scope.everyName()).keySet()),
+                "the rule three names down is read, and read at the value it governs");
         assertTrue(guaranteedUnder("Deeper",
                         new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.AsFarAs(2), _ -> false,
                                 RulesLeftOut.NONE)).isEmpty(),
-                "a reader that can afford two positions does not reach it — which is what makes"
+                "a reader that can afford two names does not reach it — which is what makes"
                         + " borrowing its number a change to what the model says");
     }
 
@@ -277,7 +277,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
                 List.of("Known", "Gathering", "PathEngine", "GuaranteeWalk", "Reach", "Borne");
         List<String> found = new ArrayList<>();
         for (Class<?> each : List.of(TypeGuarantees.class, TypeGuarantees.At.class,
-                TypeGuarantees.At.Beneath.class,
+                TypeGuarantees.At.Readable.class,
                 TypeGuarantees.At.HandedOn.ToAnotherReading.class,
                 TypeGuarantees.At.Coverage.Incomplete.class,
                 TypeGuarantee.class, TypeGuarantee.Part.class)) {

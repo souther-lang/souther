@@ -62,10 +62,10 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
     }
 
     private static final FieldDomains.Coordinate HOW_LONG =
-            FieldDomains.Coordinate.takenBy("names", LENGTH);
+            FieldDomains.Coordinate.takenBy(RuleKey.of("names"), LENGTH);
     private static final FieldDomains.Coordinate HOW_MANY =
-            FieldDomains.Coordinate.takenBy("names", SIZE);
-    private static final FieldDomains.Coordinate ITSELF = FieldDomains.Coordinate.value("names");
+            FieldDomains.Coordinate.takenBy(RuleKey.of("names"), SIZE);
+    private static final FieldDomains.Coordinate ITSELF = FieldDomains.Coordinate.value(RuleKey.of("names"));
 
     /** Both, at one path, each with an end of its own and each named by a clause of its own. */
     private static final List<FieldDomains.Placed> AT_ONE_PATH =

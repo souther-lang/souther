@@ -137,7 +137,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
         return FieldDomains.of(holder,
                         (Hir.Data) symbols.declarations().declaration(holder.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
-                .at("len").bounds().min().at().toString();
+                .at(RuleKey.of("len")).bounds().min().at().toString();
     }
 
     /**

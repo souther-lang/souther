@@ -112,7 +112,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *                  off the state's own map, the place named would be the one whose clause was
      *                  read first, and moving a clause would move the refusal
      */
-    public Optional<Emptiness> holdsNothing(SequencedMap<A, String> positions) {
+    public Optional<Emptiness> holdsNothing(SequencedMap<A, Emptiness.AtAField.Where> positions) {
         Emptiness why = isBottom() ? new Emptiness.ConflictingRules() : null;
         // A position whose ends cross, which is nearer than the general form: it says not only that
         // the rules contradict but where they leave nothing.
@@ -123,7 +123,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // by naming a place. Written without one, the sentence read off it would name whatever place
         // the reader happened to be at, which is the declaration's own value.
         Set<A> empty = ordered.holdingNothing();
-        for (Map.Entry<A, String> each : positions.entrySet()) {
+        for (Map.Entry<A, Emptiness.AtAField.Where> each : positions.entrySet()) {
             if (empty.contains(each.getKey())) {
                 why = Emptiness.preferred(why, new Emptiness.AtAField(each.getValue(),
                         new Emptiness.EmptyOrderedInterval()));

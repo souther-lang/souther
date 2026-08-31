@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.NumericMeasures;
@@ -378,7 +379,8 @@ public final class InputDomain {
     }
 
     /**
-     * The value a rule naming {@code path} would be read of, or null where this reading has none.
+     * The address a rule naming {@code path} would write it at, or null where this reading has no
+     * value whose rules can name it.
      *
      * <p>Asked here and not worked out from how the path is spelled. Which value's rules reach which
      * positions is what {@link RuleRoot} settles, and a caller building one from the head of a path
@@ -388,11 +390,20 @@ public final class InputDomain {
      * <p>The value the path is under and not the innermost one it passes through. A rule written in
      * a behavior names a position from the parameter, so the parameter is what it is read of; a rule
      * of a case is written in the case and reaches this by naming nothing above it.
+     *
+     * <p><b>The name comes back with the value, because it is why that value was chosen.</b> A root
+     * is one of these only where its rules can name the place, so the name is already worked out
+     * when the answer is made. Handed back as the root alone, a caller writes the address itself
+     * and asks the same question again — and gets a "no name" answer for a root chosen because it
+     * had one.
      */
-    public RuleRoot rootNaming(TermPath path) {
+    public RuleAddress rootNaming(TermPath path) {
         for (RuleRoot root : roots) {
-            if (root.at().equals(TermPath.of(path.head())) && path.fieldKeyUnder(root.at()) != null) {
-                return root;
+            if (root.at().equals(TermPath.of(path.head()))) {
+                RuleAddress address = RuleAddress.of(root.at(), path);
+                if (address != null) {
+                    return address;
+                }
             }
         }
         return null;
@@ -445,7 +456,7 @@ public final class InputDomain {
      * not told apart here, and a caller that has to tell them apart asks {@link #reach} what became
      * of each case.
      */
-    public List<TermPath> positionsNamed(TermPath root, String named) {
+    public List<TermPath> positionsNamed(TermPath root, RuleKey named) {
         return follow(root, named).reached();
     }
 
@@ -513,13 +524,12 @@ public final class InputDomain {
      * every pairing of their cases. Composed from the whole name at once, the pairing would be
      * something this had to work out rather than something it walks into.
      */
-    private Followed follow(TermPath root, String named) {
+    private Followed follow(TermPath root, RuleKey named) {
         List<PlacementOutcome> otherwise = new ArrayList<>();
         List<String> unnamed = new ArrayList<>();
         List<TermPath> frontier = List.of(root);
-        // The value's own name is at no step of its own, and a name of no steps is not a step
-        // called nothing.
-        for (String step : named.isEmpty() ? new String[0] : named.split("\\.")) {
+        // A name of no steps is the value itself, which is where the walk already is.
+        for (String step : named.steps()) {
             List<TermPath> next = new ArrayList<>();
             for (TermPath at : frontier) {
                 List<TermPath> across = reach.across(at, step);

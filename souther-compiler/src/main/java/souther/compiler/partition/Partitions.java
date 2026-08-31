@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.Symbols;
@@ -1322,7 +1323,7 @@ public final class Partitions {
         }
         java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
-        Map<String, Count> settled = new LinkedHashMap<>();
+        Map<RuleKey, Count> settled = new LinkedHashMap<>();
         FieldDomains left = FieldDomains.of(record, data, symbols, policy, settled);
         Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         if (!fields.keySet().containsAll(given.keySet())) {
@@ -1331,9 +1332,10 @@ public final class Partitions {
         for (Map.Entry<String, Type> field : fields.entrySet()) {
             FixtureTemplate at = given.get(field.getKey());
             if (at == null) {
+                RuleKey named =
+                        RuleKey.of(field.getKey());
                 List<FixtureTemplate> stands = representativesHolding(field.getValue(), symbols,
-                        policy, left.at(field.getKey()).bounds(), left.heldAt(field.getKey()),
-                        inside);
+                        policy, left.at(named).bounds(), left.heldAt(named), inside);
                 if (stands.isEmpty()) {
                     return List.of();
                 }
@@ -1344,7 +1346,7 @@ public final class Partitions {
             // they stand before anything is settled is chosen against `a < b` with `a` still open,
             // which leaves `b` its whole range and takes the bottom of it.
             if (Counts.writtenIn(at.value()) instanceof Count count) {
-                settled.put(field.getKey(), count);
+                settled.put(RuleKey.of(field.getKey()), count);
                 left = FieldDomains.of(record, data, symbols, policy, settled);
             }
         }

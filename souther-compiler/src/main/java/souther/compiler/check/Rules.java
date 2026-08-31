@@ -10,14 +10,14 @@ import souther.compiler.values.ValueSet;
  * The rules written about a value, or the fact that a value of this kind has none to write.
  *
  * <p>Two answers that {@link FieldDomains#NONE} reads as one. Its contract is a caller that chose
- * not to read a declaration or had none to read, which is why it says of every position that the
+ * not to read a declaration or had none to read, which is why it says of every name that the
  * reading never reached the rules about it — the safe answer for a caller that stopped, and a false
  * one for a caller that looked at a declaration which can hold no rule. A reader deciding whether
- * the model divides a position needs those apart: told the second as the first, it would answer "a
+ * the model divides a value needs those apart: told the second as the first, it would answer "a
  * rule about this may have gone unread" of every plain {@code String} in every model, and told the
  * first as the second it would say the model states nothing where nobody looked.
  *
- * <p>Which of the two it is comes from the declaration standing at the position, over
+ * <p>Which of the two it is comes from the declaration standing there, over
  * {@link Hir.Def} with no {@code default}. That is where the fact lives: an invariant clause is
  * carried by {@link Hir.Data} and by nothing else, and the front end refuses one written on a
  * declaration lowered into another kind (spec
@@ -41,9 +41,9 @@ public sealed interface Rules {
     }
 
     /**
-     * No rule about this value's own positions exists to be read.
+     * No rule about this value's own names exists to be read.
      *
-     * <p>A statement about the model and not about this reading. What stands at the position is a
+     * <p>A statement about the model and not about this reading. What stands here is a
      * primitive, a collection, a name for a choice between declarations, or nothing declared at all
      * — none of which carries a clause.
      */
@@ -66,23 +66,22 @@ public sealed interface Rules {
     }
 
     /**
-     * Whether the gathering reached every rule written about the position at {@code path}.
+     * Whether the gathering reached every rule written at {@code path}.
      *
      * <p>The same two answers this type exists to keep apart, asked of reach. A value of a kind that
      * carries no clause has no rule for a walk to reach, which is not a walk that stopped — read as
-     * the second, every plain {@code String} in every model would be a position with something out
-     * of sight.
+     * the second, every plain {@code String} in every model would have something out of sight.
      */
-    default boolean everyRuleReachedAt(String path) {
+    default boolean everyRuleReachedAt(RuleKey path) {
         return switch (this) {
             case Read read -> read.domains().everyRuleReachedAt(path);
             case NoneWritten _ -> true;
         };
     }
 
-    /** What the rules leave the position at {@code path}, which is {@link ValueSet#ANY} read in
+    /** What the rules leave what stands at {@code path}, which is {@link ValueSet#ANY} read in
      *  full where no rule was written at all. */
-    default AdmissibleSet admits(String path) {
+    default AdmissibleSet admits(RuleKey path) {
         return switch (this) {
             case Read read -> read.domains().admits(path);
             case NoneWritten _ -> AdmissibleSet.complete(ValueSet.ANY);
@@ -95,7 +94,7 @@ public sealed interface Rules {
      * <p>The same two answers this type exists to keep apart, asked of a projection. A value of a
      * kind that carries no clause has no rule for a projection to have been short of, so its bounds
      * state everything there was — read off {@link FieldDomains#NONE} instead, which answers as a
-     * caller that stopped, every plain {@code String} in every model would be a position no edge
+     * caller that stopped, every plain {@code String} in every model would be a place no edge
      * could be promised at.
      */
     default ProjectionEvidence projection() {
@@ -111,7 +110,7 @@ public sealed interface Rules {
      * <p>Asked of the algebra rather than made here. What certifies a range is the algebra's to say,
      * and a value carrying no clause is a system of no rules — which meets every hypothesis and has
      * no rule to leave unproven, so every certificate holds of it. Made once because it is the same
-     * answer every time and this is asked of every position and every line drawn on one.
+     * answer every time and this is asked of every name and every line drawn on one.
      */
     ProjectionEvidence NOTHING_WAS_WRITTEN = whatNoRuleAtAllComesTo();
 
@@ -122,7 +121,7 @@ public sealed interface Rules {
                     new ProjectionEvidence.CertifiedExact(it.by());
             // The arms below are the algebra changing what it takes a certificate to be, and not
             // anything about a value: a system of no rules leaves nothing unproven and relates no
-            // two positions of different kinds.
+            // two subjects of different kinds.
             case souther.compiler.numeric.ProjectionCertification other ->
                     throw new IllegalStateException(
                             "no rule is written anywhere and the algebra answered " + other);
@@ -163,7 +162,7 @@ public sealed interface Rules {
             // looked.
             case Hir.SumData _, Hir.UnitData _ -> new NoneWritten();
             // A name denoting no declaration. Nothing is written about it here because there is
-            // nothing here to write it on — and what that costs the position is said by the reading
+            // nothing here to write it on — and what that costs the value is said by the reading
             // of its shape, which reports the type as one this could not interpret.
             //
             // No `default` beside it. A declaration kind added later has to be classified here, and
@@ -174,7 +173,7 @@ public sealed interface Rules {
         };
     }
 
-    /** The same, for a position whose type may name no declaration at all. */
+    /** The same, for a value whose type may name no declaration at all. */
     static Rules of(Type type, Symbols symbols, ReadingPolicy policy) {
         return of(type instanceof Type.Ref ref ? ref.name() : null, symbols, policy);
     }

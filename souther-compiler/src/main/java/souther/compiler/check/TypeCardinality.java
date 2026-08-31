@@ -365,8 +365,9 @@ public final class TypeCardinality {
                 return;
             }
             OccurrenceCounts held = OccurrenceCounts.of(at, data, symbols, policy);
-            for (String path : data.newtype() ? Set.of(FieldDomains.THE_VALUE)
-                    : TypeOps.fieldTypes(data, symbols).keySet()) {
+            for (RuleKey path : data.newtype() ? Set.of(RuleKey.THE_VALUE)
+                    : TypeOps.fieldTypes(data, symbols).keySet().stream()
+                            .map(RuleKey::of).collect(java.util.stream.Collectors.toSet())) {
                 long least = held.leastHeldAt(path);
                 if (least > 0) {
                     counts.add(least);

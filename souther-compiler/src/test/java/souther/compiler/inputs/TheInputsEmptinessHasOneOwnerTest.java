@@ -73,7 +73,7 @@ class TheInputsEmptinessHasOneOwnerTest {
      */
     @Test
     void aContradictionInTheOrderingOfOneParameterNamesItsPosition() {
-        assertEquals(new Emptiness.AtAField("p.when",
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("p.when"),
                         new Emptiness.EmptyOrderedInterval()), why("""
                 module example.ordered
 

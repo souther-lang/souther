@@ -41,6 +41,11 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
+    /** What the rules leave the field the record's own clauses call {@code field}. */
+    private static NarrowedBounds at(FieldDomains domains, String field) {
+        return domains.at(RuleKey.of(field));
+    }
+
     private static void assertBounds(NarrowedBounds narrowed, long min, long max) {
         NumericDomain.Bounds bounds = narrowed.bounds();
         assertNotNull(bounds, "nothing bounds this field");
@@ -67,8 +72,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
     void aSiblingsRuleNarrowsBothEndsOfTheRange() {
         FieldDomains domains = domainsIn(TIMESHEET, "WorkInterval");
 
-        assertBounds(domains.at("startsAt"), 0, 1439);
-        assertBounds(domains.at("endsAt"), 1, 1440);
+        assertBounds(at(domains, "startsAt"), 0, 1439);
+        assertBounds(at(domains, "endsAt"), 1, 1440);
         assertTrue(domains.projection().isCertified(), "both rules were read");
     }
 
@@ -88,8 +93,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                 """, "WorkInterval");
 
-        assertBounds(domains.at("startsAt"), 0, 1440);
-        assertBounds(domains.at("endsAt"), 0, 1440);
+        assertBounds(at(domains, "startsAt"), 0, 1440);
+        assertBounds(at(domains, "endsAt"), 0, 1440);
     }
 
     /** A non-strict rule between two fields of one type narrows neither. Every relational record
@@ -109,8 +114,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant lateNightIsPartOfIt = lateNight <= worked
                 """, "DailyAttendance");
 
-        assertBounds(domains.at("worked"), 0, 24);
-        assertBounds(domains.at("lateNight"), 0, 24);
+        assertBounds(at(domains, "worked"), 0, 24);
+        assertBounds(at(domains, "lateNight"), 0, 24);
     }
 
     /**
@@ -136,13 +141,13 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = low < high
                 """, "Band");
 
-        assertBounds(domains.at("low"), 0, 1);
-        assertBounds(domains.at("high"), 0, 1);
-        assertTrue(domains.at("low").bounds().min().inclusive(), "a low of 0 needs no room under it");
-        assertFalse(domains.at("low").bounds().max().inclusive(),
+        assertBounds(at(domains, "low"), 0, 1);
+        assertBounds(at(domains, "high"), 0, 1);
+        assertTrue(at(domains, "low").bounds().min().inclusive(), "a low of 0 needs no room under it");
+        assertFalse(at(domains, "low").bounds().max().inclusive(),
                 "a low of 1 leaves no room above it");
-        assertFalse(domains.at("high").bounds().min().inclusive(), "nor a high of 0 below it");
-        assertTrue(domains.at("high").bounds().max().inclusive(), "and a high of 1 needs none");
+        assertFalse(at(domains, "high").bounds().min().inclusive(), "nor a high of 0 below it");
+        assertTrue(at(domains, "high").bounds().max().inclusive(), "and a high of 1 needs none");
         assertTrue(domains.projection().isCertified(), "and every rule of the record was taken into these");
     }
 
@@ -169,7 +174,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant nonzero = a.value /= 0
                 """, "R");
 
-        assertBounds(domains.at("a"), 1, 10);
+        assertBounds(at(domains, "a"), 1, 10);
         assertTrue(domains.projection().isCertified(),
                 "and the range is now the whole of it: every value in it is one a row can write");
     }
@@ -197,7 +202,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant afterTheLabel = String.length(label.value) < startsAt.value
                 """, "WorkInterval");
 
-        assertBounds(domains.at("startsAt"), 2, 1439);
+        assertBounds(at(domains, "startsAt"), 2, 1439);
         assertTrue(domains.projection().isCertified(), "both rules are comparisons of whole numbers");
     }
 
@@ -228,7 +233,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant spelled = String.matches("[a-z]+", label.value)
                 """, "WorkInterval");
 
-        assertBounds(domains.at("startsAt"), 0, 1439);
+        assertBounds(at(domains, "startsAt"), 0, 1439);
         assertFalse(domains.projection().isCertified(),
                 "the pattern narrows no minute, and whether a minute of 1439 can be written is a"
                         + " question about a whole interval, which has a label in it");
@@ -248,8 +253,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                 """, "Entry");
 
-        assertNull(domains.at("note").bounds(), "a string has no numbers to bound");
-        assertNull(domains.at("count").bounds(),
+        assertNull(at(domains, "note").bounds(), "a string has no numbers to bound");
+        assertNull(at(domains, "count").bounds(),
                 "an Int the model draws no line through is unbounded");
     }
 
@@ -279,8 +284,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = from.value < to.value
                 """, "Span");
 
-        assertBounds(domains.at("from"), 0, 1439);
-        assertBounds(domains.at("to"), 1, 1440);
+        assertBounds(at(domains, "from"), 0, 1439);
+        assertBounds(at(domains, "to"), 1, 1440);
     }
 
     /**
@@ -317,7 +322,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 "the rule is `value >= 0.0m` wherever it is declared");
         assertEquals(0, BigDecimal.ZERO.compareTo(
                         souther.compiler.numeric.Count.number(
-                                domains.at("total").bounds().min().at()).at()),
+                                at(domains, "total").bounds().min().at()).at()),
                 "and it reaches the domain from there too");
     }
 
@@ -345,7 +350,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant notTen = b.value /= 10
                 """, "R");
 
-        assertBounds(domains.at("a"), 0, 9);
+        assertBounds(at(domains, "a"), 0, 9);
         assertTrue(domains.projection().isCertified(),
                 "and nothing is left over: `a = 9` is written with `b = 9`, which the hole admits");
     }
@@ -410,8 +415,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-        assertBounds(domains.at("a"), 0, 9);
-        assertBounds(domains.at("b"), 1, 10);
+        assertBounds(at(domains, "a"), 0, 9);
+        assertBounds(at(domains, "b"), 1, 10);
         assertTrue(domains.projection().isCertified());
     }
 
@@ -446,7 +451,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                 """, "Root");
 
-        assertBounds(domains.at("n"), 0, 10);
+        assertBounds(at(domains, "n"), 0, 10);
         assertFalse(domains.projection().isCertified(),
                 "the pattern is three records down and a Root cannot be built without going through"
                         + " it");
@@ -473,7 +478,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                 """, "Root");
 
-        assertBounds(domains.at("n"), 0, 10);
+        assertBounds(at(domains, "n"), 0, 10);
         assertTrue(domains.projection().isCertified(),
                 "a Root with no note and no others is a Root, and the pattern never runs");
     }
@@ -511,8 +516,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-        assertBounds(domains.at("a"), 0, 9);
-        assertBounds(domains.at("b"), 1, 10);
+        assertBounds(at(domains, "a"), 0, 9);
+        assertBounds(at(domains, "b"), 1, 10);
         assertTrue(domains.projection().isCertified(),
                 "a local `Amount` of another shape says nothing about the one these fields are");
     }
@@ -520,6 +525,6 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
     /** A newtype has no siblings, so there is nothing here to project. */
     @Test
     void aNewtypeHasNothingToProjectOnto() {
-        assertNull(domainsIn(TIMESHEET, "MinuteOfDay").at("value").bounds());
+        assertNull(at(domainsIn(TIMESHEET, "MinuteOfDay"), "value").bounds());
     }
 }

@@ -52,7 +52,7 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
         FieldDomains reading = reading();
 
         long beforeEnds = FieldDomains.readingsMade();
-        NarrowedBounds hi = reading.at("hi");
+        NarrowedBounds hi = reading.at(RuleKey.of("hi"));
         assertNotNull(hi.bounds().min(), "something puts a floor under `hi`");
         assertEquals(beforeEnds, FieldDomains.readingsMade(),
                 "where the coordinate stops was settled when this reading was made");
@@ -68,7 +68,7 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
     /** Asked twice, answered once. What is kept is the answer and not the work. */
     @Test
     void whoHoldsAnEndIsWorkedOutAtMostOnce() {
-        NarrowedBounds hi = reading().at("hi");
+        NarrowedBounds hi = reading().at(RuleKey.of("hi"));
         holding(hi);
 
         long before = FieldDomains.readingsMade();
@@ -87,7 +87,7 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
     void theReadingThatLostIsNeverAskedWhoHeldItsEnd() {
         // The reading of `Held` puts `hi` at 110, and this other reading puts it at 200. A floor is
         // the greater of the two, so the one that read the declaration is the one that loses.
-        NarrowedBounds lost = reading().at("hi");
+        NarrowedBounds lost = reading().at(RuleKey.of("hi"));
         NarrowedBounds tighter = NarrowedBounds.of(
                 new souther.compiler.numeric.NumericDomain.Bounds(
                         new souther.compiler.numeric.Endpoint(

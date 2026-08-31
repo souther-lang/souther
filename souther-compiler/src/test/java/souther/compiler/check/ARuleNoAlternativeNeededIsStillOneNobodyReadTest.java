@@ -66,13 +66,13 @@ class ARuleNoAlternativeNeededIsStillOneNobodyReadTest {
     /** The position holds every value, and that is the whole of what the rules leave it. */
     @Test
     void thePositionIsSpokenForWhateverTheThirdAlternativeSays() {
-        assertEquals(AdmissibleSet.complete(ValueSet.ANY), read(LEFT_ASSOCIATED).admits("n"));
+        assertEquals(AdmissibleSet.complete(ValueSet.ANY), read(LEFT_ASSOCIATED).admits(RuleKey.of("n")));
     }
 
     /** However the alternatives are bracketed. {@code ||} is one connective and not a tree. */
     @Test
     void andHoweverTheAlternativesAreBracketed() {
-        assertEquals(AdmissibleSet.complete(ValueSet.ANY), read(RIGHT_ASSOCIATED).admits("n"));
+        assertEquals(AdmissibleSet.complete(ValueSet.ANY), read(RIGHT_ASSOCIATED).admits(RuleKey.of("n")));
     }
 
     /** And the rule is still one nothing read, which is what the accounting is for. */
@@ -113,7 +113,7 @@ class ARuleNoAlternativeNeededIsStillOneNobodyReadTest {
         Map<RuleRef, RuleAccounting> accounting = read.accounting();
 
         assertEquals(1, accounting.size(), "one clause, so one rule to account for");
-        assertEquals(AdmissibleSet.READ_IN_FULL, read.admits("n").completeness());
+        assertEquals(AdmissibleSet.READ_IN_FULL, read.admits(RuleKey.of("n")).completeness());
         assertTrue(accounting.values().stream().anyMatch(each -> !each.unaccounted().isEmpty()),
                 "the values being spoken for did not answer the rule's question");
     }

@@ -198,8 +198,4 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
         }
     }
 
-    /** The fields a path names, from the head down. */
-    static List<String> stepsOf(String path) {
-        return path.isEmpty() ? List.of() : List.of(path.split("\\."));
-    }
 }

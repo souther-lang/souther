@@ -100,7 +100,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     void andSaysSoWhereTheFieldsOwnTypeAlreadyDrewALine() {
         FieldDomains read = readingOf(MEASURED, "Parcel");
 
-        assertFalse(read.placedAt("length").isEmpty(), "`Cm` places an end here");
+        assertFalse(read.placedAt(RuleKey.of("length")).isEmpty(), "`Cm` places an end here");
         assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
                 reasonsAt(read, "length"));
         assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
@@ -125,9 +125,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant length.value <= 150
                 """, "Parcel");
 
-        assertFalse(read.placedAt("length").isEmpty());
-        assertEquals(List.of(), read.noLineAt("length"));
-        assertEquals(List.of(), read.noLineAt("width"));
+        assertFalse(read.placedAt(RuleKey.of("length")).isEmpty());
+        assertEquals(List.of(), read.noLineAt(RuleKey.of("length")));
+        assertEquals(List.of(), read.noLineAt(RuleKey.of("width")));
     }
 
     /**
@@ -147,8 +147,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant length /= 5
                 """, "Parcel");
 
-        assertEquals(List.of(), read.noLineAt("label"));
-        assertEquals(List.of(), read.noLineAt("length"));
+        assertEquals(List.of(), read.noLineAt(RuleKey.of("label")));
+        assertEquals(List.of(), read.noLineAt(RuleKey.of("length")));
     }
 
     /**
@@ -167,7 +167,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant length == 5
                 """, "Parcel");
 
-        assertEquals(List.of(), read.noLineAt("length"));
+        assertEquals(List.of(), read.noLineAt(RuleKey.of("length")));
     }
 
     /**
@@ -298,7 +298,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                 """, "Holder");
 
         assertEquals(List.of(new BlockReason.UnreadComparisonDomain()), reasonsAt(read, "stage"));
-        assertEquals(List.of(), read.placedAt("stage"), "no line is drawn where no order is");
+        assertEquals(List.of(), read.placedAt(RuleKey.of("stage")), "no line is drawn where no order is");
     }
 
     /** And a newtype's own clause reaches the same account, at the position a name wraps. */
@@ -311,14 +311,15 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant value >= 1 + 1
                 """, "Stepped");
 
-        List<FieldDomains.NoLine> said = read.noLineAt(FieldDomains.THE_VALUE);
+        List<FieldDomains.NoLine> said = read.noLineAt(RuleKey.THE_VALUE);
         assertEquals(1, said.size(), () -> "said " + said);
         assertInstanceOf(BlockReason.UnreadComparisonForm.class, said.getFirst().why());
         assertTrue(said.getFirst().from().clause().id().declaredOn().name().endsWith("Stepped"),
                 "the rule a reader is sent to look at is the one that wrote the clause");
     }
 
-    private static List<BlockReason.RuleWithoutLineReason> reasonsAt(FieldDomains read, String path) {
-        return read.noLineAt(path).stream().map(FieldDomains.NoLine::why).toList();
+    private static List<BlockReason.RuleWithoutLineReason> reasonsAt(FieldDomains read,
+                                                                     String field) {
+        return read.noLineAt(RuleKey.of(field)).stream().map(FieldDomains.NoLine::why).toList();
     }
 }

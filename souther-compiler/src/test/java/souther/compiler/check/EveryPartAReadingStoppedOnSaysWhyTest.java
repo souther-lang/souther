@@ -155,7 +155,7 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
     void aLineStandsOnEveryConjunctStoppedBehindIt() {
         FieldDomains read = read(TWO_CONJUNCTS_ON_ONE_LINE);
 
-        assertEquals(2, read.noLineAt("x").size(),
+        assertEquals(2, read.noLineAt(RuleKey.of("x")).size(),
                 "each conjunct was stopped, and each is recorded where it was written");
         assertEquals(List.of("UnreadComparisonForm"),
                 linesStanding(read).get("invariant N (said) at x"));

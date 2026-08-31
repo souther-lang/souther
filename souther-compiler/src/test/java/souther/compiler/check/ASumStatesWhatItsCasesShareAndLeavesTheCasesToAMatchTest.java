@@ -78,7 +78,7 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
     private final PathEngine engine = new PathEngine(symbols, Map.of(),
             Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-    private final GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees());
+    private final GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees(), symbols);
 
     private static Symbols symbols() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
@@ -98,7 +98,7 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
     private record Told(Map<String, List<String>> guaranteed, List<String> handedOn) {}
 
     private Told reading(String name) {
-        return reading(name, GuaranteeWalk.Scope.everyPosition());
+        return reading(name, GuaranteeWalk.Scope.everyName());
     }
 
     private Told reading(String name, GuaranteeWalk.Scope scope) {
@@ -108,19 +108,19 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
                 engine.terms().placeTerm(root.binding()));
         Map<String, List<String>> guaranteed = new LinkedHashMap<>();
         List<String> handedOn = new ArrayList<>();
-        walk.from(root, FieldDomains.THE_VALUE, at, scope,
+        walk.from(root, RuleKey.THE_VALUE, at, scope,
                 new GuaranteeWalk.Reader() {
                     @Override
-                    public void guaranteed(String path, TypeGuarantee guarantee) {
-                        guaranteed.computeIfAbsent(path, _ -> new ArrayList<>())
+                    public void guaranteed(RuleKey path, TypeGuarantee guarantee) {
+                        guaranteed.computeIfAbsent(path.toString(), _ -> new ArrayList<>())
                                 .add(guarantee.rule().clause().toString());
                     }
 
                     @Override
-                    public void handedOn(String path, Type type) {
-                        // The value itself is at the empty path, which reads as nothing in a
-                        // failure message. Named here so a diff says which position it was.
-                        handedOn.add(path.isEmpty() ? "the value" : path);
+                    public void handedOn(RuleKey path, Type type) {
+                        // The value itself is at no name of its own, which reads as nothing in a
+                        // failure message. Named here so a diff says which value it was.
+                        handedOn.add(path.isTheValueItself() ? "the value" : path.toString());
                     }
                 });
         return new Told(guaranteed, handedOn);
@@ -198,7 +198,7 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
 
     /** Reading everything but the rules {@code declaration} wrote. */
     private static GuaranteeWalk.Scope without(String declaration) {
-        return new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.EveryPosition(), _ -> false,
+        return new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.EveryName(), _ -> false,
                 RulesLeftOut.writtenOn(each -> each.name().equals(declaration)));
     }
 

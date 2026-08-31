@@ -86,9 +86,9 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
                 data Pair = Set<Int>
                     invariant two = Set.size(value) >= 2
                 """, "Pair");
-        assertFalse(counts.mayHoldAtMost(FieldDomains.THE_VALUE, 1), "two will not fit in one");
-        assertFalse(counts.mayHoldExactly(FieldDomains.THE_VALUE, 0), "nor in none");
-        assertTrue(counts.mayHoldAtLeast(FieldDomains.THE_VALUE, 2), "and two is what it asks for");
+        assertFalse(counts.mayHoldAtMost(RuleKey.THE_VALUE, 1), "two will not fit in one");
+        assertFalse(counts.mayHoldExactly(RuleKey.THE_VALUE, 0), "nor in none");
+        assertTrue(counts.mayHoldAtLeast(RuleKey.THE_VALUE, 2), "and two is what it asks for");
     }
 
     /**
@@ -103,9 +103,9 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
                 data Loose = Set<Int>
                     invariant either = Set.size(value) >= 2 || Set.size(value) == 0
                 """, "Loose");
-        assertTrue(counts.mayHoldAtMost(FieldDomains.THE_VALUE, 0), "the empty set is one of these");
-        assertTrue(counts.mayHoldAtMost(FieldDomains.THE_VALUE, 1), "and so is nothing smaller");
-        assertTrue(counts.mayHoldExactly(FieldDomains.THE_VALUE, 0), "asked the other way as well");
+        assertTrue(counts.mayHoldAtMost(RuleKey.THE_VALUE, 0), "the empty set is one of these");
+        assertTrue(counts.mayHoldAtMost(RuleKey.THE_VALUE, 1), "and so is nothing smaller");
+        assertTrue(counts.mayHoldExactly(RuleKey.THE_VALUE, 0), "asked the other way as well");
     }
 
     /** A position no rule counts answers yes to every count, having nothing to say about any. */
@@ -116,8 +116,8 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
 
                 data Bare = Set<Int>
                 """, "Bare");
-        assertTrue(counts.mayHoldAtMost(FieldDomains.THE_VALUE, 0));
-        assertTrue(counts.mayHoldExactly(FieldDomains.THE_VALUE, 5));
-        assertTrue(counts.mayHoldAtLeast(FieldDomains.THE_VALUE, 5));
+        assertTrue(counts.mayHoldAtMost(RuleKey.THE_VALUE, 0));
+        assertTrue(counts.mayHoldExactly(RuleKey.THE_VALUE, 5));
+        assertTrue(counts.mayHoldAtLeast(RuleKey.THE_VALUE, 5));
     }
 }

@@ -67,18 +67,17 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
     }
 
     /**
-     * The seed for a term, read as a rule of the value at {@code root} — null where no rule of that
-     * value names it.
+     * The seed for a term written at {@code address}.
+     *
+     * <p>The address and not the value it is under, because what a rule calls the place is settled
+     * where the value is chosen ({@link InputDomain#rootNaming}) — worked out again here, this
+     * would answer that a rule names nothing at a value picked for naming it.
      *
      * <p>Exhaustive over {@link NumericTerm}, with no {@code default}: a term of a third kind is a
      * name this would have to read, and stopping the compile is what says so.
      */
-    public static PlacementSeed of(TermPath root, NumericTerm term, RuleRef by,
+    public static PlacementSeed of(RuleAddress address, NumericTerm term, RuleRef by,
                                    RuleCitation cited) {
-        RuleAddress address = RuleAddress.of(root, term.subjectPath());
-        if (address == null) {
-            return null;
-        }
         return new PlacementSeed(address, new Placed.ANumberOfIt(switch (term) {
             case NumericTerm.ValueOf _ -> new FieldDomains.CoordinateKind.OfItsOwnValue();
             case NumericTerm.TakenOf taken ->

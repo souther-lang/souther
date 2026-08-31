@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -96,7 +97,8 @@ final class ReadQuantities implements Quantities {
     private volatile souther.compiler.check.ConstraintState<InputAtom> constraints;
     /** Where each position of the input sits, in the order the parameters and their positions are
      *  declared. What a proof of emptiness names a place out of. */
-    private volatile java.util.SequencedMap<InputAtom, String> positions;
+    private volatile java.util.SequencedMap<InputAtom,
+            souther.compiler.check.Emptiness.AtAField.Where> positions;
 
     /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
     private record Assumed(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {}
@@ -188,23 +190,33 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The value {@code path} is a position of, or null where it is a position of nothing this
-     * reading holds.
+     * The value {@code path} is a position of and what that value's rules call it, or null where no
+     * value this reading holds can name it.
      *
      * <p>The nearest, which is the one whose clauses can name it: a field of a case is under the
      * parameter as well, and what the parameter's own rules say stops at the narrowing. Read as the
      * outermost, a clause of the sum would be asked about a position inside one of its cases.
+     *
+     * <p><b>The name comes back with the root, because it is why that root was chosen.</b> Handed
+     * back alone, every caller works the name out again and has to answer for a root it cannot
+     * name — and the answers do not agree: one drops the term, one refuses. A root a caller is
+     * given is one whose rules name the place, so there is no such case to answer for.
      */
-    private TermPath rootOf(TermPath path) {
-        TermPath nearest = null;
+    private UnderARoot rootOf(TermPath path) {
+        UnderARoot nearest = null;
         for (TermPath root : roots) {
-            if (path.isAtOrUnder(root)
-                    && (nearest == null || root.isAtOrUnder(nearest))) {
-                nearest = root;
+            RuleKey named = path.ruleKeyUnder(root);
+            if (named != null
+                    && (nearest == null || root.isAtOrUnder(nearest.root()))) {
+                nearest = new UnderARoot(root, named);
             }
         }
         return nearest;
     }
+
+    /** A value whose rules reach a place, and what those rules call it. Made only by
+     *  {@link #rootOf}, so holding one is holding a root that can name what was asked about. */
+    private record UnderARoot(TermPath root, RuleKey named) {}
 
     /** Each parameter's rules read with what is fixed under it, once, under this input's names. */
     private Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned() {
@@ -323,26 +335,41 @@ final class ReadQuantities implements Quantities {
      * the order its value declares them. Read off a map salted once per run, which position a
      * refusal names would move between runs of the same compiler.
      *
-     * <p>The parameter and the declaration's own path joined, because the two spellings are the same
+     * <p>The parameter and the declaration's own name joined, because the two spellings are the same
      * place or the report names one nobody wrote. A field of the record a clause was written on is
      * {@code x} there and {@code p.x} here, and this is where it becomes the second.
+     *
+     * <p>Everything here is somewhere in the input. The value a proof would call itself is the
+     * behavior's whole input, which no reading names and no parameter is — so a parameter carrying
+     * nothing of its own comes out as the parameter and not as the value the proof is about.
      */
-    private java.util.SequencedMap<InputAtom, String> positions() {
-        java.util.SequencedMap<InputAtom, String> read = positions;
+    private java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where>
+            positions() {
+        java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where> read =
+                positions;
         if (read != null) {
             return read;
         }
-        java.util.SequencedMap<InputAtom, String> made = new LinkedHashMap<>();
-        conditioned().forEach((root, carried) -> carried.positions().forEach(
-                // What a newtype wraps has no path of its own, so the place is the value itself.
-                (atom, path) -> made.put(atom, FieldDomains.THE_VALUE.equals(path)
-                        ? root.toString() : root + "." + path)));
+        java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where> made =
+                new LinkedHashMap<>();
+        conditioned().forEach((root, carried) -> carried.named().forEach(
+                // What a newtype wraps is at no name of its own, so the place is the parameter.
+                (atom, path) -> made.put(atom,
+                        new souther.compiler.check.Emptiness.AtAField.Where.In(
+                                path.isEmpty() ? root.toString() : root + "." + path))));
         read = java.util.Collections.unmodifiableSequencedMap(made);
         positions = read;
         return read;
     }
 
-    /** What this input calls the number at one of a value's coordinates. */
+    /**
+     * What this input calls the number at one of a value's coordinates.
+     *
+     * <p>The name and not a place, because a name is what the coordinate is about: what the cases
+     * of a sum share is named at the sum and stands at a position under each of them, so a subject
+     * turned into one of those positions would be one of however many the name reaches, chosen by
+     * nothing.
+     */
     private static InputAtom called(TermPath root, FieldDomains.Coordinate at) {
         return new InputAtom.Named(root.toString(), at.path(), at.kind());
     }
@@ -350,9 +377,9 @@ final class ReadQuantities implements Quantities {
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
     private InputAtom.Named called(NumericTerm term) {
-        TermPath root = rootOf(term.subjectPath());
-        FieldDomains.Coordinate at = coordinateOf(root, term);
-        return new InputAtom.Named(root.toString(), at.path(), at.kind());
+        UnderARoot at = rootOf(term.subjectPath());
+        FieldDomains.Coordinate where = coordinateOf(at, term);
+        return new InputAtom.Named(at.root().toString(), where.path(), where.kind());
     }
 
     /**
@@ -564,8 +591,9 @@ final class ReadQuantities implements Quantities {
     private NumericTerm held(NumericTerm term) {
         if (rootOf(term.subjectPath()) == null) {
             throw new IllegalArgumentException(
-                    "`" + term.subjectPath() + "` is under nothing this behavior takes, so there is"
-                            + " nothing here to answer about " + term);
+                    "`" + term.subjectPath() + "` is under no value whose rules this reading holds"
+                            + " and can name it by, so there is nothing here to answer about "
+                            + term);
         }
         return term;
     }
@@ -573,42 +601,42 @@ final class ReadQuantities implements Quantities {
     /** What is fixed under one value, named the way that value's own rules name it. */
     private Map<FieldDomains.Coordinate, Count> under(TermPath root) {
         Map<FieldDomains.Coordinate, Count> out = new LinkedHashMap<>();
-        fixed.forEach((term, at) -> {
-            // Which number of the position was settled, and not only which position. A count taken
-            // of a position is a coordinate of its own, and a fixing that named only the value left
-            // a rule over two counts unconditioned while the same rule was read whole when the
-            // counts were asked about.
-            // Only where one value was fixed there. A position fixed at two settles nothing the
+        fixed.forEach((term, fixedAt) -> {
+            UnderARoot at = rootOf(term.subjectPath());
+            // Which number of the place was settled, and not only which place. A count taken of one
+            // is a coordinate of its own, and a fixing that named only the value left a rule over
+            // two counts unconditioned while the same rule was read whole when the counts were
+            // asked about.
+            // Only where one value was fixed there. A place fixed at two settles nothing the
             // declarations could be told, and what it contradicts is said here rather than by them.
-            if (root.equals(rootOf(term.subjectPath())) && at.isOne()) {
-                out.put(coordinateOf(root, term), at.least());
+            if (at != null && root.equals(at.root()) && fixedAt.isOne()) {
+                out.put(coordinateOf(at, term), fixedAt.least());
             }
         });
         return out;
     }
 
-    /** The coordinate of one term, in the words the rules of the value it is a position of are
-     *  read in. */
-    private static FieldDomains.Coordinate coordinateOf(TermPath root, NumericTerm term) {
-        // Written with the steps inside a sequence in it, so two positions never come to one name.
-        // No clause is written at such a name, so a lookup finds nothing — which is what a clause
-        // of the value says about a position inside a collection.
-        //
-        // Named by the operation and not by "something was taken here". A count of a string and the
-        // magnitude of a number at the same path are two quantities, and a flag brought them to one
-        // name — so a guard bounding one would have been read against the clauses written about the
-        // other (#1027).
-        String spelled = term.subjectPath().stepsSpelledUnder(root);
+    /**
+     * The coordinate of one term, in the words the rules of the value it is a position of are read
+     * in.
+     *
+     * <p>Total, because the name arrives with the root that answers by it ({@link #rootOf}). Which
+     * steps of a place are names a rule writes is settled once, where the root is chosen, so
+     * nothing here decides it again and there is no place a term could arrive at that this cannot
+     * name.
+     *
+     * <p>Named by the operation and not by "something was taken here". A count of a string and the
+     * magnitude of a number at the same place are two quantities, and a flag brought them to one
+     * name — so a guard bounding one would have been read against the clauses written about the
+     * other (#1027).
+     */
+    private static FieldDomains.Coordinate coordinateOf(UnderARoot at, NumericTerm term) {
         return switch (term) {
-            case NumericTerm.ValueOf _ -> FieldDomains.Coordinate.value(spelled);
+            case NumericTerm.ValueOf _ -> FieldDomains.Coordinate.value(at.named());
             case NumericTerm.TakenOf taken ->
-                    FieldDomains.Coordinate.takenBy(spelled, taken.operation());
-            // Named the same way, and named at a place no clause of the value is written at: the
-            // steps run inside a sequence, and what a record says relates the fields it holds. So
-            // a lookup finds nothing, which is the true answer — a record states no rule about
-            // what its elements add up to — rather than a collision with the rules of a field.
+                    FieldDomains.Coordinate.takenBy(at.named(), taken.operation());
             case NumericTerm.TakenOver over ->
-                    FieldDomains.Coordinate.takenBy(spelled, over.operation());
+                    FieldDomains.Coordinate.takenBy(at.named(), over.operation());
         };
     }
 

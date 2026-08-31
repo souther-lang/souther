@@ -114,8 +114,9 @@ class ARuleIsFiledAtWhatItsQuantityIsAboutTest {
                 new UnreadComparison.Quantity.OverOne<>("z"), List.of("x", "y")));
     }
 
-    private static List<BlockReason.RuleWithoutLineReason> reasonsAt(FieldDomains read, String path) {
-        return read.noLineAt(path).stream().map(FieldDomains.NoLine::why).toList();
+    private static List<BlockReason.RuleWithoutLineReason> reasonsAt(FieldDomains read,
+                                                                     String field) {
+        return read.noLineAt(RuleKey.of(field)).stream().map(FieldDomains.NoLine::why).toList();
     }
 
     private static FieldDomains read(String source) {

@@ -298,12 +298,12 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
                 """, "Length");
 
         assertEquals(Endpoint.inclusive(Count.of(0)),
-                domains.placedAt(FieldDomains.THE_VALUE).stream().filter(FieldDomains.Placed::lower)
+                domains.placedAt(RuleKey.THE_VALUE).stream().filter(FieldDomains.Placed::lower)
                         .findFirst().orElseThrow().end(),
                 "`floor` writes the end at none");
-        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(FieldDomains.THE_VALUE, new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(souther.compiler.types.ValueName.Stdlib.operation("List", "length"))).min(),
+        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(RuleKey.THE_VALUE, new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(souther.compiler.types.ValueName.Stdlib.operation("List", "length"))).min(),
                 "and the rules leave the count at one");
-        assertEquals(null, domains.leftAt(FieldDomains.THE_VALUE, new FieldDomains.CoordinateKind.OfItsOwnValue()),
+        assertEquals(null, domains.leftAt(RuleKey.THE_VALUE, new FieldDomains.CoordinateKind.OfItsOwnValue()),
                 "while the position's own values have no range for a line to be clamped by");
     }
 

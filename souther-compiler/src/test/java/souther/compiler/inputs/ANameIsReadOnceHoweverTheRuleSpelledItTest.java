@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Owed;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
@@ -77,10 +78,8 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
 
         TermPath root = TermPath.of("h");
         souther.compiler.check.RuleRef.Invariant rule = someRule(measuredIn(TWO_WAYS));
-        assertEquals(PlacementSeed.of(root, own, rule, someCitation(rule)).address(),
-                PlacementSeed.of(root, taken, rule, someCitation(rule)).address());
-        assertNotEquals(PlacementSeed.of(root, own, rule, someCitation(rule)).placed(),
-                PlacementSeed.of(root, taken, rule, someCitation(rule)).placed(),
+        assertEquals(seedOf(root, own, rule).address(), seedOf(root, taken, rule).address());
+        assertNotEquals(seedOf(root, own, rule).placed(), seedOf(root, taken, rule).placed(),
                 "and what each says about the location is what tells them apart");
     }
 
@@ -95,10 +94,10 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
     void twoQuestionsAboutOneLocationAreAtOneAddress() {
         TermPath root = TermPath.of("h");
         souther.compiler.check.RuleRef.Invariant rule = someRule(measuredIn(TWO_WAYS));
-        PlacementSeed values = PlacementSeed.of(root, new Owed.AdmittedValues("name"), rule,
-                someCitation(rule));
+        PlacementSeed values = PlacementSeed.of(root,
+                new Owed.AdmittedValues(RuleKey.of("name")), rule, someCitation(rule));
         PlacementSeed line = PlacementSeed.of(root,
-                new Owed.Boundary(FieldDomains.Coordinate.value("name")), rule,
+                new Owed.Boundary(FieldDomains.Coordinate.value(RuleKey.of("name"))), rule,
                 someCitation(rule));
 
         assertEquals(values.address(), line.address());
@@ -120,7 +119,8 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
         TermPath sum = TermPath.of("q");
         TermPath aCase = sum.refine(Refinement.sumCase(caseNamed(read, sum, "A")));
 
-        assertNotEquals(new RuleAddress(sum, "limit"), new RuleAddress(aCase, "limit"));
+        assertNotEquals(new RuleAddress(sum, RuleKey.of("limit")),
+                new RuleAddress(aCase, RuleKey.of("limit")));
     }
 
     /**
@@ -145,12 +145,10 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
                         + "the sum to that position is the crossing, and an address that stepped "
                         + "through the narrowing would be a second way to say it");
         souther.compiler.check.RuleRef.Invariant rule = someRule(caseNamedAtModule(read, sum, "A"));
-        assertNull(PlacementSeed.of(a, new NumericTerm.ValueOf(b.then("limit")), rule,
-                        someCitation(rule)),
-                "so nothing was placed there, which is not the same as a placement with nowhere "
+        assertNull(RuleAddress.of(a, b.then("limit")),
+                "so there is no address there, which is not the same as a placement with nowhere "
                         + "to go");
-        assertNotNull(PlacementSeed.of(a, new NumericTerm.ValueOf(a.then("limit")), rule,
-                        someCitation(rule)),
+        assertNotNull(seedOf(a, new NumericTerm.ValueOf(a.then("limit")), rule),
                 "and the same rule about its own value does place something");
     }
 
@@ -196,6 +194,14 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
                 new souther.compiler.check.Clause.Ref(
                         new souther.compiler.check.Clause.Id(on, 0),
                         java.util.Optional.of(new souther.compiler.check.ClauseName("here"))));
+    }
+
+    /** The seed for a term of the value at {@code root}, at the address that value's rules write
+     *  it at. */
+    private static PlacementSeed seedOf(TermPath root, NumericTerm term,
+                                        souther.compiler.check.RuleRef.Invariant rule) {
+        return PlacementSeed.of(RuleAddress.of(root, term.subjectPath()), term, rule,
+                someCitation(rule));
     }
 
     /** How a report would send a reader to it. */

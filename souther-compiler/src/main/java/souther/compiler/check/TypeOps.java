@@ -1177,10 +1177,10 @@ public final class TypeOps {
      * about, and a reader doing that for itself has a second way to decide what stands at a
      * position.
      */
-    static PositionReading.Owner writingFields(TypeSymbol name, Symbols symbols) {
+    static ValueReading.Owner writingFields(TypeSymbol name, Symbols symbols) {
         return name instanceof TypeSymbol.AtModule at
                 && symbols.declarations().declaration(at) instanceof Hir.Data data
-                ? new PositionReading.Owner(at, data) : null;
+                ? new ValueReading.Owner(at, data) : null;
     }
 
     /** Every data reachable from {@code data} through spreads, transitively — the set two cases are

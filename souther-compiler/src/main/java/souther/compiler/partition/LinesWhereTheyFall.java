@@ -228,12 +228,12 @@ public final class LinesWhereTheyFall {
         // The value a rule naming this location is read of, which the reading answers. A location
         // already naming a case is under no name of that value's, and comes back with none rather
         // than with one this worked out for itself.
-        InputDomain.RuleRoot root = inputs.rootNaming(path);
-        if (root == null) {
+        souther.compiler.inputs.RuleAddress address = inputs.rootNaming(path);
+        if (address == null) {
             return new WhereTheNameStands.AsWritten(term);
         }
         PlacementFiling filing = inputs.file(
-                PlacementSeed.of(root.at(), term, origin.rule(), origin.cited()));
+                PlacementSeed.of(address, term, origin.rule(), origin.cited()));
         List<NumericTerm> filed = new ArrayList<>();
         for (souther.compiler.inputs.PlacementOutcome outcome : filing.outcomes()) {
             switch (outcome) {

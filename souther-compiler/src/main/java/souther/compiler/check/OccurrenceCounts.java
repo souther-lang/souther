@@ -10,15 +10,15 @@ import java.math.BigDecimal;
 import java.util.Map;
 
 /**
- * How much a position may hold, asked of the rules rather than read off them.
+ * How much the value at a name may hold, asked of the rules rather than read off them.
  *
  * <p>Every question here has one shape: settle the count at some number and see whether anything is
- * left. A rule removes a count in more ways than a bound written at the position — a length counted
+ * left. A rule removes a count in more ways than a bound written at the name — a length counted
  * under another spelling, a floor stated through a second field, an equality that names no end at all
  * — and reading the clauses for the shapes one reader thought of leaves the rest of them saying
  * nothing. The seeding already relates all of them, so the question goes there.
  *
- * <p>Yes wherever the reading fell short: a clause the seeding could not take in, a position nothing
+ * <p>Yes wherever the reading fell short: a clause the seeding could not take in, a name nothing
  * counts, a reading that fell over. Unsupported information may leave more values in than there are
  * and may never leave fewer out — what these answers decide is that something cannot be built, and a
  * reader that guessed would refuse a type somebody can write.
@@ -26,7 +26,7 @@ import java.util.Map;
 public final class OccurrenceCounts {
 
     /**
-     * What a position no declaration wrote about leaves: every count.
+     * What a name no declaration wrote about leaves: every count.
      *
      * <p>A value a collection holds is one of these. There is no field for a record to have written a
      * rule about, so nothing here is narrowed by anything, and a reader that carried the collection's
@@ -41,7 +41,8 @@ public final class OccurrenceCounts {
     }
 
     /**
-     * The counts {@code data}, declared as {@code named}, leaves its positions able to hold.
+     * The counts {@code data}, declared as {@code named}, leaves the values at its names able to
+     * hold.
      *
      * <p>Seeded once and asked many times: filling a set from a finite element asks about every size
      * up to how many values the element has, and each of those is the same reading of the same
@@ -68,17 +69,17 @@ public final class OccurrenceCounts {
     }
 
     /** Whether the value at {@code path} may hold no more than {@code count}. */
-    public boolean mayHoldAtMost(String path, long count) {
+    public boolean mayHoldAtMost(RuleKey path, long count) {
         return mayHold(path, count, NumericDomain.Rel.LE);
     }
 
     /** Whether the value at {@code path} may hold {@code count} and no other number. */
-    public boolean mayHoldExactly(String path, long count) {
+    public boolean mayHoldExactly(RuleKey path, long count) {
         return mayHold(path, count, NumericDomain.Rel.EQ);
     }
 
     /** Whether the value at {@code path} may hold {@code count} or more. */
-    public boolean mayHoldAtLeast(String path, long count) {
+    public boolean mayHoldAtLeast(RuleKey path, long count) {
         return mayHold(path, count, NumericDomain.Rel.GE);
     }
 
@@ -91,7 +92,7 @@ public final class OccurrenceCounts {
      * answer wider than it needed to be. Nothing is refused on the strength of this — that is
      * {@link #mayHoldAtMost} and the others, which ask rather than read.
      */
-    long leastHeldAt(String path) {
+    long leastHeldAt(RuleKey path) {
         if (seeded == null) {
             return 0;
         }
@@ -100,7 +101,7 @@ public final class OccurrenceCounts {
                 : CountDomain.leastFrom(seeded.numbers().boundsOf(counted).min());
     }
 
-    private boolean mayHold(String path, long count, NumericDomain.Rel against) {
+    private boolean mayHold(RuleKey path, long count, NumericDomain.Rel against) {
         if (seeded == null) {
             return true;
         }

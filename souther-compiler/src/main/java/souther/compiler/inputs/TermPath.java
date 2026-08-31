@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.RuleKey;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -194,44 +196,38 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The dotted field name the clauses of the value at {@code root} name this position by, or null
-     * where none of them can name it.
+     * The name the rules of the value at {@code root} call this position by, or null where none of
+     * them can name it.
      *
-     * <p>{@link #fieldKey} asked of a value that is not the parameter. The rules of a
+     * <p>{@link #ruleKey} asked of a value that is not the parameter. The rules of a
      * {@code GlobalQuery} are written about {@code tag} and the position is
      * {@code query@GlobalQuery.tag}: the translation belongs to whoever knows which value's rules
-     * are being read, and putting it in {@link #fieldKey} would make this path know that too.
+     * are being read, and putting it in {@link #ruleKey} would make this path know that too.
+     *
+     * <p>The one way a position becomes a name. Which of the steps below the root are names is
+     * decided here and nowhere else — a step into a sequence and a narrowing to a case are places
+     * a value can be and are not names any rule writes — so a name is never assembled out of the
+     * steps by anybody who would have to remember that.
      *
      * <p>Null for a position under no such value as readily as for one no clause can name. A
      * reading of one value has nothing to say about a position in another, and answering with a
      * name would be that value's rules read at somebody else's position.
      */
-    public String fieldKeyUnder(TermPath root) {
+    public RuleKey ruleKeyUnder(TermPath root) {
         List<Step> below = below(root);
         if (below == null) {
             return null;
         }
+        List<String> named = new ArrayList<>();
         for (Step step : below) {
             switch (step) {
-                case Step.Field _ -> { }
+                case Step.Field field -> named.add(field.name());
                 case Step.Element _, Step.Refine _ -> {
                     return null;
                 }
             }
         }
-        return spelled(below);
-    }
-
-    /**
-     * The steps below {@code root} written out, or null where this is not under it.
-     *
-     * <p>{@link #stepsSpelled} asked of a value that is not the parameter, and what a table keyed by
-     * such names looks a position up by. {@link #fieldKeyUnder} is this where a clause of that value
-     * could name the position and null where none can.
-     */
-    public String stepsSpelledUnder(TermPath root) {
-        List<Step> below = below(root);
-        return below == null ? null : spelled(below);
+        return new RuleKey(named);
     }
 
     /** The steps of this below {@code root}, or null where this is not under it. */
@@ -274,8 +270,8 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The dotted field name the clauses of a value name this position by, or null where no clause
-     * of the value this is rooted at can name it.
+     * The name the clauses of a value call this position by, or null where no clause of the value
+     * this is rooted at can name it.
      *
      * <p>Null for two unlike reasons, and both of them are the same shape of answer. The clauses of
      * a record relate the fields of that record, and a position inside a sequence is not one of
@@ -283,7 +279,7 @@ public record TermPath(String head, List<Step> steps) {
      * holding the list is written at that name. And a clause is not written across a refinement
      * either: what a {@code GlobalQuery} says about its {@code tag} is written in
      * {@code GlobalQuery}, not in the sum, so a reader with those rules in hand asks
-     * {@link #fieldKeyUnder} the case rather than this.
+     * {@link #ruleKeyUnder} the case rather than this.
      *
      * <p>Joined without those steps the name would be looked up as a field of the value itself,
      * which is either nothing or, on the day such a field exists, another position's rules.
@@ -292,25 +288,8 @@ public record TermPath(String head, List<Step> steps) {
      * the clause (spec §invariant-discharge-quantified) and is not one of these keys. So null says
      * this reading has nothing to say about the position, and not that nothing does.
      */
-    public String fieldKey() {
-        return fieldKeyUnder(TermPath.of(head));
-    }
-
-    /**
-     * The steps written out, with the parameter left off.
-     *
-     * <p>A name for the location under whatever holds it, which is what a table keyed by such names
-     * looks a position up by. Where a step reaches inside a sequence or narrows the position the
-     * name still spells it, so two positions never come to one name — and no clause of a value is
-     * written at such a name, so a lookup finds nothing, which is the true answer and not a
-     * collision.
-     *
-     * <p>{@link #fieldKey} is this where a clause of the value could name the position and null
-     * where none can. A caller deciding what a clause says wants that one; a caller needing a name
-     * for every position wants this.
-     */
-    public String stepsSpelled() {
-        return spelled(steps);
+    public RuleKey ruleKey() {
+        return ruleKeyUnder(TermPath.of(head));
     }
 
     private static String spelled(List<Step> steps) {

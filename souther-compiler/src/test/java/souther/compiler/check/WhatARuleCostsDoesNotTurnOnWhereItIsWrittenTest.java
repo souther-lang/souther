@@ -80,7 +80,7 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
         return FieldDomains.of(name,
                 (Hir.Data) symbols.declarations().declaration(name.key()), symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
-                .admits(FieldDomains.THE_VALUE);
+                .admits(RuleKey.THE_VALUE);
     }
 
     private static final List<List<Integer>> ORDERS = List.of(

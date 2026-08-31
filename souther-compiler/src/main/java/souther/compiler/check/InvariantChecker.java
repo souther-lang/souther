@@ -403,13 +403,13 @@ public final class InvariantChecker {
      *                 on — those are {@link #handedOn()}, and they are somebody's to read rather
      *                 than nobody's
      *
-     *                 <p>Where and not whether, because a rule that narrows a position names it,
-     *                 and a clause written under one field can name no position outside that field.
-     *                 Recorded as one flag for the value, a stop under a regex-bounded code spoiled
-     *                 the plain {@code Int} beside it, and a report said a rule about that
-     *                 {@code Int} may have gone unread when nothing was written about it at all.
-     *                 A stop at {@link FieldDomains#THE_VALUE} is the declaration's own clause and
-     *                 does reach every position of it.
+     *                 <p>Where and not whether, because a rule that narrows what stands at a name
+     *                 writes that name, and a clause written under one field writes no name outside
+     *                 that field. Recorded as one flag for the value, a stop under a regex-bounded
+     *                 code spoiled the plain {@code Int} beside it, and a report said a rule about
+     *                 that {@code Int} may have gone unread when nothing was written about it at
+     *                 all. A stop at {@link RuleKey#THE_VALUE} is the declaration's own clause and
+     *                 does reach every name of it.
      *
      *                 <p>A different question from {@code everyClauseRead}, which is one reading's
      *                 account of the clauses it was handed: a clause that reading could not turn
@@ -420,18 +420,19 @@ public final class InvariantChecker {
      *                 them, which is an obligation on whoever walks the positions rather than
      *                 anything wrong here — see {@link Gathering#handedOn}
      */
-    record Seeded(ConstraintState<FactSubject> constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                  Map<String, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
-                  boolean everyClauseRead, Set<String> notGathered,
-                  Set<String> unreadOfEveryValue, Set<String> handedOn,
+    record Seeded(ConstraintState<FactSubject> constraints, Map<RuleKey, FactSubject> atoms,
+                  Map<RuleKey, FactSubject> keys,
+                  Map<RuleKey, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
+                  boolean everyClauseRead, Set<RuleKey> notGathered,
+                  Set<RuleKey> unreadOfEveryValue, Set<RuleKey> handedOn,
                   Map<RuleRef, Map<Core, PartRead>> readBy,
                   Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
 
         /** The atom each count is recorded against, for a reader that wants the subject and not
          *  which operation it is a count of. Projected rather than kept beside {@link #held()}: two
          *  maps of one thing are what this pair was before (#1027). */
-        Map<String, FactSubject> heldAtoms() {
-            Map<String, FactSubject> out = new LinkedHashMap<>();
+        Map<RuleKey, FactSubject> heldAtoms() {
+            Map<RuleKey, FactSubject> out = new LinkedHashMap<>();
             held.forEach((path, counted) -> out.put(path, counted.atom()));
             return out;
         }
@@ -452,7 +453,7 @@ public final class InvariantChecker {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
                     new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
-                    false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
+                    false, Set.of(RuleKey.THE_VALUE), Set.of(RuleKey.THE_VALUE),
                     Set.of(), Map.of(), Map.of());
         }
 
@@ -549,15 +550,15 @@ public final class InvariantChecker {
         // A clause nothing could type never reaches `written`, so no reading below sees it and none
         // of them can spoil a position for it. That is a fact about what was handed over rather
         // than about any one reading, and it is recorded here where the handing over happens.
-        Set<String> notGathered = new LinkedHashSet<>();
+        Set<RuleKey> notGathered = new LinkedHashSet<>();
         // And of those, the ones a construction cannot get out of: what a position admits and
         // whether an edge of it may be promised are two questions, and a stop answers them apart.
-        Set<String> unreadOfEveryValue = new LinkedHashSet<>();
+        Set<RuleKey> unreadOfEveryValue = new LinkedHashSet<>();
         // The positions this reading ended at with the rules under them still to be read by
         // somebody. Kept apart from the stops above because it is an obligation and not a finding:
         // whether anything took the rules over is settled by whoever walks the positions, and the
         // answer is not in this reading at all.
-        Set<String> handedOn = new LinkedHashSet<>();
+        Set<RuleKey> handedOn = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
         ReadingEvidence took = new ReadingEvidence();
         // What the bounds are able to state of each rule, as the reading that builds them says it.
@@ -576,7 +577,7 @@ public final class InvariantChecker {
             }
 
             @Override
-            public void missed(String path, Borne borne) {
+            public void missed(RuleKey path, Borne borne) {
                 notGathered.add(path);
                 if (borne == Borne.BY_EVERY_VALUE) {
                     unreadOfEveryValue.add(path);
@@ -584,7 +585,7 @@ public final class InvariantChecker {
             }
 
             @Override
-            public void handedOn(String path) {
+            public void handedOn(RuleKey path) {
                 handedOn.add(path);
             }
 
@@ -603,7 +604,7 @@ public final class InvariantChecker {
             // name any position of it.
             boolean skipped = false;
             if (!opened && !c.clauses.of(named, data).isEmpty()) {
-                gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
+                gathering.missed(RuleKey.THE_VALUE, Borne.BY_EVERY_VALUE);
             }
             for (TypeOps.Declared declared :
                     opened ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
@@ -620,7 +621,7 @@ public final class InvariantChecker {
                 Core stated = c.clauses.typed(declared.clause().expr(), named, data).orNull();
                 if (stated == null) {
                     read = false;
-                    gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
+                    gathering.missed(RuleKey.THE_VALUE, Borne.BY_EVERY_VALUE);
                     continue;
                 }
                 written.add(new Written(origin, stated));
@@ -638,7 +639,7 @@ public final class InvariantChecker {
                 // A rule of this value that no reading here took in, said once however many were
                 // left out: what is recorded is which position is short, and the position is this
                 // value either way.
-                gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
+                gathering.missed(RuleKey.THE_VALUE, Borne.BY_EVERY_VALUE);
             }
             // And what each field's own type says of it, at the field's own location. A depth of one
             // is already spent on the record, so this reaches the field's newtype and stops where the
@@ -649,23 +650,24 @@ public final class InvariantChecker {
                     // Every position: this is the reading a boundary is derived from, and a rule
                     // the construction must satisfy is a rule wherever in the value it sits.
                     k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                            data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
-                            k, at, new GuaranteeWalk.Extent.EveryPosition(), gathering, reach);
+                            data.newtype() ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
+                            k, at, new GuaranteeWalk.Extent.EveryName(), gathering, reach);
                 }
             }
-            Map<String, FactSubject> atoms = new LinkedHashMap<>();
-            Map<String, Type> typeAt = new LinkedHashMap<>();
-            Map<String, FieldDomains.Counted> held = new LinkedHashMap<>();
-            Map<String, FactSubject> keys = new LinkedHashMap<>();
+            Map<RuleKey, FactSubject> atoms = new LinkedHashMap<>();
+            Map<RuleKey, Type> typeAt = new LinkedHashMap<>();
+            Map<RuleKey, FieldDomains.Counted> held = new LinkedHashMap<>();
+            Map<RuleKey, FactSubject> keys = new LinkedHashMap<>();
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
                 Type type = fields.get(field.getKey());
                 if (type != null) {
-                    // A newtype's value is the same location as the newtype, so it is at no path of its
-                    // own and its fields are the first step there is. Named `value`, every position of a
-                    // record inside a newtype was filed one step deeper than anything asks for.
+                    // A newtype's value is the same location as the newtype, so it is at no name of
+                    // its own and its fields are the first step there is. Named `value`, every
+                    // position of a record inside a newtype was filed one step deeper than anything
+                    // asks for.
                     c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                            data.newtype() ? "" : field.getKey(), type, at, symbols, 1,
-                            atoms, typeAt, held, keys);
+                            data.newtype() ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
+                            type, at, symbols, 1, atoms, typeAt, held, keys);
                 }
             }
             // Which values each position is left, off the clauses the walk reached. What reached this
@@ -811,8 +813,8 @@ public final class InvariantChecker {
     }
 
     /** The same over a whole reading, for the readers that take the map. */
-    private static Map<String, FactSubject> heldAtomsOf(Map<String, FieldDomains.Counted> held) {
-        Map<String, FactSubject> out = new LinkedHashMap<>();
+    private static Map<RuleKey, FactSubject> heldAtomsOf(Map<RuleKey, FieldDomains.Counted> held) {
+        Map<RuleKey, FactSubject> out = new LinkedHashMap<>();
         held.forEach((path, counted) -> out.put(path, counted.atom()));
         return out;
     }
@@ -838,9 +840,9 @@ public final class InvariantChecker {
      * went unnamed — so the clauses of a record inside a newtype reached the domain and nothing could
      * ask for what they left.
      */
-    private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
-                      int depth, Map<String, FactSubject> atoms, Map<String, Type> typeAt,
-                      Map<String, FieldDomains.Counted> held, Map<String, FactSubject> keys) {
+    private void name(Core value, RuleKey path, Type type, Denotations at, Symbols symbols,
+                      int depth, Map<RuleKey, FactSubject> atoms, Map<RuleKey, Type> typeAt,
+                      Map<RuleKey, FieldDomains.Counted> held, Map<RuleKey, FactSubject> keys) {
         // What the position is called, and the atom it is. Asked together, because where a position
         // is a number the domain carries the two are one identity read once — and this asks it of
         // every level of a chain, so reading it twice costs more than the chain is long.
@@ -889,12 +891,25 @@ public final class InvariantChecker {
         if (depth > GuaranteeWalk.FIELDS_SEEDED) {
             return;
         }
-        // Which positions a value has is the reading's answer and not a second classification here:
-        // a record's fields, and the part a sum's cases share, which is readable on a value of the
-        // sum exactly as a field of a record is.
-        for (Map.Entry<String, Type> field : PositionReading.of(worn, symbols).positionsUnder().entrySet()) {
+        // What a clause of this value may name is the reading's answer and not a second
+        // classification here: a record's fields, and the part a sum's cases share, which is
+        // readable on a value of the sum exactly as a field of a record is. Which of these names a
+        // row writes a value at is somewhere else's question — a name every case of a sum spreads
+        // is written at the sum and stands under each of the cases.
+        //
+        // A name still worn here is one the walk above could not take off, which is a declaration
+        // that returns to itself. Its `value` is this very value, so following it names the same
+        // thing again a step deeper than anything asks about.
+        Map<String, Type> under = switch (ValueReading.of(worn, symbols)) {
+            case ValueReading.AtAValue read -> read.named();
+            // Every name that comes off has come off above, so a name still worn is a declaration
+            // that returns to itself: what it wraps is the value already being read, and reading it
+            // again names that value at a path one `value` deeper than anything asks about.
+            case ValueReading.UnderAName _ -> Map.of();
+        };
+        for (Map.Entry<String, Type> field : under.entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
-                    GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
+                    path.then(field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
     }
@@ -908,8 +923,9 @@ public final class InvariantChecker {
      * both names — a number is called one thing by the interval algebra and another by everything
      * else — both are filed, since a clause reaching it may be recognised by either.
      */
-    private static Map<FactSubject, Type> positions(Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                                             Map<String, Type> typeAt) {
+    private static Map<FactSubject, Type> positions(Map<RuleKey, FactSubject> atoms,
+                                             Map<RuleKey, FactSubject> keys,
+                                             Map<RuleKey, Type> typeAt) {
         Map<FactSubject, Type> out = new LinkedHashMap<>();
         typeAt.forEach((path, type) -> {
             FactSubject key = keys.get(path);
@@ -922,12 +938,6 @@ public final class InvariantChecker {
             }
         });
         return out;
-    }
-
-    /** A field of the value at {@code path}. The root of a newtype's own reading is the value it
-     * wraps, which is at no path of its own, so its fields are the first step there is. */
-    private static String under(String path, String field) {
-        return path.isEmpty() ? field : path + "." + field;
     }
 
     /**
@@ -948,9 +958,9 @@ public final class InvariantChecker {
     record Direct(FieldDomains.Coordinate at, RuleRef.Invariant from,
                   InvariantBound bound, Core part, int conjunct) {
 
-        /** Where in the value the end was placed. Never which end it is: one position carries more
-         *  than one number and {@link #at} is what says which of them this is. */
-        String path() {
+        /** What the value's rules call where the end was placed. Never which end it is: one name
+         *  carries more than one number and {@link #at} is what says which of them this is. */
+        RuleKey path() {
             return at.path();
         }
     }
@@ -1039,7 +1049,7 @@ public final class InvariantChecker {
          * entered holds rules nobody here has read. What a collector does with it is the same
          * either way.
          */
-        void missed(String path, Borne borne);
+        void missed(RuleKey path, Borne borne);
 
         /**
          * A position where this reading ends and the rules under it become another reading's.
@@ -1056,7 +1066,7 @@ public final class InvariantChecker {
          * position under which no reading was ever opened would claim to have read rules it never
          * saw.
          */
-        void handedOn(String path);
+        void handedOn(RuleKey path);
 
         /**
          * What the reading that builds the bounds made of one part of {@code rule}, as it read it.
@@ -1177,9 +1187,9 @@ public final class InvariantChecker {
      */
     private record Coordinate(FieldDomains.Coordinate at, Carrier carrier) {
 
-        /** Where in the value it sits. Never what it is: two numbers can be taken at one path, and
-         *  {@link #at} is what tells them apart. */
-        String path() {
+        /** What the value's rules call it. Never what it is: two numbers can be taken at one name,
+         *  and {@link #at} is what tells them apart. */
+        RuleKey path() {
             return at.path();
         }
     }
@@ -1208,15 +1218,15 @@ public final class InvariantChecker {
      *                  name the positions of the conjunct written beside it as well
      */
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
-                   Map<String, List<TypeSymbol.AtModule>> narrowers,
+                   Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart,
                    Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
-                                   Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                                   Map<String, FieldDomains.Counted> held,
-                                   Map<String, Type> typeAt,
+                                   Map<RuleKey, FactSubject> atoms, Map<RuleKey, FactSubject> keys,
+                                   Map<RuleKey, FieldDomains.Counted> held,
+                                   Map<RuleKey, Type> typeAt,
                                    ReadingEvidence took, PartsRead parts) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
@@ -1236,7 +1246,7 @@ public final class InvariantChecker {
                         Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
-        Map<String, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
+        Map<RuleKey, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
         Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing =
@@ -1271,7 +1281,7 @@ public final class InvariantChecker {
                         InvariantBound.Read placed,
                         Denotations at,
                         Map<FactSubject, Coordinate> byName, Map<RuleRef, Required> raised,
-                        ReadingEvidence took, Map<String, Type> typeAt,
+                        ReadingEvidence took, Map<RuleKey, Type> typeAt,
                         PartsRead parts,
                         Map<RuleRef, Map<Core, Required>> raisedByPart) {
         raises(raised, rule, states);
@@ -1296,7 +1306,7 @@ public final class InvariantChecker {
         }
         // The positions this part is about, by every name each answers to, since a reading files a
         // clause under whichever name it recognised.
-        Set<String> named = states.about();
+        Set<RuleKey> named = states.about();
         Set<FactSubject> about = new LinkedHashSet<>();
         for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
             if (named.contains(each.getValue().path())) {
@@ -1344,9 +1354,9 @@ public final class InvariantChecker {
     private void direct(Core clause, RuleRef.Invariant from, int[] conjunct, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
-                        Map<String, List<TypeSymbol.AtModule>> narrowers,
+                        Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
-                        Map<String, Type> typeAt,
+                        Map<RuleKey, Type> typeAt,
                         PartsRead parts,
                         Map<RuleRef, Map<Core, Required>> raisedByPart,
                         Map<FieldDomains.BoundaryQuestion,
@@ -1418,14 +1428,15 @@ public final class InvariantChecker {
         if (about != null && InvariantBound.ordering(op)
                 && coordinatesIn(bound, at, byName).isEmpty()
                 && shape instanceof ClauseStates.SomethingElse named) {
-            Set<String> positions = new LinkedHashSet<>(named.positions());
-            // The position the bound sits at, which the walk over the comparison names anyway. Added
+            Set<RuleKey> names = new LinkedHashSet<>(named.named());
+            // The name the bound sits at, which the walk over the comparison writes anyway. Added
             // so that the arm cannot be reached with nothing to be about.
-            positions.add(about.path());
+            names.add(about.path());
             // And the number the line is on, which is the coordinate this reading already holds. Not
-            // rebuilt from the path: which of a position's numbers a line is on is what the operation
-            // beside it says, and a reader handed the path alone has to go and ask something else.
-            shape = new ClauseStates.ABound(about.at(), positions);
+            // rebuilt from the name: which of the numbers at a name a line is on is what the
+            // operation beside it says, and a reader handed the name alone has to ask something
+            // else.
+            shape = new ClauseStates.ABound(about.at(), names);
         }
         // And where this part raises the question of where the values there stop and no end came of
         // it, the answer to that question. Made once, when the question is first met: which limit
@@ -1492,7 +1503,7 @@ public final class InvariantChecker {
      */
     private ClauseStates states(Core clause, Denotations at,
                                 Map<FactSubject, Coordinate> byName, Arithmetic read) {
-        List<String> found = new ArrayList<>();
+        List<RuleKey> found = new ArrayList<>();
         namedIn(clause, at, byName, found);
         // What the rule cuts, ahead of what it looks like. Which values a rule restricts is settled
         // by the quantity its canonical form cuts, and that is the rule `UnreadComparison.why` is
@@ -1533,7 +1544,7 @@ public final class InvariantChecker {
      * it is a coordinate of its own.
      */
     private void namedIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
-                         List<String> out) {
+                         List<RuleKey> out) {
         for (Coordinate each : coordinatesIn(e, at, byName)) {
             if (!out.contains(each.path())) {
                 out.add(each.path());
@@ -1553,7 +1564,7 @@ public final class InvariantChecker {
                                            Map<FactSubject, Coordinate> byName) {
         Places places = placesIn(e, at, byName);
         List<Coordinate> out = new ArrayList<>();
-        for (String path : places.origin().positions()) {
+        for (RuleKey path : places.origin().positions()) {
             out.add(places.met().get(path));
         }
         return out;
@@ -1567,10 +1578,10 @@ public final class InvariantChecker {
      * one name and the names carry the same rules, so a clause about one position is named once —
      * held under the coordinate instead, two names of one place would be two.
      */
-    private record Places(ValueOrigin<String> origin, Map<String, Coordinate> met) {}
+    private record Places(ValueOrigin<RuleKey> origin, Map<RuleKey, Coordinate> met) {}
 
     /** What the place {@code path} is counted on, off whichever side of the comparison met it. */
-    private static Carrier carrierAt(String path, Places left, Places right) {
+    private static Carrier carrierAt(RuleKey path, Places left, Places right) {
         Coordinate here = left.met().containsKey(path) ? left.met().get(path)
                 : right.met().get(path);
         return here == null ? null : here.carrier();
@@ -1584,12 +1595,12 @@ public final class InvariantChecker {
      * coordinate of the value it is written about, where a body names a position of an input.
      */
     private Places placesIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName) {
-        Map<String, Coordinate> met = new LinkedHashMap<>();
-        ValueOrigin<String> origin = ValueOrigin.of(e, at,
-                new ValueOrigin.Reading<String, Denotations>() {
+        Map<RuleKey, Coordinate> met = new LinkedHashMap<>();
+        ValueOrigin<RuleKey> origin = ValueOrigin.of(e, at,
+                new ValueOrigin.Reading<RuleKey, Denotations>() {
 
             @Override
-            public String positionOf(Core here, Denotations where) {
+            public RuleKey positionOf(Core here, Denotations where) {
                 FactSubject named = nameOf(here, where);
                 Coordinate found = named == null ? null : byName.get(named);
                 if (found == null) {
@@ -1602,7 +1613,7 @@ public final class InvariantChecker {
             /** A clause is written about the value in front of it, and there is no operation here
              *  that hands one of its parts out under a name of its own. */
             @Override
-            public String madeFrom(Core here, Denotations where) {
+            public RuleKey madeFrom(Core here, Denotations where) {
                 return null;
             }
 
@@ -1660,22 +1671,22 @@ public final class InvariantChecker {
         }
         Places left = placesIn(comparison.left(), at, byName);
         Places right = placesIn(comparison.right(), at, byName);
-        Predicate<String> ordered = place -> carrierAt(place, left, right) != null;
-        Map<String, Coordinate> met = new LinkedHashMap<>();
+        Predicate<RuleKey> ordered = place -> carrierAt(place, left, right) != null;
+        Map<RuleKey, Coordinate> met = new LinkedHashMap<>();
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             met.putIfAbsent(each.path(), each);
         }
         switch (read.quantity()) {
-            case UnreadComparison.Quantity.Read<String> quantity -> {
+            case UnreadComparison.Quantity.Read<RuleKey> quantity -> {
                 BlockReason.RuleWithoutLineReason why =
                         UnreadComparison.ofTheQuantity(quantity, ordered);
-                for (String path : UnreadComparison.filedAt(quantity, List.copyOf(met.keySet()))) {
+                for (RuleKey path : UnreadComparison.filedAt(quantity, List.copyOf(met.keySet()))) {
                     file(met.get(path), from, comparison, conjunct, why, out);
                 }
             }
             // Where the reading stopped there is no quantity to be a subject, so every place the
             // walk met is asked, and asked for itself.
-            case UnreadComparison.Quantity.NotRead<String> notRead -> {
+            case UnreadComparison.Quantity.NotRead<RuleKey> notRead -> {
                 for (Coordinate each : met.values()) {
                     file(each, from, comparison, conjunct,
                             UnreadComparison.whereItStopped(ruleAt(each, left, right), notRead,
@@ -1693,7 +1704,7 @@ public final class InvariantChecker {
      * about the values standing there is the same question a body's comparison is held to, and is
      * answered where both readers meet it.
      */
-    private static RuleAt<String> ruleAt(Coordinate where, Places left, Places right) {
+    private static RuleAt<RuleKey> ruleAt(Coordinate where, Places left, Places right) {
         return UnreadComparison.subjectAt(where.path(), left.origin(), right.origin());
     }
 
@@ -1722,7 +1733,7 @@ public final class InvariantChecker {
      * @param residue  what is left of {@code left - right} once the positions have cancelled, or
      *                 null where the arithmetic stopped or a position is still in it
      */
-    private record Arithmetic(UnreadComparison.Quantity<String> quantity,
+    private record Arithmetic(UnreadComparison.Quantity<RuleKey> quantity,
                               java.math.BigDecimal residue) {
 
         /**
@@ -1788,7 +1799,7 @@ public final class InvariantChecker {
                 ((AffineForms.Outcome.Composed<FactSubject, Denotations>) left).form()
                         .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
                                 .form());
-        java.util.Set<String> over = new LinkedHashSet<>();
+        java.util.Set<RuleKey> over = new LinkedHashSet<>();
         for (FactSubject atom : whole.coefs().keySet()) {
             over.add(byName.get(atom).path());
         }
@@ -1811,7 +1822,7 @@ public final class InvariantChecker {
      */
     private void relating(Core clause, TypeSymbol.AtModule from, Denotations at,
                           Map<FactSubject, Coordinate> byName,
-                          Map<String, List<TypeSymbol.AtModule>> narrowers) {
+                          Map<RuleKey, List<TypeSymbol.AtModule>> narrowers) {
         FactSubject named = nameOf(clause, at);
         Coordinate found = named == null ? null : byName.get(named);
         if (found != null) {
