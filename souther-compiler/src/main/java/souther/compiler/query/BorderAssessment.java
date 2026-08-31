@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * Everything known about one reading of one border: the line as this position met it, and what
- * became of each of its four coverage items at this reading.
+ * became of each of its coverage items at this reading.
  *
  * <p>One of these per border, made in one place. It is the occurrence: where a row can be written
  * and what the search there came to, which is what a block that shows a border whole prints and
@@ -22,11 +22,12 @@ import java.util.Map;
  * the point across its readings ({@link BorderObligationPointAssessment}), which is gathered from
  * these and never read off one of them.
  *
- * <p><b>Total over {@link PointRole}, the way the border it is about is.</b> A border answers for
- * every role and so does this, so a reader asking what one of them came to is never answered by an
- * entry that is not there. The measure used to be one record per obligation in a flat list, and two
- * of the four roles had no obligation to be in it — they were counted by the measure that counts a
- * position's classes, which is a different unit and has no word for a row on the far side of a line.
+ * <p><b>Total over the points its border has, the way that border is.</b> A border answers at every
+ * point its rule gives it and so does this, so a reader asking what one of them came to is never
+ * answered by an entry that is not there. Which of the four each point is is the line's answer
+ * ({@link Border#roleOf}) and is asked of it rather than kept here: a role is what a point is and
+ * two points of one border can be the same one, so a measure keyed on the role would hold one entry
+ * where there are two.
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items) {
 

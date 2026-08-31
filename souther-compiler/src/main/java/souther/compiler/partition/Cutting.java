@@ -229,7 +229,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         return made(new BorderQuantity.OfACoordinate(AxisId.of(behavior, drawn.term()),
                         drawn.term(), drawn.orders()),
-                new Level.OnACarrier(drawn.orders().answered(), drawn.value()), claimOf(drawn),
+                new Level.OnACarrier(drawn.orders().answered(), drawn.value()), drawn.claim(),
                 quantities);
     }
 
@@ -301,13 +301,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 new Level.ACount(new Count(read.cut())), read.claim(), quantities);
     }
 
-    /** What the operator of a line at a position states, which the reading of it already answered
-     *  and holds as the three booleans a threshold is recorded with. */
-    private static ComparisonClaim claimOf(ComparedLine drawn) {
-        return drawn.singles() ? new ComparisonClaim.Singled(drawn.holdsAtTheValue())
-                : new ComparisonClaim.Cut(drawn.valueBelongsBelow(), drawn.holdsAtTheValue());
-    }
-
     /**
      * What this cuts, as the direction it runs.
      *
@@ -335,10 +328,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * written form attains is a multiple of how much of the quantity it wrote.
      */
     Seam seam() {
+        ComparisonClaim.Cut order = ordering();
+        // The place under the value, where the rule names one. Such a rule parts the values twice —
+        // under what it names and over it — and this is the lower of the two, which is a place they
+        // genuinely part rather than a side chosen for a rule that has none. Which of the two bounds
+        // which run is asked where the runs are ({@link Border#partedBy}), and is no part of this.
+        Towards belongsTo = order == null ? Towards.ABOVE
+                : order.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE;
         LinearForm<NumericTerm> direction = direction(of);
         java.math.BigDecimal per = QuantityKey.per(direction);
-        return Seam.of(of.levels(), at,
-                valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE,
+        return Seam.of(of.levels(), at, belongsTo,
                 new Seam.Scale(per, direction.coefs().size() == 1
                         ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
     }
@@ -416,8 +415,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * at is which side the threshold's own value belongs to, and that is the rule's to say.
      */
     Place dividedValue() {
+        ComparisonClaim.Cut order = ordering();
+        if (order == null) {
+            throw new IllegalStateException("which value a rule divides at, asked of one that names"
+                    + " a value and divides at neither side of it: " + at);
+        }
         Seam seam = seam();
-        Level side = valueBelongsBelow() ? seam.below() : seam.above();
+        Level side = order.valueBelongsBelow() ? seam.below() : seam.above();
         return side instanceof Level.OnACarrier on ? on.at() : null;
     }
 
@@ -506,10 +510,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return claim instanceof ComparisonClaim.Singled;
     }
 
-    /** Which side of the line the threshold's own value belongs to, which an equality does not
-     *  answer — it orders nothing, so the side is written down as one answer and read by nobody. */
-    boolean valueBelongsBelow() {
-        return !(claim instanceof ComparisonClaim.Cut cut) || cut.valueBelongsBelow();
+    /**
+     * The order this rule placed on the values either side of its line, or null where it placed
+     * none.
+     *
+     * <p>Which side the value it wrote belongs to is an order's answer and only an order's. A rule
+     * that names a value parts that value from every other one and has no side of its own, so a
+     * caller wanting one is holding a line whose shape it has to have established.
+     */
+    ComparisonClaim.Cut ordering() {
+        return claim instanceof ComparisonClaim.Cut cut ? cut : null;
     }
 
     boolean holdsAtTheValue() {

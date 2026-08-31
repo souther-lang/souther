@@ -97,9 +97,18 @@ public final class DeclaredThresholds {
      * divide.
      */
     private static OriginRef.InvariantOrigin originOf(ClauseWithoutAnEnd clause, Cutting cutting) {
+        // Which end a rule keeps is an order's answer. A clause naming a value of the quantity two
+        // positions stand apart keeps neither end of it — what it parts is that number from every
+        // other one — so there is no end for this to have placed, and a caller reaching here with
+        // one is holding a line whose shape it has not established.
+        souther.compiler.check.ComparisonClaim.Cut order = cutting.ordering();
+        if (order == null) {
+            throw new IllegalStateException("which end a clause keeps, asked of one that names a"
+                    + " value: " + clause.rule());
+        }
         return new OriginRef.InvariantOrigin(clause.rule(), clause.conjunct(),
-                endKept(cutting.valueBelongsBelow(), cutting.holdsAtTheValue()),
-                cutting.holdsAtTheValue());
+                endKept(order.valueBelongsBelow(), order.holdsAtTheValue()),
+                order.holdsAtTheValue());
     }
 
     /**

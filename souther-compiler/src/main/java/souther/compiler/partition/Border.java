@@ -18,37 +18,37 @@ import java.util.Optional;
 import java.util.SequencedSet;
 
 /**
- * One line a rule drew, and what a row is owed at each of its four points.
+ * One line a rule drew, and what a row is owed at each of the points it has.
  *
  * <p>The unit the technique keys on. Domain testing asks for an {@code ON}, an {@code OFF}, an
  * {@code IN} and an {@code OUT} point per border, and the same value can be one role for one border
- * and another role for the next — so what owes the four is a border, and nothing else can be asked.
- * Two of the four used to be answered here as separate obligations, and the other two by the measure
- * that counts how many of a position's classes some row is in: one technique's items split across two
- * units, only one of which a report could say anything about a border with.
+ * and another role for the next — so what owes them is a border, and nothing else can be asked. The
+ * other measure this compiler makes counts how many of a position's classes some row is in, which is
+ * a different unit and has no word at all for a row on the far side of a line.
  *
- * <p><b>One reading, whatever the rule cut.</b> Where the four points are is a question about the
+ * <p><b>One reading, whatever the rule cut.</b> Where a border's points are is a question about the
  * order the quantity's own values sit on, and about nothing else — so a bound on a position, a rule
  * relating two positions and a rule over an arithmetic form are read here by one procedure. Written
  * as a procedure per shape of line, the two that existed answered the same question by different
  * reasoning and a third would have been a third reasoning.
  *
- * <p><b>Total over {@link PointRole}.</b> Every border answers for every role, and the answer for a
- * role nobody is owed a row in is a reason ({@link Demand.NotOwed}) rather than an entry left out.
- * That is checked here and not by a test: the entries used to be built by a loop that added an
- * obligation where it had one and did nothing where it did not, so four different facts — the rules
- * refusing the far side, an order with no next value, a side one value wide, a rule that names a
- * value instead of a side — all arrived as a shorter list. A role that goes missing now stops the
- * build where the border is made.
+ * <p><b>Two totalities and not one.</b> Which points a line has is its rule's ({@link #pointsOf}),
+ * and this answers at every one of them: the answer where no row is asked for is a reason
+ * ({@link Demand.NotOwed}) rather than an entry left out, so a point that goes missing stops the
+ * build where the border is made. Which of the four each point is is the second question
+ * ({@link #inEachRole}), and it is answered for all four words — a role can have two points and a
+ * role can have none, so a reader walking the points alone is told nothing about the second kind.
+ * Held as one map keyed on the role, the two were one answer and a line with two points in a role
+ * had nowhere to put the second.
  *
  * <p>Which rule drew it and which line of that rule is {@link #origin}'s, which reading of that line
  * this is is the origin's too, and which of those readings are one line is {@link BoundaryLine}'s.
  * This is not another identity: a border is a line together with what it owes, and two readings of
- * one line owe the same four things.
+ * one line owe the same things.
  *
  * @param cut     where the line is: what is cut, and where on it
  * @param origin  the rule that drew it, as this reading met it
- * @param answers one entry per role, always four of them
+ * @param answers one entry per point the line has, and no other
  */
 public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, PointAnswer> answers) {
 
@@ -155,16 +155,31 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         for (PointRole role : PointRole.values()) {
             List<DomainPoint> playing = answers.keySet().stream()
                     .filter(point -> roleOf(point) == role).toList();
-            // A role goes unplayed exactly where the class it would be in is the line's own value,
-            // which is what a rule that names one leaves. Nothing else here can empty a role: a rule
-            // that orders the values has a point against the line on the side whose class differs
-            // and a run either way, which is one of each.
-            byRole.put(role, playing.isEmpty()
-                    ? new RoleAnswer.NoPoint(
-                            RoleAnswer.Reason.THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE)
-                    : new RoleAnswer.Played(playing));
+            byRole.put(role, playing.isEmpty() ? noPointIs(role) : new RoleAnswer.Played(playing));
         }
         return byRole;
+    }
+
+    /**
+     * Why no point of this border is one of the four, where the rule accounts for it.
+     *
+     * <p>Proved from the rule and never read off the emptiness. A role goes unplayed exactly where
+     * the class it would be in is the line's own value, which is what a rule that names one leaves:
+     * an equality has no {@code IN} point and a disequality no {@code OUT} one, and an order has a
+     * point in every role. So an empty role the rule does not account for is not an absence to
+     * explain — it is a point that went missing between the rule and the border, wearing the shape
+     * of one that never existed.
+     *
+     * @throws IllegalStateException where the rule accounts for no such absence
+     */
+    private RoleAnswer noPointIs(PointRole role) {
+        boolean holdsHere = holdsAtTheValue(origin);
+        if (origin.lineFacts().claim() instanceof ComparisonClaim.Singled
+                && role == (holdsHere ? PointRole.IN : PointRole.OUT)) {
+            return new RoleAnswer.NoPoint(RoleAnswer.Reason.THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE);
+        }
+        throw new IllegalStateException("no point of " + label() + " is its " + role
+                + " point, and its rule accounts for no such absence: " + answers.keySet());
     }
 
     /**

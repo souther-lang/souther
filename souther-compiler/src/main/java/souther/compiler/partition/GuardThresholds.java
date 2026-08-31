@@ -424,7 +424,8 @@ public final class GuardThresholds {
                     }
                 } else {
                     out.add(new LineEvidence.Divides(new Threshold(at.position(),
-                            at.cutting().seam(), at.cutting().valueBelongsBelow(), origin)));
+                            at.cutting().seam(), at.cutting().ordering().valueBelongsBelow(),
+                            origin)));
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at. It divides the position — the classes either side are what the model
