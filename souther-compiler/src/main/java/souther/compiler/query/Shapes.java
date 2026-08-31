@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.CheckedFieldTypes;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.ClauseHelpers;
@@ -12,6 +13,7 @@ import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -33,6 +35,26 @@ import java.util.Map;
 public final class Shapes {
 
     private Shapes() {}
+
+    /**
+     * What the check settled a declared data's fields hold, over every declaration this compile
+     * resolved.
+     *
+     * <p>Reached by the declaration's own identity: a data names the module that wrote it, and that
+     * module's shapes are what say what a value of it is made of. So there is no order in which one
+     * module's declarations are tried before another's, and nothing has to be gathered into a table
+     * before a field can be read.
+     *
+     * @param symbols the names the reading asking this is being made against, which is what says
+     *     whether a declaration is a data at all
+     */
+    public static FieldTypes fieldTypes(Db db, Symbols symbols) {
+        return new CheckedFieldTypes(symbols, declared -> {
+            Map<TypeSymbol.AtModule, ValueShape> shapes =
+                    db.ask(new ValueShapes(declared.module())).value();
+            return shapes == null ? null : shapes.get(declared);
+        });
+    }
 
     /**
      * A module with its codecs derived and every invariant clause saying the rule it states — the

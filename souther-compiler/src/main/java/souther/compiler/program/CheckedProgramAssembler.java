@@ -79,7 +79,7 @@ final class CheckedProgramAssembler {
         for (ModuleReading module : read) {
             everyDeclaration.addAll(module.data());
         }
-        ValueTypes types = DeclaredFields.over(everyDeclaration);
+        ValueTypes types = ValueTypes.over(DeclaredFields.over(everyDeclaration));
         List<CheckedModule> modules = new ArrayList<>();
         for (ModuleReading module : read) {
             modules.add(moduleOf(module, types));

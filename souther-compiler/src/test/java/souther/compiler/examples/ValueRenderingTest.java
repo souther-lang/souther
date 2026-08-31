@@ -3,6 +3,7 @@ package souther.compiler.examples;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.CheckedFieldTypes;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
@@ -27,7 +28,9 @@ class ValueRenderingTest {
 
     private static ValueRendering rendering() {
         Symbols symbols = Symbols.none(DefaultStdlib.get());
-        return new ValueRendering(new NeutralForm(symbols));
+        // No module is being read, so nothing here declares a data whose fields could be asked for.
+        return new ValueRendering(new NeutralForm(symbols,
+                new CheckedFieldTypes(symbols, _ -> null)));
     }
 
     private static String show(ObservedValue v) {

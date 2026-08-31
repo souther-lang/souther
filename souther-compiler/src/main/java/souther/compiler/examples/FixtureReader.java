@@ -11,11 +11,13 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Kernel;
 import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Expectation;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.PathElement;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.Verdict;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.ValueTypes;
 import souther.compiler.types.BindingId;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -86,19 +88,27 @@ public final class FixtureReader {
     private final OperandRunner operands;
     /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
     private final NeutralForm neutral;
+    /** What a value of a declaration is made of, as the check settled it. */
+    private final FieldTypes fields;
+    /** The same answer as the places a comparison reads a value's parts at. */
+    private final ValueTypes types;
 
-    FixtureReader(souther.compiler.check.Prepared.Examples module, Symbols symbols, Map<String, Hir.FnDef> values,
+    FixtureReader(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+                  FieldTypes fields, Map<String, Hir.FnDef> values,
                   MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
+        this.fields = fields;
         this.values = values;
         this.loader = loader;
         this.operands = new OperandRunner(module.name(), loader);
-        this.neutral = new NeutralForm(symbols);
+        this.neutral = new NeutralForm(symbols, fields);
+        this.types = ValueTypes.over(fields);
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
     public static BoundaryValues constructing(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+                                            FieldTypes fields,
                                             Map<String, ClassFileImage> classes, ClassLoader parent,
                                             Map<String, Hir.FnDef> values) {
         // A reader is the whole of it. There are no rows, so nothing runs on a worker and no budget is
@@ -111,7 +121,7 @@ public final class FixtureReader {
         // the loader that is shared, and has to be — it caches the classes it has defined and loaded,
         // and a fake's subclass is generated once.
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        return (at, fixture) -> new FixtureReader(module, symbols, values, loader)
+        return (at, fixture) -> new FixtureReader(module, symbols, fields, values, loader)
                 .building(at, fixture);
     }
 
@@ -560,14 +570,10 @@ public final class FixtureReader {
         if (!(a instanceof Asserted.Built built)) {
             return true;   // a unit case carries nothing to hold
         }
-        Hir.TypeRef base = neutral.newtypeBaseType(name);
-        if (base != null) {
-            Asserted held = built.fields().get("value");
-            return held == null || states(held, neutral.shapeOf(base));
-        }
-        for (Map.Entry<String, Hir.TypeRef> f : neutral.fieldTypes(name).entrySet()) {
+        // A newtype's `value` is among these, since that is the field it is written with.
+        for (Map.Entry<String, Type> f : neutral.fieldTypes(name).entrySet()) {
             Asserted field = built.fields().get(f.getKey());
-            if (field != null && !states(field, neutral.shapeOf(f.getValue()))) {
+            if (field != null && !states(field, f.getValue())) {
                 return false;
             }
         }
@@ -679,14 +685,11 @@ public final class FixtureReader {
         // applies may be one another module published, and what it answered with is that module's
         // type however this module spells the same name.
         TypeSymbol type = typeOf(live);
-        if (type != null && symbols.declarations().declaration(type) instanceof Hir.Data data) {
+        if (type != null && symbols.declarations().declaration(type) instanceof Hir.Data) {
             Map<String, Asserted> fields = new LinkedHashMap<>();
-            if (data.newtype()) {
-                fields.put("value", assertedLive(ObservedValues.readOrNull(live, "value")));
-            } else {
-                for (String each : neutral.fieldTypes(type).keySet()) {
-                    fields.put(each, assertedLive(ObservedValues.readOrNull(live, each)));
-                }
+            // A newtype's `value` is among these, since that is the field it is written with.
+            for (String each : neutral.fieldTypes(type).keySet()) {
+                fields.put(each, assertedLive(ObservedValues.readOrNull(live, each)));
             }
             return new Asserted.Built(type, fields);
         }
@@ -1357,19 +1360,22 @@ public final class FixtureReader {
     }
 
     /**
-     * The type a field is declared to be, one step. Both the walk that answers what a projection
-     * states and the reading that takes the field go through this, so the two cannot come to
-     * different answers about which field of what is being read.
+     * The type a field is declared to be, one step. What a value of a declaration is made of is
+     * what the check settled, and this is that answer — the same one the place a field's value is
+     * compared at is read from, so a projection cannot be typed by one reading and compared by
+     * another.
      */
     private Type fieldTypeOf(Type record, String field) {
-        return evidence().fieldTypeOf(record, field);
+        return record instanceof Type.Ref(TypeSymbol owner)
+                ? fields.field(owner, field) : null;
     }
 
     /** What declarations say about what this row wrote, with what a {@code let} has in force here.
      *  The pass that emits the methods a row's calls need reads the same walk, so what settles a
      *  call there is what settles it here. */
     private DeclaredTypeEvidence evidence() {
-        return new DeclaredTypeEvidence(symbols, values, DeclaredTypeEvidence.boundTo(bindings));
+        return new DeclaredTypeEvidence(symbols, fields, values,
+                DeclaredTypeEvidence.boundTo(bindings));
     }
 
     /**
@@ -1706,7 +1712,7 @@ public final class FixtureReader {
             return neutral.newtypeAt(at, built,
                     neutral.shaped(raw(nd.inits().get(0).value(), base, below(admission)), base));
         }
-        Map<String, Hir.TypeRef> declared = neutral.fieldTypes(nd.typeName().answered().type());
+        Map<String, Type> declared = neutral.fieldTypes(nd.typeName().answered().type());
         Map<String, Object> map = new LinkedHashMap<>();
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought.
@@ -2011,7 +2017,7 @@ public final class FixtureReader {
      * itself would be a second place that decided it.
      */
     Verdict holds(Expectation stated, Object result, Type position) {
-        return souther.compiler.observe.Comparisons.verdict(stated, structured(result), neutral,
+        return souther.compiler.observe.Comparisons.verdict(stated, structured(result), types,
                 Position.at(position));
     }
 

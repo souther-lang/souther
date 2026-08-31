@@ -349,6 +349,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
+                Shapes.fieldTypes(c.db(), Scopes.derived(c.db(), name).value()),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 declarationsOf(c),

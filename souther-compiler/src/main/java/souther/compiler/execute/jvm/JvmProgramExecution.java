@@ -73,6 +73,7 @@ public final class JvmProgramExecution implements ProgramExecution {
             return new RowRun.NotRunHere();
         }
         Observations observed = ExampleVerifier.check(asked.rowsWrittenIn(source), asked.symbols(),
+                asked.fieldTypes(),
                 asked.signatures(), image.program(), image.published(), asked.requirements(),
                 image.around(), asked.definitions(), keeping(asked), asked.policy(),
                 // What applies a behavior here is what this compile emitted. A compile has nothing
@@ -99,6 +100,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         // The classes alone. Nothing here applies a behavior, so what the compile implemented is not
         // a question this asks.
         return new TableBuild.Built(ExampleStatements.fakeTables(asked.rows(), asked.symbols(),
+                asked.fieldTypes(),
                 asked.signatures(), image.program().classes(), image.around(), asked.definitions(),
                 source, keeping(asked), asked.policy(), asked.contracts()));
     }
@@ -116,9 +118,10 @@ public final class JvmProgramExecution implements ProgramExecution {
         Map<String, ExampleStatements.Declaring> declaring = new LinkedHashMap<>();
         asked.declaring().forEach((name, reading) -> declaring.put(name,
                 new ExampleStatements.Declaring(reading.rows(), reading.symbols(),
-                        reading.definitions())));
+                        reading.fieldTypes(), reading.definitions())));
         return new StatementReading.Read(ExampleStatements.disagreements(asked.rows(),
-                asked.symbols(), asked.signatures(), image.program().classes(), image.around(),
+                asked.symbols(), asked.fieldTypes(),
+                asked.signatures(), image.program().classes(), image.around(),
                 asked.definitions(), keeping(asked), asked.policy(), asked.contracts(),
                 declaring));
     }
@@ -135,7 +138,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         // line up, which is a fault in a measurement nothing here is making.
         JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
         return image == null ? null
-                : FixtureReader.constructing(asked.rows(), asked.symbols(),
+                : FixtureReader.constructing(asked.rows(), asked.symbols(), asked.fieldTypes(),
                         image.program().classes(), image.around(), asked.definitions());
     }
 
@@ -145,7 +148,8 @@ public final class JvmProgramExecution implements ProgramExecution {
         if (image == null || image.program().implementations() == null) {
             return null;
         }
-        return RowTrial.over(asked.rows(), asked.symbols(), image.program().classes(),
+        return RowTrial.over(asked.rows(), asked.symbols(), asked.fieldTypes(),
+                image.program().classes(),
                 image.around(), asked.definitions(), image.program().implementations(),
                 asked.policy());
     }

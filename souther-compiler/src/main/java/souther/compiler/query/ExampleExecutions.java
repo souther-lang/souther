@@ -88,7 +88,8 @@ public final class ExampleExecutions {
         // The one part that may be empty rather than missing. A module defining no value of its own
         // reaches none by name, which is a module rather than an unanswered question.
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
-        return new ExampleExecution(prepared.value(), scope.value(), sigs.value(),
+        return new ExampleExecution(prepared.value(), scope.value(),
+                Shapes.fieldTypes(db, scope.value()), sigs.value(),
                 requirements, values == null ? Map.of() : values, contracts,
                 Output.policyOf(db),
                 withDeclaring ? declaringOf(db, prepared.value()) : Map.of());

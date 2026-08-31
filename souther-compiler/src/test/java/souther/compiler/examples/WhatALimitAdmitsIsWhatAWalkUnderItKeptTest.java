@@ -3,6 +3,7 @@ package souther.compiler.examples;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.CheckedFieldTypes;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
@@ -140,8 +141,10 @@ class WhatALimitAdmitsIsWhatAWalkUnderItKeptTest {
     }
 
     private static ObservedValue observed(Limits limits, Object live) {
-        return ObservedValues.of(live, Symbols.none(DefaultStdlib.get()),
-                new NeutralForm(Symbols.none(DefaultStdlib.get())), limits);
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
+        // No module is being read, so nothing here declares a data whose fields could be asked for.
+        return ObservedValues.of(live, symbols,
+                new NeutralForm(symbols, new CheckedFieldTypes(symbols, _ -> null)), limits);
     }
 
     private static String shown(Object live) {
