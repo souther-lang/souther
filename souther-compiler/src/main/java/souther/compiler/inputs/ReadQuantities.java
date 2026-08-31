@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ConstraintState;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.Count;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The one reading of a behavior's input, asked about a quantity over several of its positions.
@@ -70,6 +72,27 @@ final class ReadQuantities implements Quantities {
      * accumulates, and what the whole of it leaves is worked out where everything else is.
      */
     private final List<Assumed> assumed;
+    /**
+     * What has already been worked out, by the context it was worked out under.
+     *
+     * <p>A memo of {@link #constraints} and of nothing else. What the rules leave under a context is
+     * a function of this value and that context — the same question asked twice has the same answer,
+     * and nothing here is consulted to decide what the answer is. So this may be dropped without
+     * changing what this reading says, and is here because a search asks the same context a great
+     * many times: where a form runs, whether anything is left, and where the next form runs are
+     * three questions under one context, and reading every declaration again for each of them is
+     * what a row costs three times over.
+     *
+     * <p>Per value, since the readings are conditioned on what this refinement fixed. A table shared
+     * between refinements would answer one refinement's question out of another's.
+     */
+    private final Map<StructuralContext, Map<TermPath, FieldDomains.Carried<InputAtom>>> read =
+            new ConcurrentHashMap<>();
+    /** The same, of what those readings come to said together. Held beside them because both are
+     *  asked for on their own: a proof of emptiness names a place out of the first and shows what
+     *  it shows out of the second. */
+    private final Map<StructuralContext, ConstraintState<InputAtom>> answered =
+            new ConcurrentHashMap<>();
 
     /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
     private record Assumed(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {}
@@ -199,6 +222,10 @@ final class ReadQuantities implements Quantities {
      * refusing an input between its alternatives.
      */
     private Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned(StructuralContext under) {
+        Map<TermPath, FieldDomains.Carried<InputAtom>> had = read.get(under);
+        if (had != null) {
+            return had;
+        }
         Map<TermPath, FieldDomains.Carried<InputAtom>> made = new LinkedHashMap<>();
         byRoot.forEach((root, opened) -> {
             if (under.holds(opened.opening())) {
@@ -207,7 +234,9 @@ final class ReadQuantities implements Quantities {
                         subject -> new InputAtom.Anonymous(root.toString(), subject)));
             }
         });
-        return Collections.unmodifiableMap(made);
+        Map<TermPath, FieldDomains.Carried<InputAtom>> answer = Collections.unmodifiableMap(made);
+        read.put(under, answer);
+        return answer;
     }
 
     @Override
@@ -268,10 +297,12 @@ final class ReadQuantities implements Quantities {
      * nothing about a form that also names a third the rules leave unbounded, and met afterwards
      * against a floor this reading did have, the rule is gone.
      */
-    private souther.compiler.check.ConstraintState<InputAtom> constraints(
-            StructuralContext under) {
-        souther.compiler.check.ConstraintState<InputAtom> made =
-                souther.compiler.check.ConstraintState.top();
+    private ConstraintState<InputAtom> constraints(StructuralContext under) {
+        ConstraintState<InputAtom> had = answered.get(under);
+        if (had != null) {
+            return had;
+        }
+        ConstraintState<InputAtom> made = ConstraintState.top();
         // What the values of this space cost to work out. One for the space and not one per
         // parameter: what each parameter was read under is the allowance of its own declaration,
         // and the set a position finally admits here is met out of all of them — so this is the
@@ -306,6 +337,7 @@ final class ReadQuantities implements Quantities {
                 made = made.taking(over(each.form(), under), each.rel(), spacing);
             }
         }
+        answered.put(under, made);
         return made;
     }
 
