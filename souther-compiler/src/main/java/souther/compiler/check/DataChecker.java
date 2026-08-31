@@ -472,7 +472,7 @@ public final class DataChecker {
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
             Hir.Def at = symbols.declarations().declaration(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
-                    FieldDomains.THE_VALUE, group.why(),
+                    RuleKey.THE_VALUE.toString(), group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));
         }
         return found;
@@ -546,7 +546,7 @@ public final class DataChecker {
                                                 Emptiness through) {
         return switch (through) {
             case Emptiness.AtAField it when it.under() instanceof Emptiness.TheNameHasNone
-                    && !FieldDomains.THE_VALUE.equals(it.path()) ->
+                    && !RuleKey.THE_VALUE.toString().equals(it.path()) ->
                     at.hint(new DataMessage.ItWouldHaveOneIfTheFieldCouldBeAbsent(
                             data, written(it.path())));
             case Emptiness.AtAField it
@@ -559,9 +559,10 @@ public final class DataChecker {
         };
     }
 
-    /** How a position is written in the model, what a newtype wraps being spelled `value`. */
+    /** How a name is written in the model, what a newtype wraps being spelled `value`. Of the
+     *  spelling a proof carries, which is what a message is built out of. */
     private static String written(String path) {
-        return FieldDomains.THE_VALUE.equals(path) ? "value" : path;
+        return RuleKey.THE_VALUE.toString().equals(path) ? "value" : path;
     }
 
     static void checkData(CheckContext ctx) {

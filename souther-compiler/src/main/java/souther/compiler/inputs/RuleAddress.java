@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.RuleKey;
+
 /**
  * A name as a rule wrote it: which value's rules are being read, and what those rules call the place
  * the name points at.
@@ -12,7 +14,7 @@ package souther.compiler.inputs;
  * addresses.
  *
  * <p>The value is named by where it stands ({@link InputDomain.RuleRoot#at}), which is what already
- * decides what the rules of a value can name ({@link TermPath#fieldKeyUnder}). A second identity for
+ * decides what the rules of a value can name ({@link TermPath#ruleKeyUnder}). A second identity for
  * it would be a second answer to the question of which rules reach which positions.
  *
  * <p><b>Every one of these is a name some rule wrote.</b> A path no rule of the value could name
@@ -21,10 +23,10 @@ package souther.compiler.inputs;
  * written, so there is nothing outstanding.
  *
  * @param root what the rules being read are of, named by where a value of it stands
- * @param key  what those rules call the place, relative to the value — {@link
- *             souther.compiler.check.FieldDomains#THE_VALUE} for the value itself
+ * @param key  what those rules call the place, relative to the value —
+ *             {@link RuleKey#THE_VALUE} for the value itself
  */
-public record RuleAddress(TermPath root, String key) {
+public record RuleAddress(TermPath root, RuleKey key) {
 
     public RuleAddress {
         if (root == null || key == null) {
@@ -42,12 +44,12 @@ public record RuleAddress(TermPath root, String key) {
      * reached nowhere, a clause of a case would be answering for a position in the sum above it.
      */
     public static RuleAddress of(TermPath root, TermPath path) {
-        String key = path.fieldKeyUnder(root);
+        RuleKey key = path.ruleKeyUnder(root);
         return key == null ? null : new RuleAddress(root, key);
     }
 
     @Override
     public String toString() {
-        return key.isEmpty() ? root.toString() : root + "." + key;
+        return key.isTheValueItself() ? root.toString() : root + "." + key;
     }
 }

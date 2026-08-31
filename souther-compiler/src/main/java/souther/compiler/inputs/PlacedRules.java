@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Owed;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.ProjectionEvidence;
@@ -139,8 +140,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * a reading of one value has nothing to say about a position in another, and answering with a
      * name would be this value's rules read at somebody else's position.
      */
-    private String keyOf(TermPath path) {
-        return path.fieldKeyUnder(root);
+    private RuleKey keyOf(TermPath path) {
+        return path.ruleKeyUnder(root);
     }
 
     /** What the rules leave the numbers, ends and narrowings of this value. */
@@ -189,8 +190,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * one of them.
      */
     NarrowedBounds at(TermPath path) {
-        String where = keyOf(path);
-        NarrowedBounds here = where == null || where.isEmpty() ? NarrowedBounds.NOTHING
+        RuleKey where = keyOf(path);
+        NarrowedBounds here = where == null || where.isTheValueItself() ? NarrowedBounds.NOTHING
                 : bounds().at(where);
         TermPath above = alsoAt(path);
         if (above == null) {
@@ -209,7 +210,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      */
     NumericDomain.Bounds leftAt(TermPath path,
                                 souther.compiler.check.FieldDomains.CoordinateKind kind) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         NumericDomain.Bounds here = where == null ? null : bounds().leftAt(where, kind);
         TermPath above = alsoAt(path);
         if (above == null) {
@@ -292,7 +293,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * to it, one position down (#1072).
      */
     boolean handsTheRulesOnAt(TermPath path) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         return where != null && bounds().handedOn().contains(where);
     }
 
@@ -307,7 +308,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * for a range.
      */
     List<RuleAccounting.Unanswered> unanswered(TermPath path) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         if (where == null) {
             return List.of();
         }
@@ -426,8 +427,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * reading is opened at it, so a path under this root never steps into one — and a position this
      * reading is not of is not a position it may be asked about.
      */
-    private String under(TermPath path) {
-        String where = keyOf(path);
+    private RuleKey under(TermPath path) {
+        RuleKey where = keyOf(path);
         if (where == null) {
             throw new IllegalArgumentException(
                     path + " is not a position of the value read at " + root);
@@ -438,9 +439,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     /** The ends the clauses reaching this value place on the coordinates at {@code path}, which is
      *  a different question from what {@link #at} leaves them. */
     List<FieldDomains.Placed> placedAt(TermPath path) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         List<FieldDomains.Placed> here =
-                where == null || where.isEmpty() ? List.of() : bounds().placedAt(where);
+                where == null || where.isTheValueItself() ? List.of() : bounds().placedAt(where);
         TermPath above = alsoAt(path);
         if (above == null) {
             return here;
@@ -461,7 +462,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * not given twice by anybody, and a newtype's own clause is where the question started.
      */
     List<FieldDomains.NoLine> noLineAt(TermPath path) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         List<FieldDomains.NoLine> here = where == null ? List.of() : bounds().noLineAt(where);
         TermPath above = alsoAt(path);
         if (above == null) {

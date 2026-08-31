@@ -130,10 +130,10 @@ final class GuaranteeWalk {
     interface Reader {
 
         /** What the declaration at {@code path} guarantees of the value there. */
-        void guaranteed(String path, TypeGuarantee guarantee);
+        void guaranteed(RuleKey path, TypeGuarantee guarantee);
 
         /** Where the walk went no further, and what stood there. */
-        default void stopped(String path, Type type, Stop why) {}
+        default void stopped(RuleKey path, Type type, Stop why) {}
 
         /**
          * That rules stand under {@code path} which no reading here takes in, and which a reading
@@ -143,11 +143,11 @@ final class GuaranteeWalk {
          * something below it belongs to somebody else. Reported as a stop, a sum whose cases share a
          * spread would have to be either read or handed on, and it is both.
          */
-        default void handedOn(String path, Type type) {}
+        default void handedOn(RuleKey path, Type type) {}
 
         /** That a declaration at {@code path} writes these clauses and this reading could not state
          * them, so what they were about is not among what was handed over. */
-        default void lostAClause(String path, List<RuleRef.Invariant> lost) {}
+        default void lostAClause(RuleKey path, List<RuleRef.Invariant> lost) {}
     }
 
     /**
@@ -178,11 +178,11 @@ final class GuaranteeWalk {
      * <p>{@code path} names where {@code root} itself stands, and everything reached is named
      * relative to it.
      */
-    void from(Core root, String path, Denotations at, Scope scope, Reader reader) {
+    void from(Core root, RuleKey path, Denotations at, Scope scope, Reader reader) {
         walk(root, path, at, 0, scope, new HashSet<>(), reader);
     }
 
-    private void walk(Core root, String path, Denotations at, int depth, Scope scope,
+    private void walk(Core root, RuleKey path, Denotations at, int depth, Scope scope,
                       Set<TypeSymbol> entered, Reader reader) {
         // Asked one at a time, because a stop says two things and only one of them is the same for
         // all of these: whether the rules under it were read, and whether a construction could have
@@ -245,8 +245,8 @@ final class GuaranteeWalk {
             // Whether following the name reaches somewhere else is `Location.isStep`'s answer,
             // asked here because here is where the name is written down. A newtype's `value` is
             // this same value under a name, so a walk into one keeps the path it came with.
-            String there = Location.isStep(root.type(), under.name(), symbols)
-                    ? under(path, under.name()) : path;
+            RuleKey there = Location.isStep(root.type(), under.name(), symbols)
+                    ? path.then(under.name()) : path;
             walk(under.value(), there, at, depth + 1, scope, entered, reader);
         }
         if (name != null) {
@@ -254,9 +254,4 @@ final class GuaranteeWalk {
         }
     }
 
-    /** A field of the value at {@code path}. The root of a newtype's own reading is the value it
-     * wraps, which is at no path of its own, so its fields are the first step there is. */
-    static String under(String path, String field) {
-        return path.isEmpty() ? field : path + "." + field;
-    }
 }

@@ -328,21 +328,24 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                 name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES);
 
         for (int at = 0; at <= 5; at++) {
-            Map<String, Count> settled = Map.of("x", count(at));
+            Map<souther.compiler.check.RuleKey, Count> settled =
+                    Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
                     name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES, settled);
             souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
-                    souther.compiler.check.FieldDomains.Coordinate.value("x"), count(at)))
+                    souther.compiler.check.FieldDomains.Coordinate
+                            .value(souther.compiler.check.RuleKey.of("x")), count(at)))
                     .constraintsOver(coordinate -> coordinate.kind()
                                     instanceof souther.compiler.check.FieldDomains
                                             .CoordinateKind.OfWhatAnOperationAnswers
-                                    ? "#" + coordinate.path() : coordinate.path(),
+                                    ? "#" + coordinate.path() : coordinate.path().toString(),
                             subject -> "?" + subject);
 
             assertEquals(readIn.holdsNothing().isPresent(),
                     taken.constraints().holdsNothing(taken.positions()).isPresent(),
                     "whether anything is left, with x at " + at);
-            assertEquals(readIn.leftAt("y", new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
+            assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
+                            new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
                     taken.constraints().numbers().boundsOf(
                             NumericDomain.LinearForm.<String>atom("y")),
                     "where y runs, with x at " + at);

@@ -89,7 +89,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
      */
     @Test
     void endsWithNothingBetweenThemAreCarriedAsThatAndNotAsRulesContradicting() {
-        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+        assertEquals(new Emptiness.AtAField(RuleKey.THE_VALUE.toString(),
                         new Emptiness.EmptyOrderedInterval()), only("""
                 module demo
 
@@ -108,7 +108,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
      */
     @Test
     void anOrderTheNumbersDoNotCarryIsShownByTheSameProof() {
-        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+        assertEquals(new Emptiness.AtAField(RuleKey.THE_VALUE.toString(),
                         new Emptiness.EmptyOrderedInterval()), only("""
                 module demo
 
@@ -215,7 +215,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
     /** A set too small for what it holds, carried with the bound the comparison was made against. */
     @Test
     void aSetTooSmallForItsElementIsCarriedWithBothCounts() {
-        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+        assertEquals(new Emptiness.AtAField(RuleKey.THE_VALUE.toString(),
                         new Emptiness.SetRequiresTooManyDistinctValues(1)), only("""
                 module demo
 
@@ -286,7 +286,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 """);
         assertEquals(List.of(List.of("Bad"), List.of("A", "B")),
                 reported.stream().map(each -> named(each.members())).toList());
-        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+        assertEquals(new Emptiness.AtAField(RuleKey.THE_VALUE.toString(),
                 new Emptiness.EmptyOrderedInterval()), reported.get(0).why());
         if (!(reported.get(1).why() instanceof Emptiness.NoBaseInComponent)) {
             throw new AssertionError("the cycle is left with nothing to bottom out: "

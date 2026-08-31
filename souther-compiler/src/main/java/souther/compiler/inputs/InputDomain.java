@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.NumericMeasures;
@@ -391,7 +392,7 @@ public final class InputDomain {
      */
     public RuleRoot rootNaming(TermPath path) {
         for (RuleRoot root : roots) {
-            if (root.at().equals(TermPath.of(path.head())) && path.fieldKeyUnder(root.at()) != null) {
+            if (root.at().equals(TermPath.of(path.head())) && path.ruleKeyUnder(root.at()) != null) {
                 return root;
             }
         }
@@ -445,7 +446,7 @@ public final class InputDomain {
      * not told apart here, and a caller that has to tell them apart asks {@link #reach} what became
      * of each case.
      */
-    public List<TermPath> positionsNamed(TermPath root, String named) {
+    public List<TermPath> positionsNamed(TermPath root, RuleKey named) {
         return follow(root, named).reached();
     }
 
@@ -513,13 +514,12 @@ public final class InputDomain {
      * every pairing of their cases. Composed from the whole name at once, the pairing would be
      * something this had to work out rather than something it walks into.
      */
-    private Followed follow(TermPath root, String named) {
+    private Followed follow(TermPath root, RuleKey named) {
         List<PlacementOutcome> otherwise = new ArrayList<>();
         List<String> unnamed = new ArrayList<>();
         List<TermPath> frontier = List.of(root);
-        // The value's own name is at no step of its own, and a name of no steps is not a step
-        // called nothing.
-        for (String step : named.isEmpty() ? new String[0] : named.split("\\.")) {
+        // A name of no steps is the value itself, which is where the walk already is.
+        for (String step : named.steps()) {
             List<TermPath> next = new ArrayList<>();
             for (TermPath at : frontier) {
                 List<TermPath> across = reach.across(at, step);

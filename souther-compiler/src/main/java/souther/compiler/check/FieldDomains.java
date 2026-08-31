@@ -40,19 +40,10 @@ import java.util.Set;
  */
 public final class FieldDomains {
 
-    /**
-     * Where a newtype's own value sits, which is where the newtype sits.
-     *
-     * <p>A name worn is not a step of the path ({@link Location#isStep}), so the value under one is
-     * at no path of its own and its fields are the first step there is. Spelled here rather than as
-     * {@code ""} at each caller, which reads as a path nobody meant.
-     */
-    public static final String THE_VALUE = "";
-
-    /** No position anywhere, for the reading that reached none. Unmodifiable, as every other part
+    /** No name anywhere, for the reading that reached none. Unmodifiable, as every other part
      * of {@link #NONE} is: a shared constant handing out a map anybody could add to is a value one
      * caller can change under the rest. */
-    private static final SequencedMap<FactSubject, String> NO_POSITIONS =
+    private static final SequencedMap<FactSubject, RuleKey> NO_POSITIONS =
             java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>());
 
     /**
@@ -66,12 +57,13 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
-                    Map.of(), Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), Set.of(),
+                    Map.of(), Map.of(), new ReadingEvidence(), Map.of(), Set.of(RuleKey.THE_VALUE), Set.of(),
                     NO_POSITIONS,
-                    ConstraintState.<FactSubject>top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
+                    ConstraintState.<FactSubject>top(), null, null, null, null, Map.of(),
+                    Set.of(RuleKey.THE_VALUE),
                     Map.of(), Map.of(), Map.of(), Map.of());
 
-    private final Map<String, NumericDomain.Bounds> byField;
+    private final Map<RuleKey, NumericDomain.Bounds> byName;
     /** The ends the record's own clauses place, which is a different question from the range they
      * leave — see {@link #placedAt}. */
     private final List<InvariantChecker.Direct> directs;
@@ -92,38 +84,37 @@ public final class FieldDomains {
     private volatile Map<RuleRef, RuleAccounting> accounting;
     /** Which declarations relate each coordinate to something else, and so could have moved where it
      * stops — see {@link #narrowedBy}. */
-    private final Map<String, List<TypeSymbol.AtModule>> narrowers;
-    /** What each field has to hold, kept apart from what each field is. Same numbers, different
+    private final Map<RuleKey, List<TypeSymbol.AtModule>> narrowers;
+    /** What each name has to hold, kept apart from what each name is. Same numbers, different
      * question — see {@link Held}. */
-    private final Map<String, NumericDomain.Bounds> heldByField;
-    /** Which values each position may hold — see {@link #admits}. */
-    private final Map<String, ValueSet> admittedByField;
-    /** Everything that stopped the reading from speaking for a position, for the ones it could not
-     * speak for. A position not here is one the reading took every rule about into the set — see
-     * {@link #admits}. Every reason and not the first: a position is named by as many parts of as
+    private final Map<RuleKey, NumericDomain.Bounds> heldByName;
+    /** Which values may stand at each name — see {@link #admits}. */
+    private final Map<RuleKey, ValueSet> admittedByName;
+    /** Everything that stopped the reading from speaking for a name, for the ones it could not
+     * speak for. A name not here is one the reading took every rule about into the set — see
+     * {@link #admits}. Every reason and not the first: a name is written by as many parts of as
      * many clauses as the author wrote about it, and two of them stop this reading in two ways that
      * are lifted by different work. */
-    private final Map<String, List<UnreadReason>> unreadByField;
+    private final Map<RuleKey, List<UnreadReason>> unreadByName;
 
-    /** The positions the reading of values could not show it holds exactly, resolved onto
-     *  paths as the values are. Asked of each position rather than of the reading: the
-     *  proposition is quantified over them, and a position a lost correlation never reached
-     *  keeps its own answer. */
-    private final Set<String> notSeparatedByField;
-    /** Where a clause of this value did not reach the readings at all, as the paths the stops
+    /** The names the reading of values could not show hold exactly, resolved onto names as the
+     *  values are. Asked of each name rather than of the reading: the proposition is quantified
+     *  over them, and a name a lost correlation never reached keeps its own answer. */
+    private final Set<RuleKey> notSeparatedByName;
+    /** Where a clause of this value did not reach the readings at all, as the names the stops
      * happened at — see {@link #admits}. */
-    private final Set<String> notGathered;
-    /** Where this reading ended with a declaration still to be read under the position, which is an
-     * obligation on whoever walks the positions rather than anything wrong here — see
+    private final Set<RuleKey> notGathered;
+    /** Where this reading ended with a declaration still to be read under the name, which is an
+     * obligation on whoever walks them rather than anything wrong here — see
      * {@link #handedOn()}. */
-    private final Set<String> handedOn;
-    /** And of those, the positions a construction has to make a value at. What a position admits is
+    private final Set<RuleKey> handedOn;
+    /** And of those, the names a construction has to make a value at. What a name admits is
      *  short wherever a rule about it went unread; whether an edge of it may be promised is about
      *  what every value of this has to satisfy, and a rule inside an optional is not that. */
-    private final Set<String> unreadOfEveryValue;
-    /** Where each position of this value sits, in the order the value declares them. What a domain
-     * holds is what a reading called a position; which place in the value that is, is known here. */
-    private final SequencedMap<FactSubject, String> positions;
+    private final Set<RuleKey> unreadOfEveryValue;
+    /** What each subject of this value's reading is called, in the order the value declares them.
+     * What a domain holds is a subject; which name of the value that is, is known here. */
+    private final SequencedMap<FactSubject, RuleKey> positions;
     /** Everything the clauses were read as, kept whole. Whether any value of this exists is a
      * question about all of it and is asked of it; the numbers are read out of it where a bound is
      * what a caller is after. */
@@ -139,8 +130,8 @@ public final class FieldDomains {
     private final ReadingPolicy policy;
     /** The atom a range is taken of at each position: the position's own value, and the count of
      *  one where a count is taken. A position with neither has no range to be exact about. */
-    private final Map<String, FactSubject> atomAt;
-    private final Map<String, Counted> countAt;
+    private final Map<RuleKey, FactSubject> atomAt;
+    private final Map<RuleKey, Counted> countAt;
     /** What the reading that builds the bounds made of each part of each rule. Per part, because a
      *  rule is represented where every part of it is. */
     private final Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy;
@@ -148,30 +139,30 @@ public final class FieldDomains {
      *  the reading would have stated for it. */
     private final Map<FactSubject, souther.compiler.numeric.Granularity> spacing;
 
-    private FieldDomains(Map<String, NumericDomain.Bounds> byField,
-                         Map<String, NumericDomain.Bounds> heldByField,
-                         Map<String, ValueSet> admittedByField,
-                         Map<String, List<UnreadReason>> unreadByField,
-                         Set<String> notSeparatedByField,
+    private FieldDomains(Map<RuleKey, NumericDomain.Bounds> byName,
+                         Map<RuleKey, NumericDomain.Bounds> heldByName,
+                         Map<RuleKey, ValueSet> admittedByName,
+                         Map<RuleKey, List<UnreadReason>> unreadByName,
+                         Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
                          Map<BoundaryQuestion, BoundaryStanding> standing, ReadingEvidence took,
-                         Map<String, List<TypeSymbol.AtModule>> narrowers,
-                         Set<String> notGathered, Set<String> handedOn,
-                         SequencedMap<FactSubject, String> positions,
+                         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
+                         Set<RuleKey> notGathered, Set<RuleKey> handedOn,
+                         SequencedMap<FactSubject, RuleKey> positions,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
                          Map<Coordinate, Count> settled,
-                         Set<String> unreadOfEveryValue,
-                         Map<String, FactSubject> atomAt, Map<String, Counted> countAt,
+                         Set<RuleKey> unreadOfEveryValue,
+                         Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy,
                          Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
-        this.byField = byField;
-        this.heldByField = heldByField;
-        this.admittedByField = admittedByField;
-        this.unreadByField = unreadByField;
-        this.notSeparatedByField = notSeparatedByField;
+        this.byName = byName;
+        this.heldByName = heldByName;
+        this.admittedByName = admittedByName;
+        this.unreadByName = unreadByName;
+        this.notSeparatedByName = notSeparatedByName;
         this.directs = directs;
         this.noLines = noLines;
         this.raised = raised;
@@ -223,7 +214,20 @@ public final class FieldDomains {
      * readings call a position, and where in the value that sits is known here and nowhere else.
      */
     public Optional<Emptiness> holdsNothing() {
-        return constraints.holdsNothing(positions);
+        return constraints.holdsNothing(spelled(positions));
+    }
+
+    /**
+     * What each subject is called, written the way a report writes it.
+     *
+     * <p>A proof names a place to a reader, so what it carries out of here is the spelling. What a
+     * table is keyed by is the name itself, which is why the two are told apart at the one point
+     * where a name leaves for a report.
+     */
+    private static <A> SequencedMap<A, String> spelled(SequencedMap<A, RuleKey> named) {
+        SequencedMap<A, String> out = new LinkedHashMap<>();
+        named.forEach((subject, name) -> out.put(subject, name.toString()));
+        return out;
     }
 
     /**
@@ -256,14 +260,14 @@ public final class FieldDomains {
      * once the other end is fixed, which is 1440 and nothing else.
      */
     public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                                  ReadingPolicy policy, Map<String, Count> settled) {
+                                  ReadingPolicy policy, Map<RuleKey, Count> settled) {
         return of(named, data, symbols, policy, atValues(settled),
                 InvariantChecker.Reach.EVERYTHING);
     }
 
-    /** Settlings written as paths, read as the positions' own values. What a caller spelling a
-     *  path means is the value there; a count taken of one is a coordinate it has to name. */
-    private static Map<Coordinate, Count> atValues(Map<String, Count> settled) {
+    /** Settlings written as names, read as what stands at each. What a caller naming a place means
+     *  is the value there; a count taken of one is a coordinate it has to name. */
+    private static Map<Coordinate, Count> atValues(Map<RuleKey, Count> settled) {
         Map<Coordinate, Count> out = new LinkedHashMap<>();
         settled.forEach((path, at) -> out.put(Coordinate.value(path), at));
         return out;
@@ -296,13 +300,13 @@ public final class FieldDomains {
         READINGS.incrementAndGet();
         InvariantChecker.Seeded seeded =
                 InvariantChecker.seedFields(named, data, symbols, policy, settled, reach);
-        Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
+        Map<RuleKey, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
-            // The value itself is at no path, and its range is the one thing not worth handing back:
-            // it is the same position this is of, so there is no sibling to relate it to. What sits
-            // under it is another matter — a record inside a newtype has fields, and they are
-            // positions with ranges like any other.
-            if (field.isEmpty()) {
+            // The value itself is at no name of its own, and its range is the one thing not worth
+            // handing back: it is the same value this is of, so there is no sibling to relate it
+            // to. What sits under it is another matter — a record inside a newtype has fields, and
+            // they are named with ranges like any other.
+            if (field.isTheValueItself()) {
                 return;
             }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
@@ -310,18 +314,18 @@ public final class FieldDomains {
                 out.put(field, bounds);
             }
         });
-        // Which values each position may hold, resolved onto paths for the same reason the bounds
-        // are. Every position and not only the fields: what a name wraps is at no path of its own,
-        // and it is the position a reader of a newtype asks about.
-        Map<String, ValueSet> admitted = new LinkedHashMap<>();
-        Map<String, List<UnreadReason>> unread = new LinkedHashMap<>();
-        Set<String> notSeparated = new LinkedHashSet<>();
-        // Every position that answers to either name. A number is called one thing by the interval
+        // Which values may stand at each name, resolved onto names for the same reason the bounds
+        // are. Every one of them and not only the fields: what a name wraps is at no name of its
+        // own, and it is what a reader of a newtype asks about.
+        Map<RuleKey, ValueSet> admitted = new LinkedHashMap<>();
+        Map<RuleKey, List<UnreadReason>> unread = new LinkedHashMap<>();
+        Set<RuleKey> notSeparated = new LinkedHashSet<>();
+        // Every name that answers to either subject. A number is called one thing by the interval
         // algebra and another by everything else, and the two are filed as they are found — so a
-        // reading keyed by one of the maps would leave a position held only by the other answering
-        // from a default, which is the widest thing there is to say and is said about a position a
+        // reading keyed by one of the maps would leave a name held only by the other answering
+        // from a default, which is the widest thing there is to say and is said about a place a
         // clause may well have narrowed.
-        Set<String> positions = new LinkedHashSet<>(seeded.keys().keySet());
+        Set<RuleKey> positions = new LinkedHashSet<>(seeded.keys().keySet());
         positions.addAll(seeded.atoms().keySet());
         positions.forEach(field -> {
             ConjoinedAdmissibleValues<FactSubject> values = seeded.constraints().values();
@@ -376,9 +380,9 @@ public final class FieldDomains {
         // Resolved here rather than handed over as atoms. An atom is a name the seeding gave a shape
         // and means nothing once the reading that named it is gone, so a caller holding one could
         // only ask the domain it came from — which is this one, while it is still here.
-        Map<String, NumericDomain.Bounds> holds = new LinkedHashMap<>();
+        Map<RuleKey, NumericDomain.Bounds> holds = new LinkedHashMap<>();
         seeded.heldAtoms().forEach((field, atom) -> {
-            if (field.isEmpty()) {
+            if (field.isTheValueItself()) {
                 return;
             }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
@@ -396,7 +400,7 @@ public final class FieldDomains {
         // followed by the atoms, and that is the keys: an atom is named from a body key, so a
         // position with an atom has a key and the second pass adds nothing. A size has no key and
         // is not one of these — it is a number taken of a position rather than a position.
-        SequencedMap<FactSubject, String> placeOf = new LinkedHashMap<>();
+        SequencedMap<FactSubject, RuleKey> placeOf = new LinkedHashMap<>();
         positions.forEach(field ->
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
@@ -431,9 +435,9 @@ public final class FieldDomains {
     public record Placed(Coordinate at, RuleRef.Invariant from, boolean lower, Endpoint end,
                         int conjunct) {
 
-        /** Where in the value the end sits. Never which number it is on: that is {@link #at}, and
-         *  reading one off the other is what the pair exists to stop. */
-        public String path() {
+        /** What the value's rules call where the end sits. Never which number it is on: that is
+         *  {@link #at}, and reading one off the other is what the pair exists to stop. */
+        public RuleKey path() {
             return at.path();
         }
     }
@@ -474,8 +478,8 @@ public final class FieldDomains {
                          Core part, int conjunct,
                          souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
 
-        /** Where in the value the end was to have been placed. */
-        public String path() {
+        /** What the value's rules call where the end was to have been placed. */
+        public RuleKey path() {
             return at.path();
         }
     }
@@ -554,12 +558,12 @@ public final class FieldDomains {
      * of its questions an answer came out of, including the one where none of them told the
      * candidates apart.
      */
-    private List<TypeSymbol.AtModule> narrowedBy(String path, boolean lower) {
+    private List<TypeSymbol.AtModule> narrowedBy(RuleKey path, boolean lower) {
         List<TypeSymbol.AtModule> candidates = narrowers.get(path);
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
-        NumericDomain.Bounds here = byField.get(path);
+        NumericDomain.Bounds here = byName.get(path);
         Endpoint end = here == null ? null : lower ? here.min() : here.max();
         if (end == null) {
             return List.of();
@@ -576,8 +580,8 @@ public final class FieldDomains {
      * against is the whole of what {@link EndNarrowing} means by an answer, and a second way of
      * standing one up is a second place for that comparison to be written a different way round.
      */
-    private Endpoint endWithout(Set<TypeSymbol.AtModule> removed, String path, boolean lower) {
-        NumericDomain.Bounds bounds = without(removed::contains).byField.get(path);
+    private Endpoint endWithout(Set<TypeSymbol.AtModule> removed, RuleKey path, boolean lower) {
+        NumericDomain.Bounds bounds = without(removed::contains).byName.get(path);
         return bounds == null ? null : lower ? bounds.min() : bounds.max();
     }
 
@@ -630,12 +634,13 @@ public final class FieldDomains {
     public static final class Settled {
 
         private final ConstraintState<FactSubject> constraints;
-        private final SequencedMap<FactSubject, String> positions;
-        private final Map<String, FactSubject> atomAt;
-        private final Map<String, Counted> countAt;
+        private final SequencedMap<FactSubject, RuleKey> positions;
+        private final Map<RuleKey, FactSubject> atomAt;
+        private final Map<RuleKey, Counted> countAt;
 
-        private Settled(ConstraintState<FactSubject> constraints, SequencedMap<FactSubject, String> positions,
-                        Map<String, FactSubject> atomAt, Map<String, Counted> countAt) {
+        private Settled(ConstraintState<FactSubject> constraints,
+                        SequencedMap<FactSubject, RuleKey> positions,
+                        Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt) {
             this.constraints = constraints;
             this.positions = positions;
             this.atomAt = atomAt;
@@ -684,8 +689,11 @@ public final class FieldDomains {
                 Coordinate coordinate = where.get(atom);
                 return coordinate == null ? otherwise.apply(atom) : named.apply(coordinate);
             });
+            // Spelled, because what a caller does with these is name a place to a reader. The
+            // names themselves belong to the value whose rules these are, and a caller holding the
+            // state has renamed its subjects to its own.
             SequencedMap<B, String> carried = new java.util.LinkedHashMap<>();
-            positions.forEach((atom, path) -> carried.put(naming.apply(atom), path));
+            positions.forEach((atom, path) -> carried.put(naming.apply(atom), path.toString()));
             return new Carried<>(constraints.renamed(naming), carried);
         }
 
@@ -838,7 +846,7 @@ public final class FieldDomains {
      * clause beside it: {@code value >= 1} leaves the reading of values short at a position, and
      * {@code value == 7} written beside it was taken in whole.
      */
-    private RuleAccounting.Outcome admissionAnswered(RuleRef rule, String at) {
+    private RuleAccounting.Outcome admissionAnswered(RuleRef rule, RuleKey at) {
         List<FactSubject> named = named(at);
         // A part of the rule nothing took in outranks everything else about it. An end placed by
         // one conjunct is not an account of the conjunct written beside it.
@@ -883,8 +891,8 @@ public final class FieldDomains {
                 : new RuleAccounting.Why.TheValueReadingSays(why);
     }
 
-    /** Every name the position at {@code path} answers to. */
-    private java.util.List<FactSubject> named(String path) {
+    /** Every subject the place at {@code path} answers to. */
+    private java.util.List<FactSubject> named(RuleKey path) {
         return positions.entrySet().stream().filter(e -> e.getValue().equals(path))
                 .map(Map.Entry::getKey).toList();
     }
@@ -898,7 +906,7 @@ public final class FieldDomains {
     }
 
     /** The ends the rules place on the coordinates at {@code path}, in the order they were read. */
-    public List<Placed> placedAt(String path) {
+    public List<Placed> placedAt(RuleKey path) {
         return placed().stream().filter(each -> each.path().equals(path)).toList();
     }
 
@@ -911,7 +919,7 @@ public final class FieldDomains {
      * and an end there says nothing about this — read as one answer, a bound on a field's own type
      * silenced the record's clause about the same field.
      */
-    public List<NoLine> noLineAt(String path) {
+    public List<NoLine> noLineAt(RuleKey path) {
         return noLines.stream().filter(each -> each.path().equals(path)).toList();
     }
 
@@ -959,7 +967,7 @@ public final class FieldDomains {
      * bottom out, and a reader that guessed would refuse a type somebody can write.
      *
      */
-    public static boolean mayHoldNothingAt(TypeSymbol.AtModule named, Hir.Data data, String path,
+    public static boolean mayHoldNothingAt(TypeSymbol.AtModule named, Hir.Data data, RuleKey path,
                                            Symbols symbols, ReadingPolicy policy) {
         // A count is never below none, so leaving it no room above none is leaving it at none.
         return OccurrenceCounts.of(named, data, symbols, policy).mayHoldAtMost(path, 0);
@@ -992,8 +1000,8 @@ public final class FieldDomains {
      * field this can answer for is one whose values are counted by something. A field of a number has
      * no such measure and is answered by {@link #at} instead; the two never speak about one field.
      */
-    public Held heldAt(String path) {
-        NumericDomain.Bounds bounds = heldByField.get(path);
+    public Held heldAt(RuleKey path) {
+        NumericDomain.Bounds bounds = heldByName.get(path);
         return bounds == null ? null : new Held(bounds);
     }
 
@@ -1006,24 +1014,24 @@ public final class FieldDomains {
      * ({@link AdmissibleSet}).
      *
      * <p>{@code path} is read from the value these are of, as {@link #at} is, and what a name wraps
-     * is at {@link #THE_VALUE}. A range is not handed back there and this is: a newtype's value is
-     * the position the newtype is, so it is the position a reader of one asks about.
+     * is at {@link RuleKey#THE_VALUE}. A range is not handed back there and this is: a newtype's
+     * value is the value the newtype is, so it is what a reader of one asks about.
      *
      * <p>The position's own reason comes first where there is one. A rule written about this
      * position that could not be read is what an author would act on; that the gathering stopped
      * somewhere else in the value is true as well and is the coarser of the two.
      */
-    public AdmissibleSet admits(String path) {
-        ValueSet values = admittedByField.getOrDefault(path, ValueSet.ANY);
+    public AdmissibleSet admits(RuleKey path) {
+        ValueSet values = admittedByName.getOrDefault(path, ValueSet.ANY);
         // What the reading could not hold together, at this position and not at every one of them.
         // A choice reaching across two positions leaves those two unable to show their projections
         // once something is met with it; a third the choice never named is answered by its own
         // clauses and keeps them. Beside whatever the position's own rules came to rather than
         // instead of it — a rule went unread or it did not, and that question is answered the same
         // whichever way this one is.
-        Set<AdmissibleSet.Widening> spread = notSeparatedByField.contains(path)
+        Set<AdmissibleSet.Widening> spread = notSeparatedByName.contains(path)
                 ? Set.of(new AdmissibleSet.Widening.AlternativesNotSeparated()) : Set.of();
-        List<UnreadReason> here = unreadByField.getOrDefault(path, List.of());
+        List<UnreadReason> here = unreadByName.getOrDefault(path, List.of());
         if (!here.isEmpty()) {
             // One widening per reason. A set of them is what {@link AdmissibleSet.Completeness} is
             // for — a reader looking for either finds it — and folding the several a position was
@@ -1078,7 +1086,7 @@ public final class FieldDomains {
      * reach taken from there is lost wherever another reason won it. A caller that wants to know
      * whether anything is out of sight wants this.
      */
-    public boolean everyRuleReachedAt(String path) {
+    public boolean everyRuleReachedAt(RuleKey path) {
         return reaches(notGathered, path);
     }
 
@@ -1097,17 +1105,16 @@ public final class FieldDomains {
      * answering with, and it made the position above short of a rule no row could ever supply
      * (#1072).
      */
-    public Set<String> handedOn() {
+    public Set<RuleKey> handedOn() {
         return handedOn;
     }
 
-    /** Whether {@code path} is out from under every stop in {@code stops}. A stop reaches the
-     *  position it happened at and everything under it, and a stop at {@link #THE_VALUE} is the
-     *  declaration's own clause and reaches every position of it. */
-    private static boolean reaches(Set<String> stops, String path) {
-        for (String stopped : stops) {
-            if (stopped.equals(THE_VALUE) || path.equals(stopped)
-                    || path.startsWith(stopped + ".")) {
+    /** Whether {@code path} is out from under every stop in {@code stops}. A stop reaches the name
+     *  it happened at and every name under it, and a stop at {@link RuleKey#THE_VALUE} is the
+     *  declaration's own clause and reaches every name of it. */
+    private static boolean reaches(Set<RuleKey> stops, RuleKey path) {
+        for (RuleKey stopped : stops) {
+            if (path.isAtOrUnder(stopped)) {
                 return false;
             }
         }
@@ -1116,7 +1123,7 @@ public final class FieldDomains {
 
     /** Both names the position at {@code path} answers to. A number has one of each and everything
      * else has the second, and a clause is filed under whichever the reading recognised. */
-    private static List<FactSubject> named(InvariantChecker.Seeded seeded, String path) {
+    private static List<FactSubject> named(InvariantChecker.Seeded seeded, RuleKey path) {
         List<FactSubject> names = new ArrayList<>();
         FactSubject atom = seeded.atoms().get(path);
         if (atom != null) {
@@ -1142,8 +1149,8 @@ public final class FieldDomains {
      * meeting these with another reading's kept both sets of names and one of the two ends.
      *
      */
-    public NarrowedBounds at(String path) {
-        NumericDomain.Bounds here = byField.get(path);
+    public NarrowedBounds at(RuleKey path) {
+        NumericDomain.Bounds here = byName.get(path);
         // The ends now and the names when they are asked for. Answering who holds an end reads this
         // declaration again without the clauses of every declaration that wrote a relation about
         // the coordinate, and again per candidate where taking them away moved the end, and the
@@ -1197,7 +1204,7 @@ public final class FieldDomains {
      * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
      * value is 1, and the end as written is not where the position starts.
      */
-    public NumericDomain.Bounds leftAt(String path, CoordinateKind kind) {
+    public NumericDomain.Bounds leftAt(RuleKey path, CoordinateKind kind) {
         // The axis the caller is on, and not whichever of the two this position happens to have. A
         // `String` is measured two ways — its own order, and the length of it — and answering with
         // the wrong one clamps a line drawn on one axis by the range of the other.
@@ -1236,7 +1243,7 @@ public final class FieldDomains {
      * {@code Time.hour(t)} names a number the declarations never mention, so what they say about it
      * is nothing — and nothing is what a lookup finding no subject already means everywhere here.
      */
-    private FactSubject subjectAt(String path, CoordinateKind kind) {
+    private FactSubject subjectAt(RuleKey path, CoordinateKind kind) {
         return switch (kind) {
             case CoordinateKind.OfItsOwnValue _ -> atomAt.get(path);
             case CoordinateKind.OfWhatAnOperationAnswers taken ->
@@ -1246,39 +1253,45 @@ public final class FieldDomains {
     }
 
     /**
-     * One number of one position: the position's own value, or the count taken of it.
+     * One number of one name: what stands at the name, or the count taken of it.
      *
-     * <p>The pair {@link #leftAt} already asks by, written down so that a form over several
-     * positions can be. A position measured two ways is two coordinates at one path, and a form
-     * naming the other one is a form about another quantity.
+     * <p>The pair {@link #leftAt} already asks by, written down so that a form over several names
+     * can be. A name measured two ways is two coordinates at one name, and a form naming the other
+     * one is a form about another quantity.
+     *
+     * <p><b>A name the rules of this value write, and never a place a row writes a value at.</b>
+     * The two part at a sum whose cases share a spread, and a coordinate is on the side the rules
+     * are read from: what is at a name here is what a rule of this value could have said something
+     * about, which is why a position inside a sequence or under a case has no coordinate rather
+     * than one nothing is written at.
      */
-    public record Coordinate(String path, CoordinateKind kind) {
+    public record Coordinate(RuleKey path, CoordinateKind kind) {
 
         public Coordinate {
             if (path == null) {
-                throw new IllegalArgumentException("a coordinate sits at a path");
+                throw new IllegalArgumentException("a coordinate is at a name of the value");
             }
             java.util.Objects.requireNonNull(kind, "and is some number of what is there");
         }
 
-        /** The position's own value. */
-        public static Coordinate value(String path) {
+        /** What stands at the name. */
+        public static Coordinate value(RuleKey path) {
             return new Coordinate(path, new CoordinateKind.OfItsOwnValue());
         }
 
         /** The number {@code operation} answers of what is there. */
-        public static Coordinate takenBy(String path, ValueName operation) {
+        public static Coordinate takenBy(RuleKey path, ValueName operation) {
             return new Coordinate(path, new CoordinateKind.OfWhatAnOperationAnswers(operation));
         }
 
         /**
          * The number, named. The operation and not a word for the kind of thing it is: two
-         * operations over one path are two of these, and "count of" spells them the same.
+         * operations over one name are two of these, and "count of" spells them the same.
          */
         @Override
         public String toString() {
-            // The value itself is at no path, which reads as nothing at all where it is printed.
-            String where = path.isEmpty() ? "the value" : path;
+            // The value itself is at no name, which reads as nothing at all where it is printed.
+            String where = path.isTheValueItself() ? "the value" : path.toString();
             return switch (kind) {
                 case CoordinateKind.OfItsOwnValue _ -> where;
                 case CoordinateKind.OfWhatAnOperationAnswers taken ->
@@ -1336,8 +1349,8 @@ public final class FieldDomains {
     }
 
     private static NumericDomain.Bounds boundsOfForm(ConstraintState<FactSubject> constraints,
-                                                     Map<String, FactSubject> atomAt,
-                                                     Map<String, Counted> countAt,
+                                                     Map<RuleKey, FactSubject> atomAt,
+                                                     Map<RuleKey, Counted> countAt,
                                                      Map<Coordinate, java.math.BigDecimal> form) {
         if (form.isEmpty()) {
             return null;
@@ -1383,8 +1396,9 @@ public final class FieldDomains {
         List<ProjectionEvidence.Cause> causes = new ArrayList<>();
         // A rule that never arrived first. Which rule it was is not known here and there is nothing
         // to say: what a stop leaves is a position and everything under it.
-        for (String stopped : unreadOfEveryValue) {
-            causes.add(new ProjectionEvidence.Cause.Unavailable(stopped));
+        // Spelled, since what a cause carries is read by an author rather than looked up.
+        for (RuleKey stopped : unreadOfEveryValue) {
+            causes.add(new ProjectionEvidence.Cause.Unavailable(stopped.toString()));
         }
         // Every position of this value, by the atom a range of it is taken under. A rule that
         // narrowed one of these is in the bounds; a rule that narrowed only an atom standing for an
@@ -1400,7 +1414,7 @@ public final class FieldDomains {
             // leaves the range wider than the rule however well the conjunct written beside it went,
             // and a set unioned over the whole clause answers for the failing half with the other
             // one — which is the same shape as reading a clause's evidence for one of its parts.
-            Set<String> said = new LinkedHashSet<>();
+            Set<RuleKey> said = new LinkedHashSet<>();
             byPart.forEach((part, read) -> {
                 // A conjunction says what its conjuncts say, and they are here beside it. Asked of
                 // the conjunction as well, a rule whose halves are each held in a language of their
@@ -1436,14 +1450,14 @@ public final class FieldDomains {
                         }
                     });
                 }
-                // A part that raised no question is about the value it is written on, which is what
-                // the empty path is.
+                // A part that raised no question is about the value it is written on, which is the
+                // name of no steps.
                 if (required == null || required.obligations().isEmpty()) {
-                    said.add(THE_VALUE);
+                    said.add(RuleKey.THE_VALUE);
                 }
             });
             said.forEach(path ->
-                    causes.add(new ProjectionEvidence.Cause.Unrepresented(rule, path)));
+                    causes.add(new ProjectionEvidence.Cause.Unrepresented(rule, path.toString())));
         });
         // And what the algebra was given and what it projects does not hold.
         //

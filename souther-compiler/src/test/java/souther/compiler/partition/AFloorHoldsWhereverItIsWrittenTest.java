@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
@@ -69,7 +70,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 """);
 
         assertEquals(2, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
-                model.domainsOf("Bag").heldAt("xs")));
+                model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
     /** And the type's own rule where the record says nothing, which is the reading that already
@@ -86,7 +87,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 """);
 
         assertEquals(1, Partitions.leastHeld(model.ref("NonEmpty"), model.symbols(),
-                model.domainsOf("Bag").heldAt("xs")));
+                model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
     /**
@@ -111,7 +112,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 """);
 
         assertEquals(3, Partitions.leastHeld(model.ref("AtLeastThree"), model.symbols(),
-                model.domainsOf("Bag").heldAt("xs")));
+                model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
     /**
@@ -135,9 +136,9 @@ class AFloorHoldsWhereverItIsWrittenTest {
         FieldDomains domains = model.domainsOf("Possible");
 
         assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
-                domains.heldAt("accounts")), "an empty list of accounts stands beside a contact");
+                domains.heldAt(RuleKey.of("accounts"))), "an empty list of accounts stands beside a contact");
         assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
-                domains.heldAt("contacts")), "and the same the other way round");
+                domains.heldAt(RuleKey.of("contacts"))), "and the same the other way round");
     }
 
     /** A rule a layer down is the outer name's rule too: the reader reaches every name the value

@@ -32,7 +32,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
     }
 
     private static FieldDomains domainsIn(String source, String type,
-                                          java.util.Map<String, Count> settled) {
+                                          java.util.Map<RuleKey, Count> settled) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -59,7 +59,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
      * rule while {@code n} is open. */
     @Test
     void aFloorStatedAgainstASiblingAsksForNothingWhileTheSiblingIsOpen() {
-        FieldDomains.Held held = domainsIn(AGAINST_A_SIBLING, "Bag").heldAt("xs");
+        FieldDomains.Held held = domainsIn(AGAINST_A_SIBLING, "Bag").heldAt(RuleKey.of("xs"));
 
         assertNotNull(held, "a count of no less than none is still what the domain holds");
         assertEquals(0, BigDecimal.ZERO.compareTo(Count.number(held.bounds().min().at()).at()),
@@ -76,7 +76,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
     @Test
     void aFloorStatedAgainstASettledSiblingIsAFloor() {
         FieldDomains.Held held = domainsIn(AGAINST_A_SIBLING, "Bag",
-                java.util.Map.of("n", Count.of(7L))).heldAt("xs");
+                java.util.Map.of(RuleKey.of("n"), Count.of(7L))).heldAt(RuleKey.of("xs"));
 
         assertNotNull(held, "seven is what the list has to hold once n is seven");
         assertEquals(0, BigDecimal.valueOf(7).compareTo(Count.number(held.bounds().min().at()).at()));
@@ -93,7 +93,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
                     invariant atLeastTwo = List.length(xs) >= 2
                 """, "Bag");
 
-        FieldDomains.Held held = domains.heldAt("xs");
+        FieldDomains.Held held = domains.heldAt(RuleKey.of("xs"));
         assertNotNull(held, "the record says how much the list holds");
         assertEquals(0, BigDecimal.valueOf(2).compareTo(Count.number(held.bounds().min().at()).at()),
                 "two, which is what the rule counts");
@@ -120,10 +120,11 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
                     invariant atLeastTwo = List.length(xs) >= 2
                 """, "Mixed");
 
-        assertNotNull(domains.at("n"), "a number is bounded as the value it is");
-        assertNull(domains.heldAt("n"), "and nothing counts what a number holds");
-        assertNotNull(domains.heldAt("xs"), "a list is bounded by how much of it there is");
-        assertNull(domains.at("xs").bounds(), "and a list is no number to bound");
+        assertNotNull(domains.at(RuleKey.of("n")), "a number is bounded as the value it is");
+        assertNull(domains.heldAt(RuleKey.of("n")), "and nothing counts what a number holds");
+        assertNotNull(domains.heldAt(RuleKey.of("xs")),
+                "a list is bounded by how much of it there is");
+        assertNull(domains.at(RuleKey.of("xs")).bounds(), "and a list is no number to bound");
     }
 
 }

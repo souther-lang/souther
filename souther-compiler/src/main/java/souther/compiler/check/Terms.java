@@ -1354,7 +1354,7 @@ final class Terms {
         // Every position, because this question has no depth in it. What the value guarantees is
         // what its type states wherever the rule is written, and a bound here would make a
         // derivation depend on how deeply an author nested a field rather than on what was declared.
-        walk.from(root, FieldDomains.THE_VALUE, inside, GuaranteeWalk.Scope.everyName(),
+        walk.from(root, RuleKey.THE_VALUE, inside, GuaranteeWalk.Scope.everyName(),
                 (path, guarantee) -> out.addAll(guarantee.owed().relations()));
         return out;
     }
@@ -1876,15 +1876,16 @@ final class Terms {
     }
 
     /**
-     * The place {@code path} names under {@code root} — the value itself where the path is empty.
+     * The place {@code path} names under {@code root} — the value itself where the name has no
+     * steps.
      *
      * <p>Here because the fields of a chain are read onto a term here and nowhere else. What answers
-     * by path is {@link InvariantChecker#seedFields}, and what a walk names is a term; putting the
+     * by name is {@link InvariantChecker#seedFields}, and what a walk names is a term; putting the
      * one back on the other is this, so a reader of both does not spell the join itself.
      */
-    FactSubject under(FactSubject root, String path) {
+    FactSubject under(FactSubject root, RuleKey path) {
         return root == null ? null
-                : FactSubject.of(interned.on(root.identity(), StepInputFacts.stepsOf(path)));
+                : FactSubject.of(interned.on(root.identity(), path.steps()));
     }
 
     /**

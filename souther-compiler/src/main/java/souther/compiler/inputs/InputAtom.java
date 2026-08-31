@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.RuleKey;
+
 /**
  * One subject the rules reaching a behavior's input are about, in the words of the input rather than
  * of the value a rule was written on.
@@ -52,11 +54,11 @@ sealed interface InputAtom {
      * would be two, and a rule about it would say nothing about the form that names it.
      *
      * @param parameter which of the behavior's inputs this sits under
-     * @param path      the steps under that parameter, joined the way a coordinate joins them
+     * @param path      what that parameter's own rules call the place
      * @param measured  whether this is the count taken of the place rather than its own value. Two
      *                  numbers at one place, and a rule about one says nothing about the other
      */
-    record Named(String parameter, String path,
+    record Named(String parameter, RuleKey path,
                  souther.compiler.check.FieldDomains.CoordinateKind kind) implements InputAtom {
 
         public Named {
@@ -68,7 +70,7 @@ sealed interface InputAtom {
 
         @Override
         public String toString() {
-            String at = path.isEmpty() ? parameter : parameter + "." + path;
+            String at = path.isTheValueItself() ? parameter : parameter + "." + path;
             return switch (kind) {
                 case souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue _ -> at;
                 case souther.compiler.check.FieldDomains.CoordinateKind

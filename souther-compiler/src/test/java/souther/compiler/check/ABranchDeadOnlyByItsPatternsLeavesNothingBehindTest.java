@@ -63,7 +63,7 @@ class ABranchDeadOnlyByItsPatternsLeavesNothingBehindTest {
     /** The choice is the branch anybody can be in, which names one string. */
     @Test
     void theSurvivingBranchIsTheWholeOfWhatTheChoiceLeaves() {
-        AdmissibleSet code = read().admits("code");
+        AdmissibleSet code = read().admits(RuleKey.of("code"));
 
         assertEquals(AdmissibleSet.READ_IN_FULL, code.completeness(),
                 "the dead branch's unread rule is not this declaration's to answer for");

@@ -29,20 +29,21 @@ public sealed interface Owed {
      * <p>The position and never a number of it. What a rule about the length of a string admits is
      * a set of strings; the length is where its line falls, which is the question below.
      *
-     * @param path where in the value it sits, {@link FieldDomains#THE_VALUE} for the value itself
+     * @param path what the value's own rules call the place, {@link RuleKey#THE_VALUE} for the
+     *             value itself
      */
-    record AdmittedValues(String path) implements Owed {
+    record AdmittedValues(RuleKey path) implements Owed {
 
         public AdmittedValues {
             if (path == null) {
-                throw new IllegalArgumentException("a subject sits somewhere in the value");
+                throw new IllegalArgumentException("a subject is at a name of the value");
             }
         }
 
         @Override
         public String toString() {
-            // The value itself is at no path, which reads as nothing at all where it is printed.
-            return path.isEmpty() ? "the value" : path;
+            // The value itself is at no name, which reads as nothing at all where it is printed.
+            return path.isTheValueItself() ? "the value" : path.toString();
         }
     }
 

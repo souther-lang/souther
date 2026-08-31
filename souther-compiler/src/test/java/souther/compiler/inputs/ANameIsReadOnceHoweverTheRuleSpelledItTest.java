@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Owed;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
@@ -95,10 +96,10 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
     void twoQuestionsAboutOneLocationAreAtOneAddress() {
         TermPath root = TermPath.of("h");
         souther.compiler.check.RuleRef.Invariant rule = someRule(measuredIn(TWO_WAYS));
-        PlacementSeed values = PlacementSeed.of(root, new Owed.AdmittedValues("name"), rule,
-                someCitation(rule));
+        PlacementSeed values = PlacementSeed.of(root,
+                new Owed.AdmittedValues(RuleKey.of("name")), rule, someCitation(rule));
         PlacementSeed line = PlacementSeed.of(root,
-                new Owed.Boundary(FieldDomains.Coordinate.value("name")), rule,
+                new Owed.Boundary(FieldDomains.Coordinate.value(RuleKey.of("name"))), rule,
                 someCitation(rule));
 
         assertEquals(values.address(), line.address());
@@ -120,7 +121,8 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
         TermPath sum = TermPath.of("q");
         TermPath aCase = sum.refine(Refinement.sumCase(caseNamed(read, sum, "A")));
 
-        assertNotEquals(new RuleAddress(sum, "limit"), new RuleAddress(aCase, "limit"));
+        assertNotEquals(new RuleAddress(sum, RuleKey.of("limit")),
+                new RuleAddress(aCase, RuleKey.of("limit")));
     }
 
     /**

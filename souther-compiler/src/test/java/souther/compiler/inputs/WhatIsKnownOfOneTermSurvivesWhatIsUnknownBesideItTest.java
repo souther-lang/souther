@@ -18,6 +18,7 @@ import souther.compiler.query.Shapes;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -197,7 +198,8 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
      */
     @Test
     void twoOperationsTakenOfOneLocationAreTwoCoordinates() {
-        String path = "p.xs";
+        souther.compiler.check.RuleKey path =
+                new souther.compiler.check.RuleKey(List.of("p", "xs"));
         FieldDomains.Coordinate byLength = FieldDomains.Coordinate.takenBy(path,
                 souther.compiler.types.ValueName.Stdlib.operation("List", "length"));
         FieldDomains.Coordinate bySize = FieldDomains.Coordinate.takenBy(path,

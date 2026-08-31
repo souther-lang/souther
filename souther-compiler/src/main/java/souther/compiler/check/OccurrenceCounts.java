@@ -68,17 +68,17 @@ public final class OccurrenceCounts {
     }
 
     /** Whether the value at {@code path} may hold no more than {@code count}. */
-    public boolean mayHoldAtMost(String path, long count) {
+    public boolean mayHoldAtMost(RuleKey path, long count) {
         return mayHold(path, count, NumericDomain.Rel.LE);
     }
 
     /** Whether the value at {@code path} may hold {@code count} and no other number. */
-    public boolean mayHoldExactly(String path, long count) {
+    public boolean mayHoldExactly(RuleKey path, long count) {
         return mayHold(path, count, NumericDomain.Rel.EQ);
     }
 
     /** Whether the value at {@code path} may hold {@code count} or more. */
-    public boolean mayHoldAtLeast(String path, long count) {
+    public boolean mayHoldAtLeast(RuleKey path, long count) {
         return mayHold(path, count, NumericDomain.Rel.GE);
     }
 
@@ -91,7 +91,7 @@ public final class OccurrenceCounts {
      * answer wider than it needed to be. Nothing is refused on the strength of this — that is
      * {@link #mayHoldAtMost} and the others, which ask rather than read.
      */
-    long leastHeldAt(String path) {
+    long leastHeldAt(RuleKey path) {
         if (seeded == null) {
             return 0;
         }
@@ -100,7 +100,7 @@ public final class OccurrenceCounts {
                 : CountDomain.leastFrom(seeded.numbers().boundsOf(counted).min());
     }
 
-    private boolean mayHold(String path, long count, NumericDomain.Rel against) {
+    private boolean mayHold(RuleKey path, long count, NumericDomain.Rel against) {
         if (seeded == null) {
             return true;
         }

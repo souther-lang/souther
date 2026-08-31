@@ -92,15 +92,26 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     private static final Value B = Value.text("B");
 
     /** {@code values} are what the position holds, and are the whole of what its rules leave it. */
-    private static void wholly(ValueSet values, FieldDomains read, String path) {
+    private static void wholly(ValueSet values, FieldDomains read, RuleKey path) {
         assertEquals(AdmissibleSet.complete(values), read.admits(path));
+    }
+
+    /** The same, of the field the record's own rules call {@code field}. */
+    private static void wholly(ValueSet values, FieldDomains read, String field) {
+        wholly(values, read, RuleKey.of(field));
     }
 
     /** {@code values} are what the position holds, the rules may leave fewer, and {@code why} is
      *  what stopped the reading short of them. */
     private static void asFarAsRead(ValueSet values, UnreadReason why, FieldDomains read,
-                                    String path) {
+                                    RuleKey path) {
         assertEquals(AdmissibleSet.partial(values, why), read.admits(path));
+    }
+
+    /** The same, of the field the record's own rules call {@code field}. */
+    private static void asFarAsRead(ValueSet values, UnreadReason why, FieldDomains read,
+                                    String field) {
+        asFarAsRead(values, why, read, RuleKey.of(field));
     }
 
     /**
@@ -123,9 +134,9 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 """, "R");
 
         ValueSet reported = ValueSet.oneOf(Set.of(Value.text("5"), Value.text("6")));
-        assertEquals(reported, read.admits("a").approximation(),
+        assertEquals(reported, read.admits(RuleKey.of("a")).approximation(),
                 "the values are the upper bound they always were");
-        assertNotEquals(AdmissibleSet.complete(reported), read.admits("a"),
+        assertNotEquals(AdmissibleSet.complete(reported), read.admits(RuleKey.of("a")),
                 "and the reading may not call them the whole of what the rules leave");
     }
 
@@ -138,7 +149,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant only = value == "A"
                 """, "Gender");
-        wholly(ValueSet.just(A), read, FieldDomains.THE_VALUE);
+        wholly(ValueSet.just(A), read, RuleKey.THE_VALUE);
     }
 
     /**
@@ -156,7 +167,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Code = String
                     invariant shape = String.matches("[a-z]+", value)
-                """, "Code").admits(FieldDomains.THE_VALUE);
+                """, "Code").admits(RuleKey.THE_VALUE);
 
         assertEquals(AdmissibleSet.READ_IN_FULL, stated.completeness());
         assertTrue(stated.approximation().has(Value.text("ab")));
@@ -168,7 +179,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Code = String
                     invariant shape = Bool.not(String.matches("[a-z]+", value))
-                """, "Code").admits(FieldDomains.THE_VALUE);
+                """, "Code").admits(RuleKey.THE_VALUE);
 
         assertEquals(AdmissibleSet.READ_IN_FULL, denied.completeness());
         assertFalse(denied.approximation().has(Value.text("ab")), "what the pattern takes is out");
@@ -186,7 +197,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant either = value == "A" || value == "B"
                 """, "Gender");
-        wholly(ValueSet.oneOf(Set.of(A, B)), read, FieldDomains.THE_VALUE);
+        wholly(ValueSet.oneOf(Set.of(A, B)), read, RuleKey.THE_VALUE);
     }
 
     /**
@@ -204,7 +215,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant either = value == "A" || String.startsWith("0",value)
                 """, "Gender");
-        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
 
     /**
@@ -348,7 +359,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         assertEquals(AdmissibleSet.wider(ValueSet.ANY, Set.of(
                         new AdmissibleSet.Widening.RuleUnread(UnreadReason.FORM_NOT_READ),
                         new AdmissibleSet.Widening.AlternativesNotSeparated())),
-                read.admits("a"));
+                read.admits(RuleKey.of("a")));
     }
 
     /**
@@ -369,7 +380,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant both = value == "A" && String.startsWith("A",value)
                 """, "Gender");
-        asFarAsRead(ValueSet.just(A), UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.just(A), UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
 
     /** And a rule it cannot read that names another position costs this one nothing at all.
@@ -436,7 +447,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Code = String
                     invariant same = value == value
-                """, "Code"), FieldDomains.THE_VALUE);
+                """, "Code"), RuleKey.THE_VALUE);
 
         FieldDomains fields = of("""
                 module demo
@@ -480,7 +491,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant shape = String.startsWith("A",value)
                 """, "Gender");
-        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
 
     /** A position with no rules at all is open, and this can say so: the model divides it in no
@@ -492,7 +503,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Gender = String
                 """, "Gender");
-        wholly(ValueSet.ANY, read, FieldDomains.THE_VALUE);
+        wholly(ValueSet.ANY, read, RuleKey.THE_VALUE);
     }
 
     /** A denial over an enumeration leaves the cases it did not deny. */
@@ -516,7 +527,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         // the model settled rather than one a set happened to store them in, which for an immutable
         // copy is settled afresh on every run of the compiler.
         assertEquals(List.of(read.caseNamed("Green"), read.caseNamed("Blue")),
-                List.copyOf(((ValueSet.Finite) read.domains().admits("colour").approximation())
+                List.copyOf(((ValueSet.Finite) read.domains().admits(RuleKey.of("colour"))
+                        .approximation())
                         .values()));
     }
 
@@ -531,7 +543,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     @Test
     void aReadingOfNothingSpeaksForNoPosition() {
         asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, FieldDomains.NONE,
-                FieldDomains.THE_VALUE);
+                RuleKey.THE_VALUE);
         asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, FieldDomains.NONE, "anything");
     }
 
@@ -623,12 +635,17 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      *  read. Both, because either alone is half the claim: a position said to be handed on and
      *  narrowed anyway would be one this reading spoke for after all, and one read in full with no
      *  handoff recorded would be a subtree nobody is ever asked about. */
-    private static void handsOn(FieldDomains read, String path) {
+    private static void handsOn(FieldDomains read, RuleKey path) {
         wholly(ValueSet.ANY, read, path);
         assertTrue(read.handedOn().contains(path),
                 () -> path + " hands its rules on, and " + read.handedOn() + " says who does");
         assertTrue(read.everyRuleReachedAt(path),
                 () -> path + " is short of nothing: what is under it was never addressed to it");
+    }
+
+    /** The same, of the field the record's own rules call {@code field}. */
+    private static void handsOn(FieldDomains read, String field) {
+        handsOn(read, RuleKey.of(field));
     }
 
     /**

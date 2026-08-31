@@ -571,7 +571,7 @@ final class PathEngine {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at) {
-        return seedAt(root, FieldDomains.THE_VALUE, k, at,
+        return seedAt(root, RuleKey.THE_VALUE, k, at,
                 new GuaranteeWalk.Extent.AsFarAs(GuaranteeWalk.FIELDS_SEEDED), null,
                 InvariantChecker.Reach.EVERYTHING);
     }
@@ -592,7 +592,7 @@ final class PathEngine {
      *                  that list has to be told here or walk the same descent again and rebase it a
      *                  second way.
      */
-    Known seedAt(Core root, String path, Known k, Denotations at, GuaranteeWalk.Extent extent,
+    Known seedAt(Core root, RuleKey path, Known k, Denotations at, GuaranteeWalk.Extent extent,
                  InvariantChecker.Gathering gathering, InvariantChecker.Reach reach) {
         Seeding seeding = new Seeding(k, gathering);
         walk.from(root, path, at,
@@ -621,17 +621,17 @@ final class PathEngine {
         }
 
         @Override
-        public void guaranteed(String path, TypeGuarantee guarantee) {
+        public void guaranteed(RuleKey path, TypeGuarantee guarantee) {
             known = taking(guarantee, known, gathering);
         }
 
         @Override
-        public void stopped(String path, Type type, GuaranteeWalk.Stop why) {
+        public void stopped(RuleKey path, Type type, GuaranteeWalk.Stop why) {
             stopping(type, path, gathering, why);
         }
 
         @Override
-        public void handedOn(String path, Type type) {
+        public void handedOn(RuleKey path, Type type) {
             // Whether a rule stands under what is being left is the reading's answer and was asked
             // there. Nothing is re-derived here from the type.
             if (gathering != null) {
@@ -640,7 +640,7 @@ final class PathEngine {
         }
 
         @Override
-        public void lostAClause(String path, List<RuleRef.Invariant> lost) {
+        public void lostAClause(RuleKey path, List<RuleRef.Invariant> lost) {
             // Said whatever stands under the position, because the clause was read and lost rather
             // than never reached: a reader answering for the clauses it was handed would otherwise
             // answer for a rule it never saw.
@@ -688,7 +688,7 @@ final class PathEngine {
      * elsewhere is not a position this walk stopped at: the walk reads it, says what it states, and
      * says separately that something below it is somebody else's ({@link Seeding#handedOn}).
      */
-    private void stopping(Type type, String path, InvariantChecker.Gathering gathering,
+    private void stopping(Type type, RuleKey path, InvariantChecker.Gathering gathering,
                           GuaranteeWalk.Stop why) {
         if (gathering == null || type == null || !guarantees.anyRuleUnder(type)) {
             return;

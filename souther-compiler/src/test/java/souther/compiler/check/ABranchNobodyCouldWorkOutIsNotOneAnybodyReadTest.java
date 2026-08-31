@@ -85,7 +85,7 @@ class ABranchNobodyCouldWorkOutIsNotOneAnybodyReadTest {
      */
     @Test
     void whatCouldNotBeWorkedOutIsSaidAtThePositionItIsAbout() {
-        AdmissibleSet y = read().admits("y");
+        AdmissibleSet y = read().admits(RuleKey.of("y"));
 
         assertNotEquals(AdmissibleSet.READ_IN_FULL, y.completeness(),
                 "a branch nobody could work out leaves the position short of what its rules say");
@@ -122,7 +122,7 @@ class ABranchNobodyCouldWorkOutIsNotOneAnybodyReadTest {
                 """, "Big");
 
         assertTrue(assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
-                        read.admits(FieldDomains.THE_VALUE).completeness(),
+                        read.admits(RuleKey.THE_VALUE).completeness(),
                         "a pattern this will not make a machine of leaves the position short")
                         .why().contains(new AdmissibleSet.Widening.RuleUnread(
                                 souther.compiler.values.UnreadReason.PATTERN_TOO_COSTLY)),

@@ -4234,7 +4234,7 @@ public final class Adequacy {
     /** The coordinate as a line is named by, which spells the value a newtype wraps the way the
      *  clause does. */
     private static String written(souther.compiler.check.FieldDomains.Coordinate at) {
-        String where = at.path().isEmpty() ? "value" : at.path();
+        String where = at.path().isTheValueItself() ? "value" : at.path().toString();
         return at.kind() instanceof souther.compiler.check.FieldDomains
                 .CoordinateKind.OfWhatAnOperationAnswers taken
                 ? taken.operation() + "(" + where + ")" : where;

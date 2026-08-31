@@ -68,7 +68,7 @@ public final class OccurrenceValues {
      * ends recorded as whole numbers it stops at, so an end that is neither is a position this cannot
      * count — and counting it anyway by rounding would name a number of values the rules never left.
      */
-    public Cardinality wholeValuesAt(String path) {
+    public Cardinality wholeValuesAt(RuleKey path) {
         if (seeded == null) {
             return Cardinality.UNKNOWN;
         }

@@ -73,16 +73,16 @@ public sealed interface Rules {
      * the second, every plain {@code String} in every model would be a position with something out
      * of sight.
      */
-    default boolean everyRuleReachedAt(String path) {
+    default boolean everyRuleReachedAt(RuleKey path) {
         return switch (this) {
             case Read read -> read.domains().everyRuleReachedAt(path);
             case NoneWritten _ -> true;
         };
     }
 
-    /** What the rules leave the position at {@code path}, which is {@link ValueSet#ANY} read in
+    /** What the rules leave what stands at {@code path}, which is {@link ValueSet#ANY} read in
      *  full where no rule was written at all. */
-    default AdmissibleSet admits(String path) {
+    default AdmissibleSet admits(RuleKey path) {
         return switch (this) {
             case Read read -> read.domains().admits(path);
             case NoneWritten _ -> AdmissibleSet.complete(ValueSet.ANY);

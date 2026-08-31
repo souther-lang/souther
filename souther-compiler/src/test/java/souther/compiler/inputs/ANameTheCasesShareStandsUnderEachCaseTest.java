@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
@@ -75,7 +76,7 @@ class ANameTheCasesShareStandsUnderEachCaseTest {
         InputDomain read = reading(SHARED, "read");
 
         assertEquals(List.of("q@A.limit", "q@B.limit"),
-                spelled(read.positionsNamed(TermPath.of("q"), "limit")));
+                spelled(read.positionsNamed(TermPath.of("q"), RuleKey.of("limit"))));
         assertFalse(read.positions().stream().anyMatch(each -> "q.limit".equals(each.path().toString())),
                 "the shared field is named at the sum and is a position under each of its cases");
     }
@@ -91,7 +92,7 @@ class ANameTheCasesShareStandsUnderEachCaseTest {
     void aNameOnlyOneCaseHasCrossesNowhere() {
         InputDomain read = reading(SHARED, "read");
 
-        assertEquals(List.of(), read.positionsNamed(TermPath.of("q"), "x"));
+        assertEquals(List.of(), read.positionsNamed(TermPath.of("q"), RuleKey.of("x")));
     }
 
     /** An ordinary name is where it always was: the position of that name one step down. */
@@ -100,7 +101,7 @@ class ANameTheCasesShareStandsUnderEachCaseTest {
         InputDomain read = reading(SHARED, "readOne");
 
         assertEquals(List.of("q.limit"),
-                spelled(read.positionsNamed(TermPath.of("q"), "limit")));
+                spelled(read.positionsNamed(TermPath.of("q"), RuleKey.of("limit"))));
         assertTrue(read.reach().crossings().isEmpty(), "no sum stands anywhere in this input");
     }
 
@@ -117,7 +118,8 @@ class ANameTheCasesShareStandsUnderEachCaseTest {
 
         assertEquals(List.of("q@OA.s@IA.deep", "q@OA.s@IB.deep",
                         "q@OB.s@IA.deep", "q@OB.s@IB.deep"),
-                spelled(read.positionsNamed(TermPath.of("q"), "s.deep")));
+                spelled(read.positionsNamed(TermPath.of("q"),
+                        new RuleKey(List.of("s", "deep")))));
     }
 
     /**
@@ -148,14 +150,15 @@ class ANameTheCasesShareStandsUnderEachCaseTest {
         // The sum under `B` is where the input returns to `Q`, so the reading stops before its
         // cases and the name a case would carry stands nowhere.
         TermPath returns = pathOf(read, "o.q@B.deeper");
-        assertEquals(List.of(), read.positionsNamed(returns, "limit"));
+        assertEquals(List.of(), read.positionsNamed(returns, RuleKey.of("limit")));
         assertTrue(read.reach().crossings().stream().noneMatch(each -> each.at().equals(returns)),
                 "the reading stopped there, so its cases put no field anywhere: "
                         + read.reach().crossings());
         // And the sum this one returns to was entered, so the absence above is the stop and not a
         // name that crosses nowhere in this model.
         assertEquals(List.of("o.q@A.limit", "o.q@B.limit"),
-                spelled(read.positionsNamed(TermPath.of("o"), "q.limit")));
+                spelled(read.positionsNamed(TermPath.of("o"),
+                        new RuleKey(List.of("q", "limit")))));
     }
 
     /** The position this reading made at {@code spelled}. */

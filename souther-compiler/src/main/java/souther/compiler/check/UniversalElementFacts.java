@@ -41,7 +41,7 @@ import java.util.Map;
  * is true and is not this — it is a fact about the count, and stating it here would make a reader
  * that assumes these of an element assume something no element satisfies.
  */
-record UniversalElementFacts(Map<String, Bounds> byPath) {
+record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
 
     UniversalElementFacts {
         byPath = Map.copyOf(byPath);
@@ -81,7 +81,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         }
         Terms.Given given = terms.given(written, at);
         Core container = given.value();
-        Map<String, Bounds> held = new LinkedHashMap<>();
+        Map<RuleKey, Bounds> held = new LinkedHashMap<>();
         Type element = Terms.elementType(container.type());
         guaranteed(element, symbols, policy).forEach((path, bounds) -> holds(held, path, bounds));
         writtenOut(container, element, symbols, held);
@@ -116,12 +116,12 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * key a {@code Map.fold} hands its step is bounded by its own declaration and by nothing about
      * the container's elements.
      */
-    static Map<String, Bounds> guaranteed(Type type, Symbols symbols, ReadingPolicy policy) {
+    static Map<RuleKey, Bounds> guaranteed(Type type, Symbols symbols, ReadingPolicy policy) {
         // Whose clauses hold of a value of this type is the one reading's answer. Asked here from
         // the declaration instead, an element that is a sum is an element nothing is known about,
         // while the same value read as a field of a record carries the shared part's bounds.
         List<ValueReading.Owner> owners = ValueReading.of(type, symbols).owners();
-        Map<String, Bounds> guaranteed = new LinkedHashMap<>();
+        Map<RuleKey, Bounds> guaranteed = new LinkedHashMap<>();
         for (ValueReading.Owner owner : owners) {
             InvariantChecker.Seeded seeded =
                     seededOf(owner.named(), owner.data(), symbols, policy);
@@ -161,7 +161,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * rather than wrongly bounded.
      */
     private static void writtenOut(Core container, Type element, Symbols symbols,
-                                   Map<String, Bounds> held) {
+                                   Map<RuleKey, Bounds> held) {
         if (element == null || !(container instanceof Core.ListLit list)
                 || list.elements().isEmpty()) {
             return;
@@ -176,7 +176,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
             low = low == null || written.compareTo(low) < 0 ? written : low;
             high = high == null || written.compareTo(high) > 0 ? written : high;
         }
-        holds(held, FieldDomains.THE_VALUE,
+        holds(held, RuleKey.THE_VALUE,
                 new Bounds(Endpoint.inclusive(Count.of(low)), Endpoint.inclusive(Count.of(high))));
     }
 
@@ -198,7 +198,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * span of what each keeps.
      */
     private static void transferred(Core container, Denotations at, Terms terms, Symbols symbols,
-                                    ReadingPolicy policy, Map<String, Bounds> held) {
+                                    ReadingPolicy policy, Map<RuleKey, Bounds> held) {
         if (!(container instanceof Core.PreservedCall call)) {
             return;
         }
@@ -211,7 +211,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
     }
 
     /** What one lineage keeps of {@code source}, by the path under an element. */
-    private static Map<String, Bounds> keptBy(ElementLineage lineage, Core.PreservedCall call,
+    private static Map<RuleKey, Bounds> keptBy(ElementLineage lineage, Core.PreservedCall call,
                                               Core source, Denotations at, Terms terms,
                                               Symbols symbols, ReadingPolicy policy) {
         return switch (lineage) {
@@ -220,9 +220,9 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
                     throughTheClosure(call, source, at, terms, symbols, policy);
             case ElementLineage.InsideClosureResult _ -> Map.of();
             case ElementLineage.OneOf one -> {
-                Map<String, Bounds> both = null;
+                Map<RuleKey, Bounds> both = null;
                 for (ElementLineage alternative : one.alternatives()) {
-                    Map<String, Bounds> keeps =
+                    Map<RuleKey, Bounds> keeps =
                             keptBy(alternative, call, source, at, terms, symbols, policy);
                     both = both == null ? keeps : spanning(both, keeps);
                 }
@@ -239,8 +239,8 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * guarantees, and one it made is bounded by what it answered, and every element is one of the
      * two.
      */
-    private static Map<String, Bounds> spanning(Map<String, Bounds> one, Map<String, Bounds> other) {
-        Map<String, Bounds> both = new LinkedHashMap<>();
+    private static Map<RuleKey, Bounds> spanning(Map<RuleKey, Bounds> one, Map<RuleKey, Bounds> other) {
+        Map<RuleKey, Bounds> both = new LinkedHashMap<>();
         one.forEach((path, bounds) -> {
             Bounds there = other.get(path);
             if (there != null) {
@@ -261,7 +261,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * kept only where the mapping ended at a number — the same value provable or not by where the
      * map was written, which is what this class is for.
      */
-    private static Map<String, Bounds> throughTheClosure(Core.PreservedCall call, Core source,
+    private static Map<RuleKey, Bounds> throughTheClosure(Core.PreservedCall call, Core source,
                                                          Denotations at, Terms terms,
                                                          Symbols symbols, ReadingPolicy policy) {
         Combinators.Handed handed = Combinators.handedTo(call, at);
@@ -297,15 +297,15 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * one with nothing — which is how this class had already answered a container given a name, and
      * a closure answering a record.
      */
-    private static Map<String, Bounds> answeredBy(Core written, Denotations at, Terms terms,
+    private static Map<RuleKey, Bounds> answeredBy(Core written, Denotations at, Terms terms,
                                                   FactSubject root, UniversalElementFacts kept) {
         Terms.Given given = terms.given(written, at);
         Core e = given.value();
         Denotations reading = given.at();
-        Map<String, Bounds> answered = new LinkedHashMap<>();
+        Map<RuleKey, Bounds> answered = new LinkedHashMap<>();
         FactSubject subject = terms.subjectOf(e, reading);
         kept.byPath().forEach((path, bounds) -> {
-            String under = beneath(subject, path, root, terms);
+            RuleKey under = beneath(subject, path, root, terms);
             if (under != null) {
                 holds(answered, under, bounds);
             }
@@ -313,8 +313,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         if (e instanceof Core.Construct construct) {
             for (Core.FieldValue field : construct.values()) {
                 answeredBy(field.value(), reading, terms, root, kept).forEach((path, bounds) ->
-                        holds(answered, path.isEmpty() ? field.field() : field.field() + "." + path,
-                                bounds));
+                        holds(answered, path.readFrom(field.field()), bounds));
             }
         }
         // Read after the places inside it are named, which reading it as a form is what does: a
@@ -323,7 +322,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         if (form != null) {
             NumericDomain<FactSubject> read = DerivedNumericFacts.refine(
                     assuming(kept.at(root, terms), terms), terms, form.coefs().keySet());
-            holds(answered, FieldDomains.THE_VALUE, read.isBottom() ? null : read.boundsOf(form));
+            holds(answered, RuleKey.THE_VALUE, read.isBottom() ? null : read.boundsOf(form));
         }
         return answered;
     }
@@ -339,14 +338,15 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * at a time, and the algebra says which of them the closure answered — as it does everywhere
      * else.
      */
-    private static String beneath(FactSubject subject, String path, FactSubject root, Terms terms) {
+    private static RuleKey beneath(FactSubject subject, RuleKey path, FactSubject root,
+                                   Terms terms) {
         if (subject == null) {
             return null;
         }
-        List<String> steps = StepInputFacts.stepsOf(path);
+        List<String> steps = path.steps();
         for (int taken = 0; taken <= steps.size(); taken++) {
-            if (subject.equals(terms.under(root, String.join(".", steps.subList(0, taken))))) {
-                return String.join(".", steps.subList(taken, steps.size()));
+            if (subject.equals(terms.under(root, new RuleKey(steps.subList(0, taken))))) {
+                return new RuleKey(steps.subList(taken, steps.size()));
             }
         }
         return null;
@@ -368,7 +368,7 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
 
     /** Records that everything at {@code path} lies between {@code bounds}. Two sources reaching one
      * place are both true of it, so the tighter end of each side is kept. */
-    private static void holds(Map<String, Bounds> held, String path, Bounds bounds) {
+    private static void holds(Map<RuleKey, Bounds> held, RuleKey path, Bounds bounds) {
         if (bounds == null || bounds.saysNothing()) {
             return;
         }

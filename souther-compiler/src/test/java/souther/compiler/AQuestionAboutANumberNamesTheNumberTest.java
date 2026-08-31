@@ -7,6 +7,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Owed;
+import souther.compiler.check.RuleKey;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.NumericTerm;
@@ -168,14 +169,14 @@ class AQuestionAboutANumberNamesTheNumberTest {
         ValueName length = ValueName.Stdlib.operation("List", "length");
         ValueName size = ValueName.Stdlib.operation("Set", "size");
 
-        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy("names", length)),
-                new Owed.Boundary(FieldDomains.Coordinate.takenBy("names", size)),
+        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy(RuleKey.of("names"), length)),
+                new Owed.Boundary(FieldDomains.Coordinate.takenBy(RuleKey.of("names"), size)),
                 "a line on one operation's number is not a line on another's");
-        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy("names", length)),
-                new Owed.Boundary(FieldDomains.Coordinate.value("names")),
+        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy(RuleKey.of("names"), length)),
+                new Owed.Boundary(FieldDomains.Coordinate.value(RuleKey.of("names"))),
                 "nor a line on what the position itself holds");
-        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy("names", length)),
-                new Owed.AdmittedValues("names"),
+        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy(RuleKey.of("names"), length)),
+                new Owed.AdmittedValues(RuleKey.of("names")),
                 "and a question about a number is not the question about the position");
     }
 

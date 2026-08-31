@@ -100,8 +100,8 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private Map<String, List<String>> guaranteedUnder(String name, GuaranteeWalk.Scope scope) {
         Map<String, List<String>> out = new LinkedHashMap<>();
         Read read = place(name);
-        walk.from(read.root(), FieldDomains.THE_VALUE, read.at(), scope,
-                (path, guarantee) -> out.computeIfAbsent(path, _ -> new ArrayList<>())
+        walk.from(read.root(), RuleKey.THE_VALUE, read.at(), scope,
+                (path, guarantee) -> out.computeIfAbsent(path.toString(), _ -> new ArrayList<>())
                         .add(guarantee.rule().clause().toString()));
         return out;
     }
@@ -110,14 +110,14 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private Map<String, GuaranteeWalk.Stop> stoppedIn(String name, GuaranteeWalk.Scope scope) {
         Map<String, GuaranteeWalk.Stop> out = new LinkedHashMap<>();
         Read read = place(name);
-        walk.from(read.root(), FieldDomains.THE_VALUE, read.at(), scope,
+        walk.from(read.root(), RuleKey.THE_VALUE, read.at(), scope,
                 new GuaranteeWalk.Reader() {
                     @Override
-                    public void guaranteed(String path, TypeGuarantee guarantee) {}
+                    public void guaranteed(RuleKey path, TypeGuarantee guarantee) {}
 
                     @Override
-                    public void stopped(String path, Type type, GuaranteeWalk.Stop why) {
-                        out.put(path, why);
+                    public void stopped(RuleKey path, Type type, GuaranteeWalk.Stop why) {
+                        out.put(path.toString(), why);
                     }
                 });
         return out;
@@ -127,14 +127,14 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private List<String> handedOnIn(String name, GuaranteeWalk.Scope scope) {
         List<String> out = new ArrayList<>();
         Read read = place(name);
-        walk.from(read.root(), FieldDomains.THE_VALUE, read.at(), scope,
+        walk.from(read.root(), RuleKey.THE_VALUE, read.at(), scope,
                 new GuaranteeWalk.Reader() {
                     @Override
-                    public void guaranteed(String path, TypeGuarantee guarantee) {}
+                    public void guaranteed(RuleKey path, TypeGuarantee guarantee) {}
 
                     @Override
-                    public void handedOn(String path, Type type) {
-                        out.add(path);
+                    public void handedOn(RuleKey path, Type type) {
+                        out.add(path.toString());
                     }
                 });
         return out;
@@ -225,7 +225,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
      */
     @Test
     void aDeclarationsOwnClausesCanBeLeftOutWithoutLeavingWhatIsUnderIt() {
-        assertEquals(List.of(FieldDomains.THE_VALUE, "cap"),
+        assertEquals(List.of(RuleKey.THE_VALUE.toString(), "cap"),
                 List.copyOf(guaranteedUnder("Bounded", GuaranteeWalk.Scope.asFarAs(2)).keySet()),
                 "both rules stand: Bounded's own, and NonNegInt's about the field");
 

@@ -47,7 +47,7 @@ sealed interface ClauseStates {
      * @param positions the ones the clause is about, which is what a rule can cost. Never empty:
      *                  a clause bounding a coordinate names the position it sits at
      */
-    record ABound(FieldDomains.Coordinate line, Set<String> positions) implements ClauseStates {
+    record ABound(FieldDomains.Coordinate line, Set<RuleKey> positions) implements ClauseStates {
 
         public ABound {
             if (line == null) {
@@ -108,7 +108,7 @@ sealed interface ClauseStates {
      *                  {@link Required#ofInvariant} makes of an empty set. Filed at the value
      *                  instead, {@code invariant t = 1 >= 0} was a rule nothing had accounted for
      */
-    record SomethingElse(Set<String> positions) implements ClauseStates {
+    record SomethingElse(Set<RuleKey> positions) implements ClauseStates {
 
         public SomethingElse {
             // Insertion order: `Set.of` and `Set.copyOf` iterate in an order salted once per JVM
@@ -117,13 +117,13 @@ sealed interface ClauseStates {
                     new java.util.LinkedHashSet<>(positions));
         }
 
-        static SomethingElse naming(List<String> found) {
+        static SomethingElse naming(List<RuleKey> found) {
             return new SomethingElse(new java.util.LinkedHashSet<>(found));
         }
     }
 
-    /** The positions this clause is about, by which a rule can cost one. */
-    default Set<String> about() {
+    /** The names this clause is about, by which a rule can cost one. */
+    default Set<RuleKey> about() {
         return switch (this) {
             case ABound bound -> bound.positions();
             case SomethingElse other -> other.positions();
