@@ -107,7 +107,7 @@ class PartitionsTest {
 
         assertEquals(List.of(), classIds(cost));
         assertFalse(cost.derivable());
-        assertTrue(cost.measurable(), "there is still an edge to reach");
+        assertTrue(cost.asksForARow(), "there is still an edge to reach");
         assertEquals(List.of(Count.of(0L), Count.of(1000L)),
                 cost.cuts().stream().map(Cut::at).toList());
     }

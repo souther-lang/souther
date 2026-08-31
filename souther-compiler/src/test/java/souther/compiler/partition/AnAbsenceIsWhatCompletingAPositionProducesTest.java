@@ -48,6 +48,10 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
 
     private static final AxisId ID = AxisId.of("run", new NumericTerm.ValueOf(AT));
 
+    /** What the rules came to where every one of them was read and none drew a line. The chain
+     *  below is about what a position is pending on, which is asked before this is read. */
+    private static final BodyCutInspection READ_TO_THE_END = new BodyCutInspection.Exhausted();
+
     private static PositionMeasurements measured() {
         return at(new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
                 List.of(PartitionClass.of("true", "true", new Recognition.Nothing(),
@@ -62,7 +66,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         return new PositionMeasurements(
                 new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
                         unread == null ? null : LeftAtThePosition.of(unread)),
-                List.of(axis), null);
+                List.of(axis), READ_TO_THE_END);
     }
 
     /** What is still to be answered for at this position. */
@@ -81,7 +85,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         return new PositionMeasurements(
                 new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
                         unread == null ? null : LeftAtThePosition.of(unread)),
-                List.of(), null);
+                List.of(), READ_TO_THE_END);
     }
 
     /**
@@ -162,7 +166,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     void aPositionNothingReadIsNotAnsweredFor() {
         assertThrows(IllegalStateException.class, () -> of(new PositionMeasurements(
                 new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, null, null),
-                List.of(), null)));
+                List.of(), READ_TO_THE_END)));
     }
 
     @Test

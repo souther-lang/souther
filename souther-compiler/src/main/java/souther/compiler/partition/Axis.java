@@ -22,8 +22,8 @@ import java.util.List;
  *
  * <p>A bound is not one of them. An invariant's bound gives a boundary and no partition: everything
  * outside it is refused at construction, so there is no class on the far side to cover (ADR-0090),
- * and what such a position gets is {@link #cuts} and no classes — which is what {@link #measurable}
- * is for. What a bound does contribute to a partition is the range the classes are clipped to: the
+ * and what such a position gets is {@link #cuts} and no classes — which is what
+ * {@link #asksForARow} is for. What a bound does contribute to a partition is the range the classes are clipped to: the
  * two either side of a {@code guard} at 50 run from the bound and not from the type's own ends.
  *
  * <p>{@link #classes} is the one denominator. What a report counts, what a pair space is the
@@ -78,6 +78,15 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
                     "`" + id + "` measures " + term + " at nothing: no class, no line and no"
                             + " parting, which is a position nothing measures and not a measure");
         }
+        // The name says which number this is a measure of, so it is that number as a report writes
+        // it and never a second answer to what is measured here. An identity handed in beside the
+        // number is one a caller chooses, and what a reader keyed by it would then be holding is a
+        // measure of one number filed under the name of another — which every map downstream is
+        // keyed by ({@link EvidenceAccount}, the lines along a measure, what a row was placed at).
+        if (!id.term().equals(term.toString())) {
+            throw new IllegalArgumentException("`" + id + "` names " + id.term()
+                    + " and this measures " + term + "; a measure is named after its own number");
+        }
         for (PartitionClass one : classes) {
             subjectHeld(term, one);
             // A line is a place on the number's order and falls in whichever class holds that
@@ -124,6 +133,20 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
         this(id, term, type, classes, cuts, List.of(), NarrowedBounds.NOTHING);
     }
 
+    /**
+     * One measure of {@code term}, named after it.
+     *
+     * <p>What a caller has is a number and the behavior whose input it is read from, and the name
+     * follows from the two. Handed the name as well, a caller has a second thing to get right and
+     * the constructor a second answer to refuse — so this is the way in, and passing a name is for
+     * a reader rebuilding a measure it already has.
+     */
+    public static Axis of(String behavior, NumericTerm.FromOnePosition term, Type type,
+                          List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted,
+                          NarrowedBounds narrowed) {
+        return new Axis(AxisId.of(behavior, term), term, type, classes, cuts, parted, narrowed);
+    }
+
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
      * read off it. Not what the axis is: two terms can be taken of one location, and {@link #id()}
@@ -160,13 +183,14 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
         return !classes.isEmpty();
     }
 
-    /** Whether there is a line to draw here — classes to cover, or a boundary to reach.
+    /** Whether there is anything here a row can be written against — a class to sit in, or an edge
+     * to stand at.
      *
      * <p>A numeric newtype bounded by an invariant has the second and not the first: everything
      * outside the bound is refused at construction, so there is no other class, only an edge worth
      * a row. False where the rules part the number and the position holds no value at the parting:
-     * that is a measure, and there is nothing at it for a row to be written against. */
-    public boolean measurable() {
+     * that is a measure of the number, and there is nothing at it to ask an author for. */
+    public boolean asksForARow() {
         return !classes.isEmpty() || !cuts.isEmpty();
     }
 

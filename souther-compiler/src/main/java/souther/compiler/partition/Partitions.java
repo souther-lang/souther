@@ -74,8 +74,9 @@ public final class Partitions {
      *                this, so which measure answers for which location is what the model said and
      *                not a rule a reader invented
      * @param between the lines drawn between two positions, which divide neither of them
-     * @param along   the lines drawn on one position, by the axis they are on. Every measurable axis
-     *                has an entry, and an axis that is not measurable has no lines to have one for
+     * @param along   the lines drawn on one position, by the measure they are on. Every measure a
+     *                row can be written against has an entry, and one that parts a number where
+     *                the position holds no value has no line to have one for
      * @param inputIsEmpty the proof that the rules reaching this input leave no value at all, or
      *                null where no such proof was found. One fact about the behavior and not one per
      *                rule or per position: two clauses each admitting values are empty together, so
@@ -283,7 +284,7 @@ public final class Partitions {
         // position is what a reader of a stop or an absence is asking about, and a measure is what
         // a reader of a class or a line is; holding the second under the first is what keeps which
         // of them answers for the other from being worked out again by whoever asks.
-        List<PositionMeasurements> measurements = new ArrayList<>();
+        List<Drawn> drawn = new ArrayList<>();
         for (Position position : inputs.positions()) {
             // Not at a position made of positions. Such a one is given up in favour of what is
             // under it and carries no classes of its own, so what this qualifies is not there —
@@ -295,8 +296,7 @@ public final class Partitions {
                 notSeparated.add(
                         new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
             }
-            axisOf(behavior, position, symbols, policy, measurements, uncertain,
-                    rulesWithoutALine);
+            axisOf(behavior, position, symbols, policy, drawn, uncertain, rulesWithoutALine);
             // What the rules of this position raise that nothing answered, gathered from the
             // reading that found it. Once per position and not once per axis: a question is the
             // model's, and which axis is standing beside it is this compiler's business.
@@ -315,25 +315,24 @@ public final class Partitions {
         // here — `withThresholds` has not run, so a position a `guard` divides has no cut yet — and
         // a selection made now would be made where the least is known about what it selects
         // (see this package's documentation).
-        List<PositionAccount> positions =
-                measurements.stream().map(PositionMeasurements::position).toList();
-        List<Axis> kept = measurements.stream().flatMap(each -> each.axes().stream()).toList();
+        List<PositionAccount> positions = drawn.stream().map(Drawn::at).toList();
+        List<Axis> kept = drawn.stream().flatMap(each -> each.axes().stream()).toList();
         // A position undivided because a rule about it drew no line says that here, without waiting
         // for a body: a type bounded by a rule this cannot read is one whether or not any behavior
         // compares it, and so is one bounded by a rule read to the end that divides nothing. What
         // the rules came to is whether either happened, and which of the two it was — settled
         // beside each axis, as it is once a body has spoken.
         List<PositionMeasurements> settled = new ArrayList<>();
-        for (PositionMeasurements at : measurements) {
+        for (Drawn at : drawn) {
             BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
                 came = BodyCutInspection.outranking(came,
                         cameTo(axis.term(), axis.path(), rulesWithoutALine));
             }
-            if (at.axes().isEmpty()) {
-                came = cameTo(null, at.position().path(), rulesWithoutALine);
+            if (came == null) {
+                came = cameTo(null, at.at().path(), rulesWithoutALine);
             }
-            settled.add(at.measuredAt(at.axes(), came));
+            settled.add(new PositionMeasurements(at.at(), at.axes(), came));
         }
         // The lines first, because the closure is a conclusion about them: whether the reading ran
         // out is asked of what it produced beside what it found, and not of the gaps alone. Both
@@ -355,6 +354,18 @@ public final class Partitions {
                 // asking per position or per rule would be asking what neither of them decides.
                 quantities.emptiness().orElse(null));
     }
+
+    /**
+     * One position and what the declarations measured it at, before what its rules came to is
+     * folded over those measures.
+     *
+     * <p>Not a {@link PositionMeasurements}, which is what this phase answers with and which says
+     * what the rules came to. The fold wants every rule of every position in hand, and that is one
+     * walk later than the walk that reads the positions — so this is what the first walk leaves,
+     * and the answer is made once, whole. Written as the answer with the fold left out, the type a
+     * reader is handed would carry a state only this file ever passes through.
+     */
+    private record Drawn(PositionAccount at, List<Axis> axes) {}
 
     /**
      * What the rules this phase drew no line from leave at one number of a position, or at the
@@ -452,8 +463,11 @@ public final class Partitions {
                                   souther.compiler.inputs.Quantities reading, Symbols symbols,
                                   ReadingPolicy policy,
                                   List<RuleWithoutALine> rules, EvidenceAccount account) {
-        AxisId id = axis != null ? axis.id()
-                : AxisId.of(at.position().behavior(), term);
+        String behavior = at.position().behavior();
+        // What a report calls this measure, which is what its number is called under this
+        // behavior. Read the same way the measure itself takes its name, so that a piece of
+        // evidence said to be measured here and the measure it was measured at are one name.
+        AxisId id = AxisId.of(behavior, term);
         Type type = at.position().type();
         List<LineEvidence> mine = evidence.stream()
                 .filter(each -> each.at().equals(term)).toList();
@@ -469,7 +483,7 @@ public final class Partitions {
             // everything else. Ranges here would ask the rows for a distinction between the two
             // sides of a value the behavior treats alike.
             mine.forEach(each -> account.measured(each, id));
-            return made(out, at, id, term, type,
+            return made(out, at, behavior, term, type,
                     classesOf(axis, () -> singledClasses(points, term, type, domain, symbols)),
                     mergedPoints(cutsOf(axis), points, carrier),
                     partedOf(axis), narrowedOf(axis),
@@ -512,7 +526,7 @@ public final class Partitions {
         // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
         // written about the position rather than everything that came to nothing.
         NumericDomain.Bounds within = domain;
-        return made(out, at, id, term, type,
+        return made(out, at, behavior, term, type,
                 classesOf(axis, () -> Intervals.classesOf(
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
@@ -535,7 +549,7 @@ public final class Partitions {
      * location rather than about a measure of it. Kept anyway, the location would be counted among
      * the measures — which is what a measure of nothing was.
      */
-    private static BodyCutInspection made(List<Axis> out, PositionMeasurements at, AxisId id,
+    private static BodyCutInspection made(List<Axis> out, PositionMeasurements at, String behavior,
                                           NumericTerm.FromOnePosition term, Type type,
                                           List<PartitionClass> classes, List<Cut> cuts,
                                           List<Parting> parted, NarrowedBounds narrowed,
@@ -543,7 +557,7 @@ public final class Partitions {
         if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
             return cameTo(term, at.position().path(), rules);
         }
-        out.add(new Axis(id, term, type, classes, cuts, parted, narrowed));
+        out.add(Axis.of(behavior, term, type, classes, cuts, parted, narrowed));
         return drew != null ? drew : cameTo(term, at.position().path(), rules);
     }
 
@@ -796,7 +810,7 @@ public final class Partitions {
             LinesRead read) {
         Map<AxisId, List<Border>> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
-            if (axis.measurable()) {
+            if (axis.asksForARow()) {
                 out.put(axis.id(),
                         bordersOf(axis, symbols, reading.runsBetween(axis.term()), read));
             }
@@ -1030,7 +1044,7 @@ public final class Partitions {
      */
     private static void axisOf(String behavior, Position position, Symbols symbols,
                                ReadingPolicy policy,
-                               List<PositionMeasurements> measurements,
+                               List<Drawn> drawn,
                                java.util.Set<NumericTerm> uncertain,
                                List<RuleWithoutALine> rulesWithoutALine) {
         for (RuleWithoutALine each : position.rulesWithoutALine()) {
@@ -1048,7 +1062,7 @@ public final class Partitions {
                                     + " reading of an input and the axes drawn from it disagree"
                                     + " about which positions there are");
                 }
-                if (divided.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
+                if (divided.cuts() instanceof CutEvidence.Present cut && cut.uncertain()) {
                     uncertain.add(term);
                 }
                 // No continuation, because something answered for the position and a fallback is
@@ -1057,9 +1071,9 @@ public final class Partitions {
                 // and taking that off the axis with the fallback is how the stop went unreported
                 // (issue #1084).
                 PositionAccount at = PositionAccount.of(behavior, position, null, null);
-                measurements.add(new PositionMeasurements(at,
-                        List.of(new Axis(id, term, at.type(), divided.classes(),
-                                divided.cuts().cuts(), List.of(), position.narrowedEnds())), null));
+                drawn.add(new Drawn(at,
+                        List.of(Axis.of(behavior, term, at.type(), divided.classes(),
+                                divided.cuts().cuts(), List.of(), position.narrowedEnds()))));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:
@@ -1080,10 +1094,10 @@ public final class Partitions {
                         // declarations name, and a measure with nothing in it would be a location
                         // counted among the measures — what is still to be answered for here is
                         // the position's to carry.
-                        measurements.add(new PositionMeasurements(
+                        drawn.add(new Drawn(
                                 PositionAccount.of(behavior, position, retained.continuation(),
                                         leftAt(position)),
-                                List.of(), null));
+                                List.of()));
                     }
                 }
             }

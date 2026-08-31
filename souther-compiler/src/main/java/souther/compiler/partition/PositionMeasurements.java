@@ -20,10 +20,10 @@ import java.util.List;
  *                   numbers measure it
  * @param axes       the measures made of it, in the order the rules name the numbers
  * @param inspection what the rules written about this location came to, over every number it is
- *                   measured at, or null where this phase read none of them. One sentence for the
- *                   location because that is what a report says about one: written per measure, a
- *                   location measured at two numbers is told twice that it is divided nowhere, and
- *                   told it at all where one of its numbers is divided and another is not
+ *                   measured at. One sentence for the location because that is what a report says
+ *                   about one: written per measure, a location measured at two numbers is told
+ *                   twice that it is divided nowhere, and told it at all where one of its numbers
+ *                   is divided and another is not
  */
 public record PositionMeasurements(PositionAccount position, List<Axis> axes,
                                    BodyCutInspection inspection) {
@@ -32,9 +32,27 @@ public record PositionMeasurements(PositionAccount position, List<Axis> axes,
         if (position == null) {
             throw new IllegalArgumentException("measures of no position");
         }
+        // What the rules came to is part of what this answers, so it is here before anything reads
+        // it. A value without it is a location half answered for, and the readers of it — the
+        // verdict a report writes about the location, and what it is left with — take it as the
+        // answer rather than as something still to arrive.
+        if (inspection == null) {
+            throw new IllegalArgumentException(
+                    position.path() + " has no account of what the rules written about it came to");
+        }
         axes = List.copyOf(axes);
+        java.util.Set<AxisId> named = new java.util.LinkedHashSet<>();
         for (Axis axis : axes) {
             held(position, axis);
+            // One measure per number. What tells two measures of one location apart is the number
+            // each is of, which is what names them, and every reader downstream holds them under
+            // that name — a second measure of one number is one of them silently standing for the
+            // other in a map, and two of them counted where a report counts measures.
+            if (!named.add(axis.id())) {
+                throw new IllegalArgumentException("`" + axis.id() + "` measures " + axis.term()
+                        + " twice at " + position.path()
+                        + "; a location is measured once at each number the rules name of it");
+            }
         }
     }
 
@@ -77,7 +95,7 @@ public record PositionMeasurements(PositionAccount position, List<Axis> axes,
      * nothing stands at come to the same thing for every reader of this.
      */
     public boolean measured() {
-        return axes.stream().anyMatch(Axis::measurable);
+        return axes.stream().anyMatch(Axis::asksForARow);
     }
 
     /** The measures of this location that divide their number into classes. */

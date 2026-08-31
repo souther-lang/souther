@@ -31,6 +31,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AMeasureIsHeldUnderThePositionItMeasuresTest {
 
+    /** What the rules came to where every one of them was read and none drew a line, which is what
+     *  the fixtures below are not about. */
+    private static final BodyCutInspection READ_TO_THE_END = new BodyCutInspection.Exhausted();
+
     private static final String MODEL = """
             module example.held
 
@@ -120,7 +124,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
         assertEquals(n.position().type(), ofAnother.type(), "the two hold the same type");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new PositionMeasurements(n.position(), List.of(ofAnother), null));
+                () -> new PositionMeasurements(n.position(), List.of(ofAnother), READ_TO_THE_END));
 
         assertTrue(refused.getMessage().contains("slot.m")
                 && refused.getMessage().contains("slot.n"), refused.getMessage());
@@ -135,10 +139,54 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
                 List.of(), reading.cuts());
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new PositionMeasurements(n.position(), List.of(ofAString), null));
+                () -> new PositionMeasurements(n.position(), List.of(ofAString), READ_TO_THE_END));
 
         assertTrue(refused.getMessage().contains(Type.STRING.toString())
                 && refused.getMessage().contains(Type.INT.toString()), refused.getMessage());
+    }
+
+    /**
+     * A measure is named after the number it is of, so its name cannot say another.
+     *
+     * <p>The name is what every reader downstream holds a measure under — the lines along it, what
+     * a row was placed at, what a piece of evidence was measured by — so a measure of one number
+     * filed under the name of another is not a wrong word in a report; it is that reader holding
+     * the wrong measure.
+     */
+    @Test
+    void aMeasureCannotBeNamedAfterANumberItDoesNotMeasure() {
+        Axis reading = at("slot.n").axes().get(0);
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new Axis(AxisId.of("gate", at("slot.m").axes().get(0).term()),
+                        reading.term(), reading.type(), reading.classes(), reading.cuts()));
+
+        assertTrue(refused.getMessage().contains("slot.m")
+                && refused.getMessage().contains("slot.n"), refused.getMessage());
+    }
+
+    /** And a location is measured once at each number, because that name is what tells them apart. */
+    @Test
+    void aLocationIsNotMeasuredTwiceAtOneNumber() {
+        PositionMeasurements n = at("slot.n");
+        Axis once = n.axes().get(0);
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new PositionMeasurements(n.position(), List.of(once, once), READ_TO_THE_END));
+
+        assertTrue(refused.getMessage().contains("twice"), refused.getMessage());
+    }
+
+    /** And what the rules about the location came to is part of the answer, not something a reader
+     *  waits for. */
+    @Test
+    void aLocationAnsweredForSaysWhatItsRulesCameTo() {
+        PositionMeasurements n = at("slot.n");
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new PositionMeasurements(n.position(), n.axes(), null));
+
+        assertTrue(refused.getMessage().contains("slot.n"), refused.getMessage());
     }
 
     /** Nor one made for another behavior's input, which an axis names on its own. */
@@ -150,7 +198,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
                 reading.type(), reading.classes(), reading.cuts());
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new PositionMeasurements(n.position(), List.of(elsewhere), null));
+                () -> new PositionMeasurements(n.position(), List.of(elsewhere), READ_TO_THE_END));
 
         assertTrue(refused.getMessage().contains("other"), refused.getMessage());
     }
