@@ -165,15 +165,23 @@ final class Coverages {
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
-        Readings readings = Readings.of(rows, where, partitioning.axes(),
+        // The measures that divide their number, which are the ones a row is placed at. Handed
+        // every measure, this asks a classifier about numbers there are no classes to place a value
+        // in, and the count it comes back with is over a set no answer here is about.
+        Readings readings = Readings.of(rows, where, partitioning.partitionAxes(),
                 observed.gaps().stream()
                         .filter(gap -> gap.code().leftNoRowRead()).toList());
-        for (Axis axis : partitioning.axes()) {
-            if (!axis.measurable()) {
-                continue;   // said by `undivided`, which also says which kind of nothing it is
-            }
-            if (axis.derivable()) {
-                axes.add(coverageOf(axis, partitioning, readings, level.readsRows()));
+        // A position at a time, because what one of its measures is owed to say includes what the
+        // reading of the position left unread — which is the position's answer and is asked of it
+        // here rather than of whichever measure happens to be in hand.
+        for (souther.compiler.partition.PositionMeasurements at : partitioning.measurements()) {
+            // The measures that divide their number, which is what a partition is counted over. A
+            // measure that is a boundary and no partition is covered by the rows at its edge and
+            // said there, and a location nothing measures is said by `undivided`, which also says
+            // which kind of nothing it is.
+            for (Axis axis : at.partitionAxes()) {
+                axes.add(coverageOf(axis, at.position(), partitioning, readings,
+                        level.readsRows()));
                 divided.add(axis);
             }
         }
@@ -192,7 +200,7 @@ final class Coverages {
                 // no axis came back for still has whatever was written about it.
                 partitioning.notSeparated(), unansweredIn(partitioning),
                 whyUnclassified(readings.byRow(),
-                        partitioning.axes().stream().map(Axis::id).toList()));
+                        partitioning.partitionAxes().stream().map(Axis::id).toList()));
     }
 
     /**
@@ -442,16 +450,16 @@ final class Coverages {
 
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis,
+            souther.compiler.partition.PositionAccount at,
             souther.compiler.partition.Partitions.Partitioning partitioning, Readings readings,
             boolean asked) {
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
-        // What the axis already says about which of this position's rules nothing accounted for,
-        // each named. Read off the axis rather than worked out here, and in the questions' own
-        // words: the vocabulary beside it says why a division could not be derived, which is a
-        // different question, and borrowing it left a reader with a sentence that named neither
-        // (issue #842).
+        // Which of this position's rules nothing accounted for, each named. Read off the position
+        // rather than worked out here, and in the questions' own words: the vocabulary beside it
+        // says why a division could not be derived, which is a different question, and borrowing it
+        // left a reader with a sentence that named neither.
         PartitionEvidence.AxisCoverage.Reading read = new PartitionEvidence.AxisCoverage.Reading(
-                axis.at().residue().rulesLeftUnread().isEmpty()
+                at.residue().rulesLeftUnread().isEmpty()
                         ? PartitionEvidence.AxisCoverage.Reach.EVERY_RULE
                         : PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
                 // Of the questions standing at this position, the ones this measure is the reader

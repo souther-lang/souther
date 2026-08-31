@@ -68,6 +68,11 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "gate")).value();
     }
 
+    /** The same measure, offered another run of classes and another set of lines. */
+    private static Axis carrying(Axis axis, List<PartitionClass> classes, List<Cut> cuts) {
+        return new Axis(axis.id(), axis.term(), axis.type(), classes, cuts);
+    }
+
     private static Axis axisOf(Partitions.Partitioning read, String id) {
         Axis found = read.axes().stream().filter(each -> each.id().toString().equals(id))
                 .findFirst().orElse(null);
@@ -116,7 +121,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Axis truth = axisOf(read, "gate/slot.on");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> count.carrying(truth.classes(), List.of(), List.of()));
+                () -> carrying(count, truth.classes(), List.of()));
 
         assertTrue(refused.getMessage().contains("slot.on")
                         && refused.getMessage().contains("slot.n"),
@@ -134,7 +139,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
                 .toList();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> count.carrying(unstamped, List.of(), List.of()));
+                () -> carrying(count, unstamped, List.of()));
 
         assertTrue(refused.getMessage().contains("no measure"), refused.getMessage());
     }
@@ -147,7 +152,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Axis count = axisOf(read, "gate/slot.n");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> length.carrying(count.classes(), List.of(), List.of()));
+                () -> carrying(length, count.classes(), List.of()));
 
         assertTrue(refused.getMessage().contains("slot.n")
                         && refused.getMessage().contains("String.length(slot.c)"),
@@ -167,7 +172,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Axis truth = axisOf(read, "gate/slot.on");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> length.carrying(truth.classes(), List.of(), List.of()));
+                () -> carrying(length, truth.classes(), List.of()));
 
         assertTrue(refused.getMessage().contains("String.length(slot.c)"), refused.getMessage());
     }
@@ -181,35 +186,37 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Partitions.Partitioning read = divided();
         Axis truth = axisOf(read, "gate/slot.on");
 
-        Axis again = truth.carrying(truth.classes(), List.of(), List.of());
+        Axis again = carrying(truth, truth.classes(), List.of());
 
         assertEquals(truth.classes(), again.classes());
     }
 
     /**
-     * The same position measured at another number keeps the position and none of the old number's
-     * answers.
+     * A position measured at a number taken of it holds that measure and no other.
      *
-     * <p>What the classes and the lines are is how the rules divided one number and where they cut
-     * it, so the position measured at a second number starts with none of them and is given what the
-     * rules leave that number. Carried over, they would be the classes of one number on an axis of
-     * another, which is the thing above that cannot be built.
+     * <p>Which is what keeps the classes of one number off an axis of another: a measure is made
+     * from the rules about one number and holds what they gave it, so there is nothing for a second
+     * number to inherit. A string the body compares the length of has one measure, of the length —
+     * and none of the string's own value, which no rule here divides.
      */
     @Test
-    void thePositionMeasuredAtAnotherNumberCarriesNoneOfTheFirstsClasses() {
+    void aPositionHoldsTheMeasuresTheRulesNameOfItAndNoOthers() {
         Partitions.Partitioning read = divided();
-        Axis length = axisOf(read, "gate/String.length(slot.c)");
-        Axis count = axisOf(read, "gate/slot.n");
-        assertFalse(length.classes().isEmpty(), "there is something to be carried or dropped");
 
-        Axis elsewhere = length.measuredAt(count.id(), count.term());
+        assertEquals(List.of("gate/String.length(slot.c)"), idsAt(read, "slot.c"));
+        assertEquals(List.of("gate/slot.n"), idsAt(read, "slot.n"));
+        assertFalse(axisOf(read, "gate/String.length(slot.c)").classes().isEmpty(),
+                "and the one measure is the rules' own division of that number");
+    }
 
-        assertEquals(List.of(), elsewhere.classes());
-        assertEquals(List.of(), elsewhere.cuts());
-        assertEquals(List.of(), elsewhere.parted());
-        assertSame(souther.compiler.check.NarrowedBounds.NOTHING, elsewhere.narrowed(),
-                "where the rules leave the first number's ends is an answer about that number");
-        assertSame(length.at(), elsewhere.at(), "and the position is the position");
+    /** What one position of the model is measured at, named as a report names it. */
+    private static List<String> idsAt(Partitions.Partitioning read, String path) {
+        PositionMeasurements at = read.measurements().stream()
+                .filter(each -> each.position().path().toString().equals(path))
+                .findFirst().orElse(null);
+        assertNotNull(at, "the behavior takes " + path + ", among " + read.measurements().stream()
+                .map(each -> each.position().path().toString()).toList());
+        return at.axes().stream().map(each -> each.id().toString()).toList();
     }
 
     /**
@@ -231,10 +238,10 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
                 .toList();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> count.carrying(placeless, count.cuts(), List.of()));
+                () -> carrying(count, placeless, count.cuts()));
 
         assertTrue(refused.getMessage().contains("lines"), refused.getMessage());
-        assertEquals(placeless, count.carrying(placeless, List.of(), List.of()).classes(),
+        assertEquals(placeless, carrying(count, placeless, List.of()).classes(),
                 "while with no line to hold, such classes are what a position with no order has");
     }
 
@@ -342,9 +349,12 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         assertNotNull(again, "the length of a string is a number this compiler names");
         assertNotSame(length.term(), again, "a second naming, built here");
         assertEquals(length.term(), again, "of the number the reading already named");
-        assertSame(again, length.measuredAt(length.id(), again).term(),
+
+        Axis measuring = new Axis(length.id(), again, length.type(),
+                length.classes(), length.cuts());
+
+        assertSame(again, measuring.term(),
                 "so the classes of that number are the classes of an axis measuring it");
-        assertEquals(length.classes(),
-                length.measuredAt(length.id(), again).classes());
+        assertEquals(length.classes(), measuring.classes());
     }
 }

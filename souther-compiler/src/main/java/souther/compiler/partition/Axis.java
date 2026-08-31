@@ -9,19 +9,21 @@ import souther.compiler.types.Type;
 import java.util.List;
 
 /**
- * One input position that a model distinguishes values at, and the classes it distinguishes them into.
+ * One measure a model makes of a number of its input: the classes it divides that number into, and
+ * the lines it draws on it.
  *
  * <p>The model's own distinctions, not invented ones. A type with two cases has two classes; a
  * {@code guard}'s comparison divides what a position holds into the two sides it treats differently.
  * A position the model says nothing about — a plain {@code String}, an {@code Int} with no invariant
- * — has no classes, and that is reported as not derivable rather than filled in with values nobody
- * asked for. The choice matters: a made-up partition measures a rule the model does not have, and
- * reports coverage of it.
+ * — is measured at nothing and has no measure at all, which the position says
+ * ({@link PositionMeasurements}) and a report names as not derivable, rather than being filled in
+ * with values nobody asked for. The choice matters: a made-up partition measures a rule the model
+ * does not have, and reports coverage of it.
  *
  * <p>A bound is not one of them. An invariant's bound gives a boundary and no partition: everything
  * outside it is refused at construction, so there is no class on the far side to cover (ADR-0090),
- * and what such a position gets is {@link #cuts} and no classes — which is what {@link #measurable}
- * is for. What a bound does contribute to a partition is the range the classes are clipped to: the
+ * and what such a position gets is {@link #cuts} and no classes — which is what
+ * {@link #asksForARow} is for. What a bound does contribute to a partition is the range the classes are clipped to: the
  * two either side of a {@code guard} at 50 run from the bound and not from the type's own ends.
  *
  * <p>{@link #classes} is the one denominator. What a report counts, what a pair space is the
@@ -37,10 +39,14 @@ import java.util.List;
  *                a run of classes over the values of a number a row can be asked for somewhere. A
  *                number read from a run of a sequence has no such place, so it draws a line without
  *                dividing anything and never arrives here
- * @param at      the position the number is read from, and what this phase is left answering for
- *                there. Pointed at rather than copied out, because a position carries as many of
- *                these axes as the rules name numbers of it and what is in there is true of the
- *                position once ({@link PositionAccount})
+ * @param type    what stands at the position the number is read from, which is what a value read
+ *                here is of. Not the term's: a string is measured at how long it is, and what
+ *                stands at the location is still a string. The one thing about the location a
+ *                measure needs, and nothing else about it is here — where the walk stopped, what
+ *                the reading left standing and what the location is if nothing answers are true of
+ *                it once however many numbers measure it, and a measure that answered them would
+ *                let any reader ask a location's question through whichever number it happens to
+ *                hold ({@link PositionMeasurements})
  * @param classes exclusive and exhaustive over the term's values, or empty where the model does
  *                not divide them
  * @param cuts    the values the classes meet at, each carrying every rule that drew it there
@@ -51,7 +57,7 @@ import java.util.List;
  *                away from its line is a run of what these leave together, and the cuts alone are
  *                short of the lines that have no value
  */
-public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount at,
+public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
                    List<PartitionClass> classes,
                    List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
 
@@ -59,8 +65,27 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
-        if (at == null) {
-            throw new IllegalArgumentException("an axis of no position");
+        if (type == null) {
+            throw new IllegalArgumentException("an axis of a value of nothing");
+        }
+        // A measure is what the rules divided a number into, cut on it, or parted it at, and one
+        // with none of the three measured nothing. Such a one used to stand for a position still to
+        // be answered for — which is a fact about the location and is held there
+        // ({@link PositionMeasurements}), so a reader counting what a behavior is measured at was
+        // counting locations among the measures.
+        if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "`" + id + "` measures " + term + " at nothing: no class, no line and no"
+                            + " parting, which is a position nothing measures and not a measure");
+        }
+        // The name says which number this is a measure of, so it is that number as a report writes
+        // it and never a second answer to what is measured here. An identity handed in beside the
+        // number is one a caller chooses, and what a reader keyed by it would then be holding is a
+        // measure of one number filed under the name of another — which every map downstream is
+        // keyed by ({@link EvidenceAccount}, the lines along a measure, what a row was placed at).
+        if (!id.term().equals(term.toString())) {
+            throw new IllegalArgumentException("`" + id + "` names " + id.term()
+                    + " and this measures " + term + "; a measure is named after its own number");
         }
         for (PartitionClass one : classes) {
             subjectHeld(term, one);
@@ -105,61 +130,23 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
 
     public Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
                 List<PartitionClass> classes, List<Cut> cuts) {
-        this(id, term, PositionAccount.at(id.behavior(), term.position(), type), classes, cuts,
-                List.of(), NarrowedBounds.NOTHING);
+        this(id, term, type, classes, cuts, List.of(), NarrowedBounds.NOTHING);
     }
 
     /**
-     * The position's type, which is what a value read here is of. Not the term's: a string is
-     * measured at how long it is, and what stands at the location is still a string.
+     * One measure of {@code term}, named after it.
      *
-     * <p>One of two things read off {@link #at} here, with {@link #path}. Both are about the
-     * measure — where it reads from and what stands there — and everything else the position's
-     * account holds is asked of the account, in the open. What its reading came to, where the walk
-     * stopped and what it is left with are true of the location once however many numbers measure
-     * it, and a measure that answered them would let any reader ask a location's question through
-     * whichever measure it happened to hold.
+     * <p>What a caller has is a number and the behavior whose input it is read from, and the name
+     * follows from the two. Handed the name as well, a caller has a second thing to get right and
+     * the constructor a second answer to refuse — so this is the way in, and passing a name is for
+     * a reader rebuilding a measure it already has.
      */
-    public Type type() {
-        return at.type();
+    public static Axis of(String behavior, NumericTerm.FromOnePosition term, Type type,
+                          List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted,
+                          NarrowedBounds narrowed) {
+        return new Axis(AxisId.of(behavior, term), term, type, classes, cuts, parted, narrowed);
     }
 
-
-    /**
-     * A position nothing has answered for yet, and what the readings of it found.
-     *
-     * <p>Not a position the model does not divide. A rule a body writes may still draw a line on it,
-     * and only where none does is what was found here what a report says — an absence where every
-     * reading ran to the end and found nothing, and what stopped one where it did not.
-     */
-    public static Axis pendingAt(AxisId id, NumericTerm.FromOnePosition term, PositionAccount at) {
-        return new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
-    }
-
-    /**
-     * The same position, measured at another number.
-     *
-     * <p>A transition rather than a constructor at the call site. What a body's rules add is a term,
-     * classes and cuts; what the position came to was settled by the reading that made this one,
-     * and a caller rebuilding an axis from its parts drops whatever it does not think to name. What
-     * the position came to is one field, so a rebuild names it or does not compile.
-     *
-     * <p>Everything answered about the number goes where the number goes: the classes it was
-     * divided into, the lines cut on it, where the rules part it and where they leave its ends. At
-     * another number they answer a question nobody asked, and carried over they would be answers
-     * about one number on an axis of another. What is kept is the one thing here that is the
-     * position's, {@link #at}. What that leaves the axis short of is what the reading measuring it
-     * at the new number puts there.
-     */
-    public Axis measuredAt(AxisId id, NumericTerm.FromOnePosition term) {
-        return term.equals(this.term) ? new Axis(id, term, at, classes, cuts, parted, narrowed)
-                : new Axis(id, term, at, List.of(), List.of(), List.of(), NarrowedBounds.NOTHING);
-    }
-
-    /** The same position, with what a body's rules divided it into and the lines they drew. */
-    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted) {
-        return new Axis(id, term, at, classes, cuts, parted, narrowed);
-    }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
      * read off it. Not what the axis is: two terms can be taken of one location, and {@link #id()}
@@ -196,10 +183,14 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, PositionAccount 
         return !classes.isEmpty();
     }
 
-    /** Whether there is anything here to measure at all — classes to cover, or a boundary to reach.
-     * A numeric newtype bounded by an invariant has the second and not the first: everything outside
-     * the bound is refused at construction, so there is no other class, only an edge worth a row. */
-    public boolean measurable() {
+    /** Whether there is anything here a row can be written against — a class to sit in, or an edge
+     * to stand at.
+     *
+     * <p>A numeric newtype bounded by an invariant has the second and not the first: everything
+     * outside the bound is refused at construction, so there is no other class, only an edge worth
+     * a row. False where the rules part the number and the position holds no value at the parting:
+     * that is a measure of the number, and there is nothing at it to ask an author for. */
+    public boolean asksForARow() {
         return !classes.isEmpty() || !cuts.isEmpty();
     }
 

@@ -143,7 +143,7 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
         Measured minute = measured(TAKEN, "gate/Time.minute(slot.at)");
         Cut line = minute.line();
 
-        assertNotEquals(minute.carrier(), minute.axis().at().type(),
+        assertNotEquals(minute.carrier(), minute.axis().type(),
                 "the number is counted on an order of its own");
         assertTrue(minute.axis().classes().stream().allMatch(each ->
                         !(each.classifier().membershipOf(minute.carrier().valueOf(line.at()))

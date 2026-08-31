@@ -70,6 +70,13 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 .anyMatch(each -> each.at().toString().equals(position) && each.isAbsent());
     }
 
+    /** And that the verdict says a rule states something here that came to no line. */
+    private static boolean leftWithARule(PartitionEvidence evidence, String position) {
+        return evidence.notDerivable().stream()
+                .anyMatch(each -> each.at().toString().equals(position)
+                        && each.why() instanceof UndividedPosition.Why.StatedWithoutALine);
+    }
+
     /** And that the verdict says nothing was established, without saying what stopped it. */
     private static boolean couldNotDerive(PartitionEvidence evidence, String position) {
         return evidence.notDerivable().stream()
@@ -137,19 +144,24 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
     }
 
     /**
-     * And a rule the second phase read and could do nothing with does not take the first phase's
-     * answer away.
+     * A rule the second phase read and could do nothing with is what the position it names is left
+     * with, however far the reading of it got.
      *
      * <p>A body compares the length against a number outside what a length can be: the comparison
      * is understood — it is a threshold, on a term this measures — and it divides nothing, because
-     * no value of the position is on the far side of it.
+     * no value of the position is on the far side of it. Nothing stopped the reading, and the rule
+     * came to no line, so the list is a position a rule was written about and no line drawn on.
      *
-     * <p>So the list comes back to the same place it was, which is a position nothing divides. What
-     * is inside it is a position of its own and answers for itself, and is not what the list is
-     * left with.
+     * <p>Which the report says rather than that the model divides it no way. A reading that got as
+     * far as {@code List.length(items)} knows there is a rule here; an absence says the model
+     * states nothing about the position, and an author reading that stops looking.
+     *
+     * <p>How exactly the rule was filed is how far its reading got, and does not decide where it
+     * lands: a finding at the position and one naming a number of it are both what the position is
+     * left with, and the number stays on the finding for a report to name.
      */
     @Test
-    void aRuleThatDividedNothingLeavesThePositionWithWhatItHad() {
+    void aRuleThatDividedNothingIsWhatThePositionIsLeftWith() {
         PartitionEvidence measured = measured("""
                 module demo
                 data Ok
@@ -161,13 +173,16 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
 
         assertEquals(List.of(), whyAt(measured, "items"),
                 () -> "nothing stopped the reading of the list: " + whyAt(measured, "items"));
-        assertTrue(absent(measured, "items"), "and the model divides it no way");
+        assertFalse(absent(measured, "items"),
+                "a rule was written about it and came to no line, which is not an absence");
+        assertTrue(leftWithARule(measured, "items"), "so that is what it is left with");
         // And what it holds is a position of its own, answering for itself. Nothing is written
         // about the elements here — the guard is on how many there are — so it divides no way
         // either, which is a conclusion about the model and not about this reading.
         assertTrue(absent(measured, "items[*].charge"),
                 "the elements carry no rule, so nothing divides them");
     }
+
 
     /**
      * Issue #631. A sum under a name is that sum, so the position divides into its cases — where

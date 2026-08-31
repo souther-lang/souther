@@ -42,8 +42,13 @@ final class EvidenceAccount {
          * <p>A policy of this stage and not a fact about the model, which is why it is said rather
          * than left out: an author is not told anything, and an account that simply had no entry
          * would be an account that cannot tell this from a loss.
+         *
+         * <p>The position and not one of the measures on it. What refused the evidence is that the
+         * location is measured, which is true of the location however many numbers measure it —
+         * named by one of them, whichever was reached for would be the reason.
          */
-        record ThePositionIsAlreadyMeasured(AxisId by) implements Disposition {}
+        record ThePositionIsAlreadyMeasured(souther.compiler.inputs.TermPath at)
+                implements Disposition {}
     }
 
     /** One piece of evidence and what became of it, held together so that holding the stage to a

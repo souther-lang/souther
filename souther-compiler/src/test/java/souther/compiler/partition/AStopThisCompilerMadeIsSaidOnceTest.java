@@ -74,10 +74,11 @@ class AStopThisCompilerMadeIsSaidOnceTest {
     /**
      * The same map again, with the line drawn by the body rather than by a declaration.
      *
-     * <p>The other way an axis is rebuilt. Nothing divides the map, so the axis is re-pointed at the
-     * number the body measures ({@link Axis#measuredAt}) — a caller writing the parts of an axis out
-     * by hand, and the place a position that had stopped once came back with nothing to say so.
-     * Named for a module of its own because {@code guard} is a word of the language.
+     * <p>The other way what a position is measured at is rebuilt. Nothing divides the map, so the
+     * measure is made at the number the body names ({@link PositionMeasurements#measuredAt}) — a
+     * caller writing the parts of a position's measurements out by hand, and the place a position
+     * that had stopped once came back with nothing to say so. Named for a module of its own because
+     * {@code guard} is a word of the language.
      */
     private static final String A_MAP_A_BODY_MEASURES = """
             module probe.bodyline
@@ -151,13 +152,13 @@ class AStopThisCompilerMadeIsSaidOnceTest {
     }
 
     /**
-     * And it survives the axis being re-pointed at the number a body measures.
+     * And it survives a measure being made at the number a body names.
      *
-     * <p>Both ways an axis is rebuilt, because what holds the two facts together is that they
-     * travel as one value and every rebuild is a place a caller can drop one. This one goes through
-     * {@link Axis#measuredAt}; the test above goes through the division. The finding names the term
-     * the axis was re-pointed to, which is the axis carrying the fact and not the position that was
-     * blocked — the position is that axis's path.
+     * <p>Both ways what a position is measured at is rebuilt, because what holds the two facts
+     * together is that they travel as one value and every rebuild is a place a caller can drop one.
+     * This one goes through {@link PositionMeasurements#measuredAt}; the test above goes through the
+     * division. The finding names the term the measure was made at, which is the measure carrying
+     * the fact and not the position that was blocked — the position is that measure's path.
      */
     @Test
     void andItSurvivesTheAxisBeingRePointedAtWhatABodyMeasures() {
