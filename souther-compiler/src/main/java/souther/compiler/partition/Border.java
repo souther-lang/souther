@@ -242,11 +242,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         return against(theOne(role));
     }
 
-    /** The class a row there falls in, as one line of a class list is written. */
-    public String said(PointRole role) {
-        return said(theOne(role));
-    }
-
     /** How a row there describes itself, or null where none is owed. */
     public String label(PointRole role) {
         return label(theOne(role));

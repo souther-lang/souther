@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleAt;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
@@ -414,18 +415,25 @@ public final class GuardThresholds {
                 // The value a row is owed against this line, which the reading of the comparison
                 // already answered. Taken off the level the rule was written with, a rule that wrote
                 // a multiple of the position named a class at a number the position never holds.
-                if (at.cutting().singles()) {
+                // Which kind of evidence this is and what it carries, from the one reading of what
+                // the rule placed. Asked twice — once to choose the branch and once for the side —
+                // the two are free to disagree, and the side is a question only one of them
+                // answers.
+                switch (at.cutting().claim()) {
                     // The value the rule names, which is where its line falls and not the value
                     // beside it. A rule that names no value of the position singles nothing out
                     // here — the position is divided all the same, and what divides it is the line.
-                    if (at.value() != null) {
-                        out.add(new LineEvidence.Singles(
-                                new Guards.Singled(at.position(), at.value(), origin)));
+                    case ComparisonClaim.Singled _ -> {
+                        if (at.value() != null) {
+                            out.add(new LineEvidence.Singles(
+                                    new Guards.Singled(at.position(), at.value(), origin)));
+                        }
                     }
-                } else {
-                    out.add(new LineEvidence.Divides(new Threshold(at.position(),
-                            at.cutting().seam(), at.cutting().ordering().valueBelongsBelow(),
-                            origin)));
+                    case ComparisonClaim.Cut order -> out.add(new LineEvidence.Divides(
+                            new Threshold(at.position(), at.cutting().seam(),
+                                    order.valueBelongsBelow(), origin)));
+                    case ComparisonClaim.Nothing _ -> throw new IllegalStateException(
+                            "a line no comparison placed, filed as one a guard drew: " + origin);
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at. It divides the position — the classes either side are what the model

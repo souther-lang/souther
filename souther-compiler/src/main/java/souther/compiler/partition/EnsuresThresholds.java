@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
@@ -230,18 +231,26 @@ public final class EnsuresThresholds {
             // wrote a multiple of the position named a class at a number the position never holds.
             case ComparisonAssessment.AtAPosition at -> {
                 OriginRef.EnsuresOrigin origin = originOf(rule, clause, line, at.cutting());
-                if (at.cutting().singles()) {
+                // From the one reading of what the rule placed, the way a body's rule is read:
+                // which kind of evidence this is and what it carries are one answer, and the side
+                // is a question only one of the two kinds has.
+                switch (at.cutting().claim()) {
                     // The value the rule names, for the reason a body's rule gets: where its line
                     // falls and not the value beside it.
-                    if (at.value() != null) {
-                        out.evidence().add(new LineEvidence.Singles(
-                                new GuardThresholds.Guards.Singled(
-                                        at.position(), at.value(), origin)));
+                    case ComparisonClaim.Singled _ -> {
+                        if (at.value() != null) {
+                            out.evidence().add(new LineEvidence.Singles(
+                                    new GuardThresholds.Guards.Singled(
+                                            at.position(), at.value(), origin)));
+                        }
                     }
-                } else {
-                    out.evidence().add(new LineEvidence.Divides(new Threshold(at.position(),
-                            at.cutting().seam(), at.cutting().ordering().valueBelongsBelow(),
-                            origin)));
+                    case ComparisonClaim.Cut order ->
+                            out.evidence().add(new LineEvidence.Divides(
+                                    new Threshold(at.position(), at.cutting().seam(),
+                                            order.valueBelongsBelow(), origin)));
+                    case ComparisonClaim.Nothing _ ->
+                            throw new IllegalStateException("a line no comparison placed, filed as"
+                                    + " one an ensures drew: " + origin);
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at: the classes either side are what the model tells apart, and the border is
