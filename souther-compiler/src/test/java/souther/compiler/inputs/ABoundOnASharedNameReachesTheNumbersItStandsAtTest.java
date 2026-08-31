@@ -21,14 +21,21 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A rule a record writes about a name its cases share reaches the numbers that name stands at.
+ * An end a record puts on a name its cases share is an end on the numbers that name stands at.
  *
  * <p>{@code Holder} says {@code q.limit <= 10} and {@code q} is a sum whose cases spread the
  * declaration that writes {@code limit}. The name is written at {@code q}; the numbers are at
  * {@code q@A.limit} and {@code q@B.limit}. A reader asking where one of those runs is asking about
- * the number the rule is about, and the rule has to be part of the answer.
+ * a number the rule put an end on, and the end has to be part of the answer.
+ *
+ * <p><b>An end and not a relation.</b> What reaches those numbers is what the rule leaves this one
+ * name, which is a projection of it. A rule over two shared names — {@code q.lo <= q.hi} — is not a
+ * projection of either, and nothing of it reaches them: fixing {@code q@A.hi} leaves {@code q@A.lo}
+ * running as widely as its own type does. That is the thing this test does not measure, and it is
+ * not the same reading being incomplete — the relation is lost where the outer value's rules are
+ * carried to the cases as per-name answers rather than as rules.
  */
-class ARuleOnASharedNameReachesTheNumbersItStandsAtTest {
+class ABoundOnASharedNameReachesTheNumbersItStandsAtTest {
 
     private static final String SHARED = """
             module g
@@ -51,13 +58,13 @@ class ARuleOnASharedNameReachesTheNumbersItStandsAtTest {
             "");
 
     @Test
-    void theRuleTheRecordWroteBoundsEachCase() {
+    void theEndTheRecordPutOnItStopsEachCase() {
         for (String at : List.of("h.q@A.limit", "h.q@B.limit")) {
             NumericDomain.Bounds runs = runsAt(SHARED, at);
 
             assertNotNull(runs, at + " is a number this reading answers about");
             assertNotNull(runs.max(),
-                    () -> at + " is bounded above by the rule the record wrote, and runs " + runs);
+                    () -> at + " is stopped above by the rule the record wrote, and runs " + runs);
             assertEquals("10", souther.compiler.numeric.Count.number(runs.max().at()).at()
                             .stripTrailingZeros().toPlainString(),
                     at + " stops where the rule the record wrote put it");
@@ -65,19 +72,19 @@ class ARuleOnASharedNameReachesTheNumbersItStandsAtTest {
     }
 
     /**
-     * And nothing else bounds it, so the bound above is the rule's doing.
+     * And nothing else stops it, so the end above is the rule's doing.
      *
-     * <p>Without this the first would pass on a reading that bounds every {@code Int} for reasons
-     * of its own, and would say nothing about whether a rule written at a name reaches the numbers
-     * that name stands at.
+     * <p>Without this the first would pass on a reading that stops every {@code Int} for reasons of
+     * its own, and would say nothing about whether an end put on a name reaches the numbers that
+     * name stands at.
      */
     @Test
-    void andWithoutTheRuleNothingBoundsIt() {
+    void andWithoutTheRuleNothingStopsIt() {
         for (String at : List.of("h.q@A.limit", "h.q@B.limit")) {
             NumericDomain.Bounds runs = runsAt(UNRULED, at);
 
             assertTrue(runs == null || runs.max() == null,
-                    () -> at + " is bounded by nothing once the rule is gone, and runs " + runs);
+                    () -> at + " is stopped by nothing once the rule is gone, and runs " + runs);
         }
     }
 
