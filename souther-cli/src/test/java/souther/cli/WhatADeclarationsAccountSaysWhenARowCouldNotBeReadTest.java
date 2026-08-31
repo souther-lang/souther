@@ -28,6 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The behavior's own block and the module's declarations count the same relation at two grains,
  * so the two numbers on the page are not one another's parts: the lines the body reads are its
  * borders and the rows the type's clause asks for are the module's.
+ *
+ * <p>What the two blocks share is the fold: an obligation the count holds is met, a gap, or one
+ * nobody can decide, and the last two are named under the block they are counted in. So a reader
+ * handed a difference between the two numbers can walk it.
  */
 class WhatADeclarationsAccountSaysWhenARowCouldNotBeReadTest {
 
@@ -66,27 +70,37 @@ class WhatADeclarationsAccountSaysWhenARowCouldNotBeReadTest {
             """;
 
     /**
-     * The count holds four obligations and the block names none of them.
+     * The count holds four obligations, and the block names every one no row is at.
      *
      * <p>Four is what {@code Amount}'s two ends owe: a point against each line and a point away from
-     * it, all four of them measured and all four known to be writable. None is met, none is a gap
-     * the report writes a line for, and a reader is handed a number with nothing under it to act on.
+     * it, all four of them counted and all four known to be writable. None is met, so the difference
+     * between the two numbers is four, and each of the four is under the block as a point nobody can
+     * say is missed.
      */
     @Test
-    void theCountHoldsFourObligationsAndTheBlockNamesNoneOfThem() throws Exception {
+    void everyObligationTheCountHoldsAndNoRowIsAtIsNamed() throws Exception {
         Run run = examples(TOO_LARGE_TO_OBSERVE, "--strict");
 
         assertTrue(run.out().contains("declarations   obligations 0/4"),
                 () -> "the module's declarations owe four rows and no row is at one:\n" + run.out());
-        assertFalse(run.out().contains("no row is at"),
-                () -> "and nothing under the block says which of the four:\n" + run.out());
+        assertEquals(4, run.out().lines()
+                        .filter(line -> line.contains("? undecided whether a row is at")).count(),
+                () -> "and each of the four is named:\n" + run.out());
     }
 
-    /** Nothing the model is short of is refused, the four being points nobody established a gap at. */
+    /**
+     * They are named and are no findings, so nothing is refused over them.
+     *
+     * <p>What a row at the point would show is what nobody could look at, so telling an author to
+     * write one is telling them to write one they may have written. The mark says so: {@code !} is
+     * work this build refuses over, and {@code ?} is a question this build could not put.
+     */
     @Test
     void nothingIsRefusedOverThem() throws Exception {
         Run run = examples(TOO_LARGE_TO_OBSERVE, "--strict");
 
+        assertFalse(run.out().contains("! no row is at"),
+                () -> "an undecided obligation is no finding:\n" + run.out());
         assertTrue(run.out().contains("adequacy: undetermined"), run.out());
         assertEquals(0, run.code(), run.err());
     }

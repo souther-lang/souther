@@ -26,6 +26,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationCoverage;
+import souther.compiler.query.ObligationSummary;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
@@ -476,32 +477,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * what the model itself is short of once.
      */
     private void declared(StringBuilder out, ModuleReport module, SourceNameResolver names) {
-        // What the declarations are owed, counted the way a behavior's own account is: the
-        // obligations whose coverage was measured and whose writability is known, and how many of
-        // them a row stands at. Here rather than in the blocks above, because that is where the
-        // work is: a line a `data` clause drew is owed once for the module, and a behavior carrying
-        // the type is short of nothing on its account. Left uncounted, a model whose every rule is
-        // a declaration's showed borders in every block, no number anywhere, and nothing saying
-        // how many of them nobody had measured.
+        // What the declarations are owed, folded the way a behavior's own account is and by the same
+        // fold. Here rather than in the blocks above, because that is where the work is: a line a
+        // `data` clause drew is owed once for the module, and a behavior carrying the type is short
+        // of nothing on its account.
         List<Adequacy.DeclaredDebt> debts = module.debts();
-        List<Adequacy.DeclaredDebt> measured = debts.stream()
-                .filter(each -> each.debt().owed().coverage().counted())
-                .filter(each -> each.debt().owed().writabilityEvidence().known()).toList();
+        ObligationSummary<Adequacy.DeclaredDebt> account =
+                ObligationSummary.of(debts, each -> each.debt().owed());
         if (!debts.isEmpty()) {
-            long met = measured.stream()
-                    .filter(each -> each.debt().owed().hasRowWitness()).count();
-            out.append(String.format("  declarations   obligations %d/%d%s%n", met, measured.size(),
-                    notes(debts,
-                            each -> !each.debt().owed().coverage().counted(),
+            out.append(String.format("  declarations   obligations %d/%d%s%n",
+                    account.met().size(), account.counted(),
+                    notes(account.nothingWasRead(),
                             each -> whyNoBoundaryItem(each.debt().owed().coverage()))));
+        }
+        // Every obligation the count holds and no row is at, so that the difference between the two
+        // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
+        // and is under no finding, and this is the only place it can be said at all.
+        for (Adequacy.DeclaredDebt each : account.undecided()) {
+            out.append(String.format("      ? undecided whether a row is at the %s point %s (%s)%n",
+                    each.debt().role(), each.said(), each.debt().describe(names, null)));
+            readings(out, each.debt(), _ -> true, _ -> "");
         }
         // And the ones the count leaves out, said here for the reason it counts them here: a line
         // a declaration drew is nobody's behavior's, so a block above has nothing to say about it
         // and this is the only place it can be said at all.
-        for (Adequacy.DeclaredDebt each : debts) {
-            if (each.debt().owed().writabilityEvidence().known()) {
-                continue;
-            }
+        for (Adequacy.DeclaredDebt each : account.notKnownWritable()) {
             out.append(String.format("      · not known to be writable: the %s point %s (%s)%n",
                     each.debt().role(), each.said(), each.debt().describe(names, null)));
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
@@ -1121,7 +1121,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("    partition   axes %d   equivalence partitions %d/%d%s%s%s%n",
                     partition.axes().size(), covered, classes,
                     excluded == 0 ? "" : "   excluded " + excluded,
-                    notes(partition.axes(), a -> a.reached().made().isEmpty(),
+                    notes(partition.axes().stream()
+                                    .filter(a -> a.reached().made().isEmpty()).toList(),
                             a -> whyNoAxis(ReportMeasurement.of(a.reached()).reason())),
                     inFull(partitioned.status())));
             // The position as well as the class. A class name alone is the same words about two
@@ -1182,11 +1183,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 out.append(String.format("    combination %s%n", combinations));
             }
         }
-        // Counted where both questions have an answer: the line was measured against the rows, and
-        // something has shown a row can be written at it. The two are separate observations and are
-        // filtered separately — a line nobody measured and a line nothing promises are not the same
-        // absence, and printing them under one sentence said "not known to be writable" about
-        // behaviors whose only problem was that nobody had written a row yet.
         // Counted over the obligations and named as such. A border owes a row at up to four points,
         // so a count of borders would say a border with one point met and three missed was as
         // covered as one with nothing to owe but that point; and a line is owed once however many
@@ -1195,27 +1191,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // which is what the block under it shows, and the two numbers are not one multiplied.
         //
         // What this behavior is owed is its account, which is a projection of the module's one
-        // relation and not something worked out again here from the lines beside it.
+        // relation, and where each obligation of it stands is one fold shared with the block that
+        // says what the declarations owe.
         ReportMeasurement<List<BorderAssessment>> bounded =
                 ReportMeasurement.of(behavior.boundaryReadings());
         List<BorderAssessment> lines = behavior.lines();
-        List<BorderObligationPointAssessment> points = behavior.account();
-        List<BorderObligationPointAssessment> measured = points.stream()
-                .filter(p -> p.owed().coverage().counted())
-                .filter(p -> p.owed().writabilityEvidence().known()).toList();
-        // The obligations the count leaves out, read off the same evidence it leaves them out by.
-        // Said per reading instead, a point one reading proves writable and another does not would
-        // be counted above and printed here as not known — one search with two accounts, which is
-        // what this whole block stopped doing. What each reading's search came to is under it.
-        List<BorderObligationPointAssessment> unpromised = points.stream()
-                .filter(p -> !p.owed().writabilityEvidence().known()).toList();
-        long met = measured.stream().filter(p -> p.owed().hasRowWitness()).count();
-        // A point read from rows some of which could not be read. What was not found there is
-        // undecided rather than absent, which is the measurement's answer and no longer a third
-        // case of the verdict beside it.
-        long undecided = measured.stream()
-                .filter(p -> p.owed().coverage() instanceof ObligationCoverage.Undecided)
-                .count();
+        ObligationSummary<BorderObligationPointAssessment> owed = ObligationSummary.of(
+                behavior.account(), BorderObligationPointAssessment::owed);
         if (!bounded.counted()) {
             // `0/0` said the rows were at every line there was. What it meant was that nobody found
             // a line to be at, which a model whose bounds sit one type away from the position the
@@ -1226,13 +1208,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The points the model's own rules discharged are not on this line. They are not
             // obligations, so a count of them beside the obligations would be two units in one
             // sentence; each is said under the block, by the reading it is a point of.
-            out.append(String.format("    border      borders %d   obligations %d/%d%s%s%s%n",
-                    lines.size(), met, measured.size(),
-                    notes(points,
-                            p -> !p.owed().coverage().counted(),
-                            p -> whyNoBoundaryItem(p.owed().coverage())),
-                    undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)",
+            out.append(String.format("    border      borders %d   obligations %d/%d%s%s%n",
+                    lines.size(), owed.met().size(), owed.counted(),
+                    notes(owed.nothingWasRead(), p -> whyNoBoundaryItem(p.owed().coverage())),
                     inFull(bounded.status())));
+        }
+        // Every obligation the count holds and no row is at, said here or under the findings below:
+        // a point nobody can say is missed is not a gap and is no finding, and left to the number
+        // alone a reader is told a difference with nothing under it to act on.
+        for (BorderObligationPointAssessment point : owed.undecided()) {
+            out.append(String.format("      ? undecided whether a row is at the %s point (%s)%n",
+                    point.role(), point.describe(names, declaredIn)));
+            readings(out, point, _ -> true, _ -> "");
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
         // it. It is exactly where none did that the question stands, so this cannot be written by
@@ -1274,10 +1261,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // once and a row stands at it — and still a fact about that position: a reader who wants
         // every case of the sum exercised is told which are not, and told it as diagnosis rather
         // than as work a strict build refuses over.
-        for (BorderObligationPointAssessment point : points) {
-            if (point.owed().hasRowWitness()
-                    && point.readings().stream().anyMatch(
-                            at -> !at.owedAt(point.role()).hasRowWitness())) {
+        for (BorderObligationPointAssessment point : owed.met()) {
+            if (point.readings().stream().anyMatch(
+                    at -> !at.owedAt(point.role()).hasRowWitness())) {
                 out.append(String.format("      · the %s point (%s) is answered, and not at every"
                                 + " reading of the line%n",
                         point.role(), point.describe(names, declaredIn)));
@@ -1288,7 +1274,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // could not read every rule of the value, and nothing built one either — so they are not
         // rows anybody is owed, and they are still the only thing there is to say about the
         // position.
-        for (BorderObligationPointAssessment p : unpromised) {
+        for (BorderObligationPointAssessment p : owed.notKnownWritable()) {
             out.append(String.format("      · not known to be writable: the %s point (%s)%n",
                     p.role(), p.describe(names, declaredIn)));
             // What each reading's search came to, beside the verdict none of them decided. Whether
@@ -1627,13 +1613,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * facts, and one count over both would be a number whose sentence is true of only some of what it
      * counts — which is the shape of the thing this report stopped doing.
      */
-    private static <T> String notes(List<T> all, java.util.function.Predicate<T> unmeasured,
+    private static <T> String notes(List<T> unmeasured,
                                     java.util.function.Function<T, String> why) {
         Map<String, Long> counted = new LinkedHashMap<>();
-        for (T each : all) {
-            if (unmeasured.test(each)) {
-                counted.merge(why.apply(each), 1L, Long::sum);
-            }
+        for (T each : unmeasured) {
+            counted.merge(why.apply(each), 1L, Long::sum);
         }
         StringBuilder out = new StringBuilder();
         counted.forEach((said, count) ->
