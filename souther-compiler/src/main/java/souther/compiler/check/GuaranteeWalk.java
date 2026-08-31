@@ -11,14 +11,17 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * A reader taken over the positions under a value, told what each one guarantees.
+ * A reader taken over the names readable off a value, told what each of them guarantees.
  *
  * <p>Mechanism and not meaning. What a declaration says is {@link TypeGuarantees}' answer and this
- * asks for it a position at a time; what this owns is getting to the positions — how deep to go,
- * which names were to be left out, and stopping where a record holds another of its own kind. Two
- * readers may walk to different depths and still be reading one model, which is the whole point of
- * keeping the two apart: a scope changes which positions were visited, never what a declaration
- * states at one.
+ * asks for it a value at a time; what this owns is getting to the values — how deep to go, which
+ * names were to be left out, and stopping where a record holds another of its own kind. Two readers
+ * may walk to different depths and still be reading one model, which is the whole point of keeping
+ * the two apart: a scope changes which values were visited, never what a declaration states at one.
+ *
+ * <p>Where a name followed is written down is {@link Location#isStep}'s answer and not a rule of
+ * this walk. A newtype's {@code value} is the same value under a name, so the path a walk carries
+ * is unchanged by following it, and every other name is one step further in.
  *
  * <p>Nothing here decides what a stop costs. A reader is told where the walk stopped and answers
  * that for itself, because the same stop means different things to different readers: a measurement
@@ -29,8 +32,13 @@ final class GuaranteeWalk {
 
     private final TypeGuarantees guarantees;
 
-    GuaranteeWalk(TypeGuarantees guarantees) {
+    /** Asked whether following a name reaches somewhere else, which is what says where a name this
+     *  walk followed is written down. */
+    private final Symbols symbols;
+
+    GuaranteeWalk(TypeGuarantees guarantees, Symbols symbols) {
         this.guarantees = guarantees;
+        this.symbols = symbols;
     }
 
     /**
@@ -50,7 +58,7 @@ final class GuaranteeWalk {
      * How far a reader is asking this walk to go.
      *
      * <p>The last two are asked of different things, and are different types for that reason. A
-     * name supposed to hold values is a position; a rule left out is a rule, and one a spread
+     * name supposed to hold values is a declaration; a rule left out is a rule, and one a spread
      * carries in was written where it was written whatever value it is read at.
      *
      * @param extent          how far down to read
@@ -61,14 +69,14 @@ final class GuaranteeWalk {
      */
     record Scope(Extent extent, Predicate<TypeSymbol> stopAt, RulesLeftOut withoutClauses) {
 
-        /** Every rule down to {@code positions} positions, wherever it is written. */
-        static Scope asFarAs(int positions) {
-            return new Scope(new Extent.AsFarAs(positions), _ -> false, RulesLeftOut.NONE);
+        /** Every rule down to {@code names} names followed, wherever it is written. */
+        static Scope asFarAs(int names) {
+            return new Scope(new Extent.AsFarAs(names), _ -> false, RulesLeftOut.NONE);
         }
 
         /** Every rule the model writes under this value. */
-        static Scope everyPosition() {
-            return new Scope(new Extent.EveryPosition(), _ -> false, RulesLeftOut.NONE);
+        static Scope everyName() {
+            return new Scope(new Extent.EveryName(), _ -> false, RulesLeftOut.NONE);
         }
     }
 
@@ -83,7 +91,7 @@ final class GuaranteeWalk {
      */
     sealed interface Extent {
 
-        /** Whether a position {@code down} steps from the root is one this reader reads. */
+        /** Whether a value {@code down} names from the root is one this reader reads. */
         boolean reaches(int down);
 
         /**
@@ -95,7 +103,7 @@ final class GuaranteeWalk {
          * because a name met on the way down is not entered again, which is a fact about the type
          * graph and not a budget.
          */
-        record EveryPosition() implements Extent {
+        record EveryName() implements Extent {
 
             @Override
             public boolean reaches(int down) {
@@ -104,16 +112,16 @@ final class GuaranteeWalk {
         }
 
         /**
-         * As far as {@code positions} steps down, and no further.
+         * As far as {@code names} names down, and no further.
          *
          * <p>A cost bound, and only ever that. A reader states one where reading further is work it
          * cannot afford — never where the question it is asking runs deeper than it wants to go.
          */
-        record AsFarAs(int positions) implements Extent {
+        record AsFarAs(int names) implements Extent {
 
             @Override
             public boolean reaches(int down) {
-                return down <= positions;
+                return down <= names;
             }
         }
     }
@@ -131,7 +139,7 @@ final class GuaranteeWalk {
          * That rules stand under {@code path} which no reading here takes in, and which a reading
          * opened elsewhere answers for — the cases of a sum, what a container holds.
          *
-         * <p>Not a stop. The position was read and what it states was heard; this says only that
+         * <p>Not a stop. The value was read and what it states was heard; this says only that
          * something below it belongs to somebody else. Reported as a stop, a sum whose cases share a
          * spread would have to be either read or handed on, and it is both.
          */
@@ -145,10 +153,10 @@ final class GuaranteeWalk {
     /**
      * Why a walk went no further.
      *
-     * <p>Every one of them is this walk's own doing. A position it did not enter because nothing
-     * there belongs to it is not a stop at all — that is {@link Reader#handedOn}, and it is answered
-     * by the reading rather than by the walk. Held here as a stop, a position that both states rules
-     * and leaves something below to another reading could only be one of the two.
+     * <p>Every one of them is this walk's own doing. A value it did not enter because nothing there
+     * belongs to it is not a stop at all — that is {@link Reader#handedOn}, and it is answered by
+     * the reading rather than by the walk. Held here as a stop, a value that both states rules and
+     * leaves something below to another reading could only be one of the two.
      */
     enum Stop {
 
@@ -165,10 +173,10 @@ final class GuaranteeWalk {
     }
 
     /**
-     * Take {@code reader} over {@code root} and the positions beneath it.
+     * Take {@code reader} over {@code root} and what is readable off it.
      *
-     * <p>{@code path} names where {@code root} itself stands, and every position is named relative
-     * to it.
+     * <p>{@code path} names where {@code root} itself stands, and everything reached is named
+     * relative to it.
      */
     void from(Core root, String path, Denotations at, Scope scope, Reader reader) {
         walk(root, path, at, 0, scope, new HashSet<>(), reader);
@@ -187,7 +195,7 @@ final class GuaranteeWalk {
         // name it was told to stop at and the name it has already entered are the declaration's, and
         // asking the type for one beside the reading is a second answer to that.
         TypeGuarantees.At here = guarantees.at(root, at);
-        TypeSymbol name = here.name();
+        TypeSymbol name = here.entered();
         if (name != null) {
             if (scope.stopAt().test(name)) {
                 reader.stopped(path, root.type(), Stop.ASKED_TO_STOP);
@@ -205,7 +213,7 @@ final class GuaranteeWalk {
         // reader hears is the scope's answer, asked of each rule. A rule the reader asked to leave
         // out is not one it was asked to lose, so nothing is reported lost for it either — and the
         // rules read here need not have been written on the declaration standing here, which is why
-        // this is not one question about the position.
+        // this is not one question about the value.
         List<RuleRef.Invariant> lost = new ArrayList<>();
         if (here.coverage() instanceof TypeGuarantees.At.Coverage.Incomplete incomplete) {
             for (RuleRef.Invariant each : incomplete.lost()) {
@@ -233,11 +241,12 @@ final class GuaranteeWalk {
         if (name != null) {
             entered.add(name);
         }
-        for (TypeGuarantees.At.Beneath under : here.beneath()) {
-            // A position wearing a name is at a path of its own; a newtype's value is the same
-            // position and keeps this one's, which is the rule a path walks by: wearing a name is
-            // not being somewhere else.
-            String there = under.field().isEmpty() ? path : under(path, under.field());
+        for (TypeGuarantees.At.Readable under : here.readable()) {
+            // Whether following the name reaches somewhere else is `Location.isStep`'s answer,
+            // asked here because here is where the name is written down. A newtype's `value` is
+            // this same value under a name, so a walk into one keeps the path it came with.
+            String there = Location.isStep(root.type(), under.name(), symbols)
+                    ? under(path, under.name()) : path;
             walk(under.value(), there, at, depth + 1, scope, entered, reader);
         }
         if (name != null) {

@@ -340,7 +340,7 @@ final class Terms {
         this.policy = policy;
         this.predicates = new Predicates(this);
         this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
-        this.walk = new GuaranteeWalk(guarantees);
+        this.walk = new GuaranteeWalk(guarantees, symbols);
     }
 
     /**
@@ -1354,7 +1354,7 @@ final class Terms {
         // Every position, because this question has no depth in it. What the value guarantees is
         // what its type states wherever the rule is written, and a bound here would make a
         // derivation depend on how deeply an author nested a field rather than on what was declared.
-        walk.from(root, FieldDomains.THE_VALUE, inside, GuaranteeWalk.Scope.everyPosition(),
+        walk.from(root, FieldDomains.THE_VALUE, inside, GuaranteeWalk.Scope.everyName(),
                 (path, guarantee) -> out.addAll(guarantee.owed().relations()));
         return out;
     }
@@ -2692,7 +2692,7 @@ final class Terms {
      * readable there. What a value has of its own is the one reading's answer, so a field every case
      * of a sum spreads is read off the sum here exactly as it is where a body reads one. */
     Type fieldType(Type owner, String field) {
-        return PositionReading.of(owner, symbols).fields().get(field);
+        return ValueReading.of(owner, symbols).named().get(field);
     }
 
     /** What a container hands its closure: a list's or set's element, a map's value (the key is the

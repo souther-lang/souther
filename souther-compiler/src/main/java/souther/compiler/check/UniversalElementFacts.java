@@ -120,9 +120,9 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         // Whose clauses hold of a value of this type is the one reading's answer. Asked here from
         // the declaration instead, an element that is a sum is an element nothing is known about,
         // while the same value read as a field of a record carries the shared part's bounds.
-        List<PositionReading.Owner> owners = PositionReading.of(type, symbols).owners();
+        List<ValueReading.Owner> owners = ValueReading.of(type, symbols).owners();
         Map<String, Bounds> guaranteed = new LinkedHashMap<>();
-        for (PositionReading.Owner owner : owners) {
+        for (ValueReading.Owner owner : owners) {
             InvariantChecker.Seeded seeded =
                     seededOf(owner.named(), owner.data(), symbols, policy);
             if (seeded == null) {

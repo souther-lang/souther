@@ -650,7 +650,7 @@ public final class InvariantChecker {
                     // the construction must satisfy is a rule wherever in the value it sits.
                     k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
-                            k, at, new GuaranteeWalk.Extent.EveryPosition(), gathering, reach);
+                            k, at, new GuaranteeWalk.Extent.EveryName(), gathering, reach);
                 }
             }
             Map<String, FactSubject> atoms = new LinkedHashMap<>();
@@ -889,10 +889,23 @@ public final class InvariantChecker {
         if (depth > GuaranteeWalk.FIELDS_SEEDED) {
             return;
         }
-        // Which positions a value has is the reading's answer and not a second classification here:
-        // a record's fields, and the part a sum's cases share, which is readable on a value of the
-        // sum exactly as a field of a record is.
-        for (Map.Entry<String, Type> field : PositionReading.of(worn, symbols).positionsUnder().entrySet()) {
+        // What a clause of this value may name is the reading's answer and not a second
+        // classification here: a record's fields, and the part a sum's cases share, which is
+        // readable on a value of the sum exactly as a field of a record is. Which of these names a
+        // row writes a value at is somewhere else's question — a name every case of a sum spreads
+        // is written at the sum and stands under each of the cases.
+        //
+        // A name still worn here is one the walk above could not take off, which is a declaration
+        // that returns to itself. Its `value` is this very value, so following it names the same
+        // thing again a step deeper than anything asks about.
+        Map<String, Type> under = switch (ValueReading.of(worn, symbols)) {
+            case ValueReading.AtAValue read -> read.named();
+            // Every name that comes off has come off above, so a name still worn is a declaration
+            // that returns to itself: what it wraps is the value already being read, and reading it
+            // again names that value at a path one `value` deeper than anything asks about.
+            case ValueReading.UnderAName _ -> Map.of();
+        };
+        for (Map.Entry<String, Type> field : under.entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
                     GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);

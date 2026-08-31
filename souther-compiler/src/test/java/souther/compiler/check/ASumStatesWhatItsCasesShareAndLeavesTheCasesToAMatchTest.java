@@ -78,7 +78,7 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
     private final PathEngine engine = new PathEngine(symbols, Map.of(),
             Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-    private final GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees());
+    private final GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees(), symbols);
 
     private static Symbols symbols() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
@@ -98,7 +98,7 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
     private record Told(Map<String, List<String>> guaranteed, List<String> handedOn) {}
 
     private Told reading(String name) {
-        return reading(name, GuaranteeWalk.Scope.everyPosition());
+        return reading(name, GuaranteeWalk.Scope.everyName());
     }
 
     private Told reading(String name, GuaranteeWalk.Scope scope) {
@@ -198,7 +198,7 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
 
     /** Reading everything but the rules {@code declaration} wrote. */
     private static GuaranteeWalk.Scope without(String declaration) {
-        return new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.EveryPosition(), _ -> false,
+        return new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.EveryName(), _ -> false,
                 RulesLeftOut.writtenOn(each -> each.name().equals(declaration)));
     }
 

@@ -14,29 +14,29 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The readings that discharge an invariant ask what a position is; they do not work it out.
+ * The readings that discharge an invariant ask what a value is; they do not work it out.
  *
- * <p>What kind of thing stands at a position is {@link Shape}'s answer and what the model writes
- * there is {@link PositionReading}'s. A reader that resolves a name to a declaration and switches on
- * what it finds has a second way to answer both, and two answers about one position is how a field
+ * <p>What kind of thing a value is is {@link Shape}'s answer and what the model writes where one
+ * stands is {@link ValueReading}'s. A reader that resolves a name to a declaration and switches on
+ * what it finds has a second way to answer both, and two answers about one value is how a field
  * every case of a sum spreads came to be readable off the sum by the elaborator and invisible to the
  * check that reads what the sum guarantees.
  *
  * <p><b>Narrow on purpose.</b> Not every {@code instanceof Hir.Data} in the compiler is this
  * mistake — enumerating the declarations that write an invariant is a different question, and so is
  * resolving what a construction builds — and a check that refused all of them would need an
- * exception list longer than the rule. What is held here is the set of files that read a position on
+ * exception list longer than the rule. What is held here is the set of files that read a value on
  * the way to discharging an invariant, and they resolve no declaration at all.
  *
  * <p>A tripwire and not a proof. A helper in between defeats it; what it does see is the line that
  * has to be written first.
  */
-class TheInvariantReadingAsksWhatAPositionIsRatherThanDecidingTest {
+class TheInvariantReadingAsksWhatAValueIsRatherThanDecidingTest {
 
     /** Read once: what this asks of it does not change between its checks. */
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
-    /** The files that read a position on the way to discharging an invariant. */
+    /** The files that read a value on the way to discharging an invariant. */
     private static final List<String> THE_READING = List.of(
             "TypeGuarantees.java",
             "GuaranteeWalk.java",
@@ -63,8 +63,8 @@ class TheInvariantReadingAsksWhatAPositionIsRatherThanDecidingTest {
         }
 
         assertEquals(List.of(), resolving,
-                "these decide what a position is instead of asking; what stands at one is"
-                        + " PositionReading's answer");
+                "these decide what a value is instead of asking; what the model writes where one"
+                        + " stands is ValueReading's answer");
     }
 
     /**
