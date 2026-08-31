@@ -138,7 +138,7 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
                 .map(each -> each.subject().named() + " owes " + each.debt().id() + " "
                         + each.debt().role() + "="
                         + (each.debt().item().disposition()
-                                instanceof souther.compiler.query.ObligationDisposition.Unmet)
+                                instanceof ObligationDisposition.Unmet)
                         + "/" + each.debt().demand())
                 .toList();
     }

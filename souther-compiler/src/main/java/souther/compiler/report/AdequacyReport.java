@@ -12,6 +12,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
@@ -1848,7 +1849,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     private static String whyNoBoundaryItem(ObligationCoverage coverage) {
-        souther.compiler.observe.MeasureReason why = coverage.why();
+        MeasureReason why = coverage.why();
         if (why == null) {
             return "";
         }

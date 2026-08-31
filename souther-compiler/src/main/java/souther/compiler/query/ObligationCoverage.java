@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.observe.MeasureReason;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Whether a row is at one point of an authored line, over every reading of that line.
@@ -46,7 +47,7 @@ public sealed interface ObligationCoverage {
     record NotMeasured(NotMeasuredReason why) implements ObligationCoverage {
 
         public NotMeasured {
-            java.util.Objects.requireNonNull(why, "an obligation nobody measured says why");
+            Objects.requireNonNull(why, "an obligation nobody measured says why");
         }
     }
 
