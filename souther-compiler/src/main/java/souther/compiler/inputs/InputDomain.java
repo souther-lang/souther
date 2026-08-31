@@ -114,7 +114,7 @@ public final class InputDomain {
     /** Nothing to read: a behavior whose signature is not in hand. */
     public static final InputDomain NONE =
             new InputDomain(List.of(), Map.of(), List.of(), List.of(), null, NameReach.NONE,
-                    List.of(), List.of());
+                    List.of(), List.of(), List.of());
 
     private final List<Position> positions;
     private final Map<TermPath, Position> byPath;
@@ -147,11 +147,23 @@ public final class InputDomain {
      * agreed about the parameters and disagreed here would be disagreeing with itself.
      */
     private final List<ClauseWithoutAnEnd> clauses;
+    /**
+     * Every sum this reading met and what became of each of its cases.
+     *
+     * <p>What says whether a sum has a value at all, which is a question about the whole list of
+     * them rather than about any one case.
+     *
+     * <p>No part of what makes two readings one, for the reason {@link #clauses} is not: the same
+     * parameters walked under the same policy meet the same cases, so a reading that agreed about
+     * the positions and disagreed here would be disagreeing with itself.
+     */
+    private final List<CasesRead> cases;
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
                         NameReach reach, List<PlacementSeed> placed,
-                        List<ClauseWithoutAnEnd> clauses) {
+                        List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases) {
+        this.cases = List.copyOf(cases);
         this.placed = List.copyOf(placed);
         this.clauses = List.copyOf(clauses);
         this.positions = List.copyOf(positions);
@@ -276,7 +288,7 @@ public final class InputDomain {
                 .toList();
         return settled.isEmpty() ? NONE
                 : new InputDomain(settled, read, parameters, roots, policy, observed.reach(),
-                        account.placed(), account.clauses());
+                        account.placed(), account.clauses(), observed.cases());
     }
 
     /**
@@ -750,8 +762,8 @@ public final class InputDomain {
         // position first and the declarations under one the reading stopped above, which is the one
         // resolution of it — worked out again from the positions this hands over, a rule about a
         // name every case of a sum spreads would be read as naming nothing.
-        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, path -> typeAt(path, symbols),
-                symbols);
+        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, cases,
+                path -> typeAt(path, symbols), symbols);
     }
 
     /**
@@ -1067,8 +1079,6 @@ public final class InputDomain {
                     }
                     standing.add(branch);
                     passedTo.add(path.refine(branch.refinement()));
-                    observed.became(path, branch.refinement(),
-                            new CaseOutcome.Opened(path.refine(branch.refinement())));
                 }
                 if (!stopped) {
                     handoffs.passesTo(placed.root(), path, passedTo);
@@ -1177,6 +1187,14 @@ public final class InputDomain {
                                          PlacedRules.Reaching crossing, RootOpening opening,
                                          Gathered account, Reach reach) {
         roots.add(new RuleRoot(opened, type, opening));
+        // Said where a reading is actually opened, so that a case recorded as opened is one there
+        // is somewhere to ask about. Said where the branch was chosen instead, a descent that turns
+        // back at a value it has already been at would leave a case pointing at a reading nobody
+        // made.
+        if (opening instanceof RootOpening.Refined it) {
+            observed.became(it.crossing().sum(), it.crossing().branch(),
+                    new CaseOutcome.Opened(opened));
+        }
         if (reach.handedOn()) {
             handoffs.accepts(by, at, opened);
         }
@@ -1223,6 +1241,9 @@ public final class InputDomain {
         // this walk already reported; saying they were read here as well would be one reading
         // discharging an obligation raised somewhere it never went.
         if (visited.contains(branch.under())) {
+            // Where the descent stops, and nothing under this case was read. What is known about it
+            // is nothing, which is not what the rules leaving nothing at it would be.
+            observed.became(path, branch.refinement(), new CaseOutcome.NotWalked());
             return;
         }
         java.util.Set<Type> deeper = new java.util.LinkedHashSet<>(visited);

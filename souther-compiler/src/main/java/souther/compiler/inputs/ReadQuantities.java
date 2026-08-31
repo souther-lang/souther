@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.ConstraintState;
+import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.Count;
@@ -32,6 +33,9 @@ final class ReadQuantities implements Quantities {
 
     /** Every value whose rules reach this input, with the condition each reading holds under. */
     private final Map<TermPath, OpenedRules> byRoot;
+    /** Every sum this input holds, and what became of each of its cases. What the choice between
+     *  alternatives is folded over. */
+    private final List<CasesRead> cases;
     /** What says how the values of a position are spaced, which the arithmetic needs of every
      *  number it is told a bound on. Held rather than asked for per question: the reading of an
      *  input is what a caller has, and where a position's values step is a fact about its type. */
@@ -112,10 +116,11 @@ final class ReadQuantities implements Quantities {
     }
 
     private ReadQuantities(Map<TermPath, OpenedRules> byRoot, Set<TermPath> roots,
-                           Map<TermPath, Position> byPath,
+                           Map<TermPath, Position> byPath, List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
                            souther.compiler.check.Symbols symbols, List<Assumed> assumed) {
+        this.cases = List.copyOf(cases);
         this.symbols = symbols;
         this.typeAt = typeAt;
         this.assumed = List.copyOf(assumed);
@@ -134,10 +139,11 @@ final class ReadQuantities implements Quantities {
 
     /** Before anything is fixed. */
     static ReadQuantities of(Map<TermPath, OpenedRules> byRoot, Set<TermPath> roots,
-                             Map<TermPath, Position> byPath,
+                             Map<TermPath, Position> byPath, List<CasesRead> cases,
                              java.util.function.Function<TermPath, Type> typeAt,
                              souther.compiler.check.Symbols symbols) {
-        return new ReadQuantities(byRoot, roots, byPath, typeAt, Map.of(), symbols, List.of());
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), symbols,
+                List.of());
     }
 
     /**
@@ -276,7 +282,7 @@ final class ReadQuantities implements Quantities {
         }
         List<Assumed> both = new ArrayList<>(assumed);
         both.add(taking);
-        return new ReadQuantities(byRoot, roots, byPath, typeAt, fixed, symbols, both);
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, symbols, both);
     }
 
     /**
@@ -429,9 +435,9 @@ final class ReadQuantities implements Quantities {
      * behavior's whole input, which no reading names and no parameter is — so a parameter carrying
      * nothing of its own comes out as the parameter and not as the value the proof is about.
      */
-    private java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where>
+    private java.util.SequencedMap<InputAtom, Emptiness.AtAField.Where>
             positions(StructuralContext under) {
-        java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where> made =
+        java.util.SequencedMap<InputAtom, Emptiness.AtAField.Where> made =
                 new LinkedHashMap<>();
         conditioned(under).forEach((root, carried) -> carried.named().forEach(
                 // Off the subject and not off the reading it arrived from. A field the cases of a
@@ -440,7 +446,7 @@ final class ReadQuantities implements Quantities {
                 // which is what the subject itself says.
                 // What a newtype wraps is at no name of its own, so the place is the value.
                 (atom, path) -> made.put(atom,
-                        new souther.compiler.check.Emptiness.AtAField.Where.In(
+                        new Emptiness.AtAField.Where.In(
                                 atom instanceof InputAtom.Named named ? named.place()
                                         : path.isEmpty() ? root.toString() : root + "." + path))));
         return Collections.unmodifiableSequencedMap(made);
@@ -661,7 +667,7 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byRoot, roots, byPath, typeAt, both, symbols, assumed);
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, symbols, assumed);
     }
 
     /**
@@ -706,9 +712,88 @@ final class ReadQuantities implements Quantities {
         // answers it. Every parameter's reading is in here, renamed, so there is nothing a
         // per-parameter reading could add — and a contradiction between two parameters, or between a
         // declaration and something a caller took in, can be seen nowhere else.
-        StructuralContext under = asked(List.of());
-        return constraints(under).holdsNothing(positions(under))
-                .map(EmptyInput.ProvedByTheRules::new);
+        return switch (viability(asked(List.of()))) {
+            case Viability.ProvedImpossible it ->
+                    Optional.of(new EmptyInput.ProvedByTheRules(it.why()));
+            // Neither of these is a proof. One says nothing showed the input empty and the other
+            // says this reading did not look, and a caller that read either as "there is a value"
+            // would be reading the absence of a proof as one.
+            case Viability.MayStand _, Viability.NotRead _ -> Optional.empty();
+        };
+    }
+
+    /**
+     * Whether anything stands under {@code under}, and what showed it where nothing does.
+     *
+     * <p><b>The alternatives a value has are quantified over, not met.</b> What the rules of the
+     * values a context names leave is one part of the answer; the other is that the context has not
+     * said which case every sum turned out to be, and a sum has a value wherever any of its cases
+     * does. So a case its own rules refuse takes nothing with it while a sibling stands, and the
+     * input is empty only where every alternative of some sum is impossible.
+     *
+     * <p>Depth first, and it stops at the first alternative that may stand: what is being asked is
+     * whether any assignment of cases leaves anything, so one that does is the whole answer. Two
+     * sums are settled one after another rather than apart, because a rule written above a
+     * narrowing reaches the numbers under it — a clause relating a shared name of one sum to a
+     * shared name of another is contradictory under some pairs of cases and not others, and each
+     * pair is a context of its own.
+     */
+    private Viability viability(StructuralContext under) {
+        Optional<Emptiness> here =
+                constraints(under).holdsNothing(positions(under));
+        if (here.isPresent()) {
+            return new Viability.ProvedImpossible(here.get());
+        }
+        for (CasesRead sum : cases) {
+            // A sum inside a case is a place to ask about only once the value is that case, and one
+            // this context has already settled is not a choice any more.
+            if (!under.covers(StructuralContext.of(sum.sum()))
+                    || under.refinements().at(sum.sum()) != null) {
+                continue;
+            }
+            Viability across = across(sum, under);
+            if (!(across instanceof Viability.MayStand)) {
+                return across;
+            }
+        }
+        return new Viability.MayStand();
+    }
+
+    /**
+     * What the cases of one sum come to together.
+     *
+     * <p>All of them, because that is what makes the proof a proof: picking one to speak for the
+     * rest would answer a question about which case is at fault that nothing asked. And a case this
+     * walk never entered stops the proof rather than joining it — nothing was shown about it, which
+     * is not the same as its having been shown to hold nothing.
+     */
+    private Viability across(CasesRead sum, StructuralContext under) {
+        List<Emptiness> refused = new ArrayList<>();
+        Viability unread = null;
+        for (Map.Entry<Refinement, CaseOutcome> each : sum.outcomes().entrySet()) {
+            Viability of = switch (each.getValue()) {
+                // Naming the case builds it, so there is a value here whatever the rules do to the
+                // others.
+                case CaseOutcome.StandsAlone _ -> new Viability.MayStand();
+                case CaseOutcome.RefusedByTheRules _ ->
+                        new Viability.ProvedImpossible(new Emptiness.ConflictingRules());
+                case CaseOutcome.NotWalked _ ->
+                        new Viability.NotRead(sum.sum().refine(each.getKey()));
+                case CaseOutcome.Opened _ -> viability(under.and(sum.sum(), each.getKey()));
+            };
+            switch (of) {
+                case Viability.MayStand _ -> {
+                    return of;
+                }
+                case Viability.ProvedImpossible it -> refused.add(it.why());
+                case Viability.NotRead _ -> unread = of;
+            }
+        }
+        return unread != null ? unread : new Viability.ProvedImpossible(
+                new Emptiness.AtAField(
+                        new Emptiness.AtAField.Where.In(
+                                sum.sum().toString()),
+                        new Emptiness.AcrossEveryCase(refused)));
     }
 
     /**

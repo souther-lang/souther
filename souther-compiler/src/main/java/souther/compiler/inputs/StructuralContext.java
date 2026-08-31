@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -82,6 +83,33 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
          * are an emptiness — and neither of those readings belongs to the disagreement itself.
          */
         record Disagreeing(Requirements.Merge.Conflict why) implements Merge {}
+    }
+
+    /**
+     * The same, with the value at {@code at} settled as {@code branch} as well.
+     *
+     * <p>What a reader walking the alternatives of a sum asks about one of them. A narrowing already
+     * settled here is not settled again: {@link Requirements#and} refuses a second answer at one
+     * position, which is a caller asking about a case it has already ruled out.
+     */
+    StructuralContext and(TermPath at, Refinement branch) {
+        return new StructuralContext(refinements.and(at, branch), nonEmptySequences);
+    }
+
+    /**
+     * Whether everything {@code other} assumes is already assumed here.
+     *
+     * <p>What says a position exists in the values this describes: a sum inside a case is a place to
+     * ask about only once the value is that case, and asking about it under a context that has not
+     * settled the case would be walking alternatives of a sum that stands nowhere.
+     */
+    boolean covers(StructuralContext other) {
+        for (Map.Entry<TermPath, Refinement> each : other.refinements.refinements().entrySet()) {
+            if (!each.getValue().equals(refinements.at(each.getKey()))) {
+                return false;
+            }
+        }
+        return nonEmptySequences.containsAll(other.nonEmptySequences);
     }
 
     /**
