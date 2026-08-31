@@ -22,12 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * A name whose value is read through itself is not a name that reaches no position.
  *
- * <p>The two answers are told apart because what a reader is told about the model depends on it. A
- * position nothing names is what an expression this reading does not follow comes to, and a rule
- * about it is reported as being about a value made from somewhere else — a sentence about the model.
- * A binding that holds a value read through itself is not a model at all: a binding holds one value,
- * worked out where it was written, so what is in hand is a representation this compiler built and
- * says is impossible.
+ * <p>The two answers are told apart because what a reader is told about the model depends on it.
+ * Arithmetic over a position stands nowhere, and a rule about it is reported as being about a value
+ * made from somewhere else — a sentence about the model, and a true one. A binding that holds a
+ * value read through itself is not a model at all: the lineage this compiler builds runs one way,
+ * so a value read through itself is a representation it made and says it does not make.
  *
  * <p>Handed one of those, the reading raises rather than answering. What it must not do is come back
  * with the answer a plain expression gets, which would put a report of this compiler's own state

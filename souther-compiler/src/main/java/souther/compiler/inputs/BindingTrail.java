@@ -24,11 +24,16 @@ import java.util.function.Supplier;
  * grew would refuse the second for having been to the first, and the answer would depend on which
  * order the attempts happen to be written in.
  *
- * <p>What a cycle is, is that this compiler's own representation is not what it says it is: a
- * binding holds one value, worked out where the binding was written, so a value read through itself
- * is nothing a body could mean. So it is raised rather than reported. A walk that answered "no
- * position" for it would say of a model that it states no rule where a position, and a reader has no
- * way to tell that from a model that states none.
+ * <p>What a cycle is, is that this compiler's own representation is not what it says it is. What is
+ * violated is not that a binding holds one value — two bindings holding each other hold one value
+ * each — but that the lineage built here runs one way: what a name holds is worked out where the
+ * name was written, from what stood before it, and the record of which binding another's elements
+ * came from is written where the operation that made them still stood. A walk that arrives back at
+ * a binding it is answering has been handed a graph nothing here builds.
+ *
+ * <p>So it is raised rather than reported. A walk that answered "no position" for it would say of a
+ * model that it states no rule where a position, and a reader has no way to tell that from a model
+ * that states none.
  */
 final class BindingTrail {
 
