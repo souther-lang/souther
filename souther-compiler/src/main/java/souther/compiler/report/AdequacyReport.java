@@ -3027,14 +3027,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>The one place the two vocabularies are joined. An obligation's coverage is a fold of the
      * readings and not a measurement ({@link ObligationCoverage}), and the document says of it what
      * it says of every other measure — a status, what it went without, and whether a row is at the
-     * point — so the mapping is made here and nowhere a second time. What tells the two apart is
-     * that a debt has no state where something went unread and a row was seen anyway, so
-     * {@code partial} here is always a point left undecided.
+     * point. Which word says how far it got is {@link ReportMeasurement}'s, where the other measures
+     * ask it — a debt has no state where something went unread and a row was seen anyway, so
+     * {@code partial} here is always a point left undecided, and that is the difference between the
+     * two arms rather than a reason to answer them apart.
      */
     private static void owedIn(ObjectNode of, ObligationCoverage coverage) {
-        of.put("status", wire(coverage.settled() ? MeasurementStatus.COMPLETE
-                : coverage.counted() ? MeasurementStatus.PARTIAL
-                        : MeasurementStatus.NOT_MEASURED));
+        of.put("status", wire(ReportMeasurement.statusOf(coverage)));
         if (coverage.why() != null) {
             of.put("reason", word(coverage.why()));
         }
