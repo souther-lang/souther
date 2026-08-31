@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
@@ -319,19 +320,24 @@ public record InputReads(Map<BindingId, TermPath> roots,
      * a rule draws, and the walk that says which positions a rule mentions — so the two agree about
      * what a name is rather than each working out what a missing position meant.
      *
-     * <p>A position first, wherever there is one. A name an operation handed an element on is a
-     * position where the container is at one, and only where it is not does what the binding holds
-     * matter — which is the order the position walk already reads them in, said here so a caller
-     * does not have to know it.
+     * <p>A position first, and by whichever road reaches one. That is not the same as asking whether
+     * the binding is a parameter: a name an operation handed an element on stands at a position
+     * wherever its container does, and so does one bound to something that names a position. So what
+     * is asked first is the whole walk after a position ({@link InputPath}) rather than one of the
+     * facts it is built from.
+     *
+     * <p>Then a set the arms already narrowed, which is the same order as everywhere else: what is in
+     * force where the name is read wins over what was true of it further out.
+     *
+     * <p>And what is left is read from where the binding came from ({@link BindingRole}), which is
+     * the one place those facts are ordered. Nothing is re-ordered here — the walk after a position
+     * reads the same ordering, so a name that got past it is one no road placed, and what remains is
+     * to say which kind of value it has.
      *
      * <p>What it holds is answered last and only as the expression. Whether that expression may
      * stand where the name does is the caller's question, asked of the fact rather than of a
      * permission recorded here: an arithmetic reader substitutes it, and a reader collecting
      * positions walks into it, and neither is the other's rule.
-     *
-     * <p>A set the arms already narrowed stands before an element's own, which is the same order as
-     * everywhere else: what is in force where the name is read wins over what was true of it
-     * further out.
      */
     public ReadMeaning meaningOf(Core.Read read, Symbols symbols) {
         return meaningOf(read, symbols, new java.util.HashSet<>());
@@ -360,19 +366,63 @@ public record InputReads(Map<BindingId, TermPath> roots,
         if (narrowed != null) {
             return new ReadMeaning.OneOf(narrowed);
         }
-        Core container = elements.containerOf(read.binding());
-        if (container != null) {
-            java.util.List<Denotation> written =
-                    writtenElementsOf(new Denotation(container, this), symbols, met);
-            return written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
+        return switch (roleOf(read.binding())) {
+            case BindingRole.Element(var container) -> {
+                java.util.List<Denotation> written =
+                        writtenElementsOf(new Denotation(container, this), symbols, met);
+                yield written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
+            }
+            // Read in this environment. Bindings are added on the way down and each tells itself
+            // from every other, so what was bound after this name does not answer for what it holds
+            // — which is why the environment at the binder and the one at the read cannot be told
+            // apart yet. Said once here rather than by each reader, so the day they can be, one
+            // place changes.
+            //
+            // A name bound to the very read being answered is a name this knows nothing about: the
+            // value would be the question, and a reader handed it would ask it again.
+            case BindingRole.Alias(var value) -> value == read ? new ReadMeaning.Unknown()
+                    : new ReadMeaning.Through(new Denotation(value, this));
+            case BindingRole.Unknown _ -> new ReadMeaning.Unknown();
+            // A parameter stands at its position, so the walk above answered for it and nothing
+            // reaches here. Arriving means the roots this answers from and the roots that walk read
+            // are not the same roots, which is one reading of one body giving two answers.
+            case BindingRole.Root(var at) -> throw new ARootThatReachedNoPosition(read, at);
+        };
+    }
+
+    /**
+     * Where {@code binding} came from, as the one ordering of the facts held here
+     * ({@link BindingRole}).
+     *
+     * <p>Every reader of these facts asks this rather than the three of them, so that which of them
+     * wins is settled once. Read separately, the winner is whichever the reader looked at first, and
+     * a binding that is more than one of these — a closure parameter of a walk joined to the one
+     * before it is handed an element and bound to what the earlier closure made — comes back
+     * differently to each of them.
+     */
+    private BindingRole roleOf(BindingId binding) {
+        TermPath root = roots.get(binding);
+        if (root != null) {
+            return new BindingRole.Root(root);
         }
-        Core held = bound.get(read.binding());
-        // Read in this environment. Bindings are added on the way down and each tells itself from
-        // every other, so what was bound after this name does not answer for what it holds — which
-        // is why the environment at the binder and the one at the read cannot be told apart yet.
-        // Said once here rather than by each reader, so the day they can be, one place changes.
-        return held == null || held == read ? new ReadMeaning.Unknown()
-                : new ReadMeaning.Through(new Denotation(held, this));
+        Core container = elements.containerOf(binding);
+        if (container != null) {
+            return new BindingRole.Element(container);
+        }
+        Core value = bound.get(binding);
+        return value == null ? new BindingRole.Unknown() : new BindingRole.Alias(value);
+    }
+
+    /** A name this answers for as a parameter, which the walk after a position did not place. */
+    static final class ARootThatReachedNoPosition extends IllegalStateException
+            implements TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        ARootThatReachedNoPosition(Core.Read read, TermPath at) {
+            super(read.binding() + " is the name of " + at + ", and reading " + read.name()
+                    + " reached no position");
+        }
     }
 
     /**
