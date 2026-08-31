@@ -268,10 +268,12 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.Stopped stopped -> stopped.why().isEmpty()
                     ? aboutNoPosition(comparison, reads, read.symbols())
                     : new Unread(stopped.why());
-            // And where the quantity was read and no line could be built on it, the carrier is
+            // And where the quantity was read and stands on no order this counts, the carrier is
             // what a reader is owed — at the quantity's own coordinates, because the quantity is
-            // what such a rule is about.
-            case Cutting.Read.NoLineOnTheQuantity over -> over.over().isEmpty()
+            // what such a rule is about. The word is what the reading established and not what is
+            // left when several answers were absent: it says the values here carry no order to
+            // draw a line on, and that is exactly what was found.
+            case Cutting.Read.NoOrderToCountOn over -> over.over().isEmpty()
                     ? aboutNoPosition(comparison, reads, read.symbols())
                     : new Unread(atEachOf(over.over(),
                             new BlockReason.UnreadComparisonDomain()));

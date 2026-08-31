@@ -354,6 +354,26 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
+     * And what each position is left with is the carrier, which is what was found.
+     *
+     * <p>The word beside the one above, because that one holds over any way of drawing no line and
+     * this one says which. Both positions stand on an order this counts nothing on, so a sum over
+     * them has nothing to be spaced by — and that is established where the orders are asked for
+     * rather than left over when three readings declined.
+     *
+     * <p>Paired with {@link #aCarrierOfStringsDrawsOneToo}, which is the same question answered the
+     * other way: two strings also count nothing and the place they meet is a line, so a reader
+     * asking for counting orders before the narrower readings would refuse a line the model draws.
+     * Together they hold the question to "is there an order this quantity can be realized on" and
+     * away from "is this domain numeric".
+     */
+    @Test
+    void aCarrierNoOrderCountsOnSaysThatAtEachPositionOfTheQuantity() {
+        assertEquals(List.of("a: UNSUPPORTED_DOMAIN", "b: UNSUPPORTED_DOMAIN"),
+                notRead(NO_CARRIER));
+    }
+
+    /**
      * An offset on one side moves the line rather than taking it away.
      *
      * <p>{@code charge > ceiling + 1000} is {@code charge - ceiling > 1000}: a line on the same

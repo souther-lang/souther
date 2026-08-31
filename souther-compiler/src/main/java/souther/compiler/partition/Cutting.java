@@ -48,11 +48,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /**
      * What reading {@code comparison} as a line came to.
      *
-     * <p>Three answers, and the two that are not a line are not one absence. A comparison whose
-     * positions cancel was read from end to end and there was no line in it; one this compiler could
-     * not take apart leaves whatever it states unknown. Told apart by a {@code null}, whoever asked
-     * had to work out which — and worked it out by reading the comparison a second time, which is
-     * how a rule read in full came to be described as one whose spelling defeated this compiler.
+     * <p>Four answers, and the three that are not a line are not one absence. A comparison whose
+     * positions cancel was read from end to end and there was no line in it; one this compiler
+     * could not take apart leaves whatever it states unknown; and one whose quantity was read and
+     * stands on no order this counts is neither. Told apart by a {@code null}, whoever asked had to
+     * work out which — and worked it out by reading the comparison a second time, which is how a
+     * rule read in full came to be described as one whose spelling defeated this compiler.
+     *
+     * <p>Each of them says what was found rather than what came of it. An arm named for the absence
+     * of a line holds every way of failing to draw one, so the next one added goes out under the
+     * word the last one earned.
      */
     sealed interface Read {
 
@@ -93,28 +98,39 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
 
         /**
-         * The quantity was read and no line could be built on it: a position with no order to be
-         * counted on, or an order whose values this draws no line against.
+         * The quantity was read, and there is no order this compiler can realize it as a count on.
+         *
+         * <p><b>Named for what was found and not for what came of it.</b> "No line was built" is
+         * true of every way of failing to build one, so an arm carrying that name takes the next
+         * one added to it — and the word a document then prints was decided by whichever answers
+         * happened to be absent rather than by anything anybody established.
+         *
+         * <p>What is established here is one thing: some term of the form stands on no order, or on
+         * one whose values do not count, so a sum over the terms has nothing to be spaced by
+         * ({@link AffineReading#carriers}). A line on a single position and a distance between two
+         * are asked before this and reach orders this does not — two strings stand no measurable
+         * distance apart and are still one above the other — so what is left here is the general
+         * form, and the general form is what needs every term to count.
          *
          * <p>Its own answer and not {@link Stopped}. Nothing about the form fell short — it is
-         * right here, and it is the carrier that stopped this — so the quantity is the subject and
-         * the places are its own, which is what every read comparison's are. Said as a reading that
-         * stopped, the places would come from a walk over the operands, and which of two authorities
-         * a comparison's places came from would turn on which producer built the answer.
+         * right here — so the quantity is the subject and the places are its own, which is what
+         * every read comparison's are. Said as a reading that stopped, the places would come from a
+         * walk over the operands, and which of two authorities a comparison's places came from
+         * would turn on which producer built the answer.
          *
          * @param over the coordinates of the quantity, which is where a reader is sent
          */
-        record NoLineOnTheQuantity(
+        record NoOrderToCountOn(
                 java.util.List<souther.compiler.inputs.FilingCoordinate> over) implements Read {
 
-            public NoLineOnTheQuantity {
+            public NoOrderToCountOn {
                 over = java.util.List.copyOf(over);
             }
         }
     }
 
     /**
-     * The same, said as which of the three it is.
+     * The same, said as which of the four it is.
      *
      * <p>The reason a reading stopped is settled here, where it stopped, and not asked for
      * afterwards by whoever met the absence. Worked out later, the reason came from a second walk
@@ -174,26 +190,76 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Three shapes and one order among them, which is the arithmetic's: one position's own
      * values, two positions held apart, and a form over several. Nothing here reads the comparison
      * again — what each of them is handed is the form the reading already came to.
+     *
+     * <p><b>A shape declining and a recognised shape failing to draw are two different things.</b>
+     * A recogniser answers nothing where the form is not its shape and where the orders that shape
+     * would need are not there. The second of those is a fact about the model — an order is missing,
+     * and that is worth saying — but it is not this reading's to classify, because a reading further
+     * down may still answer: a form on an order that counts nothing is turned away by both narrower
+     * shapes and gets its line from neither, and what it is left with is settled at the one place
+     * that knows it has run out of readings.
+     *
+     * <p>What must not happen is the other one: a shape that was recognised and then could not be
+     * realized falling to the next reading, where whatever that reading is short of becomes the
+     * reason. So a recogniser is asked first and its answer decides which reading owns the form,
+     * and only then is a line built.
+     *
+     * <p>And that one place is after the narrower shapes, not before them. They reach orders this
+     * counts nothing on: two strings stand no measurable distance apart and the place they meet is
+     * still a line, so a reader asking for counting orders first refuses lines the model draws.
      */
     private static Read realized(String behavior, AffineReading read,
                                  Quantities quantities) {
-        Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, quantities),
-                quantities);
+        // Which shape this quantity is, asked narrowest first, and each answered before anything is
+        // built. A recogniser answering nothing is this form not being that shape, and the next
+        // shape is asked; a recogniser that answered and a line that then could not be built are
+        // two facts about one shape, and falling from the second to the next shape is how the
+        // first came to be reported as the last one's absence.
+        ComparedLine line = ComparedLine.fromTheForm(read, quantities);
+        if (line != null) {
+            return new Read.Cuts(realizedAt(atAPosition(behavior, line, quantities),
+                    "a line on one position", read));
+        }
+        ComparedTerms pair = ComparedTerms.fromTheForm(read, quantities);
+        if (pair != null) {
+            return new Read.Cuts(realizedAt(apart(behavior, pair, read.claim(), quantities),
+                    "a distance between two positions", read));
+        }
+        // And what the general form needs, asked once and here. Not before the two above: they
+        // reach orders that do not count — two strings stand no measurable distance apart and the
+        // place they meet is a line — so a reader asking this first would refuse lines the model
+        // draws.
+        java.util.Map<NumericTerm, TermOrders> on = read.carriers(quantities);
+        if (on == null) {
+            return new Read.NoOrderToCountOn(
+                    AffineReading.filedAt(read.form().coefs().keySet()));
+        }
+        return new Read.Cuts(overAForm(behavior, read, on, quantities));
+    }
+
+    /**
+     * The line a recognised shape draws, which is one it draws.
+     *
+     * <p>What is watched here is a shape this reading recognised and could not put a line on. Only
+     * one thing refuses past recognition — an order with no place at the level the rule wrote
+     * ({@link LevelSpace#canCutAt}) — and it is a fact about the model rather than a limit of this
+     * compiler: a rule holding two strings three apart asks for a line at a distance the order has
+     * no place for at all, and there is none to find.
+     *
+     * <p>Unreachable while the language admits no arithmetic over an order that counts nothing, so
+     * a distance on such an order is only ever the place the two meet, which every such order has.
+     * That is a fact about what can be written and not about these types, so it stops here rather
+     * than falling to the reading below — where a shape that was recognised would have been
+     * answered for by whether the general form's orders were there, and gone out as values nothing
+     * draws a line on.
+     */
+    private static Cutting realizedAt(Cutting drawn, String shape, AffineReading read) {
         if (drawn == null) {
-            drawn = apart(behavior, ComparedTerms.fromTheForm(read, quantities), read.claim(),
-                    quantities);
+            throw new IllegalStateException("this reading recognised " + shape
+                    + " and its order has no place at the level the rule wrote: "
+                    + read.form() + " at " + read.cut());
         }
-        if (drawn != null) {
-            return new Read.Cuts(drawn);
-        }
-        Cutting form = overAForm(behavior, read, quantities);
-        if (form != null) {
-            return new Read.Cuts(form);
-        }
-        // The quantity was read and no line could be built on it. Filed at the quantity, because
-        // the quantity is what the rule is about.
-        return new Read.NoLineOnTheQuantity(
-                AffineReading.filedAt(read.form().coefs().keySet()));
+        return drawn;
     }
 
     /**
@@ -278,8 +344,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * variable — and the four sides of the box its positions sit in are not it.
      *
      * <p>Each position on the order it is written back on, which the reading answers per position.
-     * Only where every one of them has an order with counts under it: a position with no number is
-     * one a sum has nothing to add.
+     * The orders are the parameter and not something asked for here: a position with no number is
+     * one a sum has nothing to add, and whether every term has one is what the caller settled
+     * before choosing this shape at all. So this draws a line and never declines — left able to,
+     * the next refusal added to it would arrive where a missing order is reported and be described
+     * as one.
      *
      * <p><b>Whatever the operator states, and not orders alone.</b> {@code 2 * a == 8} names four
      * and {@code a + b == 10} names the place their sum reaches ten, and both are quantities this
@@ -288,17 +357,22 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * the form is right here.
      */
     private static Cutting overAForm(String behavior, AffineReading read,
+                                     java.util.Map<NumericTerm, TermOrders> on,
                                      Quantities quantities) {
-        if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
-            return null;
-        }
-        java.util.Map<NumericTerm, TermOrders> on =
-                read.carriers(quantities);
-        if (on == null) {
-            return null;
-        }
-        return made(new BorderQuantity.OverAForm(behavior, read.form(), on),
+        Cutting drawn = made(new BorderQuantity.OverAForm(behavior, read.form(), on),
                 new Level.ACount(new Count(read.cut())), read.claim(), quantities);
+        if (drawn == null) {
+            // What this watches: `OverAForm.levels()` answers `steppingBy` or `overFiniteDecimals`,
+            // and neither of those parts anywhere but everywhere — the one order that names a
+            // single place is the one two values meet on, and every term here counts, so that order
+            // is not reachable from this shape. An override added to either of those two is what
+            // would bring it here, and it should stop rather than be reported as a rule about
+            // values nothing draws a line on, which is the opposite of what would have happened.
+            throw new IllegalStateException(
+                    "a form over orders that count produced a line its order has no place for: "
+                            + read.form() + " at " + read.cut());
+        }
+        return drawn;
     }
 
     /** What the operator of a line at a position states, which the reading of it already answered
