@@ -34,6 +34,7 @@ public final class Shapes {
 
     private Shapes() {}
 
+
     /**
      * A module with its codecs derived and every invariant clause saying the rule it states — the
      * form each declaration is read from, before what one of them wrote is normalized.

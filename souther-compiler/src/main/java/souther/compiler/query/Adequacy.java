@@ -2960,7 +2960,13 @@ public final class Adequacy {
                 composed = rowsFor(spec, sig, symbols, asked,
                         baselines(name, spec, sig,
                                 db.ask(new Bodies.ModuleDefinitions(name)).value(),
-                                prepared.value(), symbols),
+                                prepared.value(), symbols,
+                                // What the declarations of this module denote, and not what a check
+                                // settled about them: a generation is a measurement of a module
+                                // that need not have been accepted — this same answer is worked out
+                                // where a body did not check — and a declaration the check said
+                                // nothing about is a value this cannot reach rather than a fault.
+                                new souther.compiler.check.ResolvedFieldTypes(symbols)),
                         divided, bodies.get(behavior), plan,
                         Rows.readingFor(byTarget, behavior),
                         constructing(db, name),
@@ -3344,7 +3350,8 @@ public final class Adequacy {
          */
         private static List<Generator.Baseline> baselines(
                 String module, Hir.SpecBehavior spec, Sig sig, Map<String, Hir.FnDef> values,
-                souther.compiler.check.Prepared prepared, Symbols symbols) {
+                souther.compiler.check.Prepared prepared, Symbols symbols,
+                souther.compiler.observe.FieldTypes fields) {
             List<Generator.Baseline> out = new ArrayList<>();
             // What the author has already written, first and whole. A row of theirs names a set of
             // values that go together, which is more than this can say of one value chosen per
@@ -3364,7 +3371,7 @@ public final class Adequacy {
             // Then every value the module states of a parameter's own type, in the order it states
             // them, one origin per turn. Narrowed to the only value of a type, a module that states
             // a second one lost the spread from every row of every behavior taking it.
-            out.addAll(named(module, spec, sig, values, symbols));
+            out.addAll(named(module, spec, sig, values, symbols, fields));
             return List.copyOf(out);
         }
 
@@ -3408,7 +3415,8 @@ public final class Adequacy {
          */
         private static List<Generator.Baseline> named(String module, Hir.SpecBehavior spec, Sig sig,
                                                       Map<String, Hir.FnDef> values,
-                                                      Symbols symbols) {
+                                                      Symbols symbols,
+                                                      souther.compiler.observe.FieldTypes fields) {
             if (values == null) {
                 return List.of();
             }
@@ -3416,7 +3424,7 @@ public final class Adequacy {
             // reading of a definition's type here would be a second answer about what a row may
             // name, differing from the reading that builds the row at whatever either forgot.
             souther.compiler.check.DeclaredTypeEvidence evidence =
-                    new souther.compiler.check.DeclaredTypeEvidence(symbols, values);
+                    new souther.compiler.check.DeclaredTypeEvidence(symbols, fields, values);
             Map<TypeSymbol, List<String>> stated = new LinkedHashMap<>();
             for (Map.Entry<String, Hir.FnDef> each : values.entrySet()) {
                 if (!each.getValue().params().isEmpty()

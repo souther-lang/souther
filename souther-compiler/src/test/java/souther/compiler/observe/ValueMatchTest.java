@@ -36,9 +36,9 @@ class ValueMatchTest {
 
     /** What a declaration would say, written out: `Receipt.lines` is a set of ints and nothing else
      *  is declared anywhere. */
-    private static final ValueTypes TYPES = (owner, field) ->
-            RECEIPT.equals(owner) && field.equals("lines")
-                    ? Position.at(Type.set(Type.Prim.named("Int"))) : Position.UNREAD;
+    private static final ValueTypes TYPES = ValueTypes.over(owner ->
+            RECEIPT.equals(owner) ? java.util.Map.of("lines", Type.set(Type.Prim.named("Int")))
+                    : java.util.Map.of());
 
     private static ValueMatch match() {
         return new ValueMatch(TYPES);
@@ -178,7 +178,7 @@ class ValueMatchTest {
         assertNull(match().compare(stated, answered, Position.UNREAD),
                 "the field is declared a set, so the order it stands in is not part of it");
 
-        ValueMatch nothingDeclared = new ValueMatch((owner, field) -> Position.UNREAD);
+        ValueMatch nothingDeclared = new ValueMatch(ValueTypes.over(owner -> java.util.Map.of()));
         Mismatch differs = nothingDeclared.compare(stated, answered, Position.UNREAD);
         assertNotNull(differs, "with nothing declaring the field, the elements are read in order");
         assertEquals(List.of(new PathElement.Field("lines"), new PathElement.Index(0)),

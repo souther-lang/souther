@@ -25,6 +25,7 @@ import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.observe.FailurePhase;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -71,10 +72,12 @@ public final class ExampleStatements {
      * built and compared in the reading that holds this, so nothing crosses a loader.
      */
     public record Declaring(souther.compiler.check.Prepared.Examples rows, Symbols symbols,
-                            Map<String, Hir.FnDef> values) {}
+                            FieldTypes fields, Map<String, Hir.FnDef> values) {}
 
     private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
+    /** What a value of a declaration is made of, as the check settled it. */
+    private final FieldTypes fields;
     /** The shape of every behavior a statement here may name, keyed by the declaration it is: this
      * module's own and the ones it borrows. A stand-in may name a dependency another module
      * declares, and a table under bare spellings answers one entry for that and for a namesake
@@ -101,6 +104,7 @@ public final class ExampleStatements {
     private final Map<String, Declaring> declaring;
 
     private ExampleStatements(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+                              FieldTypes fields,
                               Map<ValueName.Behavior, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy,
@@ -110,12 +114,13 @@ public final class ExampleStatements {
         this.declaring = declaring;
         this.module = module;
         this.symbols = symbols;
+        this.fields = fields;
         this.sigs = sigs;
         this.loader = loader;
         this.values = values;
         this.deadline = deadline;
         this.policy = policy;
-        this.rendering = new FixtureReader(module, symbols, values, loader);
+        this.rendering = new FixtureReader(module, symbols, fields, values, loader);
     }
 
     /**
@@ -187,7 +192,7 @@ public final class ExampleStatements {
      * this.
      */
     private FixtureReader newFixtureReader() {
-        return new FixtureReader(module, symbols, values, loader);
+        return new FixtureReader(module, symbols, fields, values, loader);
     }
 
     /**
@@ -204,7 +209,7 @@ public final class ExampleStatements {
         }
         Declaring elsewhere = declaring.get(declaredIn);
         return () -> new FixtureReader(elsewhere.rows(), elsewhere.symbols(),
-                elsewhere.values(), loader);
+                elsewhere.fields(), elsewhere.values(), loader);
     }
 
     private Set<TypeSymbol> outCases(Type out) {
@@ -226,6 +231,7 @@ public final class ExampleStatements {
      * the two answers are compared as the written values they are built into.
      */
     public static Readings disagreements(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+                                         FieldTypes fields,
                                          Map<ValueName.Behavior, Sig> sigs,
                                          Map<String, ClassFileImage> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
@@ -244,7 +250,7 @@ public final class ExampleStatements {
         if (contested.isEmpty()) {
             return Readings.NONE;
         }
-        ExampleStatements v = new ExampleStatements(module, symbols, sigs,
+        ExampleStatements v = new ExampleStatements(module, symbols, fields, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy, contracts,
                 declaring);
         try {
@@ -319,6 +325,7 @@ public final class ExampleStatements {
      * step.
      */
     public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+                                              FieldTypes fields,
                                               Map<ValueName.Behavior, Sig> sigs,
                                               Map<String, ClassFileImage> classes,
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
@@ -332,7 +339,7 @@ public final class ExampleStatements {
         }
         // Building a table reads statements written here and nothing another module wrote, so it
         // needs no reading of one.
-        ExampleStatements v = new ExampleStatements(module, symbols, sigs,
+        ExampleStatements v = new ExampleStatements(module, symbols, fields, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy, contracts,
                 Map.of());
         List<Diagnostic> said = new ArrayList<>();
