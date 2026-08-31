@@ -165,7 +165,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                     inputs.quantities(symbols),
                     Partitions.of(spec.name(), inputs, symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), HeldCounts.of(inputs)),
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes()),
                     CoverageRead.of(spec.name(), body,
                             CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()), inputs,

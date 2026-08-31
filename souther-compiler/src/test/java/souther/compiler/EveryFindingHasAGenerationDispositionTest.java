@@ -936,7 +936,7 @@ class EveryFindingHasAGenerationDispositionTest {
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 souther.compiler.inputs.InputDomain.of(List.of(), symbols,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES).quantities(symbols),
-                List.of(), souther.compiler.partition.HeldCounts.NONE);
+                List.of());
     }
 
     /**

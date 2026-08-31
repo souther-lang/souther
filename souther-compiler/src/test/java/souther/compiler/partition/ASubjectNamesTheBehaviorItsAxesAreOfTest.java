@@ -47,7 +47,7 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
         Generator.Subject subject = new Generator.Subject("fee",
                 new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
                         ReadAs.THE_COMPILATION_DOES),
-                readingOf("days"), List.of(), HeldCounts.NONE);
+                readingOf("days"), List.of());
 
         assertEquals("fee", subject.behavior(),
                 "the behavior is named whether or not anything divided its positions");
@@ -60,7 +60,7 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
                 () -> new Generator.Subject("fee",
                         new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
                                 ReadAs.THE_COMPILATION_DOES),
-                        readingOf("days"), List.of(axisOf("charge", "days")), HeldCounts.NONE));
+                        readingOf("days"), List.of(axisOf("charge", "days"))));
 
         assertEquals(true, refused.getMessage().contains("charge"),
                 "the refusal names the axis that disagrees: " + refused.getMessage());
@@ -74,7 +74,7 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
                         new BehaviorInputs(List.of("days", "cap"), List.of(Type.INT, Type.INT),
                                 SYMBOLS, ReadAs.THE_COMPILATION_DOES),
                         readingOf("days", "cap"),
-                        List.of(axisOf("fee", "days"), axisOf("charge", "cap")), HeldCounts.NONE),
+                        List.of(axisOf("fee", "days"), axisOf("charge", "cap"))),
                 "an axis of another behavior standing second is still one");
     }
 

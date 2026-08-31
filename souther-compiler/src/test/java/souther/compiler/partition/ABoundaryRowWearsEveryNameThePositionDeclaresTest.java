@@ -105,8 +105,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         spec.params().forEach(each -> names.add(each.name()));
         Generator.Subject subject = new Generator.Subject(spec.name(),
                 new BehaviorInputs(names, sigs.get(spec.name()).inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                domain.quantities(symbols), p.axes(),
-                HeldCounts.of(domain));
+                domain.quantities(symbols), p.axes());
 
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {

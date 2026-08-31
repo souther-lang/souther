@@ -153,7 +153,29 @@ final class ReadQuantities implements Quantities {
      */
     @Override
     public TermOrders ordersOf(NumericTerm term) {
+        // Refused for a term under nothing this behavior takes, the same as every other question
+        // here. What an operation answers with follows from the operation alone where the type is
+        // absent, so a term of another input comes back with an order on one end and nothing on the
+        // other — an answer about no reading, wearing this one's name.
+        held(term);
         return term.ordersAt(typeAt.apply(term.subjectPath()), symbols);
+    }
+
+    @Override
+    public int mostHeldAt(TermPath at) {
+        Position position = byPath.get(at);
+        // The position's own count, which is the one question here that names an arm — and it names
+        // it because it is about that arm.
+        if (position == null || !(position.term() instanceof NumericTerm.TakenOf taken)
+                || !(taken.takenAs()
+                        instanceof souther.compiler.semantics.TakenAs.HowManyItHolds)) {
+            return Integer.MAX_VALUE;
+        }
+        // Asked of the rules when the question arrives rather than solved for every container as
+        // the reading is made: what they leave a count moves with whatever else has been settled.
+        NumericDomain.Bounds runs = runsBetween(position.term());
+        return runs == null ? Integer.MAX_VALUE
+                : souther.compiler.numeric.CountDomain.mostFrom(runs.max());
     }
 
     /**

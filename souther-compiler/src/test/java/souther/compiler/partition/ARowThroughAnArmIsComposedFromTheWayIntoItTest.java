@@ -270,7 +270,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             return new Model(new Generator.Subject(spec.name(),
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sigs.get(behavior).inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                    inputs.quantities(symbols), partitioning.axes(), HeldCounts.of(inputs)),
+                    inputs.quantities(symbols), partitioning.axes()),
                     CoverageRead.of(spec.name(), body, plan, inputs, symbols));
         }
     }

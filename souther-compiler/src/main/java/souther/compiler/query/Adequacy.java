@@ -1460,8 +1460,7 @@ public final class Adequacy {
             }
             Generator.Subject subject = new Generator.Subject(behavior,
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy), quantities, partitioning.axes(),
-                    souther.compiler.partition.HeldCounts.of(domain));
+                            symbols, policy), quantities, partitioning.axes());
             Generator.CandidateCheck check =
                     (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
             return new Coverages.Probe() {
@@ -3508,7 +3507,7 @@ public final class Adequacy {
             HowARowIsRead read = readingOf(spec, sig, symbols, policy, partitioning);
             Generator.Subject subject =
                     new Generator.Subject(spec.name(), read.where(), domain.quantities(symbols),
-                            read.axes(), souther.compiler.partition.HeldCounts.of(domain));
+                            read.axes());
             // The arms this build is owed a row at, which the measure established and this reads.
             // A combination the body settles together is where one is looked for and is not itself
             // owed a row — nothing reports one — so what is searched follows from the findings

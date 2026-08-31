@@ -102,8 +102,7 @@ public final class Generator {
      * @param behavior what the behavior is called, which every axis of it agrees with
      */
     public record Subject(String behavior, BehaviorInputs inputs,
-                          souther.compiler.inputs.Quantities quantities, List<Axis> axes,
-                          HeldCounts held) {
+                          souther.compiler.inputs.Quantities quantities, List<Axis> axes) {
 
         public Subject {
             axes = List.copyOf(axes);
@@ -120,23 +119,6 @@ public final class Generator {
                                     + ": " + axis.id());
                 }
             }
-        }
-
-        /**
-         * How many the rules leave the container at {@code at}, or every number where they leave it
-         * unsaid.
-         *
-         * <p>The two halves of the answer are put together here and nowhere else: which positions
-         * are containers is what the reading found, and what its rules leave one of them is what the
-         * same reading says. A caller holding the first and choosing the second would be asking one
-         * reading's positions what another reading's rules leave them.
-         *
-         * <p>Answered about the positions of the input alone. A coordinate of a
-         * {@link ConstructionPlan} is spelled the same way and is not one of these, and what a
-         * plan's node holds is read off that node's own type.
-         */
-        public int mostHeldAt(TermPath at) {
-            return held.most(at, quantities);
         }
 
 
@@ -3465,7 +3447,7 @@ public final class Generator {
      */
     private static boolean holdsNothing(Subject subject, Axis axis) {
         for (TermPath inside : axis.path().sequencesContainingIt()) {
-            if (subject.mostHeldAt(inside) < 1) {
+            if (subject.quantities().mostHeldAt(inside) < 1) {
                 return true;
             }
         }

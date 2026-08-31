@@ -107,6 +107,26 @@ public sealed interface Quantities permits ReadQuantities {
     TermOrders ordersOf(NumericTerm term);
 
     /**
+     * How many the rules leave the container standing at {@code at}, or every number where they
+     * leave it unsaid.
+     *
+     * <p>Answered here because both halves of it are this reading's: which positions hold a
+     * container is what the reading found, and what its rules leave one of them is what the same
+     * reading says. Kept as a table beside a reading, a caller could ask what one reading's
+     * containers come to under another's rules, and the answer would be about neither.
+     *
+     * <p>Counts of containers and nothing else. What this feeds is how many elements to build, so an
+     * operation whose number is not how many the value holds has no business bounding it:
+     * {@code Time.hour(t) <= 5} would otherwise be read as a container of at most five.
+     *
+     * <p>About the positions of the input and about nothing else. A coordinate of a construction
+     * plan is spelled with the same {@link TermPath} and is a different thing: the plan goes on past
+     * where the reading stops, and puts positions under a sum the declaration has none of. What a
+     * plan's node holds is read off that node's own type, which is where its rules are.
+     */
+    int mostHeldAt(TermPath at);
+
+    /**
      * Where the values of {@code form} run, or null at either end where nothing bounds them.
      *
      * <p>The form as the rule wrote it, over this input's terms. What it comes to is asked of the

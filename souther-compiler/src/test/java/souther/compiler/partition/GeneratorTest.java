@@ -112,8 +112,7 @@ class GeneratorTest {
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(new Generator.Subject(spec.name(),
                 new BehaviorInputs(parameters, sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                domain.quantities(symbols), partitioning.axes(),
-                HeldCounts.of(domain)),
+                domain.quantities(symbols), partitioning.axes()),
                 symbols);
     }
 
@@ -205,7 +204,7 @@ class GeneratorTest {
         // measured on is what the declarations say, and the subject asks it for that.
         return new Generator.Subject("f",
                 new BehaviorInputs(List.of("a", "b"), List.of(Type.INT, Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                readingOf(symbols, "a", "b"), List.of(a, b), HeldCounts.NONE);
+                readingOf(symbols, "a", "b"), List.of(a, b));
     }
 
     /** The reading of an input whose parameters are bare numbers, which is what says what a number
@@ -411,8 +410,7 @@ class GeneratorTest {
                 classesOf(List.of(number("low", 1), number("high", 9)), atA), List.of());
         Generator.Subject subject = new Generator.Subject("f",
                 new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                readingOf(symbols, "a"), List.of(only),
-                HeldCounts.NONE);
+                readingOf(symbols, "a"), List.of(only));
 
         FillResult filled =
                 Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());

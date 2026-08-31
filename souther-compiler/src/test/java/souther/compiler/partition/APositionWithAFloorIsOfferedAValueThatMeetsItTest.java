@@ -43,7 +43,7 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
         return new Generator.Subject(spec.name(),
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                domain.quantities(symbols), partitioning.axes(), HeldCounts.of(domain));
+                domain.quantities(symbols), partitioning.axes());
     }
 
     /** The value at the position the row wrote, which is the one the search reached first. */

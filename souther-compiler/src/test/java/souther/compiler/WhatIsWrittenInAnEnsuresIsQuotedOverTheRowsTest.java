@@ -274,7 +274,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                         souther.compiler.inputs.InputDomain.of(List.of(), symbols,
                                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                                 .quantities(symbols),
-                        List.of(), souther.compiler.partition.HeldCounts.NONE);
+                        List.of());
         return new Adequacy.Filling(
                 souther.compiler.partition.FillResult.nothingAskedOf(
                         new souther.compiler.partition.GenerationPlan(subject, List.of(),

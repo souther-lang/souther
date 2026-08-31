@@ -174,7 +174,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                         List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
                                 Type.INT)),
                         SYMBOLS, ReadAs.THE_COMPILATION_DOES).quantities(SYMBOLS),
-                List.of(days), HeldCounts.NONE);
+                List.of(days));
         return new GenerationPlan(subject, classes, arms);
     }
 

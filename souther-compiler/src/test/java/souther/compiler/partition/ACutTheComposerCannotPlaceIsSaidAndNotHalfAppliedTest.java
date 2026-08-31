@@ -209,7 +209,6 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                         ReadAs.THE_COMPILATION_DOES),
                 domain().quantities(symbols()),
                 Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES)
-                        .axes(),
-                HeldCounts.of(domain()));
+                        .axes());
     }
 }

@@ -72,7 +72,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         return new Model(new Generator.Subject(spec.name(),
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                domain.quantities(symbols), partitioning.axes(), HeldCounts.of(domain)),
+                domain.quantities(symbols), partitioning.axes()),
                 partitioning.axes());
     }
 

@@ -449,7 +449,7 @@ class AGroupTooWideToWalkSaysSoTest {
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sigs.get("total").inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    inputs.quantities(symbols), partitioning.axes(), HeldCounts.of(inputs)),
+                    inputs.quantities(symbols), partitioning.axes()),
                     CoverageRead.of("total", body, plan, inputs, symbols));
         }
     }

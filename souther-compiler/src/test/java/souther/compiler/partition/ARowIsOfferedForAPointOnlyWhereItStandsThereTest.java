@@ -187,7 +187,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
         Generator.Subject subject = new Generator.Subject(spec.name(),
                 new BehaviorInputs(names, sigs.get(spec.name()).inputTypes(), symbols,
                         ReadAs.THE_COMPILATION_DOES),
-                domain.quantities(symbols), partitioning.axes(), HeldCounts.of(domain));
+                domain.quantities(symbols), partitioning.axes());
 
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();
