@@ -6,8 +6,8 @@ import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DeclaredTypeEvidence;
 import souther.compiler.check.Symbols;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Position;
-import souther.compiler.observe.ValueTypes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -39,12 +39,20 @@ import java.util.Set;
  * {@link #simpleName} for what a report quotes — because a live value's type is a question every
  * reader of a run asks and only one answer to it is right.
  */
-final class NeutralForm implements ValueTypes {
+final class NeutralForm {
 
     private final Symbols symbols;
+    /** What a declaration's fields hold, as the check settled it. Read and never worked out here:
+     *  the same answer decides what a comparison reads at a place inside a value. */
+    private final FieldTypes fields;
 
-    NeutralForm(Symbols symbols) {
+    NeutralForm(Symbols symbols, FieldTypes fields) {
+        if (fields == null) {
+            throw new IllegalArgumentException("a value's parts are read against what its"
+                    + " declaration was checked to hold");
+        }
         this.symbols = symbols;
+        this.fields = fields;
     }
 
     // --- a live value, re-materialised -------------------------------------------------------------
@@ -130,11 +138,11 @@ final class NeutralForm implements ValueTypes {
         if (data.newtype()) {
             Position base = declaredBy(newtypeBaseType(caseName));
             return newtypeAt(position, caseName,
-                    shaped(of(field(live, "value", what), base, what), base));
+                    shaped(of(field(live, NEWTYPE_FIELD, what), base, what), base));
         }
-        Map<String, Hir.TypeRef> declared = fieldTypes(caseName);
+        Map<String, Type> declared = fieldTypes(caseName);
         Map<String, Object> out = new LinkedHashMap<>();
-        for (Map.Entry<String, Hir.TypeRef> f : declared.entrySet()) {
+        for (Map.Entry<String, Type> f : declared.entrySet()) {
             Position at = declaredBy(f.getValue());
             Object value = shaped(of(field(live, f.getKey(), what), at, what), at);
             // an absent optional is left out, the same neutral form a fixture writes for `None`
@@ -406,45 +414,20 @@ final class NeutralForm implements ValueTypes {
                         instanceof Boundary.Representation.Enumeration;
     }
 
-    /** A data's fields by name, following the `...includes` it composes in (spec §data). */
-    Map<String, Hir.TypeRef> fieldTypes(TypeSymbol typeName) {
-        return DeclaredTypeEvidence.fieldTypes(typeName, symbols);
+    /** Every field a value of {@code typeName} holds, in the order it is laid out. */
+    Map<String, Type> fieldTypes(TypeSymbol typeName) {
+        return fields.of(typeName);
     }
 
     /**
-     * Where this module's declarations read {@code field} of {@code owner}.
+     * A place a value of {@code declared} stands at, and {@link Position#UNREAD} where nothing
+     * declares one.
      *
-     * <p>This compiler's answer to the one question a comparison asks of the declarations, read from
-     * the same walk everything else here reads them from.
+     * <p>Here rather than on {@link Position}, which takes a type and has nothing to say about a
+     * field a declaration does not have.
      */
-    @Override
-    public Position field(TypeSymbol owner, String field) {
-        Map<String, Hir.TypeRef> declared = fieldTypes(owner);
-        return declared.containsKey(field) ? declaredBy(declared.get(field)) : Position.UNREAD;
-    }
-
-    /**
-     * The place a declaration writes, and {@link Position#UNREAD} where it writes none — a field a
-     * fixture wrote that the data does not declare, or a newtype's base where the type it wraps has
-     * no written form.
-     *
-     * <p>Here rather than on {@link Position}, which is a place a value stands and knows nothing of
-     * how a module was written down. What a written type denotes is this compiler's reading of its
-     * own syntax, and a place carrying that reading would be a place only this compiler could make.
-     */
-    static Position declaredBy(Hir.TypeRef declared) {
-        return declared == null ? Position.UNREAD : Position.at(declared.denotes());
-    }
-
-    /**
-     * The declared type of a field, used only to shape the written value (a map's entry pairs, a
-     * set's list). The {@code TypeRef} comes from the module that declares the data, and it says what
-     * it denotes — resolved where it was written, so naming a type this module never imported is not
-     * a question asked here at all (issue #110 was that question being asked, and answered with the
-     * declaring file's position).
-     */
-    Type shapeOf(Hir.TypeRef declaredType) {
-        return DeclaredTypeEvidence.shapeOf(declaredType);
+    static Position declaredBy(Type declared) {
+        return declared == null ? Position.UNREAD : Position.at(declared);
     }
 
     /** Whether {@code name} is a newtype — asked of a name resolution settled, never of a spelling:
@@ -454,11 +437,14 @@ final class NeutralForm implements ValueTypes {
         return DeclaredTypeEvidence.isNewtype(name, symbols);
     }
 
-    /** The written form of what a newtype wraps, kept whole so a generic base
-     * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
-    Hir.TypeRef newtypeBaseType(TypeSymbol name) {
-        return DeclaredTypeEvidence.newtypeBaseType(name, symbols);
+    /** What a newtype wraps: the one field it is written with (spec §newtype), read like any other
+     *  field, so a generic base ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
+    Type newtypeBaseType(TypeSymbol name) {
+        return fields.field(name, NEWTYPE_FIELD);
     }
+
+    /** What a newtype's one field is called (spec §newtype). */
+    static final String NEWTYPE_FIELD = "value";
 
     // --- reading a position's type ----------------------------------------------------------------
 
@@ -495,11 +481,11 @@ final class NeutralForm implements ValueTypes {
             if (!(at instanceof Type.Ref ref) || !through.add(ref.name())) {
                 return null;
             }
-            Hir.TypeRef base = newtypeBaseType(ref.name());
+            Type base = newtypeBaseType(ref.name());
             if (base == null) {
                 return null;
             }
-            at = open(shapeOf(base));
+            at = open(base);
         }
     }
 

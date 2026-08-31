@@ -145,7 +145,9 @@ public final class ExampleVerifier {
      * @throws IllegalArgumentException where the artifact is of another module
      */
     public static Observations check(souther.compiler.check.Prepared.Examples module,
-                                     Symbols symbols, Map<ValueName.Behavior, Sig> sigs,
+                                     Symbols symbols,
+                                     souther.compiler.observe.FieldTypes fields,
+                                     Map<ValueName.Behavior, Sig> sigs,
                                      EvaluationArtifact artifact,
                                      Supplier<PublishedClasses> declared,
                                      Map<String, List<BehaviorRequirement>> requirements,
@@ -161,8 +163,8 @@ public final class ExampleVerifier {
         if (module.rows().isEmpty()) {
             return Observations.NONE;
         }
-        ExampleVerifier v = evaluating(module, symbols, sigs, artifact, declared, requirements,
-                parent, values, deadline, policy, answering, contracts);
+        ExampleVerifier v = evaluating(module, symbols, fields, sigs, artifact, declared,
+                requirements, parent, values, deadline, policy, answering, contracts);
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
@@ -203,7 +205,9 @@ public final class ExampleVerifier {
      * what an implementation answers out of changes between one row and the next.
      */
     public static ExampleVerifier evaluating(souther.compiler.check.Prepared.Examples module,
-                                      Symbols symbols, Map<ValueName.Behavior, Sig> sigs,
+                                      Symbols symbols,
+                                      souther.compiler.observe.FieldTypes fields,
+                                      Map<ValueName.Behavior, Sig> sigs,
                                       EvaluationArtifact artifact,
                                       Supplier<PublishedClasses> declared,
                                       Map<String, List<BehaviorRequirement>> requirements,
@@ -212,7 +216,7 @@ public final class ExampleVerifier {
                                       Answering answering,
                                       Map<ValueName.Behavior, Contract> contracts) {
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
-        return new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
+        return new ExampleVerifier(module, symbols, fields, sigs, requirements, loader, values,
                 deadline, policy, answering.over(artifact.implementations(), loader), declared,
                 contracts);
     }
@@ -660,6 +664,8 @@ public final class ExampleVerifier {
 
     private final souther.compiler.check.Prepared.Examples module;
     private final Symbols symbols;
+    /** What a value of a declaration is made of, as the check settled it. */
+    private final souther.compiler.observe.FieldTypes fields;
     /** The shape of every behavior a row here may name: this module's own, and the ones a stand-in
      * reaches in another module. Keyed by the declaration, so a borrowed dependency and a namesake
      * declared here are two entries. */
@@ -715,7 +721,9 @@ public final class ExampleVerifier {
     private final EnsuresChecks ensures;
 
     private ExampleVerifier(souther.compiler.check.Prepared.Examples module,
-                            Symbols symbols, Map<ValueName.Behavior, Sig> sigs,
+                            Symbols symbols,
+                            souther.compiler.observe.FieldTypes fields,
+                            Map<ValueName.Behavior, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                             Deadline deadline, EvaluationPolicy policy, Answerer answerer,
@@ -724,6 +732,7 @@ public final class ExampleVerifier {
         this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
         this.module = module;
         this.symbols = symbols;
+        this.fields = fields;
         this.sigs = sigs;
         this.requirements = requirements;
         this.loader = loader;
@@ -744,7 +753,7 @@ public final class ExampleVerifier {
      * starts.
      */
     private FixtureReader newFixtureReader() {
-        return new FixtureReader(module, symbols, values, loader);
+        return new FixtureReader(module, symbols, fields, values, loader);
     }
 
     // --- one example (a target and its rows) --------------------------------------------------

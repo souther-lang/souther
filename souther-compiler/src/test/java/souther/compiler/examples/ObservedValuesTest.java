@@ -3,7 +3,9 @@ package souther.compiler.examples;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.CheckedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 
@@ -30,7 +32,10 @@ class ObservedValuesTest {
 
     private static ObservedValue observe(Object live, Limits limits) {
         Symbols symbols = Symbols.none(DefaultStdlib.get());
-        return ObservedValues.of(live, symbols, new NeutralForm(symbols), limits);
+        // No module is being read, so nothing here declares a data whose fields could be asked for.
+        return ObservedValues.of(live, symbols,
+                new NeutralForm(symbols,
+                        FieldTypes.over(new CheckedDeclarations(symbols, _ -> null))), limits);
     }
 
     private static ObservedValue observe(Object live) {
