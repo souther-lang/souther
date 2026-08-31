@@ -5,10 +5,12 @@ import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.RationalCut;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -607,7 +609,18 @@ final class ReadQuantities implements Quantities {
         //
         // Under the context this question is asked in, which is what says which of those rules are
         // about the row being asked about at all.
-        StructuralContext under = asked(form.coefs().keySet());
+        return runsIn(asked(form.coefs().keySet()), form);
+    }
+
+    /**
+     * The same, in a context a caller already holds.
+     *
+     * <p>For a reader that is walking contexts rather than answering a question in the one this
+     * value accumulated — which is the fold that asks how many a container holds under a case, where
+     * the context is the one the fold has reached and not the one anybody fixed.
+     */
+    private NumericDomain.Bounds runsIn(StructuralContext under,
+                                        NumericDomain.LinearForm<NumericTerm> form) {
         souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints(under).numbers();
         for (NumericTerm term : form.coefs().keySet()) {
             rules = holding(rules, term, under);
@@ -756,7 +769,49 @@ final class ReadQuantities implements Quantities {
                 return across;
             }
         }
+        for (OpenedRules opened : byRoot.values()) {
+            if (!(opened.opening() instanceof RootOpening.Inside it)
+                    || under.nonEmptySequences().contains(it.sequence())
+                    || !under.covers(StructuralContext.of(it.sequence()))) {
+                continue;
+            }
+            Viability holding = holds(it.sequence(), under);
+            if (!(holding instanceof Viability.MayStand)) {
+                return holding;
+            }
+        }
         return new Viability.MayStand();
+    }
+
+    /**
+     * What a sequence and the values it holds come to together.
+     *
+     * <p><b>An element nothing can build refuses the sequence only where the sequence cannot be
+     * empty.</b> A container that may hold none is a value whatever is true of what it would hold,
+     * so what its element's rules refuse is a row nobody has to write rather than an input nobody
+     * can. The two are one question asked in the order the model settles it: how many the rules
+     * leave it, and then — only where they leave it no way to be empty — whether anything can stand
+     * inside it.
+     *
+     * <p>Where nothing says how many it holds, nothing is proved. A reading that took an unmeasured
+     * container for one that must hold something would refuse a model for a rule nobody wrote.
+     */
+    private Viability holds(TermPath sequence, StructuralContext under) {
+        Position at = byPath.get(sequence);
+        if (at == null || !(at.term() instanceof NumericTerm.TakenOf taken)
+                || !(taken.takenAs() instanceof TakenAs.HowManyItHolds)) {
+            return new Viability.MayStand();
+        }
+        NumericDomain.Bounds many = runsIn(under, NumericDomain.LinearForm.atom(at.term()));
+        if (many == null || CountDomain.leastFrom(many.min()) < 1) {
+            return new Viability.MayStand();
+        }
+        Viability inside = viability(under.holding(sequence));
+        return inside instanceof Viability.ProvedImpossible it
+                ? new Viability.ProvedImpossible(new Emptiness.AtAField(
+                        new Emptiness.AtAField.Where.In(sequence.toString()),
+                        new Emptiness.NonEmptyCollectionWithNoElement(it.why())))
+                : inside;
     }
 
     /**
@@ -775,6 +830,12 @@ final class ReadQuantities implements Quantities {
                 // Naming the case builds it, so there is a value here whatever the rules do to the
                 // others.
                 case CaseOutcome.StandsAlone _ -> new Viability.MayStand();
+                // Impossible because the rules leave the case nothing, which is what the reading of
+                // the position settled when it said the case was owed no row
+                // ({@link Position#obligationCases}) — a refusal that holds whether or not every
+                // rule was read. Not because the walk did not go down it: how far a walk goes is
+                // the other arm, and reading this one as that would be a proof made out of where
+                // this compiler stopped.
                 case CaseOutcome.RefusedByTheRules _ ->
                         new Viability.ProvedImpossible(new Emptiness.ConflictingRules());
                 case CaseOutcome.NotWalked _ ->

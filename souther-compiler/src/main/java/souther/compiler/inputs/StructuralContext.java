@@ -97,6 +97,19 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
     }
 
     /**
+     * The same, with {@code sequence} required to hold an element as well.
+     *
+     * <p>What a reader asking whether anything can stand inside a container assumes while it asks.
+     * A container that may be empty is a value whatever is true of what it would hold, so the
+     * question is only ever asked under this.
+     */
+    StructuralContext holding(TermPath sequence) {
+        Set<TermPath> more = new LinkedHashSet<>(nonEmptySequences);
+        more.add(sequence);
+        return new StructuralContext(refinements, more);
+    }
+
+    /**
      * Whether everything {@code other} assumes is already assumed here.
      *
      * <p>What says a position exists in the values this describes: a sum inside a case is a place to
