@@ -940,7 +940,7 @@ public final class InputDomain {
                 }
             }
             case StructuralInspection.Retained retained ->
-                    under(retained.continuation(), here, path, sharedAt(input), deeper, symbols,
+                    under(retained.continuation(), here, path, input, deeper, symbols,
                             policy, placed, found, roots, visited, handoffs, observed, account,
                             reach, already != null);
         }
@@ -955,12 +955,12 @@ public final class InputDomain {
      * would be a name this said could be written at the sum, and the reading would reach positions
      * the language refuses to name.
      *
-     * <p>Empty at a record, whose readable names are the positions under it and cross nothing: they
-     * are reached without a narrowing, so nobody is owed an account of where they stand under one.
+     * <p>Asked where the branches are and nowhere else, so a shape whose readable names are its own
+     * positions is not a case this has to hold an answer for: a name crosses a narrowing or it is
+     * reached without one.
      */
     private static List<String> sharedAt(ReadablePosition input) {
-        return input.shape() instanceof Shape.Sum
-                ? List.copyOf(ReadableFields.of(input.shape()).fields().keySet()) : List.of();
+        return List.copyOf(ReadableFields.of(input.shape()).fields().keySet());
     }
 
     /**
@@ -983,7 +983,7 @@ public final class InputDomain {
      * some other reason is not one anybody handed anything to.
      */
     private static void under(StructuralInspection.Continuation continuation, Position here,
-                              TermPath path, List<String> shared, ExpansionTrace ancestry,
+                              TermPath path, ReadablePosition input, ExpansionTrace ancestry,
                               Symbols symbols, ReadingPolicy policy,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
                               java.util.Set<Type> visited, RuleHandoffs handoffs,
@@ -1015,6 +1015,8 @@ public final class InputDomain {
                         account, on);
             }
             case StructuralInspection.Continuation.Branches branches -> {
+                // Asked where the branches are, which is the only place a name can cross one.
+                List<String> shared = sharedAt(input);
                 List<StructuralInspection.Branch> standing = new ArrayList<>();
                 List<TermPath> passedTo = new ArrayList<>();
                 for (StructuralInspection.Branch branch : branches.branches()) {

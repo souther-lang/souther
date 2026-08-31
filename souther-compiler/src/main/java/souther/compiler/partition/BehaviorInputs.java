@@ -213,7 +213,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
         }
         Type here = types.get(at);
         for (TermPath.Step step : path.steps()) {
-            here = stepWrittenValue(step,here, symbols);
+            here = stepWrittenValue(step, here, symbols);
             if (here == null) {
                 return null;
             }
@@ -299,7 +299,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
             }
             switch (step) {
                 case TermPath.Step.Field named -> {
-                    Type next = stepWrittenValue(step,type, symbols);
+                    Type next = stepWrittenValue(step, type, symbols);
                     if (next == null || !(here instanceof ObservedValue.Constructed made)) {
                         return false;
                     }
@@ -314,7 +314,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                 // and what a class comes to over them is the caller's to decide. A list holding
                 // none is a step taken: the walk arrived and the row wrote nothing there.
                 case TermPath.Step.Element _ -> {
-                    Type element = stepWrittenValue(step,type, symbols);
+                    Type element = stepWrittenValue(step, type, symbols);
                     if (element == null || !(here instanceof ObservedValue.Sequence written)) {
                         return false;
                     }
@@ -333,7 +333,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                 // a row nothing could read gives. What refuses the step is the type and the path
                 // disagreeing about what is at this position, which is nothing about the row.
                 case TermPath.Step.Refine refine -> {
-                    Type narrowed = stepWrittenValue(step,type, symbols);
+                    Type narrowed = stepWrittenValue(step, type, symbols);
                     if (narrowed == null) {
                         return false;
                     }
