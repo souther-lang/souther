@@ -272,6 +272,36 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
     }
 
     /**
+     * The run on one side of a line, given every place that line parts the values.
+     *
+     * <p>Asked with the side and never with a place picked out of the list. How many places a line
+     * parts the values at is what kind of rule drew it — one where it orders them, two where it
+     * names a value and leaves the run under it and the run over it — and that is topology, which
+     * is this arrangement's and not a reader's. A caller choosing between them is a caller that has
+     * to know how many there are, and gets it wrong the day a third shape of rule is written.
+     *
+     * @param parted every place this line parts the values, in any order
+     */
+    public Run beside(java.util.Collection<Parting> parted, Towards side) {
+        // The run this side of every place the line parts them, which is the one this line does not
+        // also bound at its far end. A rule that names a value leaves the value itself between its
+        // two places, and that run is on neither side of the line: it is the line.
+        for (Parting each : parted) {
+            Run run = side == Towards.ABOVE ? above(each) : below(each);
+            if (run == null) {
+                continue;
+            }
+            BandEnd far = side == Towards.ABOVE ? run.values().upper() : run.values().lower();
+            boolean ourOwn = far.seam() != null
+                    && parted.stream().anyMatch(also -> is(far.seam(), also));
+            if (!ourOwn) {
+                return run;
+            }
+        }
+        return null;
+    }
+
+    /**
      * The run at one end of what the rules leave: the one nothing parts below it, or nothing parts
      * above it.
      *

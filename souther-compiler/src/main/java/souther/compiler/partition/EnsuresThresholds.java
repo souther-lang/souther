@@ -282,7 +282,7 @@ public final class EnsuresThresholds {
     private static OriginRef.EnsuresOrigin originOf(StatedContract.StatedRule rule, String clause,
                                                     int line, Cutting cutting) {
         return new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), line,
-                cutting.valueBelongsBelow(), cutting.holdsAtTheValue(), cutting.singles());
+                new LineFacts(cutting.claim()));
     }
 
     /**

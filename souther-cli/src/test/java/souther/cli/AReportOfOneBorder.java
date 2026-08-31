@@ -16,6 +16,7 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.OriginRef;
@@ -94,7 +95,7 @@ final class AReportOfOneBorder {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(3, 5)))),
-                true, true);
+                new souther.compiler.partition.LineFacts(new ComparisonClaim.Cut(true, true)));
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),

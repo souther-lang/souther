@@ -3,12 +3,14 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -159,6 +161,109 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                         "/= 200", "== 200"),
                 "a value the rules leave is a line wherever in the range it falls, and a value they"
                         + " refuse is no line at all");
+    }
+
+    /**
+     * At an end of the range one of the two values beside the line is a value the rules leave and
+     * the other is not, and the two are answered apart.
+     *
+     * <p>The edge case the whole of this identity is for. A rule naming the value the rules stop at
+     * has a point on each side of it, and only one of them is a value a row can hold — so a border
+     * that had one place for the two would have to answer for both at once, and whichever answer it
+     * gave would be wrong about the other.
+     *
+     * <p>Both operators against one table, because the place and what the rules leave there are the
+     * same for the two and only the role turns over. That is the whole of what putting the identity
+     * in the place and the classification in the rule buys, said as one measurement.
+     */
+    @Test
+    void atAnEndOfTheRangeTheTwoValuesBesideTheLineAreAnsweredApart() {
+        assertEquals(List.of(
+                        "== 100: beside below = 99 (OFF), beside above = THE_RULES_REFUSE_IT",
+                        "/= 100: beside below = 99 (ON), beside above = THE_RULES_REFUSE_IT",
+                        "== 0: beside below = THE_RULES_REFUSE_IT, beside above = 1 (OFF)",
+                        "/= 0: beside below = THE_RULES_REFUSE_IT, beside above = 1 (ON)",
+                        "== 50: beside below = 49 (OFF), beside above = 51 (OFF)",
+                        "/= 50: beside below = 49 (ON), beside above = 51 (ON)"),
+                besideTheLineOf("== 100", "/= 100", "== 0", "/= 0", "== 50", "/= 50"),
+                "the value beside the line on each side is asked for on its own, and the rules"
+                        + " refusing one of them says nothing about the other");
+    }
+
+    /**
+     * A rule that names a value has no point in one of the four roles, and says which and why.
+     *
+     * <p>The class its own value is in holds that value and nothing else, so there is nowhere in it
+     * away from the line: {@code == 50} has no {@code IN} point and {@code /= 50} no {@code OUT}
+     * one. That is not a point the rules refuse — it is a word the technique has for something such
+     * a line does not have — and a reader told nothing about it cannot tell the two apart from the
+     * four words being four.
+     *
+     * <p>An order beside them, where every word is played and none of this arises.
+     */
+    @Test
+    void aRuleThatNamesAValueHasNoPointInOneOfTheFourRoles() {
+        assertEquals(List.of("ON x1", "OFF x2", "IN none", "OUT x2"),
+                rolesOf(onlyLineOf(model("Int", ">= 0 && value <= 100", "== 50", "50"))),
+                "what a rule naming a value keeps out is two runs and two values, and what it keeps"
+                        + " is the value alone");
+        assertEquals(List.of("ON x2", "OFF x1", "IN x2", "OUT none"),
+                rolesOf(onlyLineOf(model("Int", ">= 0 && value <= 100", "/= 50", "50"))),
+                "and the same places one class over");
+        assertEquals(List.of("ON x1", "OFF x1", "IN x1", "OUT x1"),
+                rolesOf(onlyLineOf(model("Int", ">= 0 && value <= 100", "<= 50", "50"))),
+                "an order plays every one of the four once");
+
+        assertEquals(RoleAnswer.Reason.THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE,
+                ((RoleAnswer.NoPoint) onlyLineOf(model("Int", ">= 0 && value <= 100", "== 50", "50"))
+                        .inEachRole().get(PointRole.IN)).why(),
+                "and what settles the absence is the class at the line holding one value");
+    }
+
+    /** How many points of one line play each of the four roles, every role answered. */
+    private static List<String> rolesOf(Border line) {
+        List<String> said = new ArrayList<>();
+        line.inEachRole().forEach((role, answer) -> said.add(role + " " + switch (answer) {
+            case RoleAnswer.Played played -> "x" + played.at().size();
+            case RoleAnswer.NoPoint _ -> "none";
+        }));
+        return said;
+    }
+
+    /** What each guard's line asks at the value beside it on each side, over a position the rules
+     *  leave {@code 0..100}. */
+    private static List<String> besideTheLineOf(String... guards) {
+        List<String> said = new ArrayList<>();
+        for (String guard : guards) {
+            Border line = onlyLineOf(model("Int", ">= 0 && value <= 100", guard, "50"));
+            said.add(guard + ": " + beside(line, Towards.BELOW)
+                    + ", " + beside(line, Towards.ABOVE));
+        }
+        return said;
+    }
+
+    /** What one line asks at the value beside it on one side, with which of the four that point is
+     *  where a row is owed there. */
+    private static String beside(Border line, Towards side) {
+        DomainPoint at = new DomainPoint.BesideTheLine(side);
+        String where = "beside " + (side == Towards.BELOW ? "below" : "above") + " = ";
+        return switch (line.answer(at)) {
+            case PointAnswer.NotOwed not -> where + not.reason();
+            case PointAnswer.AtLine _ -> where + line.against(at) + " (" + line.roleOf(at) + ")";
+            case PointAnswer.InRegion in -> where + in;
+        };
+    }
+
+    /** The one line a guard of this model draws, without the two the bounds of the range draw. */
+    private static Border onlyLineOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<Border> drawn = Adequacy.boundariesOf(compilation.db(), "example.owed").values()
+                .stream().flatMap(List::stream).map(BorderAssessment::border)
+                .filter(each -> !(each.origin() instanceof OriginRef.InvariantOrigin)).toList();
+        assertEquals(1, drawn.size(), () -> "this model draws one line of its own: " + drawn);
+        return drawn.get(0);
     }
 
     /** The lines each guard draws over a position the rules leave {@code 0..100}, without the two

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.reading.Condition;
@@ -422,13 +423,20 @@ public final class InteractionCells {
                 if (home < 0) {
                     return null;
                 }
-                // Which side the comparison is true on, from the two facts the line carries: which
+                // Which side the comparison is true on, from the two facts the order carries: which
                 // side of it the cut value itself sits on, and whether the comparison holds there.
                 // The whole side and not its nearest class: the comparison admits every value out
                 // that way, and a reading that answered with one of them would have said more than
                 // the rule does — which is what makes two of them impossible to take together.
-                boolean homeSideIsUp = !guard.valueBelongsBelow();
-                boolean wantedIsHomeSide = guard.holdsAtTheValue() == one.held();
+                //
+                // Asked of a rule that ordered the values, and of no other. A rule that names one
+                // has no side its values are true on — what it distinguishes is that value from
+                // every other — so there is no cell either way of it to take.
+                if (!(guard.facts().claim() instanceof ComparisonClaim.Cut order)) {
+                    return null;
+                }
+                boolean homeSideIsUp = !order.valueBelongsBelow();
+                boolean wantedIsHomeSide = order.holdsAtTheValue() == one.held();
                 boolean wantedIsUp = wantedIsHomeSide == homeSideIsUp;
                 int last = axes.get(axis).classes().size() - 1;
                 int edge = wantedIsHomeSide ? home : (wantedIsUp ? home + 1 : home - 1);

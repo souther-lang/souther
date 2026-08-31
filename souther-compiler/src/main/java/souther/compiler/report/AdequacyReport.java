@@ -7,6 +7,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.RoleAnswer;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.QuotedFrom;
@@ -1299,11 +1300,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // write down are counted out for opposite reasons, and a reader acts on them differently.
         for (BorderAssessment.Point p : BorderAssessment.pointsOf(lines)) {
             if (p.item() instanceof ItemAssessment.NotOwed not) {
-                out.append(String.format("      · no %s point is owed at %s (%s): %s%n",
-                        p.role(), p.border().label(), p.border().describe(names, declaredIn),
-                        whyNotOwed(not.reason())));
+                out.append(String.format("      · no %s point%s is owed at %s (%s): %s%n",
+                        p.role(), p.border().border().whichSide(p.at()), p.border().label(),
+                        p.border().describe(names, declaredIn), whyNotOwed(not.reason())));
             }
         }
+        // And a word of the technique this line has no point in at all, which is not the same news.
+        // A point the rules refuse is an item the model settled; a role with no point is a word for
+        // something this line does not have, and a reader told nothing about it cannot tell the two
+        // apart from the four words being four.
+        for (BorderAssessment line : lines) {
+            line.border().inEachRole().forEach((role, answer) -> {
+                if (answer instanceof RoleAnswer.NoPoint none) {
+                    out.append(String.format("      · no %s point exists at %s (%s): %s%n",
+                            role, line.label(), line.describe(names, declaredIn),
+                            whyNoPoint(none.why())));
+                }
+            });
+        }
+    }
+
+    /** Why a line has no point in one of the four roles, in the report's own words. */
+    private static String whyNoPoint(RoleAnswer.Reason why) {
+        return switch (why) {
+            case THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE ->
+                    "the class at the line holds the value the rule names and nothing else, so"
+                            + " there is no row in it away from the line";
+        };
     }
 
     /**

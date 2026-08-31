@@ -108,6 +108,6 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(3, 5)))),
-                true, true);
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(true, true)));
     }
 }

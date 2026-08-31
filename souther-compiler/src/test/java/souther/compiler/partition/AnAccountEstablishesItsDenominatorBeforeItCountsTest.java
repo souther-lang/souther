@@ -102,6 +102,6 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new souther.compiler.coverage.ComparisonOccurrence(0),
                         new RuleCitation.WrittenAt(Citation.of(
                                 new souther.compiler.diag.SourcePos(1, 1)))),
-                true, true, false);
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(true, true)));
     }
 }

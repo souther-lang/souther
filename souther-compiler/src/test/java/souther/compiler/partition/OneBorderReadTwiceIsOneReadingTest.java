@@ -218,6 +218,6 @@ class OneBorderReadTwiceIsOneReadingTest {
         return new AuthoredLine(new RuleRef.Comparison("weigh",
                 new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
                         souther.compiler.types.CoverageConstruct.BINARY)),
-                0, LineFacts.of(true, true, false), List.of());
+                0, LineFacts.ordering(true, true), List.of());
     }
 }

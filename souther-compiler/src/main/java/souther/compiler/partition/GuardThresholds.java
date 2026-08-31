@@ -505,7 +505,7 @@ public final class GuardThresholds {
         return new OriginRef.ComparisonOrigin(
                 new RuleRef.Comparison(behavior, each.origin()),
                 new OriginRef.ComparisonOrigin.Read(site, citationOf(each, plan.comparisons())),
-                cutting.valueBelongsBelow(), cutting.holdsAtTheValue(), cutting.singles());
+                new LineFacts(cutting.claim()));
     }
 
     /**

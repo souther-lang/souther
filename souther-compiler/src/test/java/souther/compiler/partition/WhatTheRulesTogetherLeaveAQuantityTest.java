@@ -142,7 +142,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                                         new souther.compiler.types.TypeKey("example.runs", "N")),
                                 clause),
                         java.util.Optional.empty())),
-                0, LineFacts.of(false, true, false), List.of());
+                0, LineFacts.ordering(false, true), List.of());
     }
 
     /**

@@ -139,6 +139,35 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
     }
 
     /**
+     * What this border has in each of the four roles, every one of them answered.
+     *
+     * <p>The points classified, with the empty classes said rather than left out. A border's points
+     * are places and the roles are what the rule makes of them, so a role can have two points and a
+     * role can have none — and a reader walking the points alone is told nothing at all about the
+     * second kind. This is the technique's four words answered for, which is a different question
+     * from what a row is owed at a place ({@link Demand}) and is not folded into it.
+     *
+     * <p>Derived here from the points and never kept beside them. A second table would be the same
+     * facts written twice, free to disagree the moment either moved.
+     */
+    public java.util.SequencedMap<PointRole, RoleAnswer> inEachRole() {
+        java.util.SequencedMap<PointRole, RoleAnswer> byRole = new LinkedHashMap<>();
+        for (PointRole role : PointRole.values()) {
+            List<DomainPoint> playing = answers.keySet().stream()
+                    .filter(point -> roleOf(point) == role).toList();
+            // A role goes unplayed exactly where the class it would be in is the line's own value,
+            // which is what a rule that names one leaves. Nothing else here can empty a role: a rule
+            // that orders the values has a point against the line on the side whose class differs
+            // and a run either way, which is one of each.
+            byRole.put(role, playing.isEmpty()
+                    ? new RoleAnswer.NoPoint(
+                            RoleAnswer.Reason.THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE)
+                    : new RoleAnswer.Played(playing));
+        }
+        return byRole;
+    }
+
+    /**
      * How a report names one of this border's points.
      *
      * <p>Which of the four it is, and which side of the line where this border has two of them in
@@ -499,14 +528,13 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                     "a border built on a line the quantity does not reach: " + target.left()
                             + " at " + target.right());
         }
-        Map<Towards, Parting> mine = boundingSides(target, origin);
+        List<Parting> mine = partedBy(target, origin);
         List<Parting> all = new ArrayList<>(parted);
         // Handed over as candidates rather than told apart here. Whether this line is one the
         // others already hold is a question about where the values part, and the arrangement is
         // what answers it — asked here as well, this reading kept whichever of two lines at one
         // place it met first and the other went unsaid.
-        // One entry per place, since a rule that orders the values bounds both its sides with one.
-        all.addAll(new LinkedHashSet<>(mine.values()));
+        all.addAll(mine);
         QuantityArrangement arrangement = QuantityArrangement.of(space, all,
                 DomainEnds.leaving(space, cut, reach, narrowed));
         Map<DomainPoint, PointAnswer> demands = new LinkedHashMap<>();
@@ -586,9 +614,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * from whichever place was recorded first.
      */
     private static QuantityArrangement.Run runBeside(QuantityArrangement arrangement,
-                                                     Map<Towards, Parting> mine, Towards side) {
-        Parting at = mine.get(side);
-        return side == Towards.ABOVE ? arrangement.above(at) : arrangement.below(at);
+                                                     List<Parting> mine, Towards side) {
+        return arrangement.beside(mine, side);
     }
 
     /** The value against the line on one side of it, which the run there is asked for without. Null
@@ -787,49 +814,26 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * could move without touching the other.
      */
     public static List<Parting> partedBy(BoundaryTarget target, OriginRef origin) {
-        return List.copyOf(
-                new LinkedHashSet<>(boundingSides(target, origin).values()));
-    }
-
-    /**
-     * The place bounding each side of this line, or nothing where it bounds neither.
-     *
-     * <p>The pairing said where it is known, rather than left to the order a list comes back in. A
-     * rule that orders the values parts them once and that one place bounds both sides; a rule that
-     * names a value parts them under it and over it, and which of those two bounds which side is
-     * the whole of what a reader of a run needs. Taken by position from a list of them, the two runs
-     * of such a line swap wherever the places are collected the other way round, and nothing says
-     * so.
-     */
-    private static Map<Towards, Parting> boundingSides(BoundaryTarget target, OriginRef origin) {
         LevelSpace space = target.levels();
         Level cut = target.at();
-        Map<Towards, Parting> bounding = new LinkedHashMap<>();
         if (drawnByAnInvariant(origin)) {
             // A bound is where the quantity stops rather than a place its values part: nothing
             // outside one can be constructed, so there is no run on the far side.
-            return bounding;
+            return List.of();
         }
-        switch (origin.lineFacts().claim()) {
-            case ComparisonClaim.Cut order -> {
-                Parting once = Parting.by(Seam.of(space, cut,
-                        order.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE),
-                        origin.authoredLine());
-                bounding.put(Towards.BELOW, once);
-                bounding.put(Towards.ABOVE, once);
-            }
-            case ComparisonClaim.Singled _ -> {
-                // The run under the value stops where the values part under it, which is the place
-                // the value itself is over; the run over it stops at the place the value is under.
-                bounding.put(Towards.BELOW,
-                        Parting.by(Seam.of(space, cut, Towards.ABOVE), origin.authoredLine()));
-                bounding.put(Towards.ABOVE,
-                        Parting.by(Seam.of(space, cut, Towards.BELOW), origin.authoredLine()));
-            }
+        return switch (origin.lineFacts().claim()) {
+            case ComparisonClaim.Cut order -> List.of(Parting.by(Seam.of(space, cut,
+                    order.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE),
+                    origin.authoredLine()));
+            // The place under the value and the place over it, with the value between them. Which
+            // of the two bounds which side is the arrangement's answer and not this one's: a run
+            // is on a side of the line by what stops it, and that is a fact about the runs.
+            case ComparisonClaim.Singled _ -> List.of(
+                    Parting.by(Seam.of(space, cut, Towards.ABOVE), origin.authoredLine()),
+                    Parting.by(Seam.of(space, cut, Towards.BELOW), origin.authoredLine()));
             case ComparisonClaim.Nothing _ -> throw new IllegalStateException(
                     "a line no comparison placed, asked where it parts the values: " + origin);
-        }
-        return bounding;
+        };
     }
 
     /**
