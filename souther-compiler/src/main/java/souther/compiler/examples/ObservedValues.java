@@ -131,14 +131,11 @@ final class ObservedValues {
         if (type == null) {
             return new ObservedValue.Unknown("`" + name + "` is not a type this module can name");
         }
-        if (!(symbols.declarations().declaration(type) instanceof Hir.Data data)) {
+        if (!(symbols.declarations().declaration(type) instanceof Hir.Data)) {
             return new ObservedValue.Unit(type);   // a case that carries nothing
         }
         Map<String, ObservedValue> fields = ObservedValue.fields();
-        if (data.newtype()) {
-            fields.put("value", field(live, "value", depth));
-            return new ObservedValue.Constructed(type, fields);
-        }
+        // A newtype's `value` is among these, since that is the field it is written with.
         for (String each : neutral.fieldTypes(type).keySet()) {
             fields.put(each, field(live, each, depth));
         }

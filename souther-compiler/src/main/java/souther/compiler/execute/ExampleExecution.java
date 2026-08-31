@@ -6,6 +6,7 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.ValueName;
 
@@ -40,6 +41,7 @@ public final class ExampleExecution {
 
     private final Prepared prepared;
     private final Symbols symbols;
+    private final FieldTypes fields;
     private final Map<ValueName.Behavior, Sig> signatures;
     private final Map<String, List<BehaviorRequirement>> requirements;
     private final Map<String, Hir.FnDef> definitions;
@@ -47,7 +49,7 @@ public final class ExampleExecution {
     private final EvaluationPolicy policy;
     private final Map<String, ExampleExecution> declaring;
 
-    public ExampleExecution(Prepared prepared, Symbols symbols,
+    public ExampleExecution(Prepared prepared, Symbols symbols, FieldTypes fields,
                             Map<ValueName.Behavior, Sig> signatures,
                             Map<String, List<BehaviorRequirement>> requirements,
                             Map<String, Hir.FnDef> definitions,
@@ -56,6 +58,7 @@ public final class ExampleExecution {
                             Map<String, ExampleExecution> declaring) {
         this.prepared = prepared;
         this.symbols = symbols;
+        this.fields = fields;
         this.declaring = declaring;
         // Taken as they are and not copied. Each is another question's settled answer, and this is
         // put together afresh every time it is asked for — it cannot be memoised, because a
@@ -86,6 +89,19 @@ public final class ExampleExecution {
     /** What a name written here means. */
     public Symbols symbols() {
         return symbols;
+    }
+
+    /**
+     * What a value of a declaration is made of, as the check settled it.
+     *
+     * <p>Every declaration this compile resolved and not this module's own: a row here may state a
+     * value of a data another module declares, and what its fields hold is that declaration's
+     * check to say. Read rather than worked out — the places a comparison reads a value's parts at
+     * come from this same answer, so a fixture typed by it and a row compared against it cannot
+     * come apart.
+     */
+    public FieldTypes fieldTypes() {
+        return fields;
     }
 
     /**
