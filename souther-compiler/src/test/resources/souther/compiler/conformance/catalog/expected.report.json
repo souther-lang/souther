@@ -57,6 +57,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it", "a_value_was_built" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "discount",
           "axis" : "discount/String.length(item.sku)",
@@ -120,6 +121,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "discount",
           "axis" : "discount/String.length(item.sku)",
@@ -185,6 +187,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "discount",
           "axis" : "discount/item.price",
@@ -241,6 +244,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "discount",
           "axis" : "discount/item.price",
@@ -299,6 +303,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "discount",
           "axis" : "discount/item.weight",
@@ -355,6 +360,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "discount",
           "axis" : "discount/item.weight",
@@ -428,6 +434,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "discount",
           "axis" : "discount/rate",
@@ -492,6 +499,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "discount",
           "axis" : "discount/rate",
@@ -891,6 +899,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "出荷する",
           "axis" : "出荷する/String.length(指示.番号)",
@@ -954,6 +963,7 @@
         "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
+        "disposition" : "met",
         "readings" : [ {
           "behavior" : "出荷する",
           "axis" : "出荷する/String.length(指示.番号)",
@@ -1432,6 +1442,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
           "status" : "complete",
           "hit" : true,
+          "disposition" : "met",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/指示.重量",
@@ -1481,6 +1492,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
           "status" : "complete",
           "hit" : true,
+          "disposition" : "met",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/指示.重量",
@@ -1530,6 +1542,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
           "status" : "complete",
           "hit" : true,
+          "disposition" : "met",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/指示.重量",
@@ -1594,6 +1607,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
           "status" : "complete",
           "hit" : true,
+          "disposition" : "met",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/指示.重量",
@@ -1650,6 +1664,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "complete",
           "hit" : false,
+          "disposition" : "unmet",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/指示.重量",
@@ -1699,6 +1714,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "complete",
           "hit" : false,
+          "disposition" : "unmet",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/Time.hour(指示.集荷時刻)",
@@ -1748,6 +1764,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "complete",
           "hit" : false,
+          "disposition" : "unmet",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/Time.hour(指示.集荷時刻)",
@@ -1812,6 +1829,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
           "status" : "complete",
           "hit" : true,
+          "disposition" : "met",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/Time.hour(指示.集荷時刻)",
@@ -1876,6 +1894,7 @@
           "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
           "status" : "complete",
           "hit" : true,
+          "disposition" : "met",
           "readings" : [ {
             "behavior" : "出荷する",
             "axis" : "出荷する/Time.hour(指示.集荷時刻)",

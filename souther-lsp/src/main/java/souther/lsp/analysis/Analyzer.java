@@ -14,6 +14,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
+import souther.compiler.query.ObligationAssessment;
 import souther.compiler.query.Shapes;
 import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.ClauseDischarge;
@@ -634,12 +635,12 @@ public final class Analyzer {
             // to four of them, and a line is owed once however many positions read it, so
             // counting either would call a line with one point met as covered as one that owes
             // only that point, or one guard over a sum as many rows as the sum has cases.
-            List<souther.compiler.query.ItemAssessment.Owed> settled =
+            List<ObligationAssessment> settled =
                     account.made().orElseGet(List::of).stream()
                             .map(souther.compiler.query.BorderObligationPointAssessment::item)
                             .filter(Analyzer::settled).toList();
             long met = settled.stream()
-                    .filter(souther.compiler.query.ItemAssessment.Owed::hasRowWitness)
+                    .filter(ObligationAssessment::hasRowWitness)
                     .count();
             if (!settled.isEmpty()) {
                 parts.add("boundary " + met + "/" + settled.size());
@@ -675,12 +676,10 @@ public final class Analyzer {
      * <p>Nor a point nobody is owed a row at. Nothing was measured there and nothing is missing, and
      * a lens that counted it would put the model's own answer into a ratio of what the rows reach.
      */
-    private static boolean settled(souther.compiler.query.ItemAssessment.Owed owed) {
-        // The measurement was made and made in full, which is the whole of what this asks. It used
-        // to list the two verdicts that count as settled and leave out the two that do not; a
-        // verdict is now what was seen and how far it can be trusted is the measurement's, so this
-        // is one question again.
-        return owed.coverage() instanceof souther.compiler.query.Measurement.Complete<?>;
+    private static boolean settled(ObligationAssessment owed) {
+        // What the readings came to together, short of nothing, which is the whole of what this
+        // asks. The two states it leaves out are a point left undecided and one nobody read.
+        return owed.coverage().settled();
     }
 
     /** The caret at one position, as a range of no width. */

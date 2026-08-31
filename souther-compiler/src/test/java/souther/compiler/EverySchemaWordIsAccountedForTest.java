@@ -11,6 +11,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.check.BehaviorImplementation;
@@ -368,6 +369,16 @@ class EverySchemaWordIsAccountedForTest {
                             "writableBecause", "items"),
                     List.of(ItemAssessment.WritabilityEvidence.Ground.class), groundWords(),
                     Set.of()),
+            // How an account treats the obligation, beside the evidence that is why. Spelled by the
+            // writer for the reason the grounds are: which dispositions a consumer must handle is a
+            // decision about the contract, and a state renamed inside the compiler is not.
+            new Vocabulary("obligations[].disposition",
+                    List.of("$defs", "obligations", "items", "properties", "disposition"),
+                    List.of(ObligationDisposition.class), dispositionWords(), Set.of()),
+            new Vocabulary("obligations[].notCountedBecause",
+                    List.of("$defs", "obligations", "items", "properties",
+                            "notCountedBecause", "items"),
+                    List.of(ObligationDisposition.Reason.class), notCountedWords(), Set.of()),
             new Vocabulary("obligations[].readings[].reason",
                     List.of("$defs", "obligations", "items",
                             "properties", "readings", "items", "properties", "reason"),
@@ -405,6 +416,62 @@ class EverySchemaWordIsAccountedForTest {
                     Set.of("whole", "dense", "days", "seconds", "seconds_of_day", "nanos", "text",
                             "ordinal"),
                     Set.of()));
+
+    /**
+     * One disposition of each kind there is, which is what the words are asked of.
+     *
+     * <p>A value apiece rather than a list of words, so that the words come off the writer. Which
+     * kinds there are is checked against the type below: a disposition added and not sampled here
+     * would leave the schema promising the words of the ones before it, and the compiler could write
+     * a document the shipped schema refuses.
+     */
+    private static List<ObligationDisposition> dispositions() {
+        return List.of(
+                new ObligationDisposition.Met(),
+                new ObligationDisposition.Unmet(),
+                new ObligationDisposition.Undecided(),
+                new ObligationDisposition.NotCounted(
+                        Set.of(ObligationDisposition.Reason.NOTHING_WAS_READ)));
+    }
+
+    /** Every kind of disposition is sampled above, so the words below are all the words there are. */
+    @Test
+    void everyDispositionHasASample() {
+        Set<Class<?>> kinds = new LinkedHashSet<>();
+        for (ObligationDisposition each : dispositions()) {
+            kinds.add(each.getClass());
+        }
+        assertEquals(leavesOf(ObligationDisposition.class), kinds,
+                "a disposition the writer can write is one this asks for a word");
+    }
+
+    /** The kinds a sealed hierarchy bottoms out in, which are the values that can be written. */
+    private static Set<Class<?>> leavesOf(Class<?> sealedType) {
+        Set<Class<?>> out = new LinkedHashSet<>();
+        Class<?>[] permitted = sealedType.getPermittedSubclasses();
+        if (permitted == null) {
+            out.add(sealedType);
+            return out;
+        }
+        for (Class<?> each : permitted) {
+            out.addAll(leavesOf(each));
+        }
+        return out;
+    }
+
+    /** The dispositions a document may name, spelled by the one writer of the field. */
+    private static Set<String> dispositionWords() {
+        return dispositions().stream()
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** The reasons an obligation leaves the count, likewise spelled by the writer. */
+    private static Set<String> notCountedWords() {
+        return Arrays.stream(ObligationDisposition.Reason.values())
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
 
     /** The grounds a document may name, spelled by the one writer of the field. */
     private static Set<String> groundWords() {

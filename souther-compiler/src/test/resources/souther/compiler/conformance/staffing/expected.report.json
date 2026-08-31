@@ -55,6 +55,8 @@
         "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
         "status" : "unavailable",
         "reason" : "no_rows",
+        "disposition" : "not_counted",
+        "notCountedBecause" : [ "nothing_was_read" ],
         "readings" : [ {
           "behavior" : "grantLeave",
           "axis" : "grantLeave/worked",
@@ -104,6 +106,8 @@
         "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
         "status" : "unavailable",
         "reason" : "no_rows",
+        "disposition" : "not_counted",
+        "notCountedBecause" : [ "nothing_was_read" ],
         "readings" : [ {
           "behavior" : "grantLeave",
           "axis" : "grantLeave/worked",
@@ -162,6 +166,8 @@
         "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
         "status" : "unavailable",
         "reason" : "no_rows",
+        "disposition" : "not_counted",
+        "notCountedBecause" : [ "nothing_was_read" ],
         "readings" : [ {
           "behavior" : "grantLeave",
           "axis" : "grantLeave/rate",
@@ -211,6 +217,8 @@
         "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
         "status" : "unavailable",
         "reason" : "no_rows",
+        "disposition" : "not_counted",
+        "notCountedBecause" : [ "nothing_was_read" ],
         "readings" : [ {
           "behavior" : "grantLeave",
           "axis" : "grantLeave/rate",
@@ -269,6 +277,8 @@
         "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
         "status" : "unavailable",
         "reason" : "no_rows",
+        "disposition" : "not_counted",
+        "notCountedBecause" : [ "nothing_was_read" ],
         "readings" : [ {
           "behavior" : "judgeHours",
           "axis" : "judgeHours/hours",
@@ -318,6 +328,8 @@
         "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
         "status" : "unavailable",
         "reason" : "no_rows",
+        "disposition" : "not_counted",
+        "notCountedBecause" : [ "nothing_was_read" ],
         "readings" : [ {
           "behavior" : "judgeHours",
           "axis" : "judgeHours/hours",
@@ -632,6 +644,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/worked",
@@ -702,6 +716,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/worked",
@@ -751,6 +767,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/worked",
@@ -800,6 +818,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/worked",
@@ -864,6 +884,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/worked",
@@ -928,6 +950,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/worked",
@@ -998,6 +1022,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/rate",
@@ -1068,6 +1094,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/rate",
@@ -1117,6 +1145,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/rate",
@@ -1181,6 +1211,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/rate",
@@ -1245,6 +1277,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "grantLeave",
             "axis" : "grantLeave/rate",
@@ -1519,6 +1553,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -1589,6 +1625,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -1638,6 +1676,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -1687,6 +1727,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -1751,6 +1793,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -1823,6 +1867,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -1872,6 +1918,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -1921,6 +1969,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -1993,6 +2043,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
@@ -2057,6 +2109,8 @@
           "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
+          "disposition" : "not_counted",
+          "notCountedBecause" : [ "nothing_was_read" ],
           "readings" : [ {
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",

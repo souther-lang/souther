@@ -34,8 +34,8 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
      */
     @Test
     void aRowFoundAtOneReadingSettlesTheDebt() {
-        assertEquals(new Measurement.Complete<>(new Coverage.Hit()),
-                Coverage.acrossTheReadings(List.of(
+        assertEquals(new ObligationCoverage.Witnessed(),
+                ObligationCoverage.acrossTheReadings(List.of(
                         missed(), found(), unread())),
                 "one reading is at the point, which is what the line asked for");
     }
@@ -49,11 +49,12 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
      */
     @Test
     void aReadingThatMayBeHidingARowLeavesTheDebtUnsettled() {
-        Measurement<Coverage> across = Coverage.acrossTheReadings(List.of(missed(), unread()));
+        ObligationCoverage across =
+                ObligationCoverage.acrossTheReadings(List.of(missed(), unread()));
 
-        assertInstanceOf(Measurement.Partial.class, across,
+        assertInstanceOf(ObligationCoverage.Undecided.class, across,
                 "the reading was not whole, so neither is the answer");
-        assertEquals(new Measurement.Partial<>(new Coverage.NoHit(), WEAKENED), across,
+        assertEquals(new ObligationCoverage.Undecided(WEAKENED), across,
                 "no row was seen at any of them, and this is what the reading went without");
     }
 
@@ -68,8 +69,8 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
      */
     @Test
     void aReadingWithNoRowsDoesNotUnsettleAMissBesideIt() {
-        assertEquals(new Measurement.Complete<>(new Coverage.NoHit()),
-                Coverage.acrossTheReadings(List.of(noRows(), missed())),
+        assertEquals(new ObligationCoverage.Missed(),
+                ObligationCoverage.acrossTheReadings(List.of(noRows(), missed())),
                 "the rows that exist were read and none is at the point");
     }
 
@@ -82,23 +83,40 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
      */
     @Test
     void aBuildThatLookedAtNothingDoesUnsettleAMissBesideIt() {
-        assertEquals(new Measurement.NotMeasured<>(Coverage.NotAsked.NOT_ASKED),
-                Coverage.acrossTheReadings(List.of(notAsked(), missed())),
+        assertEquals(new ObligationCoverage.NotMeasured(Coverage.NotAsked.NOT_ASKED),
+                ObligationCoverage.acrossTheReadings(List.of(notAsked(), missed())),
                 "the rows of the reading that was never made may be at the point");
     }
 
     /** Where every reading had nothing to look at, neither has the debt. */
     @Test
     void aDebtNoRowAnywhereCouldHaveAnsweredIsNotAMiss() {
-        assertEquals(new Measurement.NotMeasured<>(Coverage.NotAsked.NO_ROWS),
-                Coverage.acrossTheReadings(List.of(noRows(), noRows())));
+        assertEquals(new ObligationCoverage.NotMeasured(Coverage.NotAsked.NO_ROWS),
+                ObligationCoverage.acrossTheReadings(List.of(noRows(), noRows())));
     }
 
     /** A debt is what its readings came to, so there is no answer where there are none. */
     @Test
     void aDebtWithNoReadingsIsNotAnAnswer() {
         assertThrows(IllegalArgumentException.class,
-                () -> Coverage.acrossTheReadings(List.of()));
+                () -> ObligationCoverage.acrossTheReadings(List.of()));
+    }
+
+    /**
+     * A reading made in part that found the row comes back as one a row is at, and not as one made
+     * in part.
+     *
+     * <p>The state the fold's codomain does not have. A reading's coverage is a measurement of that
+     * reading and may be both — what it could not read and what it did find are separate facts about
+     * it — and a debt's cannot: a row found settles the line, so what the readings went without has
+     * nothing left to weaken.
+     */
+    @Test
+    void aReadingMadeInPartThatFoundTheRowIsWitnessedAndNotUndecided() {
+        assertEquals(new ObligationCoverage.Witnessed(),
+                ObligationCoverage.acrossTheReadings(List.of(
+                        new Measurement.Partial<>(new Coverage.Hit(), WEAKENED))),
+                "found is found, whatever the reading beside it went without");
     }
 
     /** A reading that found the row. */

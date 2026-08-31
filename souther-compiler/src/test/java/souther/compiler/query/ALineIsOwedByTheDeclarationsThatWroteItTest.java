@@ -136,7 +136,9 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
     private static List<String> account(Compilation compilation, String module) {
         return debtsOf(compilation, module).stream()
                 .map(each -> each.subject().named() + " owes " + each.debt().id() + " "
-                        + each.debt().role() + "=" + each.debt().item().isUnmetGap()
+                        + each.debt().role() + "="
+                        + (each.debt().item().disposition()
+                                instanceof ObligationDisposition.Unmet)
                         + "/" + each.debt().demand())
                 .toList();
     }
