@@ -4,6 +4,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -237,10 +238,11 @@ sealed interface ComparisonAssessment {
      * state would come back as one about no input at all.
      */
     static ComparisonAssessment of(String behavior, Core.Binary comparison,
-                                   souther.compiler.inputs.InputDomain inputs, InputReads reads,
-                                   Symbols symbols, Quantities quantities, BindingId answer,
+                                   InputReading read, InputReads reads,
+                                   BindingId answer,
                                    boolean drawnByAnInvariant,
                                    souther.compiler.reach.ComparisonArrival arrival) {
+        Quantities quantities = read.quantities();
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
@@ -248,7 +250,7 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison, answer)) {
             return new AnswerDependent();
         }
-        return switch (Cutting.read(behavior, comparison, inputs, reads, symbols, quantities)) {
+        return switch (Cutting.read(behavior, comparison, read, reads)) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(comparison, cuts.cutting(), quantities, drawnByAnInvariant,
                             arrival);
@@ -257,20 +259,20 @@ sealed interface ComparisonAssessment {
             // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
             // constants and states nothing anywhere.
             case Cutting.Read.CutsNothing over -> over.read().isEmpty()
-                    ? aboutNoPosition(comparison, reads, symbols)
+                    ? aboutNoPosition(comparison, reads, read.symbols())
                     : new CutsNothing(AffineReading.filedAt(over.read()));
             // And where the reading stopped, its own answer for having stopped — decided where it
             // stopped rather than worked out again from the comparison afterwards. Here the walk
             // over the expression is the only account of what the rule is about, which is what it
             // is for.
             case Cutting.Read.Stopped stopped -> stopped.why().isEmpty()
-                    ? aboutNoPosition(comparison, reads, symbols)
+                    ? aboutNoPosition(comparison, reads, read.symbols())
                     : new Unread(stopped.why());
             // And where the quantity was read and no line could be built on it, the carrier is
             // what a reader is owed — at the quantity's own coordinates, because the quantity is
             // what such a rule is about.
             case Cutting.Read.NoLineOnTheQuantity over -> over.over().isEmpty()
-                    ? aboutNoPosition(comparison, reads, symbols)
+                    ? aboutNoPosition(comparison, reads, read.symbols())
                     : new Unread(atEachOf(over.over(),
                             new BlockReason.UnreadComparisonDomain()));
         };

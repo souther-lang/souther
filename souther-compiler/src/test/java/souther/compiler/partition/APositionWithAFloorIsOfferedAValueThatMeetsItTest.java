@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
 
-    private static Generator.Subject subjectOf(String source, String behavior) {
+    private static MeasuredInput subjectOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -40,10 +40,7 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
         Sig sig = sigs.get(behavior);
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return new Generator.Subject(spec.name(),
-                new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                        sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                partitioning.axes(), HeldCounts.of(domain, symbols));
+        return MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning.axes());
     }
 
     /** The value at the position the row wrote, which is the one the search reached first. */

@@ -1,11 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Refinement;
-import souther.compiler.check.StructuralDescent;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -26,7 +26,8 @@ import java.util.Map;
  *
  * <p>And because the same three are what a row is generated from. Two spellings of what a behavior
  * takes are two chances to read a position differently, which is the shape of every defect this
- * package has been fixing: {@link Generator.Subject} is these inputs and the axes derived at them.
+ * package has been fixing: a {@link MeasuredInput} is these inputs and the axes derived at them,
+ * both taken from the one reading they were made from.
  */
 public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols symbols,
                              souther.compiler.check.ReadingPolicy policy) {
@@ -34,6 +35,23 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     public BehaviorInputs {
         parameters = List.copyOf(parameters);
         types = List.copyOf(types);
+    }
+
+    /**
+     * The walk into what a row writes, of the input {@code read} was made of.
+     *
+     * <p>Taken from the reading rather than assembled beside it. What a behavior takes is what its
+     * reading was made from, so a caller building this from a signature would be writing down a
+     * second answer to that — and a row would be walked by one of them and measured by the other.
+     */
+    public static BehaviorInputs of(souther.compiler.inputs.InputReading read) {
+        List<String> parameters = new ArrayList<>();
+        List<Type> types = new ArrayList<>();
+        for (souther.compiler.inputs.InputDomain.Parameter each : read.domain().parameters()) {
+            parameters.add(each.name());
+            types.add(each.type());
+        }
+        return new BehaviorInputs(parameters, types, read.symbols(), read.domain().policy());
     }
 
     /** Which input {@code path} starts at, or -1 where the behavior has no such parameter. */
@@ -165,11 +183,18 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     }
 
     /**
-     * What the declarations put at {@code path}, or null where they put nothing there.
+     * What the declarations put where a value at {@code path} is written, or null where a value is
+     * not written there at all.
      *
      * <p>The same walk {@link #occurrencesAt} takes, with the values left out. A position's type is
      * a fact about the declarations and a row is not needed to ask it — which is what a caller
      * composing a value at a position wants, since there is no row yet.
+     *
+     * <p><b>For composing a value and for nothing else.</b> This walk stops where a value is built,
+     * so a sum whose cases share a spread answers nothing here — right for a caller writing a value
+     * at the sum, and not an answer about what a number named there is measured on. That question
+     * has an owner ({@link souther.compiler.inputs.Quantities#ordersOf}), and it is asked of the
+     * reading of the input rather than worked out from what this returns.
      *
      * <p><b>Here because the walk is here.</b> How a step of a path moves the type is one rule with
      * several cases — a field is reached through the names its record is written under, an element
@@ -181,14 +206,14 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * parameter for. Neither is a position with a type nothing could name: they are paths that name
      * no position of these inputs at all.
      */
-    public Type declaredAt(TermPath path) {
+    Type typeAtWrittenPath(TermPath path) {
         int at = indexOf(path);
         if (at < 0) {
             return null;
         }
         Type here = types.get(at);
         for (TermPath.Step step : path.steps()) {
-            here = stepping(step, here, symbols);
+            here = stepWrittenValue(step, here, symbols);
             if (here == null) {
                 return null;
             }
@@ -197,25 +222,25 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     }
 
     /**
-     * The type one step reaches from {@code from}, or null where the step is not one this position
-     * takes.
+     * The type one step of a written value reaches from {@code from}, or null where a value written
+     * here is at no such place.
      *
-     * <p>Exhaustive over {@link TermPath.Step}, with no {@code default}, and the one place a step is
-     * turned into a type. A step added later stops this compiling rather than arriving as a walk
-     * that quietly takes it one way here and another way where a row is read.
+     * <p>Exhaustive over {@link TermPath.Step}, with no {@code default}, and the one place a step
+     * into what a row wrote is turned into a type. A step added later stops this compiling rather
+     * than arriving as a walk that quietly takes it one way here and another way where a row is
+     * read.
+     *
+     * <p>A field is where a value written here put one, which is a field of the record it was
+     * written as. A name every case of a sum spreads is somewhere else: a row writes one of the
+     * cases, so what stands at that name is under whichever case was written and nothing stands at
+     * the name itself. What is readable off such a value is a question with an owner
+     * ({@link ReadableFields}), and it is asked of the reading rather than worked out from this.
      */
-    static Type stepping(TermPath.Step step, Type from, Symbols symbols) {
+    static Type stepWrittenValue(TermPath.Step step, Type from, Symbols symbols) {
         TypeView view = TypeView.of(from, symbols);
         return switch (step) {
-            case TermPath.Step.Field named -> {
-                // Null at a sum whose cases share a spread, deliberately. A shared field is
-                // readable at every value of the sum and is not by itself a constructible child of
-                // it, since a value there is one of the cases. {@link StructuralDescent} answers
-                // the constructible question, so taking the field as a step here would give this
-                // reader a descent wider than the construction it has to agree with.
-                StructuralDescent.Children children = StructuralDescent.of(view.shape());
-                yield children == null ? null : children.under().get(named.name());
-            }
+            case TermPath.Step.Field named -> view.shape() instanceof Shape.Product product
+                    ? product.fields().get(named.name()) : null;
             case TermPath.Step.Element _ -> view.shape() instanceof Shape.Sequence sequence
                     ? sequence.element() : null;
             // What a sum's case holds is the value the sum held, and what an optional holds is at
@@ -274,7 +299,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
             }
             switch (step) {
                 case TermPath.Step.Field named -> {
-                    Type next = stepping(step, type, symbols);
+                    Type next = stepWrittenValue(step, type, symbols);
                     if (next == null || !(here instanceof ObservedValue.Constructed made)) {
                         return false;
                     }
@@ -289,7 +314,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                 // and what a class comes to over them is the caller's to decide. A list holding
                 // none is a step taken: the walk arrived and the row wrote nothing there.
                 case TermPath.Step.Element _ -> {
-                    Type element = stepping(step, type, symbols);
+                    Type element = stepWrittenValue(step, type, symbols);
                     if (element == null || !(here instanceof ObservedValue.Sequence written)) {
                         return false;
                     }
@@ -308,7 +333,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                 // a row nothing could read gives. What refuses the step is the type and the path
                 // disagreeing about what is at this position, which is nothing about the row.
                 case TermPath.Step.Refine refine -> {
-                    Type narrowed = stepping(step, type, symbols);
+                    Type narrowed = stepWrittenValue(step, type, symbols);
                     if (narrowed == null) {
                         return false;
                     }

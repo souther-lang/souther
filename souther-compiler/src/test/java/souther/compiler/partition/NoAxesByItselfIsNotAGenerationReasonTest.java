@@ -36,6 +36,14 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
     private static final PathAccess NOT_ENUMERABLE =
             new PathAccess.Unsupported(PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE);
 
+    /** The reading of an input of one parameter, which is what says what a number of it is measured
+     *  on. */
+    private static souther.compiler.inputs.InputReading readingOf(String parameter, Type type) {
+        return souther.compiler.inputs.InputDomain.of(
+                List.of(new souther.compiler.inputs.InputDomain.Parameter(parameter, null, type)),
+                SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS);
+    }
+
     @Test
     void anArmIsAnsweredWhereNoPositionIsDivided() {
         FillResult filled = filledOverOneArm();
@@ -55,10 +63,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
 
     /** One arm the reading has an answer for, over a behavior whose position nothing divides. */
     private static FillResult filledOverOneArm() {
-        Generator.Subject subject = new Generator.Subject("fee",
-                new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
-                        ReadAs.THE_COMPILATION_DOES),
-                List.of(), HeldCounts.NONE);
+        MeasuredInput subject = MeasuredInput.of("fee", readingOf("days", Type.INT), List.of());
         java.util.SequencedMap<Integer, PathAccess> ways = new java.util.LinkedHashMap<>();
         ways.put(1, NOT_ENUMERABLE);
         CoverageRead.Read read = new CoverageRead.Read(List.of(), ways);

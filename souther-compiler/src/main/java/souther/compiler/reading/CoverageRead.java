@@ -155,10 +155,10 @@ public final class CoverageRead {
         // admitted by and what a decision is said of are two questions about one comparison, and
         // each reading it for itself is how they came to be about different numbers.
         souther.compiler.inputs.ComparedNumbers numbers =
-                souther.compiler.inputs.ComparedNumbers.of(inputs, symbols);
+                souther.compiler.inputs.ComparedNumbers.of(inputs.reading(symbols));
         CoverageNaming naming = new CoverageNaming(plan, symbols, reads, numbers);
         ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming,
-                new NumberWays(numbers, inputs.quantities(symbols), reads, symbols));
+                new NumberWays(numbers, numbers.reading().quantities(), reads, symbols));
         Meetings meetings = new Meetings(plan, reading);
         Arms arms = new Arms(plan);
         new CoverageRead(reading, meetings, arms)

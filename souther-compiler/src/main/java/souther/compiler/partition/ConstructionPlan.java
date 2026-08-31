@@ -5,7 +5,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
-import souther.compiler.check.StructuralDescent;
+import souther.compiler.check.ConstructionDescent;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -336,16 +336,16 @@ final class ConstructionPlan {
                         Math.max(1, least.applyAsInt(here, building)));
             }
         }
-        StructuralDescent.Children children = StructuralDescent.of(view.shape());
+        ConstructionDescent.ProductBuild composed = ConstructionDescent.toBuild(view.shape());
         // A record with no fields composes nothing out of anything, so it is a value to be chosen
         // like any other and not a position made of positions.
-        if (depth >= MAX_DEPTH || children == null || children.under().isEmpty()) {
+        if (depth >= MAX_DEPTH || composed == null || composed.fields().isEmpty()) {
             return new Slot(here, building, settled.outer(), false);
         }
         Map<String, Node> under = new LinkedHashMap<>();
-        children.under().forEach((field, type) -> under.put(field,
+        composed.fields().forEach((field, type) -> under.put(field,
                 node(type, here.then(field), symbols, depth + 1, decided, required, least)));
-        return new Built(here, building, children.of(), worn, under);
+        return new Built(here, building, composed.constructor(), worn, under);
     }
 
     /**

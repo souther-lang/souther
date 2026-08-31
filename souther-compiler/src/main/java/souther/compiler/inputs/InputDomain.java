@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.ReadableFields;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
@@ -38,10 +39,10 @@ import java.util.Map;
  * do with it — including the ones a reader gives up in favour of what is under them, and the ones
  * dropped past a budget.
  *
- * <p>Which is a claim about the reading and not about the step it is made of. What stands directly
- * under a type is one fact and is {@link StructuralDescent}'s; how far to follow it, and what is
- * read where it lands, are this reading's. A reader wanting the step alone
- * takes it from there, and takes none of the meaning here with it.
+ * <p>Which is a claim about the reading and not about the steps it is made of. What is readable off
+ * a value is one fact and is {@link ReadableFields}'s; how far to follow what a position has under
+ * it, and what is read where it lands, are this reading's. A reader wanting a step alone takes it
+ * from the owner of the question it is a step of, and takes none of the meaning here with it.
  *
  * <p><b>A position may exist only under a narrowing of another.</b> What a case of a sum declares is
  * declared whether or not anything constructs one, so those fields are positions of the input and are
@@ -344,6 +345,22 @@ public final class InputDomain {
     }
 
     /**
+     * What the behavior takes, in the order it declares them.
+     *
+     * <p>What this reading was made from, so that a reader needing the parameters takes the ones it
+     * was read at rather than assembling its own from a signature — two lists of what one behavior
+     * takes are two chances to disagree about which position a row's value goes to.
+     */
+    public List<Parameter> parameters() {
+        return parameters;
+    }
+
+    /** How the names in it are read, which is the policy this reading was made under. */
+    public ReadingPolicy policy() {
+        return policy;
+    }
+
+    /**
      * The position at {@code path}, or null where this reading has none there.
      *
      * <p>Null for two unlike paths: one below where this reading stops, and one that is not a
@@ -574,56 +591,6 @@ public final class InputDomain {
     }
 
     /**
-     * The order one term is read off a row and written back on, or null where it has none.
-     *
-     * <p><b>The one answer, so that nothing derives it from an expression.</b> A rule is written
-     * beside operands, and the type of an operand is not the type of the position the rule is about:
-     * an operation the arithmetic rewrote into a form of two positions is compared as what it
-     * answers with, so {@code Date.daysBetween(a, b) > 10} has {@code Int} on both sides and dates
-     * at both positions. Read off the comparison, every position of that rule was written back as a
-     * whole number and read off a row as one, and both directions agreed with each other and with
-     * nothing else (#1018).
-     *
-     * <p>Two questions, answered where each is known. What a term measures is the term's — a size is
-     * a whole number whatever it is taken of — and what the location holds is this reading's, which
-     * is why the two meet here rather than at whichever caller had both to hand.
-     *
-     * <p><b>A term under no position of this reading still has an order.</b> This reading stops
-     * where a path returns to a declaration already open on it ({@link ExpansionTrace}), and nothing
-     * stops a rule from naming what is under that. What a report is about and what a declaration
-     * says are two questions, and only the first of them stops there — so the type is followed down
-     * to wherever the rule named ({@link #declaredAt}) and the line is drawn.
-     *
-     * <p>The position first and the descent only where there is none. A position may stand under a
-     * narrowing, and what it holds there is what a row writes; walking the declaration again would
-     * answer with what the field was declared as before anything narrowed it.
-     */
-    public Carrier answeredOn(NumericTerm term, Symbols symbols) {
-        return ordersOf(term, symbols).answered();
-    }
-
-    /**
-     * The order a value at {@code term}'s path is read off a row on, or null where nothing orders
-     * it.
-     *
-     * <p>The other end of the same term, and never the one above. What a term answers and what it is
-     * read off are two orders for every term that is what an operation answered and one order for
-     * every term that is not — so a caller handed a single carrier had whichever of the two the
-     * caller before it meant, and the day the two part is the day a row is decoded on a count the
-     * value is not written in (#1027).
-     */
-    public Carrier observedOn(NumericTerm term, Symbols symbols) {
-        return ordersOf(term, symbols).observed();
-    }
-
-    /** Both ends of one term, taken together from the one reading of where it sits. Read from the
-     *  subject and not from a position the term divides: what a term's orders follow from is what
-     *  stands where the number comes from. */
-    public TermOrders ordersOf(NumericTerm term, Symbols symbols) {
-        return term.ordersAt(typeAt(term.subjectPath(), symbols), symbols);
-    }
-
-    /**
      * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
      *
      * <p>The position first and the declarations only where there is none, which is the one
@@ -694,7 +661,7 @@ public final class InputDomain {
             // language reads a value.
             case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
                     ? made.under().get(field.name())
-                    : sharedFieldsOf(shape).get(field.name());
+                    : ReadableFields.of(shape).fields().get(field.name());
             case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
                     && on.continuation() instanceof StructuralInspection.Continuation.Elements held
                     ? held.element() : null;
@@ -715,6 +682,19 @@ public final class InputDomain {
             }
         }
         return null;
+    }
+
+    /**
+     * This reading and what it says about its numbers, as one value.
+     *
+     * <p>The way a reader that uses both gets them. Which position a name stands at and what a
+     * number there is measured on are two questions such a reader asks together, and asked of two
+     * values it was handed separately they can be of two behaviors — a parameter spelled the same
+     * way in both is all it takes. So the pairing is made here, where the second is made from the
+     * first, and there is nowhere else to make one.
+     */
+    public InputReading reading(Symbols symbols) {
+        return new InputReading(this, quantities(symbols), symbols);
     }
 
     /**
@@ -744,7 +724,12 @@ public final class InputDomain {
             byRoot.computeIfAbsent(root.at(),
                     at -> PlacedRules.of(at, root.type(), symbols, policy));
         }
-        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, symbols);
+        // Where a term's subject stands, handed over already answered. What comes back asks a
+        // position first and the declarations under one the reading stopped above, which is the one
+        // resolution of it — worked out again from the positions this hands over, a rule about a
+        // name every case of a sum spreads would be read as naming nothing.
+        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, path -> typeAt(path, symbols),
+                symbols);
     }
 
     /**
@@ -955,7 +940,7 @@ public final class InputDomain {
                 }
             }
             case StructuralInspection.Retained retained ->
-                    under(retained.continuation(), here, path, sharedAt(input), deeper, symbols,
+                    under(retained.continuation(), here, path, input, deeper, symbols,
                             policy, placed, found, roots, visited, handoffs, observed, account,
                             reach, already != null);
         }
@@ -965,28 +950,17 @@ public final class InputDomain {
      * The names readable at this position that a value of one of its cases carries, which is empty
      * for every position but a sum whose cases all spread one declaration.
      *
-     * <p>Read off {@link Shape.Sum#common}, which is the same answer that makes those names readable
-     * on a value of the sum at all. Taken from what a case declares instead, a field one case has
-     * and another has not would be a name this said could be written at the sum, and the reading
-     * would reach positions the language refuses to name.
+     * <p>Asked of {@link ReadableFields}, which is what makes those names readable on a value of the
+     * sum at all. Taken from what a case declares instead, a field one case has and another has not
+     * would be a name this said could be written at the sum, and the reading would reach positions
+     * the language refuses to name.
+     *
+     * <p>Asked where the branches are and nowhere else, so a shape whose readable names are its own
+     * positions is not a case this has to hold an answer for: a name crosses a narrowing or it is
+     * reached without one.
      */
     private static List<String> sharedAt(ReadablePosition input) {
-        return List.copyOf(sharedFieldsOf(input.shape()).keySet());
-    }
-
-    /**
-     * The names a value of this shape carries that are readable on it without opening a case, and
-     * what stands at each.
-     *
-     * <p>The one reading of a sum's shared part in this walk. What makes a name readable on a value
-     * of the sum is the declarations its cases all spread, and every question here that turns on
-     * that name — which names cross a narrowing, and what the model puts at one — is asked of this.
-     * Empty for every other shape, whose names are the positions under it.
-     */
-    private static Map<String, Type> sharedFieldsOf(Shape shape) {
-        return shape instanceof Shape.Sum sum
-                && sum.common() instanceof Shape.CommonProduct.Shared shared
-                ? shared.fields() : Map.of();
+        return List.copyOf(ReadableFields.of(input.shape()).fields().keySet());
     }
 
     /**
@@ -1009,7 +983,7 @@ public final class InputDomain {
      * some other reason is not one anybody handed anything to.
      */
     private static void under(StructuralInspection.Continuation continuation, Position here,
-                              TermPath path, List<String> shared, ExpansionTrace ancestry,
+                              TermPath path, ReadablePosition input, ExpansionTrace ancestry,
                               Symbols symbols, ReadingPolicy policy,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
                               java.util.Set<Type> visited, RuleHandoffs handoffs,
@@ -1041,6 +1015,8 @@ public final class InputDomain {
                         account, on);
             }
             case StructuralInspection.Continuation.Branches branches -> {
+                // Asked where the branches are, which is the only place a name can cross one.
+                List<String> shared = sharedAt(input);
                 List<StructuralInspection.Branch> standing = new ArrayList<>();
                 List<TermPath> passedTo = new ArrayList<>();
                 for (StructuralInspection.Branch branch : branches.branches()) {

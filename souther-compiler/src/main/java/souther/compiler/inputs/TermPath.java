@@ -38,7 +38,7 @@ import java.util.Map;
  *
  * <p>Steps are fields, elements and refinements, and nothing else. That a newtype contributes no
  * step is not this type's rule and nothing here enforces it — whoever reads a structure takes its
- * steps from what {@link StructuralDescent} answers with, off a shape {@code TypeView} has already
+ * steps from whichever question about a shape it is asking, off a shape {@code TypeView} has already
  * taken the worn names off. So {@code data Amount = Int} is one location whether it is written
  * {@code request.cost} or {@code request.cost.value}, and a path ends at the newtype itself.
  */

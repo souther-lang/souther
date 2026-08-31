@@ -789,6 +789,38 @@ public final class Adequacy {
                 : read.getOrDefault(spec.name(), InputDomain.NONE);
     }
 
+    /**
+     * What a row would be written for: the input as it was read, and where the model divides it.
+     *
+     * <p><b>The one place a subject is made.</b> Which classes a position has and what a number
+     * there is measured on are two answers about one behavior, and a caller that chose them
+     * separately could pair a reading of one input with classes measured at another — two behaviors
+     * taking a parameter spelled the same way is all it takes, and then a row is composed on one
+     * reading's orders and read back through the other's walk. Here both come from the same
+     * {@code (module, behavior)}, so there is nothing to pair.
+     *
+     * <p><b>Made where it is used and never kept in an answer.</b> The reading is a way of asking
+     * the declarations further questions, and an answer holding one is an answer whose comparison
+     * walks a capability rather than a value — which is what decides whether a compile changed
+     * anything. So what the questions answer stays what it was, and whoever needs a subject asks
+     * for the parts here: a caller that depends on this depends on the geometry, on the input's
+     * reading and on the names it was read against, and is recomputed when any of them moves.
+     *
+     * <p>Null where the behavior has no such reading, which is a behavior nothing measured.
+     */
+    private static souther.compiler.partition.MeasuredInput subjectOf(
+            Db db, String module, Hir.SpecBehavior spec) {
+        souther.compiler.partition.Partitions.Partitioning divided =
+                db.ask(new Divided(module, spec.name())).value();
+        Answer<Symbols> scope = Names.derivedSymbols(db, module);
+        if (divided == null || !scope.present()) {
+            return null;
+        }
+        InputDomain domain = domainOf(db.ask(new Inputs(module)).value(), spec);
+        return souther.compiler.partition.MeasuredInput.of(spec.name(),
+                domain.reading(scope.value()), divided.axes());
+    }
+
     /** What one behavior states about its answer, or nothing where it states none. A behavior
      *  declaring nothing is not in the map at all, which is what says it states nothing. */
     private static souther.compiler.check.StatedContract statedOf(
@@ -1424,18 +1456,14 @@ public final class Adequacy {
             if (spec == null || sig == null) {
                 return Answer.absent();
             }
-            Symbols symbols = scope.value();
-            souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
-            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-            InputDomain domain = domainOf(db.ask(new Inputs(name)).value(), spec);
-            souther.compiler.partition.BehaviorInputs inputs =
-                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy);
-            return Answer.of(Coverages.merged(Coverages.searched(measured, inputs,
-                    probing(spec.name(), divided, sig, symbols, policy, parameters,
-                            constructing(db, name), runningRowsOf(trialling(db, name), behavior, sig),
-                            domain),
-                    domain.quantities(symbols), divided.reaching())));
+            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
+            if (subject == null) {
+                return Answer.absent();
+            }
+            return Answer.of(Coverages.merged(Coverages.searched(measured, subject,
+                    probing(sig, subject, constructing(db, name),
+                            runningRowsOf(trialling(db, name), behavior, sig)),
+                    divided.reaching())));
         }
 
         /**
@@ -1447,18 +1475,11 @@ public final class Adequacy {
          * are missing" into "the edge can be written".
          */
         private static Coverages.Probe probing(
-                String behavior,
-                souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
-                Symbols symbols, souther.compiler.check.ReadingPolicy policy,
-                List<String> parameters, BoundaryValues building, Generator.Trial trial,
-                InputDomain domain) {
+                Sig sig, souther.compiler.partition.MeasuredInput subject,
+                BoundaryValues building, Generator.Trial trial) {
             if (building == null) {
                 return null;
             }
-            Generator.Subject subject = new Generator.Subject(behavior,
-                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy), partitioning.axes(),
-                    souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check =
                     (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
             return new Coverages.Probe() {
@@ -2950,12 +2971,14 @@ public final class Adequacy {
             // by behavior would be reading the grouping as the answer.
             List<Finding> owed = findings == null ? List.of()
                     : findings.stream().filter(each -> each.subject().isBehavior(behavior)).toList();
-            InputDomain domain = domainOf(readInputs, spec);
+            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
+            if (subject == null) {
+                return Answer.absent();
+            }
             // What this run is asked for, settled before the search and before anything that can
             // stop it. Every way out of the generation below holds this same list.
-            souther.compiler.partition.GenerationPlan asked = planFor(spec, sig, symbols,
-                    db.ask(new Front.Reading()).value(), divided, domain, owed,
-                    partitions.get(behavior));
+            souther.compiler.partition.GenerationPlan asked =
+                    planFor(subject, owed, partitions.get(behavior));
             souther.compiler.partition.FillResult composed;
             try {
                 composed = rowsFor(spec, sig, symbols, asked,
@@ -2971,7 +2994,7 @@ public final class Adequacy {
                         divided, bodies.get(behavior), plan,
                         Rows.readingFor(byTarget, behavior),
                         constructing(db, name),
-                        domain,
+                        domainOf(readInputs, spec),
                         runningRowsOf(trialling(db, name),
                                 behavior, sig),
                         levelOf(db).runsInstrumentedRows(),
@@ -3502,18 +3525,8 @@ public final class Adequacy {
          * reason about the run and no word about the thing a reader was asking after.
          */
         private static souther.compiler.partition.GenerationPlan planFor(
-                Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                souther.compiler.check.ReadingPolicy policy,
-                souther.compiler.partition.Partitions.Partitioning partitioning,
-                InputDomain domain, List<Finding> owed, PartitionEvidence evidence) {
-            // One reading of what the behavior takes, for both halves of this: the rows already
-            // written are read by it, and the rows offered are generated from it. Made where every
-            // reading of a row is made, so that a reader holding one of these rows and a reader
-            // holding none read it the same way.
-            HowARowIsRead read = readingOf(spec, sig, symbols, policy, partitioning);
-            Generator.Subject subject =
-                    new Generator.Subject(spec.name(), read.where(), read.axes(),
-                            souther.compiler.partition.HeldCounts.of(domain, symbols));
+                souther.compiler.partition.MeasuredInput subject, List<Finding> owed,
+                PartitionEvidence evidence) {
             // The arms this build is owed a row at, which the measure established and this reads.
             // A combination the body settles together is where one is looked for and is not itself
             // owed a row — nothing reports one — so what is searched follows from the findings

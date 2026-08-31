@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -120,10 +122,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * with it.
      */
     static Read read(String behavior, Core.Binary comparison,
-                     souther.compiler.inputs.InputDomain inputs, InputReads reads, Symbols symbols,
-                     souther.compiler.inputs.Quantities quantities) {
+                     InputReading read, InputReads reads) {
         AffineReading.OfAComparison canonical =
-                AffineReading.read(comparison, inputs, reads, symbols);
+                AffineReading.read(comparison, read.domain(), reads, read.symbols());
         return switch (canonical) {
             // Nothing was missing: the form was read from end to end, and the quantity in it is
             // empty. Unconditional, and before anything about how the comparison was spelled —
@@ -136,12 +137,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // left to try. Read the other way round, a spelling that produced a line took the
             // comparison before the canonical form was consulted at all.
             case AffineReading.OfAComparison.Cuts cuts ->
-                    realized(behavior, cuts.read(), inputs, symbols, quantities);
+                    realized(behavior, cuts.read(), read.quantities());
             // And only here does how it was written decide anything. The arithmetic stopped, which
             // is what a date against a written date and a case of an enumeration do: the values are
             // ones it cannot count, and the comparison still states a line.
             case AffineReading.OfAComparison.Stopped stopped ->
-                    asWritten(behavior, comparison, stopped, inputs, reads, symbols, quantities);
+                    asWritten(behavior, comparison, stopped, read, reads);
         };
     }
 
@@ -158,8 +159,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * rules leave it there — kept as it was, a line would be held inside the values of the position
      * it came from.
      */
-    Cutting movedTo(NumericTerm from, NumericTerm to, souther.compiler.inputs.TermOrders orders,
-                    souther.compiler.inputs.Quantities quantities) {
+    Cutting movedTo(NumericTerm from, NumericTerm to, TermOrders orders,
+                    Quantities quantities) {
         BorderQuantity moved = of.movedTo(from, to, orders);
         if (moved == null || !moved.levels().canCutAt(at)) {
             return null;
@@ -175,18 +176,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * again — what each of them is handed is the form the reading already came to.
      */
     private static Read realized(String behavior, AffineReading read,
-                                 souther.compiler.inputs.InputDomain inputs, Symbols symbols,
-                                 souther.compiler.inputs.Quantities quantities) {
-        Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, inputs, symbols),
+                                 Quantities quantities) {
+        Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, quantities),
                 quantities);
         if (drawn == null) {
-            drawn = apart(behavior, ComparedTerms.fromTheForm(read, inputs, symbols), read.claim(),
+            drawn = apart(behavior, ComparedTerms.fromTheForm(read, quantities), read.claim(),
                     quantities);
         }
         if (drawn != null) {
             return new Read.Cuts(drawn);
         }
-        Cutting form = overAForm(behavior, read, inputs, symbols, quantities);
+        Cutting form = overAForm(behavior, read, quantities);
         if (form != null) {
             return new Read.Cuts(form);
         }
@@ -205,27 +205,25 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read asWritten(String behavior, Core.Binary comparison,
                                   AffineReading.OfAComparison.Stopped canonical,
-                                  souther.compiler.inputs.InputDomain inputs, InputReads reads,
-                                  Symbols symbols,
-                                  souther.compiler.inputs.Quantities quantities) {
+                                  InputReading read, InputReads reads) {
+        Quantities quantities = read.quantities();
         Cutting drawn = atAPosition(behavior,
-                ComparedLine.asWritten(comparison, inputs, reads, symbols), quantities);
+                ComparedLine.asWritten(comparison, read, reads), quantities);
         if (drawn == null) {
-            drawn = apart(behavior, ComparedTerms.asWritten(comparison, inputs, reads, symbols),
+            drawn = apart(behavior, ComparedTerms.asWritten(comparison, read, reads),
                     ComparisonClaim.of(comparison.op()), quantities);
         }
         if (drawn != null) {
             return new Read.Cuts(drawn);
         }
         return new Read.Stopped(
-                GuardThresholds.whatEachPlaceIsLeftWith(comparison, canonical, inputs, reads,
-                        symbols));
+                GuardThresholds.whatEachPlaceIsLeftWith(comparison, canonical, read, reads));
     }
 
     /** One position's own values, cut where the reading found the line, or null where that reading
      *  found none and where the order has no place for the one it found. */
     private static Cutting atAPosition(String behavior, ComparedLine drawn,
-                                       souther.compiler.inputs.Quantities quantities) {
+                                       Quantities quantities) {
         if (drawn == null) {
             return null;
         }
@@ -238,7 +236,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /** How far two positions stand apart, cut where the reading found the line, or null on the same
      *  two counts. */
     private static Cutting apart(String behavior, ComparedTerms drawn, ComparisonClaim claim,
-                                 souther.compiler.inputs.Quantities quantities) {
+                                 Quantities quantities) {
         if (drawn == null) {
             return null;
         }
@@ -261,7 +259,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * model has nothing.
      */
     private static Cutting made(BorderQuantity of, Level at, ComparisonClaim claim,
-                                souther.compiler.inputs.Quantities quantities) {
+                                Quantities quantities) {
         // Whether the order has a place at that level for a line to be, which is the order's answer
         // and not the carrier's. An order whose only number is where two positions meet has one
         // place and no others; every order that counts is parted anywhere, whether or not it takes
@@ -290,13 +288,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * the form is right here.
      */
     private static Cutting overAForm(String behavior, AffineReading read,
-                                     souther.compiler.inputs.InputDomain inputs, Symbols symbols,
-                                     souther.compiler.inputs.Quantities quantities) {
+                                     Quantities quantities) {
         if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
             return null;
         }
-        java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
-                read.carriers(inputs, symbols);
+        java.util.Map<NumericTerm, TermOrders> on =
+                read.carriers(quantities);
         if (on == null) {
             return null;
         }

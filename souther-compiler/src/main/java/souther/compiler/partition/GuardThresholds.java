@@ -8,8 +8,11 @@ import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.FilingCoordinate;
@@ -126,7 +129,7 @@ public final class GuardThresholds {
      */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
-        return of(behavior, body, plan, inputs, inputs.quantities(symbols), symbols,
+        return of(behavior, body, plan, inputs.reading(symbols),
                 souther.compiler.check.ElementBindings.NONE,
                 souther.compiler.check.PathReachability.Answers.NONE);
     }
@@ -137,10 +140,11 @@ public final class GuardThresholds {
      * {@code arrives} says what the paths leave arriving at each of those sites, which is what a
      * line is dropped by ({@link ComparisonAssessment.NothingArrivesAtItsLine}). */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
-                            InputDomain inputs, souther.compiler.inputs.Quantities quantities,
-                            Symbols symbols,
+                            InputReading read,
                             souther.compiler.check.ElementBindings elements,
                             souther.compiler.check.PathReachability.Answers arrives) {
+        InputDomain inputs = read.domain();
+        Symbols symbols = read.symbols();
         List<LineEvidence> found = new ArrayList<>();
         List<RuleWithoutALine> withoutALine = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
@@ -148,10 +152,9 @@ public final class GuardThresholds {
         // comparison is written, what its names point at, what a row had satisfied to get there,
         // whether a line may be drawn on it and what it came to are five questions about one
         // position, and one walk answers them about one position.
-        ComparisonReadings read = ComparisonReadings.of(behavior, body, plan, inputs,
-                InputReads.ofParameters(inputs.parameterReads(), elements), symbols, quantities,
-                arrives);
-        for (ComparisonReadings.Reading each : read.all()) {
+        ComparisonReadings comparisons = ComparisonReadings.of(behavior, body, plan, read,
+                InputReads.ofParameters(inputs.parameterReads(), elements), arrives);
+        for (ComparisonReadings.Reading each : comparisons.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
                         lineAt(behavior, each.comparison(), plan, symbols,
@@ -162,7 +165,7 @@ public final class GuardThresholds {
                 case BoundaryPolicy.Standing.Refused _ -> { }
             }
         }
-        return new Guards(found, withoutALine, between, read.reaching(plan));
+        return new Guards(found, withoutALine, between, comparisons.reaching(plan));
     }
 
     /**
@@ -278,7 +281,8 @@ public final class GuardThresholds {
     static java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped>
             whatEachPlaceIsLeftWith(Core.Binary comparison,
                                     AffineReading.OfAComparison.Stopped stopped,
-                                    InputDomain inputs, InputReads reads, Symbols symbols) {
+                                    InputReading read, InputReads reads) {
+        Symbols symbols = read.symbols();
         Names left = namesIn(comparison.left(), reads, symbols);
         Names right = namesIn(comparison.right(), reads, symbols);
         Names here = namesIn(stopped.node(), stopped.at(), symbols);
@@ -291,7 +295,7 @@ public final class GuardThresholds {
                 at -> met.containsKey(at) && orderable(met.get(at), symbols);
         java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
                 new java.util.LinkedHashMap<>();
-        for (FilingCoordinate at : filedAt(comparison, inputs, reads, symbols)) {
+        for (FilingCoordinate at : filedAt(comparison, read, reads)) {
             out.putIfAbsent(at,
                     UnreadComparison.whereItStopped(ruleAt(at, left, right), notRead, ordered));
         }
@@ -344,11 +348,13 @@ public final class GuardThresholds {
      * the position's own values — which number of it the rule is about is exactly the part that was
      * not read.
      */
-    static List<FilingCoordinate> filedAt(Core.Binary comparison, InputDomain inputs,
-                                               InputReads reads, Symbols symbols) {
+    static List<FilingCoordinate> filedAt(Core.Binary comparison,
+                                               InputReading read,
+                                               InputReads reads) {
+        Symbols symbols = read.symbols();
         List<FilingCoordinate> out = new ArrayList<>();
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            Named named = namedBy(side, inputs, reads, symbols);
+            Named named = namedBy(side, read, reads);
             if (named != null) {
                 // The term itself, because this side named one: a rule about a length that nothing
                 // could read leaves the length short and the string's own values alone.
@@ -535,7 +541,7 @@ public final class GuardThresholds {
      * @param term  what the expression names
      * @param order what it is counted on
      */
-    record Named(NumericTerm term, souther.compiler.inputs.TermOrders orders) {
+    record Named(NumericTerm term, TermOrders orders) {
 
         /** What a line on it is measured on, which is what most readers of a pair want. */
         Carrier order() {
@@ -549,7 +555,7 @@ public final class GuardThresholds {
      * <p>The two together because no reader of a line wants one without the other, and both readings
      * of a comparison want them the same way round. Neither answer is made here: which position an
      * expression names is {@link InputNumber}'s and which order that position is counted on is the
-     * reading of the declarations' ({@link InputDomain#carrierOf}).
+     * reading of the declarations' ({@link Quantities#ordersOf}).
      *
      * <p>In particular the expression's own type is not read, here or anywhere a line is drawn. It
      * would agree wherever a rule names its positions itself and disagree wherever an operation
@@ -558,12 +564,12 @@ public final class GuardThresholds {
      * as whole numbers and read them off a row as whole numbers, which agreed with itself about a
      * border nothing could meet (#1018).
      */
-    static Named namedBy(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
-        NumericTerm term = InputNumber.of(e, inputs, reads, symbols);
+    static Named namedBy(Core e, InputReading read, InputReads reads) {
+        NumericTerm term = InputNumber.of(e, read.domain(), reads, read.symbols());
         if (term == null) {
             return null;
         }
-        souther.compiler.inputs.TermOrders orders = inputs.ordersOf(term, symbols);
+        TermOrders orders = read.quantities().ordersOf(term);
         return orders.answered() == null ? null : new Named(term, orders);
     }
 

@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.PlacementFiling;
 import souther.compiler.inputs.PlacementSeed;
 import souther.compiler.inputs.Position;
@@ -74,9 +76,11 @@ public final class LinesWhereTheyFall {
     }
 
     /** Every measurement where its name was filed, and the lines this had nowhere to put. */
-    public static Filed of(InputDomain inputs, List<LineEvidence> evidence,
-                           List<LineDrawn> between,
-                           souther.compiler.inputs.Quantities quantities, Symbols symbols) {
+    public static Filed of(InputReading read, List<LineEvidence> evidence,
+                           List<LineDrawn> between) {
+        InputDomain inputs = read.domain();
+        Quantities quantities = read.quantities();
+        Symbols symbols = read.symbols();
         List<LineEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
         List<RuleWithoutALine> notPlaced = new ArrayList<>();
@@ -94,7 +98,7 @@ public final class LinesWhereTheyFall {
             destinations.forEach(at -> out.add(measuredAt(each, at)));
         }
         for (LineDrawn each : between) {
-            place(inputs, each, quantities, symbols, outBetween, notPlaced);
+            place(read, each, outBetween, notPlaced);
         }
         return new Filed(out, outBetween, notPlaced);
     }
@@ -146,9 +150,11 @@ public final class LinesWhereTheyFall {
      * second how many come out of it. Answered off one count, a name filed at one position and a
      * name left where it was written would be the same answer.
      */
-    private static void place(InputDomain inputs, LineDrawn line,
-                              souther.compiler.inputs.Quantities quantities, Symbols symbols,
+    private static void place(InputReading read, LineDrawn line,
                               List<LineDrawn> out, List<RuleWithoutALine> notPlaced) {
+        InputDomain inputs = read.domain();
+        Quantities quantities = read.quantities();
+        Symbols symbols = read.symbols();
         List<FiledName> filed = new ArrayList<>();
         for (NumericTerm term : line.cuts().of().terms()) {
             switch (standingOf(inputs, term, symbols, line.by())) {
@@ -172,9 +178,9 @@ public final class LinesWhereTheyFall {
         }
         FiledName moves = filed.getFirst();
         List<LineDrawn> made = new ArrayList<>();
-        made.add(lineAt(line, moves.name(), moves.at().first(), inputs, quantities, symbols));
+        made.add(lineAt(line, moves.name(), moves.at().first(), quantities));
         for (NumericTerm to : moves.at().rest()) {
-            made.add(lineAt(line, moves.name(), to, inputs, quantities, symbols));
+            made.add(lineAt(line, moves.name(), to, quantities));
         }
         out.addAll(made);
     }
@@ -188,9 +194,8 @@ public final class LinesWhereTheyFall {
      * fewer places than the name was filed.
      */
     private static LineDrawn lineAt(LineDrawn line, NumericTerm moves, NumericTerm to,
-                                    InputDomain inputs,
-                                    souther.compiler.inputs.Quantities quantities, Symbols symbols) {
-        Cutting cut = line.cuts().movedTo(moves, to, inputs.ordersOf(to, symbols), quantities);
+                                    Quantities quantities) {
+        Cutting cut = line.cuts().movedTo(moves, to, quantities.ordersOf(to), quantities);
         if (cut == null) {
             throw new IllegalStateException(
                     "`" + moves + "` was filed at " + to + " and the line on it cannot be taken "

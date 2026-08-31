@@ -3,10 +3,12 @@ package souther.compiler.partition;
 import souther.compiler.types.BinOp;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 
 import java.util.LinkedHashMap;
@@ -50,7 +52,7 @@ import java.util.Map;
  *                       with no smallest step still holds its values a distance apart
  */
 record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition against,
-                     Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers,
+                     Map<NumericTerm, TermOrders> carriers,
                      Count stepsApart) {
 
     /**
@@ -62,18 +64,17 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      * it had no answer.
      */
     static ComparedTerms asWritten(Core.Binary comparison,
-                                   souther.compiler.inputs.InputDomain inputs, InputReads reads,
-                                   Symbols symbols) {
+                                   InputReading read, InputReads reads) {
         if (ordersStrictly(comparison.op())) {
             GuardThresholds.Named on =
-                    GuardThresholds.namedBy(comparison.left(), inputs, reads, symbols);
+                    GuardThresholds.namedBy(comparison.left(), read, reads);
             GuardThresholds.Named against =
-                    GuardThresholds.namedBy(comparison.right(), inputs, reads, symbols);
+                    GuardThresholds.namedBy(comparison.right(), read, reads);
             // A distance runs between two positions, so each side has to be a number one answers.
             NumericTerm.FromOnePosition here = on == null ? null : on.term().atOnePosition();
             NumericTerm.FromOnePosition there =
                     against == null ? null : against.term().atOnePosition();
-            Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers =
+            Map<NumericTerm, TermOrders> carriers =
                     here == null || there == null ? null
                             : aDistanceBetween(here, on.orders(), there, against.orders());
             if (carriers != null) {
@@ -105,15 +106,15 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      * two positions written back differently — a decimal against a whole number is the pair that
      * exists — is still one distance, and it is only the writing that differs.
      */
-    private static Map<NumericTerm, souther.compiler.inputs.TermOrders> aDistanceBetween(
-            NumericTerm on, souther.compiler.inputs.TermOrders here,
-            NumericTerm against, souther.compiler.inputs.TermOrders there) {
+    private static Map<NumericTerm, TermOrders> aDistanceBetween(
+            NumericTerm on, TermOrders here,
+            NumericTerm against, TermOrders there) {
         if (on == null || against == null || here == null || there == null
                 || here.answered() == null || there.answered() == null
                 || on.equals(against) || !here.answered().standsAgainst(there.answered())) {
             return null;
         }
-        Map<NumericTerm, souther.compiler.inputs.TermOrders> both = new LinkedHashMap<>();
+        Map<NumericTerm, TermOrders> both = new LinkedHashMap<>();
         both.put(on, here);
         both.put(against, there);
         return both;
@@ -131,7 +132,7 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      * that proves nothing about it.
      */
     static ComparedTerms fromTheForm(AffineReading read,
-                                     souther.compiler.inputs.InputDomain inputs, Symbols symbols) {
+                                     Quantities quantities) {
         if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
             return null;
         }
@@ -149,8 +150,8 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
         // The orders come from the reading of the declarations, the way they do above. A term the
         // arithmetic produced has no expression naming it, so there is not even a type here to take
         // one off — which is the whole of what went wrong when one was taken off the comparison.
-        souther.compiler.inputs.TermOrders hereOn = inputs.ordersOf(two[0], symbols);
-        souther.compiler.inputs.TermOrders thereOn = inputs.ordersOf(two[1], symbols);
+        TermOrders hereOn = quantities.ordersOf(two[0]);
+        TermOrders thereOn = quantities.ordersOf(two[1]);
         Carrier here = hereOn.answered();
         Carrier there = thereOn.answered();
         // Whether the order has a place at the number the rule wrote is the order's own answer and
@@ -161,7 +162,7 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
         if (here == null) {
             return null;
         }
-        Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers =
+        Map<NumericTerm, TermOrders> carriers =
                 aDistanceBetween(two[0], hereOn, two[1], thereOn);
         if (carriers == null) {
             return null;

@@ -133,8 +133,8 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     @Test
     void twoClassesOfOneLocationWantingDifferentValuesComposeNoRow() {
         Partitions.Partitioning read = partitioningOf();
-        Generator.Subject subject = new Generator.Subject("gate", inputsOf(), read.axes(),
-                HeldCounts.NONE);
+        MeasuredInput subject =
+                MeasuredInput.of("gate", readingOf(), read.axes());
 
         FillResult filled = Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY,
                 Budgets.generation());
@@ -162,6 +162,17 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         compilation.answerEverything();
         return souther.compiler.query.Scopes.derived(compilation.db(),
                 compilation.modules().get(0)).value();
+    }
+
+    /** What the reading of that input says about its numbers, which is what a subject is asked
+     *  through. */
+    private static souther.compiler.inputs.InputReading readingOf() {
+        Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = souther.compiler.query.Scopes.derived(compilation.db(), module).value();
+        return compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate")
+                .reading(symbols);
     }
 
     private static Partitions.Partitioning partitioningOf() {

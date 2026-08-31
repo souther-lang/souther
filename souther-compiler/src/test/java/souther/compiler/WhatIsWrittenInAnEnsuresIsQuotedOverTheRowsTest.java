@@ -265,12 +265,14 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
     /** A behavior nothing was asked for and nothing composed for, which is what an empty offer is. */
     private static Adequacy.Filling nothingOffered() {
-        souther.compiler.partition.Generator.Subject subject =
-                new souther.compiler.partition.Generator.Subject("findTodo",
-                        new souther.compiler.partition.BehaviorInputs(List.of(), List.of(),
-                                souther.compiler.check.Symbols.none(DefaultStdlib.get()),
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                        List.of(), souther.compiler.partition.HeldCounts.NONE);
+        souther.compiler.check.Symbols symbols =
+                souther.compiler.check.Symbols.none(DefaultStdlib.get());
+        souther.compiler.partition.MeasuredInput subject =
+                souther.compiler.partition.MeasuredInput.of("findTodo",
+                        souther.compiler.inputs.InputDomain.of(List.of(), symbols,
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                                .reading(symbols),
+                        List.of());
         return new Adequacy.Filling(
                 souther.compiler.partition.FillResult.nothingAskedOf(
                         new souther.compiler.partition.GenerationPlan(subject, List.of(),

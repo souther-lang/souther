@@ -54,10 +54,9 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
         Sig sig = sigs.get(behavior);
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        FillResult filled = Generator.fill(new Generator.Subject(spec.name(),
-                new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                        sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                partitioning.axes(), HeldCounts.of(domain, symbols)), List.of(), REFUSED, Budgets.generation());
+        FillResult filled = Generator.fill(
+                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning.axes()),
+                List.of(), REFUSED, Budgets.generation());
         assertFalse(filled.unresolved().isEmpty(), "nothing was written and nothing said why");
         return filled.unresolved().get(0).reason();
     }
