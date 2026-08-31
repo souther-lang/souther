@@ -3802,6 +3802,25 @@ public final class Adequacy {
         }
 
         /**
+         * The same, where what found it is an obligation rather than a measure.
+         *
+         * <p>An obligation's coverage is a fold of the readings and not a measurement of anything
+         * ({@link ObligationCoverage}), so it has what it went without and no status. It is taken
+         * whole for the reason the measure above is: what a caller hands over is the thing it is
+         * looking at, and there is no argument here to pass a set worked out somewhere else.
+         */
+        public static Finding by(FindingSubject subject, ObligationCoverage found, Citation at,
+                                 About about) {
+            return new Finding(subject, found.weakening(), at, about);
+        }
+
+        /** The same, about a behavior. */
+        public static Finding by(String behavior, ObligationCoverage found, Citation at,
+                                 About about) {
+            return by(new FindingSubject.OfABehavior(behavior), found, at, about);
+        }
+
+        /**
          * Something the report says that no measurement established.
          *
          * <p>A rule this compiler could not read, a position nothing divides, a question nobody
@@ -4386,11 +4405,11 @@ public final class Adequacy {
                 return;
             }
             for (DeclaredDebt owed : account.owed()) {
-                ItemAssessment item = owed.debt().item();
+                ObligationAssessment item = owed.debt().item();
                 if (!item.isUnmetGap()) {
                     continue;
                 }
-                out.add(Finding.by(owed.subject(), item.weakeningSource(), owed.at(),
+                out.add(Finding.by(owed.subject(), item.coverage(), owed.at(),
                         new About.APointOfADeclaredBorder(owed)));
             }
         }
@@ -4498,7 +4517,7 @@ public final class Adequacy {
                 if (!owed.item().isUnmetGap()) {
                     continue;
                 }
-                out.add(Finding.by(behavior.name(), owed.item().weakeningSource(),
+                out.add(Finding.by(behavior.name(), owed.item().coverage(),
                         Citation.of(behavior.pos()), new About.APointOfABorder(owed)));
             }
             // What the model divides this position no way at all, which is the classes question and

@@ -58,7 +58,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                                               souther.compiler.partition.PointAttribution
                                                       attribution,
                                               souther.compiler.check.RuleCitation cited,
-                                              Demand demand, ItemAssessment.Owed item,
+                                              Demand demand, ObligationAssessment item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met) {
 
@@ -348,8 +348,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * to undo. What it is here for is that a value at the point was built, which is evidence the
      * point exists.
      */
-    private static ItemAssessment.Owed came(PointRole role, List<BorderAssessment> readings,
-                                            Demand asked) {
+    private static ObligationAssessment came(PointRole role, List<BorderAssessment> readings,
+                                             Demand asked) {
         if (asked instanceof Demand.NotOwed not) {
             throw new IllegalStateException(
                     "a point nobody is owed a row at, assessed as one that is: " + not.reason());
@@ -378,12 +378,12 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 projection = ItemAssessment.WritabilityProjection.UNPROVEN;
             }
         }
-        return new ItemAssessment.Owed(asked.criterion(),
-                ItemAssessment.Coverage.acrossTheReadings(coverage), projection, built);
+        return new ObligationAssessment(asked.criterion(),
+                ObligationCoverage.acrossTheReadings(coverage), projection, built);
     }
 
     /** The measured half, which a point owed a row always has. */
-    public ItemAssessment.Owed owed() {
+    public ObligationAssessment owed() {
         return item;
     }
 

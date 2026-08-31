@@ -60,13 +60,11 @@ class AMeasureIsIntroducedInOnePlaceTest {
      * keep the class's total where it was and answer for nothing; counted per name, an overload
      * would be admitted without anybody deciding it should be.
      *
-     * <p>The tenth is what an authored line came to across the readings of it
-     * ({@code Coverage#acrossTheReadings}), which is not the same measure as what one of those
-     * readings came to and arrived with issue #1062. One line is read at every position of every
-     * behavior carrying the type, and a row standing at it through any of them is evidence about the
-     * type — so the debt has an answer of its own, and it follows from what the readings found and
-     * from which of them could be hiding a row. Written by each of its readers instead, a report, a
-     * build's refusal, an editor and the generator would fold one set of readings four ways.
+     * <p>What an authored line came to across the readings of it is not here, and not because
+     * nobody makes it. {@code ObligationCoverage} is a type of its own and not a state of a measure:
+     * a reading may be made in part and have found a row, and a debt cannot, so the states are not
+     * the same states. It has an introduction rule of the same shape — one fold, read by a report, a
+     * build's refusal, an editor and the generator — and that rule is its own type's to keep.
      *
      * <p>{@code PairSpace}'s static initialiser makes the one space that is measured in full and
      * holds nothing — a behavior with no pair of positions — and {@code ItemAssessment} makes the
@@ -113,7 +111,6 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.PartitionEvidence$AxisCoverage#notAsked(Lsouther/compiler/partition/AxisId;Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/PartitionEvidence$AxisCoverage$Reading;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#notAsked(I)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
             Map.entry("souther.compiler.query.ItemAssessment#weakeningSource()Lsouther/compiler/query/Measurement;", 1),
-            Map.entry("souther.compiler.query.ItemAssessment$Coverage#acrossTheReadings(Ljava/util/List;)Lsouther/compiler/query/Measurement;", 5),
             // A behavior whose boundary could not be worked out. Every measure of it is short of
             // the same one thing, so the state is made here and each of them hands its own type
             // parameter to it — five factories and one introduction, which is what keeps them

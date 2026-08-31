@@ -321,75 +321,9 @@ public sealed interface ItemAssessment {
             return coverage instanceof Hit;
         }
 
-        /**
-         * What the readings of one authored line come to together.
-         *
-         * <p>One debt is read at every position of every behavior carrying the type, and each of
-         * those readings measures it on its own. What the debt came to is not any one of them: a row
-         * standing at the line through {@code draft.owner} is evidence about {@code UserId}, and the
-         * reading at {@code activities[*]@CallTask.owner} cannot disagree with it (issue #1062).
-         *
-         * <p><b>Here and nowhere else.</b> A report, a build's refusal, an editor and the generator
-         * all ask what became of a debt, and four foldings of the same readings would be four
-         * answers about one line — which is the shape this whole change is undoing.
-         *
-         * <p>The order is the whole of it. A row found settles the line whatever else went unread,
-         * so a hit outranks everything. Below that, a reading that could be hiding a row outranks
-         * one that ran out and found none, because the second is an answer and the first is the
-         * absence of one. And a reading with no rows to look at is neither: it hides nothing, so it
-         * cannot take back a miss another reading established, and where every reading is one there
-         * was nothing anywhere to look at.
-         */
-        static Measurement<Coverage> acrossTheReadings(
-                java.util.List<Measurement<Coverage>> readings) {
-            if (readings.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a debt is what its readings came to, and this is none of them");
-            }
-            WeakeningSet unread = WeakeningSet.none();
-            NotMeasuredReason unasked = null;
-            boolean missed = false;
-            for (Measurement<Coverage> reading : readings) {
-                // Found is found. Said before anything else is looked at, so that no accounting of
-                // what went unread can weaken a row somebody wrote.
-                if (reading.made().map(Coverage::hit).orElse(false)) {
-                    return new Measurement.Complete<>(new Hit());
-                }
-                switch (reading) {
-                    // A reading of this line that did not run out. Whatever it could not read may
-                    // be holding the row.
-                    case Measurement.Partial<Coverage> in -> unread = unread.union(in.by());
-                    case Measurement.FailedToMeasure<Coverage> stopped -> {
-                        if (((CouldNotAsk) stopped.why()).mayHideARow()) {
-                            unread = unread.union(stopped.by());
-                        }
-                    }
-                    // The three reasons a question was not put are not one answer here. One that
-                    // may be hiding a row is kept as itself rather than turned into a weakening:
-                    // nothing was read, so there is no reading for a weakening to be about.
-                    case Measurement.NotMeasured<Coverage> none -> {
-                        if (((NotAsked) none.why()).mayHideARow()) {
-                            unasked = none.why();
-                        }
-                    }
-                    // Read to the end and no row is at the point, which is what a miss is.
-                    case Measurement.Complete<Coverage> _ -> missed = true;
-                }
-            }
-            if (!unread.isEmpty()) {
-                return new Measurement.Partial<>(new NoHit(), unread);
-            }
-            // Above a miss another reading established, because a reading that looked at nothing
-            // leaves the rows it would have looked at unaccounted for. Both of the reasons that
-            // reach here are settings of the build rather than facts about one behavior, so this is
-            // reached where every reading says it and not where one of them does.
-            if (unasked != null) {
-                return new Measurement.NotMeasured<>(unasked);
-            }
-            return missed ? new Measurement.Complete<>(new NoHit())
-                    // Every reading had nothing to look at, so neither has the debt.
-                    : new Measurement.NotMeasured<>(NotAsked.NO_ROWS);
-        }
+        // What the readings of one authored line come to together is
+        // ObligationCoverage.acrossTheReadings. It is a different type and not a state of this
+        // measure: a reading may be made in part and have found a row, and a debt cannot be.
     }
 
     /**
