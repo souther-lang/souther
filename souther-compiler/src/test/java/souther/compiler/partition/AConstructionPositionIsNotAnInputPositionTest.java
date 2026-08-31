@@ -56,9 +56,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Written flat here, the same location would have two names and the lookup would find nothing.
  *
  * <p>So what is checked here is that a path from one is not looked up in the other, and that the
- * disagreement is the design rather than a defect. The one thing they share is the step, and that is
- * checked over in {@code inputs} by
- * {@code TheReadingAndThePlanTakeOneStepDownATypeTest}.
+ * disagreement is the design rather than a defect. What they share is not a step but an answer at a
+ * record: the questions about a shape come to the same fields there and part at a sum whose cases
+ * share a spread, which is checked as a law over the answers by
+ * {@code WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest}.
  */
 class AConstructionPositionIsNotAnInputPositionTest {
 

@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.ReadableFields;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
@@ -38,10 +39,10 @@ import java.util.Map;
  * do with it — including the ones a reader gives up in favour of what is under them, and the ones
  * dropped past a budget.
  *
- * <p>Which is a claim about the reading and not about the step it is made of. What stands directly
- * under a type is one fact and is {@link StructuralDescent}'s; how far to follow it, and what is
- * read where it lands, are this reading's. A reader wanting the step alone
- * takes it from there, and takes none of the meaning here with it.
+ * <p>Which is a claim about the reading and not about the steps it is made of. What is readable off
+ * a value is one fact and is {@link ReadableFields}'s; how far to follow what a position has under
+ * it, and what is read where it lands, are this reading's. A reader wanting a step alone takes it
+ * from the owner of the question it is a step of, and takes none of the meaning here with it.
  *
  * <p><b>A position may exist only under a narrowing of another.</b> What a case of a sum declares is
  * declared whether or not anything constructs one, so those fields are positions of the input and are
@@ -660,7 +661,7 @@ public final class InputDomain {
             // language reads a value.
             case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
                     ? made.under().get(field.name())
-                    : sharedFieldsOf(shape).get(field.name());
+                    : ReadableFields.of(shape).fields().get(field.name());
             case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
                     && on.continuation() instanceof StructuralInspection.Continuation.Elements held
                     ? held.element() : null;
@@ -949,28 +950,17 @@ public final class InputDomain {
      * The names readable at this position that a value of one of its cases carries, which is empty
      * for every position but a sum whose cases all spread one declaration.
      *
-     * <p>Read off {@link Shape.Sum#common}, which is the same answer that makes those names readable
-     * on a value of the sum at all. Taken from what a case declares instead, a field one case has
-     * and another has not would be a name this said could be written at the sum, and the reading
-     * would reach positions the language refuses to name.
+     * <p>Asked of {@link ReadableFields}, which is what makes those names readable on a value of the
+     * sum at all. Taken from what a case declares instead, a field one case has and another has not
+     * would be a name this said could be written at the sum, and the reading would reach positions
+     * the language refuses to name.
+     *
+     * <p>Empty at a record, whose readable names are the positions under it and cross nothing: they
+     * are reached without a narrowing, so nobody is owed an account of where they stand under one.
      */
     private static List<String> sharedAt(ReadablePosition input) {
-        return List.copyOf(sharedFieldsOf(input.shape()).keySet());
-    }
-
-    /**
-     * The names a value of this shape carries that are readable on it without opening a case, and
-     * what stands at each.
-     *
-     * <p>The one reading of a sum's shared part in this walk. What makes a name readable on a value
-     * of the sum is the declarations its cases all spread, and every question here that turns on
-     * that name — which names cross a narrowing, and what the model puts at one — is asked of this.
-     * Empty for every other shape, whose names are the positions under it.
-     */
-    private static Map<String, Type> sharedFieldsOf(Shape shape) {
-        return shape instanceof Shape.Sum sum
-                && sum.common() instanceof Shape.CommonProduct.Shared shared
-                ? shared.fields() : Map.of();
+        return input.shape() instanceof Shape.Sum
+                ? List.copyOf(ReadableFields.of(input.shape()).fields().keySet()) : List.of();
     }
 
     /**

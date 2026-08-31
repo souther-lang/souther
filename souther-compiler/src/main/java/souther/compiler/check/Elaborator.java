@@ -490,11 +490,11 @@ public final class Elaborator {
             // value of X, whose fields are X's. `TypeView` keeps both directions available for that
             // reason, and this reader takes the one it has always taken.
             TypeView view = TypeView.of(target, ctx.symbols());
-            if (!view.isWrapped() && view.shape() instanceof Shape.Sum shape
-                    && shape.common() instanceof Shape.CommonProduct.Shared shared
-                    && shared.fields().get(fa.field()) != null) {
-                return new Core.FieldAccess(targetCore, fa.field(),
-                        shared.fields().get(fa.field()), fa.pos());
+            if (!view.isWrapped() && view.shape() instanceof Shape.Sum shape) {
+                Type readable = ReadableFields.of(shape).fields().get(fa.field());
+                if (readable != null) {
+                    return new Core.FieldAccess(targetCore, fa.field(), readable, fa.pos());
+                }
             }
             // A sum carries no fields of its own — its cases do, and which case it is is not known
             // until it is opened. Saying that is the difference between "this value has no such

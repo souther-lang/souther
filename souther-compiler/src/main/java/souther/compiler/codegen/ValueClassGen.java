@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.Ordering;
+import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
@@ -238,9 +239,8 @@ final class ValueClassGen {
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
             // A field every case spreads is readable on the sum (issue #160): declared here, and
             // implemented by each case record's accessor of the same name and descriptor.
-            if (TypeView.of(Type.ref(sum.declares()), symbols).shape() instanceof Shape.Sum shape
-                    && shape.common() instanceof Shape.CommonProduct.Shared shared) {
-                for (Map.Entry<String, Type> e : shared.fields().entrySet()) {
+            if (TypeView.of(Type.ref(sum.declares()), symbols).shape() instanceof Shape.Sum shape) {
+                for (Map.Entry<String, Type> e : ReadableFields.of(shape).fields().entrySet()) {
                     cb.withMethod(e.getKey(), MethodTypeDesc.of(jvmType(e.getValue())),
                             ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> { });
                 }
