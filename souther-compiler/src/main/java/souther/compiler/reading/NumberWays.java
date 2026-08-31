@@ -11,6 +11,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
 
 import java.util.function.Function;
 
@@ -80,9 +81,8 @@ final class NumberWays implements ComparisonWays {
         NumericDomain.Bounds runs = quantities.runsBetween(drawn.term());
         return switch (drawn.claim()) {
             case ComparisonClaim.Cut cut -> {
-                // Which side the way needs, from the two facts the claim carries: which side of the
-                // line the named value itself is on, and whether the comparison holds there.
-                boolean upIsTrue = cut.holdsAtTheValue() != cut.valueBelongsBelow();
+                // Which side the way needs, which is the side the comparison is true on.
+                boolean upIsTrue = cut.satisfyingSide() == Towards.ABOVE;
                 yield anythingBeyond(runs, drawn.at(), upIsTrue == want,
                         cut.holdsAtTheValue() == want);
             }

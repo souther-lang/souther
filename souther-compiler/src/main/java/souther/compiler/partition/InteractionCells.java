@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Towards;
 import souther.compiler.reading.Condition;
 import souther.compiler.reading.Factor;
 import souther.compiler.reading.Interaction;
@@ -435,9 +436,11 @@ public final class InteractionCells {
                 if (!(guard.facts().claim() instanceof ComparisonClaim.Cut order)) {
                     return null;
                 }
-                boolean homeSideIsUp = !order.valueBelongsBelow();
                 boolean wantedIsHomeSide = order.holdsAtTheValue() == one.held();
-                boolean wantedIsUp = wantedIsHomeSide == homeSideIsUp;
+                // The side the cell wants: the one the rule is satisfied on where it wants the rule
+                // met, and the other where it wants it broken.
+                boolean wantedIsUp = (one.held() ? order.satisfyingSide()
+                        : order.satisfyingSide().opposite()) == Towards.ABOVE;
                 int last = axes.get(axis).classes().size() - 1;
                 int edge = wantedIsHomeSide ? home : (wantedIsUp ? home + 1 : home - 1);
                 if (edge < 0 || edge > last) {

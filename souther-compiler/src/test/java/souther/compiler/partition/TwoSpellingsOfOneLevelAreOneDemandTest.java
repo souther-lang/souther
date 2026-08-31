@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Towards;
@@ -145,6 +146,6 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
                         new Clause.Id(TypeSymbols.declared(new TypeKey("example.probe", "Amount")),
                                 0),
                         Optional.of(new ClauseName("floor")))),
-                0, LineFacts.ordering(false, true), List.of());
+                0, new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)), List.of());
     }
 }

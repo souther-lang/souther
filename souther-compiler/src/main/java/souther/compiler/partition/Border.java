@@ -101,7 +101,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         points.add(new DomainPoint.AtTheLine());
         switch (origin.lineFacts().claim()) {
             case ComparisonClaim.Cut order -> points.add(new DomainPoint.BesideTheLine(
-                    order.valueBelongsBelow() ? Towards.ABOVE : Towards.BELOW));
+                    order.valueBelongs().opposite()));
             case ComparisonClaim.Singled _ -> {
                 points.add(new DomainPoint.BesideTheLine(Towards.BELOW));
                 points.add(new DomainPoint.BesideTheLine(Towards.ABOVE));
@@ -589,7 +589,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                 // line of `< 3000`, and neither is the threshold at all where the quantity does not
                 // take it: which way to look for the value the rule wrote is the side that value
                 // belongs to.
-                Towards belongs = order.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE;
+                Towards belongs = order.valueBelongs();
                 demands.put(new DomainPoint.AtTheLine(),
                         pointAt(space, cut, belongs, true, reach));
                 demands.put(new DomainPoint.BesideTheLine(belongs.opposite()),
@@ -628,7 +628,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
     private static Level levelAgainstTheLineOn(Map<DomainPoint, PointAnswer> demands,
                                                OriginRef origin, Towards side) {
         boolean atTheLine = origin.lineFacts().claim() instanceof ComparisonClaim.Cut order
-                && (order.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE) == side;
+                && order.valueBelongs() == side;
         PointAnswer point = demands.get(atTheLine ? new DomainPoint.AtTheLine()
                 : new DomainPoint.BesideTheLine(side));
         return point == null ? null : against(point);
@@ -677,7 +677,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         return switch (claim) {
             case ComparisonClaim.Singled _ -> admits(within, cut);
             case ComparisonClaim.Cut order -> {
-                Towards kept = satisfyingSide(order.holdsAtTheValue(), order.valueBelongsBelow());
+                Towards kept = order.satisfyingSide();
                 yield standsAt(within, cut, parts, kept)
                         // A line with two sides owes a point against the line on each of them, so
                         // the line's own value is enough for it to be one somebody can write a row
@@ -718,19 +718,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         Place at = placeOf(level);
         return (within.min() == null || at.compareTo(within.min().at()) >= 0)
                 && (within.max() == null || at.compareTo(within.max().at()) <= 0);
-    }
-
-    /**
-     * Which way a rule is satisfied from its threshold, from the two things every rule records about
-     * its own line.
-     *
-     * <p>One derivation, asked by whoever holds the pair. A line is read off a cutting before any
-     * rule has been named for it and off that rule's origin afterwards, and the two carry the same
-     * two facts — worked out separately, a line would be satisfied one way while it was a cutting
-     * and the other way once it had an origin.
-     */
-    static Towards satisfyingSide(boolean holdsAtTheValue, boolean valueBelongsBelow) {
-        return holdsAtTheValue == valueBelongsBelow ? Towards.BELOW : Towards.ABOVE;
     }
 
     /**
@@ -825,7 +812,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         }
         return switch (origin.lineFacts().claim()) {
             case ComparisonClaim.Cut order -> List.of(Parting.by(Seam.of(space, cut,
-                    order.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE),
+                    order.valueBelongs()),
                     origin.authoredLine()));
             // The place under the value and the place over it, with the value between them. Which
             // of the two bounds which side is the arrangement's answer and not this one's: a run
@@ -1006,8 +993,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         // — and the range this is held against stops there too. Held against the number instead,
         // the two agree wherever a rule admits its threshold and are one count apart wherever it
         // does not, which is half the operators an author can write.
-        Level leaves = Seam.of(space, cut,
-                valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE).leaving(kept);
+        Level leaves = Seam.of(space, cut, valueBelongs(origin)).leaving(kept);
         if (end == null || !end.at().sameAs(placeOf(leaves))) {
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: " + origin.named());
@@ -1047,8 +1033,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * nothing.
      */
     private static Towards satisfyingSide(OriginRef origin) {
-        ComparisonClaim.Cut order = ordering(origin);
-        return satisfyingSide(order.holdsAtTheValue(), order.valueBelongsBelow());
+        return ordering(origin).satisfyingSide();
     }
 
     /**
@@ -1109,7 +1094,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                 instanceof ComparisonClaim.Cut order)) {
             return null;
         }
-        return Seam.of(space, cut, order.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE);
+        return Seam.of(space, cut, order.valueBelongs());
     }
 
     /**
@@ -1139,7 +1124,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
     }
 
     /** Which side of the line the threshold's own value belongs to, of a rule that ordered them. */
-    private static boolean valueBelongsBelow(OriginRef origin) {
-        return ordering(origin).valueBelongsBelow();
+    private static Towards valueBelongs(OriginRef origin) {
+        return ordering(origin).valueBelongs();
     }
 }

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
 
 /**
  * A value a behavior compares an input against, and which side of it the value itself falls on.
@@ -23,7 +24,7 @@ import souther.compiler.numeric.Place;
  *                in an {@code ensures}. Both leave values a row can write either side; what differs
  *                is what meeting the line takes, and that is the origin's to answer
  */
-public record Threshold(NumericTerm.FromOnePosition term, Seam parts, boolean valueBelongsBelow,
+public record Threshold(NumericTerm.FromOnePosition term, Seam parts, Towards valueBelongs,
                         OriginRef origin) {
 
     /**
@@ -41,7 +42,7 @@ public record Threshold(NumericTerm.FromOnePosition term, Seam parts, boolean va
      * a third or the decimal next to one.
      */
     public Place value() {
-        Level beside = valueBelongsBelow ? parts.below() : parts.above();
+        Level beside = valueBelongs == Towards.BELOW ? parts.below() : parts.above();
         return beside instanceof Level.OnACarrier on ? on.at() : null;
     }
 

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Towards;
@@ -142,7 +143,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                                         new souther.compiler.types.TypeKey("example.runs", "N")),
                                 clause),
                         java.util.Optional.empty())),
-                0, LineFacts.ordering(false, true), List.of());
+                0, new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)), List.of());
     }
 
     /**

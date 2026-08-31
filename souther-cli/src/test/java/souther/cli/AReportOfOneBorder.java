@@ -95,7 +95,8 @@ final class AReportOfOneBorder {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(3, 5)))),
-                new souther.compiler.partition.LineFacts(new ComparisonClaim.Cut(true, true)));
+                new souther.compiler.partition.LineFacts(
+                        new ComparisonClaim.Cut(souther.compiler.numeric.Towards.BELOW, true)));
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),

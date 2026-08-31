@@ -16,6 +16,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Towards;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -104,7 +105,7 @@ class ThresholdNormalizationTest {
         Threshold threshold = read.thresholds().get(0);
         assertEquals("request.cost", threshold.path().toString());
         assertEquals(Count.of(new BigDecimal(100000)), threshold.value());
-        assertTrue(threshold.valueBelongsBelow(), "`<= c` puts c on the low side");
+        assertEquals(Towards.BELOW, threshold.valueBelongs(), "`<= c` puts c on the low side");
 
         Axis cost = axis(read.partitioning(), "request.cost");
         assertEquals(List.of("0 <= x <= 100000", "100000 < x"), labels(cost));
@@ -216,8 +217,8 @@ class ThresholdNormalizationTest {
         Threshold bare = read.thresholds().get(0);
         Threshold beside = compound.thresholds().get(0);
         assertEquals(
-                List.of(bare.term(), bare.parts(), bare.valueBelongsBelow()),
-                List.of(beside.term(), beside.parts(), beside.valueBelongsBelow()),
+                List.of(bare.term(), bare.parts(), bare.valueBelongs()),
+                List.of(beside.term(), beside.parts(), beside.valueBelongs()),
                 "and the line is the same one either way: " + compound.thresholds());
     }
 

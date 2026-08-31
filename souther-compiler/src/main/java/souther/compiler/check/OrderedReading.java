@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Endpoint;
@@ -104,15 +103,19 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
 
     /** Where one comparison leaves the position it names, or nothing where it names none. */
     private OrderedIntervals<FactSubject> comparison(Core.Binary bin, boolean positive) {
+        Comparison read = Comparison.of(bin).orElse(null);
+        if (read == null) {
+            return OrderedIntervals.top();
+        }
         // The position-bearing side read as the left one, as `0 <= value` says what `value >= 0`
         // says.
         FactSubject position = positionIn(bin.left());
         Core bound = bin.right();
-        BinOp op = bin.op();
+        ComparisonClaim claim = read.claim();
         if (position == null) {
             position = positionIn(bin.right());
             bound = bin.left();
-            op = InvariantBound.flipped(op);
+            claim = claim.turned();
         }
         Carrier carrier = position == null ? null : carriers.get(position);
         if (carrier == null) {
@@ -122,17 +125,30 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         // Denied, a comparison is the one that leaves what it leaves out. `!(value /= x)` is an
         // equality and is read; `!(value == x)` is a disequality and is not, which is the same
         // answer the disequality gets when it is written directly.
-        BinOp said = positive ? op : denied(op);
-        if (said == BinOp.EQ) {
-            Place only = written == null ? null : carrier.literalOf(written);
-            return only == null ? OrderedIntervals.top()
-                    : leaves(position, carrier, new OrderedInterval(
-                            Endpoint.inclusive(only), Endpoint.inclusive(only)));
-        }
-        if (!InvariantBound.ordering(said)) {
-            return OrderedIntervals.top();
-        }
-        return switch (InvariantBound.at(said, written, carrier)) {
+        ComparisonClaim said = positive ? claim : claim.denied();
+        return switch (said) {
+            // A value singled out is a range with that one value in it where the rule holds there,
+            // and a set rather than a range where it does not.
+            case ComparisonClaim.Singled singled -> onlyTheValue(position, carrier,
+                    singled.holdsAtTheValue() ? written : null);
+            case ComparisonClaim.Cut cut -> ends(position, carrier,
+                    InvariantBound.at(cut, written, carrier));
+        };
+    }
+
+    /** The range of one value, or nothing where the rule names none this order reads. */
+    private OrderedIntervals<FactSubject> onlyTheValue(FactSubject position, Carrier carrier,
+                                                       Hir.Expr written) {
+        Place only = written == null ? null : carrier.literalOf(written);
+        return only == null ? OrderedIntervals.top()
+                : leaves(position, carrier, new OrderedInterval(
+                        Endpoint.inclusive(only), Endpoint.inclusive(only)));
+    }
+
+    /** What the end an ordering placed leaves the position. */
+    private OrderedIntervals<FactSubject> ends(FactSubject position, Carrier carrier,
+                                               InvariantBound.Read read) {
+        return switch (read) {
             case InvariantBound.Read.AnEnd it -> leaves(position, carrier, it.bound().lower()
                     ? new OrderedInterval(it.bound().end(), null)
                     : new OrderedInterval(null, it.bound().end()));
@@ -155,21 +171,6 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
     private static OrderedIntervals<FactSubject> leaves(FactSubject position, Carrier carrier,
                                                  OrderedInterval range) {
         return OrderedIntervals.at(position, carrier.extent().meet(range));
-    }
-
-    /** The comparison that holds exactly where {@code op} does not. */
-    private static BinOp denied(BinOp op) {
-        return switch (op) {
-            case EQ -> BinOp.NE;
-            case NE -> BinOp.EQ;
-            case LT -> BinOp.GE;
-            case LE -> BinOp.GT;
-            case GT -> BinOp.LE;
-            case GE -> BinOp.LT;
-            // Not a comparison. Denied or stated, it says nothing about where a position stops, and
-            // answering it with itself lets the caller find that out the one way it does.
-            default -> op;
-        };
     }
 
     /** The position {@code e} is, or null where it is not one this is reading for. */

@@ -410,8 +410,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // under what it names and over it — and this is the lower of the two, which is a place they
         // genuinely part rather than a side chosen for a rule that has none. Which of the two bounds
         // which run is asked where the runs are ({@link Border#partedBy}), and is no part of this.
-        Towards belongsTo = order == null ? Towards.ABOVE
-                : order.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE;
+        Towards belongsTo = order == null ? Towards.ABOVE : order.valueBelongs();
         LinearForm<NumericTerm> direction = direction(of);
         java.math.BigDecimal per = QuantityKey.per(direction);
         return Seam.of(of.levels(), at, belongsTo,
@@ -498,7 +497,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     + " a value and divides at neither side of it: " + at);
         }
         Seam seam = seam();
-        Level side = order.valueBelongsBelow() ? seam.below() : seam.above();
+        Level side = order.valueBelongs() == Towards.BELOW ? seam.below() : seam.above();
         return side instanceof Level.OnACarrier on ? on.at() : null;
     }
 

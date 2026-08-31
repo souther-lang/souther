@@ -89,7 +89,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new Level.OnACarrier(new Carrier.Whole(),
                                 new Count(new java.math.BigDecimal(at))),
                         Towards.BELOW),
-                true, origin()));
+                Towards.BELOW, origin()));
     }
 
     /** One rule, written in one place. Two lines of it are told apart by where they part the
@@ -102,6 +102,6 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new souther.compiler.coverage.ComparisonOccurrence(0),
                         new RuleCitation.WrittenAt(Citation.of(
                                 new souther.compiler.diag.SourcePos(1, 1)))),
-                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(true, true)));
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 }

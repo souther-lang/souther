@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Towards;
 import souther.compiler.types.BinOp;
 
 /**
@@ -57,27 +58,16 @@ public sealed interface ComparisonPlacement permits ComparisonClaim, ComparisonP
             return new Nothing();
         }
         return switch (op) {
-            case LE -> new ComparisonClaim.Cut(true, true);
-            case GT -> new ComparisonClaim.Cut(true, false);
-            case LT -> new ComparisonClaim.Cut(false, false);
-            case GE -> new ComparisonClaim.Cut(false, true);
+            case LE -> new ComparisonClaim.Cut(Towards.BELOW, true);
+            case GT -> new ComparisonClaim.Cut(Towards.BELOW, false);
+            case LT -> new ComparisonClaim.Cut(Towards.ABOVE, false);
+            case GE -> new ComparisonClaim.Cut(Towards.ABOVE, true);
             case EQ -> new ComparisonClaim.Singled(true);
             case NE -> new ComparisonClaim.Singled(false);
             // Refused above and written out here so the switch stays exhaustive: an operator added
             // to the language stops the compile here and is decided about rather than falling in.
             case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> new Nothing();
         };
-    }
-
-    /**
-     * Whether {@code op} orders the values either side of what it names.
-     *
-     * <p>For a reader that holds an operator and nothing else. A reader inside the comparison's own
-     * reading holds the claim and asks it instead: this answers about an operator, and what a rule
-     * placed is the claim's to say.
-     */
-    static boolean orders(BinOp op) {
-        return of(op) instanceof ComparisonClaim.Cut;
     }
 
 }

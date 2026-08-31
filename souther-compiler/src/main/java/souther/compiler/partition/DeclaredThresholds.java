@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Comparison;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -106,14 +107,13 @@ public final class DeclaredThresholds {
         // positions stand apart keeps neither end of it — what it parts is that number from every
         // other one — so there is no end for this to have placed, and a caller reaching here with
         // one is holding a line whose shape it has not established.
-        souther.compiler.check.ComparisonClaim.Cut order = cutting.ordering();
+        ComparisonClaim.Cut order = cutting.ordering();
         if (order == null) {
             throw new IllegalStateException("which end a clause keeps, asked of one that names a"
                     + " value: " + clause.rule());
         }
         return new OriginRef.InvariantOrigin(clause.rule(), clause.conjunct(),
-                endKept(order.valueBelongsBelow(), order.holdsAtTheValue()),
-                order.holdsAtTheValue());
+                endKept(order), order.holdsAtTheValue());
     }
 
     /**
@@ -125,12 +125,14 @@ public final class DeclaredThresholds {
      * two are held against each other: a rule stated as one end and read back as the other is a
      * line whose sides are the wrong way round, and it asks for two rows that prove nothing.
      *
-     * <p>Read off the side alone, the answer is right wherever a rule admits its own threshold and
-     * the other one wherever it does not — so {@code a <= b} lands correctly and {@code a < b} lands
-     * inverted, which is a whole half of the rules a model can write.
+     * <p>Read off the side the rule's own value belongs to alone, the answer is right wherever a
+     * rule admits its threshold and the other one wherever it does not — so {@code a <= b} lands
+     * correctly and {@code a < b} lands inverted, which is a whole half of the rules a model can
+     * write. What the end is read off is the side the rule is satisfied on, which is the claim's
+     * answer and puts the two facts together once.
      */
-    static EndSide endKept(boolean valueBelongsBelow, boolean holdsAtTheValue) {
-        return valueBelongsBelow == holdsAtTheValue ? EndSide.UPPER : EndSide.LOWER;
+    static EndSide endKept(ComparisonClaim.Cut order) {
+        return EndSide.facing(order.satisfyingSide());
     }
 
     /**

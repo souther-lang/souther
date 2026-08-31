@@ -38,6 +38,17 @@ public enum EndSide {
         return inward().opposite();
     }
 
+    /**
+     * The end the values run {@code inward} from, which is {@link #inward} read the other way.
+     *
+     * <p>Beside it rather than worked out by a caller, so that the pairing of an end with a
+     * direction is one fact read in whichever direction a reader has. A caller holding the way a
+     * rule is satisfied and wanting the end it keeps is asking this.
+     */
+    public static EndSide facing(Towards inward) {
+        return inward == Towards.ABOVE ? LOWER : UPPER;
+    }
+
     /** Where {@code bounds} stops on this side, or null where nothing stops it that way. */
     public Endpoint at(NumericDomain.Bounds bounds) {
         return bounds == null ? null : this == LOWER ? bounds.min() : bounds.max();

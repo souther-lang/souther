@@ -55,20 +55,12 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
             new Licence("souther.compiler.check.Comparison.of", 1,
                     "the one place a node becomes a comparison, which is what carries the claim to"
                             + " every reader below it"),
-            new Licence("souther.compiler.check.ComparisonPlacement.orders", 1,
-                    "the same answer asked as a boolean, for a reader that holds an operator and"
-                            + " no comparison"),
+            new Licence("souther.compiler.check.ClauseComparison.of", 1,
+                    "the one place a clause of a data becomes a comparison, which is what carries"
+                            + " the claim to the readings of what it bounds"),
             new Licence("souther.compiler.inputs.ComparedNumber.of", 1,
                     "reads any binary a walk met, so an operator that places nothing arrives here"
                             + " and is answered rather than excluded"));
-
-    /** Who may ask whether an operator orders its values, which is the wide answer read as a
-     *  boolean. The reading of an invariant's clauses is the one left, and it is where the same
-     *  arrangement is still to be made. */
-    private static final List<Licence> MAY_ASK_ORDERS = List.of(
-            new Licence("souther.compiler.check.InvariantBound.ordering", 1,
-                    "a clause of a data is read off the syntax tree and has no recognised"
-                            + " comparison to carry a claim"));
 
     @Test
     void onlyTheTwoBoundariesReadAnOperatorForWhatItPlaces() throws IOException {
@@ -77,13 +69,6 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
                         + " wide answer, and has a case to invent an answer for; a second call in a"
                         + " licensed reader is a second question under the first one's licence."
                         + " What each of these may ask, and why: " + why(MAY_ASK));
-    }
-
-    @Test
-    void whetherAnOperatorOrdersIsAskedOnlyWhereNoComparisonIsHeld() throws IOException {
-        assertEquals(declared(MAY_ASK_ORDERS), callsTo("orders"),
-                "asked as a boolean, what an operator places is left behind at the test. Where"
-                        + " that is still done, and why: " + why(MAY_ASK_ORDERS));
     }
 
     private static Map<String, Integer> declared(List<Licence> licences) {

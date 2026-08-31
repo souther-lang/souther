@@ -129,7 +129,7 @@ public final class LinesWhereTheyFall {
 
     /** The same threshold, measured at {@code at}. */
     private static Threshold thresholdAt(Threshold each, NumericTerm.FromOnePosition at) {
-        return new Threshold(at, each.parts(), each.valueBelongsBelow(), each.origin());
+        return new Threshold(at, each.parts(), each.valueBelongs(), each.origin());
     }
 
     /** The same singled-out value, measured at {@code at}. */
