@@ -242,8 +242,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aPointARowAlreadyStandsAtIsNotSearchedFor() {
         PointResolution resolved = PointResolver.resolveAt(
-                new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
-                        new Measurement.Complete<>(new ItemAssessment.Coverage.Hit()),
+                new ObligationAssessment(new Criterion.AtTheLevel(Level.ACount.of(1)),
+                        new ObligationCoverage.Witnessed(),
                         ItemAssessment.WritabilityProjection.PROVEN, null),
                 List.of(at("anywhere")), _ -> {
                     throw new AssertionError("nothing is searched at a point a row stands at");
@@ -279,9 +279,9 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** A point a row is owed at, measured and missed, so a search of it would tell somebody
      *  something. */
-    private static ItemAssessment.Owed owed() {
-        return new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
-                new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
+    private static ObligationAssessment owed() {
+        return new ObligationAssessment(new Criterion.AtTheLevel(Level.ACount.of(1)),
+                new ObligationCoverage.Missed(),
                 ItemAssessment.WritabilityProjection.PROVEN, null);
     }
 

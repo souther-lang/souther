@@ -87,7 +87,7 @@ public sealed interface About {
         }
 
         /** What became of it, which is what the finding is about. */
-        default ItemAssessment item() {
+        default ObligationAssessment item() {
             return obligation().item();
         }
     }

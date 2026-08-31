@@ -3823,6 +3823,25 @@ public final class Adequacy {
         }
 
         /**
+         * The same, where what found it is an obligation rather than a measure.
+         *
+         * <p>An obligation's coverage is a fold of the readings and not a measurement of anything
+         * ({@link ObligationCoverage}), so it has what it went without and no status. It is taken
+         * whole for the reason the measure above is: what a caller hands over is the thing it is
+         * looking at, and there is no argument here to pass a set worked out somewhere else.
+         */
+        public static Finding by(FindingSubject subject, ObligationCoverage found, Citation at,
+                                 About about) {
+            return new Finding(subject, found.weakening(), at, about);
+        }
+
+        /** The same, about a behavior. */
+        public static Finding by(String behavior, ObligationCoverage found, Citation at,
+                                 About about) {
+            return by(new FindingSubject.OfABehavior(behavior), found, at, about);
+        }
+
+        /**
          * Something the report says that no measurement established.
          *
          * <p>A rule this compiler could not read, a position nothing divides, a question nobody
@@ -4407,11 +4426,11 @@ public final class Adequacy {
                 return;
             }
             for (DeclaredDebt owed : account.owed()) {
-                ItemAssessment item = owed.debt().item();
-                if (!item.isUnmetGap()) {
+                ObligationAssessment item = owed.debt().item();
+                if (!(item.disposition() instanceof ObligationDisposition.Unmet)) {
                     continue;
                 }
-                out.add(Finding.by(owed.subject(), item.weakeningSource(), owed.at(),
+                out.add(Finding.by(owed.subject(), item.coverage(), owed.at(),
                         new About.APointOfADeclaredBorder(owed)));
             }
         }
@@ -4512,14 +4531,13 @@ public final class Adequacy {
             for (BorderObligationPointAssessment owed
                     : account == null ? List.<BorderObligationPointAssessment>of()
                             : account.made().orElseGet(List::of)) {
-                // Both halves, asked of the two answers the assessment keeps apart. A point no
-                // row was measured against is not a gap, and neither is one nothing has shown a
-                // row can be written at — that point is where the reading stopped rather than
-                // where the model does, and a row at it may be one nobody can write.
-                if (!owed.item().isUnmetGap()) {
+                // The one state a finding is made of, and the account is what says which that is.
+                // A point no row was measured against is not a gap, neither is one nothing has
+                // shown a row can be written at, and neither is one the readings left undecided.
+                if (!(owed.item().disposition() instanceof ObligationDisposition.Unmet)) {
                     continue;
                 }
-                out.add(Finding.by(behavior.name(), owed.item().weakeningSource(),
+                out.add(Finding.by(behavior.name(), owed.item().coverage(),
                         Citation.of(behavior.pos()), new About.APointOfABorder(owed)));
             }
             // What the model divides this position no way at all, which is the classes question and

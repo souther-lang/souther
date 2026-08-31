@@ -219,8 +219,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
             for (souther.compiler.query.BorderObligationPointAssessment point
                     : compilation.db().ask(new Adequacy.BodyBorders(module)).value().get("take")
                             .made().orElseGet(List::of)) {
-                if (point.item().weakeningSource() instanceof Measurement.Complete<?>
-                        && !point.owed().hasRowWitness()) {
+                if (point.item().coverage().settled() && !point.owed().hasRowWitness()) {
                     wrong.add("boundary "
                             + point.said(souther.compiler.source.SourceId::value, null));
                 }

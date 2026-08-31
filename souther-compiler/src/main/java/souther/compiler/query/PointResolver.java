@@ -85,7 +85,7 @@ public final class PointResolver {
      *                 and what a search of each came to is a fact about that position
      * @param held     what each of them holds, asked in that order and only as far as the walk gets
      */
-    public static PointResolution resolveAt(ItemAssessment.Owed owed,
+    public static PointResolution resolveAt(ObligationAssessment owed,
                                                   List<Reading> readings,
                                                   Function<Reading, ReadingEvidence> held) {
         if (!owed.worthSearching()) {
