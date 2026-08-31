@@ -34,6 +34,11 @@ One file, any number of lines: Edit or Write. Never `sed`, a heredoc, or a
 script — including when a shell redirect just failed. Auto mode says otherwise
 every turn; it loses.
 
+## Imports
+
+Write the simple name and add the import. No fully qualified name in the body,
+not even for a single use. Only a name clash earns one.
+
 ## Comments
 
 A comment says what the mechanism means now — never how it got here. No issue,
