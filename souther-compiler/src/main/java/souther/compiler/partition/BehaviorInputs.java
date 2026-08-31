@@ -26,7 +26,8 @@ import java.util.Map;
  *
  * <p>And because the same three are what a row is generated from. Two spellings of what a behavior
  * takes are two chances to read a position differently, which is the shape of every defect this
- * package has been fixing: {@link Generator.Subject} is these inputs and the axes derived at them.
+ * package has been fixing: a {@link MeasuredInput} is these inputs and the axes derived at them,
+ * both taken from the one reading they were made from.
  */
 public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols symbols,
                              souther.compiler.check.ReadingPolicy policy) {
@@ -34,6 +35,23 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     public BehaviorInputs {
         parameters = List.copyOf(parameters);
         types = List.copyOf(types);
+    }
+
+    /**
+     * The walk into what a row writes, of the input {@code read} was made of.
+     *
+     * <p>Taken from the reading rather than assembled beside it. What a behavior takes is what its
+     * reading was made from, so a caller building this from a signature would be writing down a
+     * second answer to that — and a row would be walked by one of them and measured by the other.
+     */
+    public static BehaviorInputs of(souther.compiler.inputs.InputReading read) {
+        List<String> parameters = new ArrayList<>();
+        List<Type> types = new ArrayList<>();
+        for (souther.compiler.inputs.InputDomain.Parameter each : read.domain().parameters()) {
+            parameters.add(each.name());
+            types.add(each.type());
+        }
+        return new BehaviorInputs(parameters, types, read.symbols(), read.domain().policy());
     }
 
     /** Which input {@code path} starts at, or -1 where the behavior has no such parameter. */
@@ -165,11 +183,18 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     }
 
     /**
-     * What the declarations put at {@code path}, or null where they put nothing there.
+     * What the declarations put where a value at {@code path} is written, or null where a value is
+     * not written there at all.
      *
      * <p>The same walk {@link #occurrencesAt} takes, with the values left out. A position's type is
      * a fact about the declarations and a row is not needed to ask it — which is what a caller
      * composing a value at a position wants, since there is no row yet.
+     *
+     * <p><b>For composing a value and for nothing else.</b> This walk stops where a value is built,
+     * so a sum whose cases share a spread answers nothing here — right for a caller writing a value
+     * at the sum, and not an answer about what a number named there is measured on. That question
+     * has an owner ({@link souther.compiler.inputs.Quantities#ordersOf}), and it is asked of the
+     * reading of the input rather than worked out from what this returns.
      *
      * <p><b>Here because the walk is here.</b> How a step of a path moves the type is one rule with
      * several cases — a field is reached through the names its record is written under, an element
@@ -181,7 +206,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * parameter for. Neither is a position with a type nothing could name: they are paths that name
      * no position of these inputs at all.
      */
-    public Type declaredAt(TermPath path) {
+    Type typeAtWrittenPath(TermPath path) {
         int at = indexOf(path);
         if (at < 0) {
             return null;

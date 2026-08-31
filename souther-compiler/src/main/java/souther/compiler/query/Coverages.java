@@ -86,23 +86,21 @@ final class Coverages {
         // a way of asking the declarations reaching this input a further question, and each of them
         // asking for its own would read every rule of every parameter three times over to arrive at
         // the same answers.
-        souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
+        souther.compiler.inputs.InputReading read = inputs.reading(symbols);
+        souther.compiler.inputs.Quantities quantities = read.quantities();
         Partitions.Partitioning partitioning =
-                Partitions.of(behavior.name(), inputs, quantities, symbols, policy);
+                Partitions.of(behavior.name(), read, policy);
         // What the behavior states about its own answer, which is read whether or not anything
         // implements it: a clause is written against the declaration, so an injected behavior draws
         // its lines like any other and there is no body for them to have come out of.
-        EnsuresThresholds.Clauses clauses =
-                EnsuresThresholds.of(stated, inputs, quantities, symbols);
+        EnsuresThresholds.Clauses clauses = EnsuresThresholds.of(stated, read);
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
-                : GuardThresholds.of(behavior.name(), body, plan, inputs, quantities,
-                        symbols, elements, arrives);
+                : GuardThresholds.of(behavior.name(), body, plan, read, elements, arrives);
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
         List<souther.compiler.partition.LineDrawn> declared =
-                souther.compiler.partition.DeclaredThresholds.between(behavior.name(), inputs,
-                        quantities, symbols);
+                souther.compiler.partition.DeclaredThresholds.between(behavior.name(), read);
         // Every producer of one kind of line, put together before the position is divided. Two
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would
@@ -112,10 +110,9 @@ final class Coverages {
         // written under a case, so one line there is one line per case — on the same number and from
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
-                souther.compiler.partition.LinesWhereTheyFall.of(inputs,
+                souther.compiler.partition.LinesWhereTheyFall.of(read,
                         both(clauses.evidence(), guards.evidence()),
-                        both(declared, both(clauses.between(), guards.between())),
-                        quantities, symbols);
+                        both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
                 filed.evidence(), symbols, policy,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
@@ -631,14 +628,14 @@ final class Coverages {
      * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
      * can never take one away, whenever it is run and however many points it is run over.
      */
-    static LineReadings searched(LineReadings measured, BehaviorInputs where,
-                                 Probe probe, souther.compiler.inputs.Quantities rules,
-                                 ReachingCuts reaching) {
+    static LineReadings searched(LineReadings measured,
+                                 souther.compiler.partition.MeasuredInput input,
+                                 Probe probe, ReachingCuts reaching) {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
         for (BorderAssessment border : measured.each()) {
-            OneSearchOfABorder search = searching(border.border(), where, probe, realizer,
-                    wayTo(border.border(), reaching), rules);
+            OneSearchOfABorder search = searching(border.border(), input, probe, realizer,
+                    wayTo(border.border(), reaching));
             java.util.EnumMap<PointRole, ItemAssessment> items =
                     new java.util.EnumMap<>(PointRole.class);
             for (PointRole role : PointRole.values()) {
@@ -792,10 +789,12 @@ final class Coverages {
      * other: what the rows already established is read whatever anybody asked for, and building a
      * value is work somebody asked for and pays for.
      */
-    private static OneSearchOfABorder searching(Border border, BehaviorInputs where, Probe probe,
-                                                LevelRealizer realizer,
-                                                souther.compiler.partition.WayToTheBorder within,
-                                                souther.compiler.inputs.Quantities rules) {
+    private static OneSearchOfABorder searching(Border border,
+                                                souther.compiler.partition.MeasuredInput input,
+                                                Probe probe, LevelRealizer realizer,
+                                                souther.compiler.partition.WayToTheBorder within) {
+        BehaviorInputs where = input.inputs();
+        souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = border.cut().of();
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
                 border.origin().comparisonAt();

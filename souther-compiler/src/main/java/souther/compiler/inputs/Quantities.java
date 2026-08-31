@@ -7,7 +7,12 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * What the rules leave a quantity taken over several of a behavior's input positions.
+ * What the rules leave a quantity taken over several of a behavior's input positions, and what
+ * order each of its terms is measured on.
+ *
+ * <p>The second because it is the same reading asked about one term rather than a form of them: what
+ * a quantity runs between is read on the orders its terms are on, and a caller that took the orders
+ * from somewhere else would be adding up numbers this reading counts differently.
  *
  * <p><b>The relational half of {@link InputDomain}.</b> A {@link Position} answers about itself, and
  * a rule can be about no position in particular: {@code x + y <= 5} relates two of them and divides
@@ -69,6 +74,59 @@ import java.util.Optional;
  * one that cannot see across two parameters asked first.
  */
 public sealed interface Quantities permits ReadQuantities {
+
+    /**
+     * Both orders of {@code term} as this reading has it: the one a value at its position is read
+     * on, and the one the number it names is answered on.
+     *
+     * <p><b>The answer for a term of this input, and the only thing that resolves where the term
+     * sits.</b> Which order a term is measured on follows from what stands where its number comes
+     * from, and where that is is settled once by the reading that made this. A caller working it
+     * out from a type it holds is answering with whatever walk put that type in its hand — a walk
+     * that follows a written value stops where a value is built, and a shared name of a sum is a
+     * position a number is taken at and not a place a value is composed for.
+     *
+     * <p>Both ends together, because a term that is what an operation answered has two orders and a
+     * caller handed one of them has whichever end the caller before it meant. The day the two part
+     * is the day a row is decoded on a count the value is not written in.
+     *
+     * <p><b>And so that nothing derives it from an expression.</b> A rule is written beside
+     * operands, and the type of an operand is not the type of the position the rule is about: an
+     * operation the arithmetic rewrote into a form over two positions is compared as what it
+     * answers with, so {@code Date.daysBetween(a, b) > 10} has {@code Int} on both sides and dates
+     * at both positions. Read off the comparison, every position of that rule was written back as a
+     * whole number and read off a row as one, and both directions agreed with each other and with
+     * nothing else.
+     *
+     * <p><b>A term under no position of the reading still has an order.</b> The reading stops where
+     * a path returns to a declaration already open on it, and it reports the end of a path the
+     * measurement named rather than every step on the way; nothing stops a rule from naming what is
+     * under either. What a report is about and what a declaration says are two questions, and only
+     * the first of them stops there.
+     */
+    TermOrders ordersOf(NumericTerm term);
+
+    /**
+     * How many the rules leave the container standing at {@code at}, or every number where they
+     * leave it unsaid.
+     *
+     * <p>Answered here because both halves of it are this reading's: which positions hold a
+     * container is what the reading found, and what its rules leave one of them is what the same
+     * reading says. Kept as a table beside a reading, a caller could ask what one reading's
+     * containers come to under another's rules, and the answer would be about neither.
+     *
+     * <p>Counts of containers and nothing else. What this feeds is how many elements to build, so an
+     * operation whose number is not how many the value holds has no business bounding it:
+     * {@code Time.hour(t) <= 5} would otherwise be read as a container of at most five.
+     *
+     * <p>About the positions of the input and about nothing else, which is why it takes one rather
+     * than a path. A coordinate of a construction plan is spelled with the same {@link TermPath} and
+     * is a different thing: the plan goes on past where the reading stops, and puts positions under
+     * a sum the declaration has none of. What a plan's node holds is read off that node's own type,
+     * which is where its rules are — and a reading handed one of those answers that nothing here is
+     * a position of it, rather than that no rule bounds it.
+     */
+    int mostHeldAt(PositionId at);
 
     /**
      * Where the values of {@code form} run, or null at either end where nothing bounds them.

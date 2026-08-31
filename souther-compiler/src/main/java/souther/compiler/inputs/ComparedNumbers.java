@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 
 import java.util.IdentityHashMap;
@@ -31,8 +30,9 @@ import java.util.Map;
  */
 public final class ComparedNumbers {
 
-    private final InputDomain inputs;
-    private final Symbols symbols;
+    /** The reading these comparisons are read against, which is where every position and every
+     *  order in an answer below comes from. */
+    private final InputReading read;
 
     /** What each comparison came to and what it was read under, shared by every reader of one
      *  body. */
@@ -40,15 +40,19 @@ public final class ComparedNumbers {
 
     private record Read(InputReads under, ComparedNumber said) { }
 
-    private ComparedNumbers(InputDomain inputs, Symbols symbols, Map<Core.Binary, Read> said) {
-        this.inputs = inputs;
-        this.symbols = symbols;
+    private ComparedNumbers(InputReading read, Map<Core.Binary, Read> said) {
+        this.read = read;
         this.said = said;
     }
 
-    /** The comparisons of one body, read against {@code inputs}. */
-    public static ComparedNumbers of(InputDomain inputs, Symbols symbols) {
-        return new ComparedNumbers(inputs, symbols, new IdentityHashMap<>());
+    /** The comparisons of one body, read against {@code read}. */
+    public static ComparedNumbers of(InputReading read) {
+        return new ComparedNumbers(read, new IdentityHashMap<>());
+    }
+
+    /** The reading they were read against, for a reader that wants it beside them. */
+    public InputReading reading() {
+        return read;
     }
 
     /**
@@ -71,8 +75,8 @@ public final class ComparedNumbers {
             }
             return had.said();
         }
-        ComparedNumber read = ComparedNumber.of(comparison, inputs, at, symbols);
-        said.put(comparison, new Read(at, read));
-        return read;
+        ComparedNumber made = ComparedNumber.of(comparison, read, at);
+        said.put(comparison, new Read(at, made));
+        return made;
     }
 }

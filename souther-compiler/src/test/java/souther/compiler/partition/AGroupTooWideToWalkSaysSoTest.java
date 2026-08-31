@@ -416,7 +416,7 @@ class AGroupTooWideToWalkSaysSoTest {
     }
 
     /** The behavior's inputs, its axes and the groups its body meets at, off one compile. */
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -445,11 +445,8 @@ class AGroupTooWideToWalkSaysSoTest {
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                     checked.supplied());
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sigs.get("total").inputTypes(), symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    partitioning.axes(), HeldCounts.of(inputs, symbols)),
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
+                    partitioning.axes()),
                     CoverageRead.of("total", body, plan, inputs, symbols));
         }
     }

@@ -76,10 +76,11 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
                 checked.supplied());
         Core body = checked.behaviorBodies().get(behavior);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
         return GuardThresholds.of(behavior, body, plan, inputs, symbols).thresholds().stream()
                 .<String>map(each -> each.term() + " at "
                         + (each.value() == null ? "nowhere" : each.value().key()) + " on "
-                        + inputs.answeredOn(each.term(), symbols))
+                        + quantities.ordersOf(each.term()).answered())
                 .toList();
     }
 

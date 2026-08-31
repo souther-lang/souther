@@ -184,10 +184,8 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));
-        Generator.Subject subject = new Generator.Subject(spec.name(),
-                new BehaviorInputs(names, sigs.get(spec.name()).inputTypes(), symbols,
-                        ReadAs.THE_COMPILATION_DOES),
-                partitioning.axes(), HeldCounts.of(domain, symbols));
+        MeasuredInput subject =
+                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning.axes());
 
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();

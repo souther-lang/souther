@@ -27,7 +27,7 @@ import java.util.Set;
  * @param classesOwed one class of one position apiece, in the order they were gathered
  * @param armsOwed    one arm apiece, in the order the plan numbered them
  */
-public record GenerationPlan(Generator.Subject subject, List<Generator.ClassOwed> classesOwed,
+public record GenerationPlan(MeasuredInput subject, List<Generator.ClassOwed> classesOwed,
                              List<Generator.ArmOwed> armsOwed) {
 
     public GenerationPlan {
@@ -38,7 +38,7 @@ public record GenerationPlan(Generator.Subject subject, List<Generator.ClassOwed
         }
         onlyOnce("class", classesOwed);
         onlyOnce("arm", armsOwed);
-        // A class of another behavior, which is the same disagreement `Subject` refuses among its
+        // A class of another behavior, which is the same disagreement a measured input refuses among its
         // axes. Held here, one run would be answering for two behaviors and every sentence about
         // what it was asked for would be right about one of them.
         for (Generator.ClassOwed each : classesOwed) {

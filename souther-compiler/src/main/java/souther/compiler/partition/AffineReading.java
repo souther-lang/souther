@@ -367,14 +367,14 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * it: a position with no number is one a sum has nothing to add.
      */
     java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers(
-            InputDomain inputs, Symbols symbols) {
+            souther.compiler.inputs.Quantities quantities) {
         java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
                 new java.util.LinkedHashMap<>();
         for (NumericTerm term : form.coefs().keySet()) {
             // Both ends of the term, because a reader of a row wants the one it is decoded on and a
             // reader of a line wants the one the answer is measured on. Carried together so neither
             // stands in for the other (#1027).
-            souther.compiler.inputs.TermOrders here = inputs.ordersOf(term, symbols);
+            souther.compiler.inputs.TermOrders here = quantities.ordersOf(term);
             if (here.answered() == null || !here.answered().counts()) {
                 return null;
             }

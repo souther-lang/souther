@@ -344,6 +344,22 @@ public final class InputDomain {
     }
 
     /**
+     * What the behavior takes, in the order it declares them.
+     *
+     * <p>What this reading was made from, so that a reader needing the parameters takes the ones it
+     * was read at rather than assembling its own from a signature — two lists of what one behavior
+     * takes are two chances to disagree about which position a row's value goes to.
+     */
+    public List<Parameter> parameters() {
+        return parameters;
+    }
+
+    /** How the names in it are read, which is the policy this reading was made under. */
+    public ReadingPolicy policy() {
+        return policy;
+    }
+
+    /**
      * The position at {@code path}, or null where this reading has none there.
      *
      * <p>Null for two unlike paths: one below where this reading stops, and one that is not a
@@ -574,56 +590,6 @@ public final class InputDomain {
     }
 
     /**
-     * The order one term is read off a row and written back on, or null where it has none.
-     *
-     * <p><b>The one answer, so that nothing derives it from an expression.</b> A rule is written
-     * beside operands, and the type of an operand is not the type of the position the rule is about:
-     * an operation the arithmetic rewrote into a form of two positions is compared as what it
-     * answers with, so {@code Date.daysBetween(a, b) > 10} has {@code Int} on both sides and dates
-     * at both positions. Read off the comparison, every position of that rule was written back as a
-     * whole number and read off a row as one, and both directions agreed with each other and with
-     * nothing else (#1018).
-     *
-     * <p>Two questions, answered where each is known. What a term measures is the term's — a size is
-     * a whole number whatever it is taken of — and what the location holds is this reading's, which
-     * is why the two meet here rather than at whichever caller had both to hand.
-     *
-     * <p><b>A term under no position of this reading still has an order.</b> This reading stops
-     * where a path returns to a declaration already open on it ({@link ExpansionTrace}), and nothing
-     * stops a rule from naming what is under that. What a report is about and what a declaration
-     * says are two questions, and only the first of them stops there — so the type is followed down
-     * to wherever the rule named ({@link #declaredAt}) and the line is drawn.
-     *
-     * <p>The position first and the descent only where there is none. A position may stand under a
-     * narrowing, and what it holds there is what a row writes; walking the declaration again would
-     * answer with what the field was declared as before anything narrowed it.
-     */
-    public Carrier answeredOn(NumericTerm term, Symbols symbols) {
-        return ordersOf(term, symbols).answered();
-    }
-
-    /**
-     * The order a value at {@code term}'s path is read off a row on, or null where nothing orders
-     * it.
-     *
-     * <p>The other end of the same term, and never the one above. What a term answers and what it is
-     * read off are two orders for every term that is what an operation answered and one order for
-     * every term that is not — so a caller handed a single carrier had whichever of the two the
-     * caller before it meant, and the day the two part is the day a row is decoded on a count the
-     * value is not written in (#1027).
-     */
-    public Carrier observedOn(NumericTerm term, Symbols symbols) {
-        return ordersOf(term, symbols).observed();
-    }
-
-    /** Both ends of one term, taken together from the one reading of where it sits. Read from the
-     *  subject and not from a position the term divides: what a term's orders follow from is what
-     *  stands where the number comes from. */
-    public TermOrders ordersOf(NumericTerm term, Symbols symbols) {
-        return term.ordersAt(typeAt(term.subjectPath(), symbols), symbols);
-    }
-
-    /**
      * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
      *
      * <p>The position first and the declarations only where there is none, which is the one
@@ -718,6 +684,19 @@ public final class InputDomain {
     }
 
     /**
+     * This reading and what it says about its numbers, as one value.
+     *
+     * <p>The way a reader that uses both gets them. Which position a name stands at and what a
+     * number there is measured on are two questions such a reader asks together, and asked of two
+     * values it was handed separately they can be of two behaviors — a parameter spelled the same
+     * way in both is all it takes. So the pairing is made here, where the second is made from the
+     * first, and there is nowhere else to make one.
+     */
+    public InputReading reading(Symbols symbols) {
+        return new InputReading(this, quantities(symbols), symbols);
+    }
+
+    /**
      * The same input, asked about a quantity over several of its positions.
      *
      * <p>The relational half of what a reading of an input can say. A {@link Position} answers about
@@ -744,7 +723,12 @@ public final class InputDomain {
             byRoot.computeIfAbsent(root.at(),
                     at -> PlacedRules.of(at, root.type(), symbols, policy));
         }
-        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, symbols);
+        // Where a term's subject stands, handed over already answered. What comes back asks a
+        // position first and the declarations under one the reading stopped above, which is the one
+        // resolution of it — worked out again from the positions this hands over, a rule about a
+        // name every case of a sum spreads would be read as naming nothing.
+        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, path -> typeAt(path, symbols),
+                symbols);
     }
 
     /**

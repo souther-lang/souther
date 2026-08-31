@@ -103,10 +103,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
                     guards.between());
         }
         FillResult filled = Generator.fill(
-                new Generator.Subject(spec.name(), new BehaviorInputs(
-                        spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(),
-                        symbols, ReadAs.THE_COMPILATION_DOES),
-                        axes.axes(), HeldCounts.of(domain, symbols)),
+                MeasuredInput.of(spec.name(), domain.reading(symbols), axes.axes()),
                 List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
         return filled.rows();

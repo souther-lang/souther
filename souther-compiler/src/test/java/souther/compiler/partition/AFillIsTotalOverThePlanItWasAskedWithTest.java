@@ -167,10 +167,12 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                 List.of(divided("days/low", 1).ofTheNumber(atDays),
                         divided("days/high", 9).ofTheNumber(atDays)),
                 List.of());
-        Generator.Subject subject = new Generator.Subject("fee",
-                new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
-                        ReadAs.THE_COMPILATION_DOES),
-                List.of(days), HeldCounts.NONE);
+        MeasuredInput subject = MeasuredInput.of("fee",
+                souther.compiler.inputs.InputDomain.of(
+                        List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
+                                Type.INT)),
+                        SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS),
+                List.of(days));
         return new GenerationPlan(subject, classes, arms);
     }
 

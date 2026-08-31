@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.BinOp;
@@ -40,32 +39,31 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonClai
      * line asks for one ({@link #drawsALine}); a reader wanting to know what the decision is about
      * takes the number and needs no more.
      */
-    public static ComparedNumber of(Core.Binary comparison, InputDomain inputs, InputReads reads,
-                                    Symbols symbols) {
+    public static ComparedNumber of(Core.Binary comparison, InputReading read, InputReads reads) {
         // Whichever side draws a line, and the left where neither does and it names a number. A
         // number on the left that the right is not a value of is still the number the comparison
         // is about, unless the right is a number the left is a value of — then the line is on that
         // one, and the comparison is read turned round.
         ComparedNumber left = onOneSide(comparison.left(), comparison.right(), comparison.op(),
-                inputs, reads, symbols);
+                read, reads);
         if (left != null && left.at() != null) {
             return left;
         }
         ComparedNumber right = onOneSide(comparison.right(), comparison.left(),
-                mirrored(comparison.op()), inputs, reads, symbols);
+                mirrored(comparison.op()), read, reads);
         return right != null && right.at() != null ? right : left != null ? left : right;
     }
 
     /** The comparison read as being about a number {@code side} names, or null where it names none. */
-    private static ComparedNumber onOneSide(Core side, Core other, BinOp op, InputDomain inputs,
-                                            InputReads reads, Symbols symbols) {
-        Named named = namedBy(side, inputs, reads, symbols);
+    private static ComparedNumber onOneSide(Core side, Core other, BinOp op, InputReading read,
+                                            InputReads reads) {
+        Named named = namedBy(side, read, reads);
         if (named == null) {
             return null;
         }
         Carrier order = named.orders() == null ? null : named.orders().answered();
         return new ComparedNumber(named.term(), named.orders(), ComparisonClaim.of(op),
-                order == null ? null : order.literalOf(other, symbols));
+                order == null ? null : order.literalOf(other, read.symbols()));
     }
 
     /** The number this is about where one position answers it, and null where none does. */
@@ -89,12 +87,12 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonClai
 
     /** The number an expression names together with the orders it is read and counted on, or null
      *  where it names none. */
-    private static Named namedBy(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
-        NumericTerm term = InputNumber.of(e, inputs, reads, symbols);
+    private static Named namedBy(Core e, InputReading read, InputReads reads) {
+        NumericTerm term = InputNumber.of(e, read.domain(), reads, read.symbols());
         if (term == null) {
             return null;
         }
-        TermOrders orders = inputs.ordersOf(term, symbols);
+        TermOrders orders = read.quantities().ordersOf(term);
         return new Named(term, orders == null || orders.answered() == null ? null : orders);
     }
 

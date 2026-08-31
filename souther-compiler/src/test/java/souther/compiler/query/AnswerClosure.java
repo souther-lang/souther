@@ -540,11 +540,10 @@ final class AnswerClosure {
                     part("souther.compiler.check.Resolve$Values", "elsewhere")), A_STORE,
                     Traversal.Why.NOTHING_CLOSES_IT),
             generationReader("souther.compiler.check.Symbols",
-                    part("souther.compiler.partition.Generator$Subject", "inputs"),
+                    part("souther.compiler.partition.MeasuredInput", "written"),
                     part("souther.compiler.partition.BehaviorInputs", "symbols")),
             generationReader("souther.compiler.inputs.ReadQuantities",
-                    part("souther.compiler.partition.Generator$Subject", "held"),
-                    part("souther.compiler.partition.HeldCounts", "counts"),
+                    part("souther.compiler.partition.MeasuredInput", "quantities"),
                     arm("souther.compiler.inputs.ReadQuantities")),
             new KnownDeclared(declared(Q + "Names$Resolution",
                     "souther.compiler.diag.CompileException",
@@ -572,7 +571,7 @@ final class AnswerClosure {
                 part("souther.compiler.partition.Axis", "classes"), HELD,
                 part("souther.compiler.partition.PartitionClass", "denotes"));
         theMachineUnderALanguage(out, Q + "Adequacy$Generated",
-                then(A_SUBJECT, part("souther.compiler.partition.Generator$Subject", "axes"), HELD,
+                then(A_SUBJECT, part("souther.compiler.partition.MeasuredInput", "axes"), HELD,
                         part("souther.compiler.partition.Axis", "classes"), HELD,
                         part("souther.compiler.partition.PartitionClass", "denotes")));
         // The same ends, reached where an axis carries what the reading left the position.
@@ -581,7 +580,7 @@ final class AnswerClosure {
                 part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
                 part("souther.compiler.partition.Axis", "narrowed"));
         bothEndsOfARange(out, Q + "Adequacy$Generated",
-                then(A_SUBJECT, part("souther.compiler.partition.Generator$Subject", "axes"), HELD,
+                then(A_SUBJECT, part("souther.compiler.partition.MeasuredInput", "axes"), HELD,
                         part("souther.compiler.partition.Axis", "narrowed")));
         return List.copyOf(out);
     }

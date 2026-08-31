@@ -245,7 +245,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         return new Observation(taken, ways);
     }
 
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -267,10 +267,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                     checked.supplied());
             Partitions.Partitioning partitioning =
                     Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sigs.get(behavior).inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                    partitioning.axes(), HeldCounts.of(inputs, symbols)),
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
+                    partitioning.axes()),
                     CoverageRead.of(spec.name(), body, plan, inputs, symbols));
         }
     }
