@@ -42,6 +42,15 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonClai
      */
     public static ComparedNumber of(Core.Binary comparison, InputDomain inputs,
                                     Quantities quantities, InputReads reads, Symbols symbols) {
+        // Both of one reading, established here because this is where both are used: which position
+        // a name stands at comes from the first and what the number there is measured on from the
+        // second. Two behaviors can take a parameter spelled the same way, so a term made against
+        // one reading is answered by the other with nothing saying anything is wrong — the order
+        // would be of a position this comparison is not about.
+        if (!(quantities instanceof ReadQuantities read) || !read.isOf(inputs)) {
+            throw new IllegalArgumentException(
+                    "a comparison read against one reading of an input and measured on another's");
+        }
         // Whichever side draws a line, and the left where neither does and it names a number. A
         // number on the left that the right is not a value of is still the number the comparison
         // is about, unless the right is a number the left is a value of — then the line is on that

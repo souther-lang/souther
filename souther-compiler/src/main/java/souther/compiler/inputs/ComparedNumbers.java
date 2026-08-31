@@ -32,9 +32,10 @@ import java.util.Map;
 public final class ComparedNumbers {
 
     private final InputDomain inputs;
-    /** The same reading, asked what order a term it named is measured on. Taken from the caller
-     *  rather than made here: what it answers is read off every parameter's declarations, and a
-     *  body's comparisons are read beside other readers of the same input. */
+    /** The same reading, asked what order a term it named is measured on. Made here from the
+     *  reading rather than taken beside it, so that the two cannot be of different behaviors — and
+     *  handed out ({@link #quantities()}) so that a reader wanting one asks for this one rather
+     *  than reading every parameter's declarations a second time. */
     private final Quantities quantities;
     private final Symbols symbols;
 
@@ -53,8 +54,15 @@ public final class ComparedNumbers {
     }
 
     /** The comparisons of one body, read against {@code inputs}. */
-    public static ComparedNumbers of(InputDomain inputs, Quantities quantities, Symbols symbols) {
-        return new ComparedNumbers(inputs, quantities, symbols, new IdentityHashMap<>());
+    public static ComparedNumbers of(InputDomain inputs, Symbols symbols) {
+        return new ComparedNumbers(inputs, inputs.quantities(symbols), symbols,
+                new IdentityHashMap<>());
+    }
+
+    /** What the reading these comparisons are read against says about its numbers, for a reader
+     *  that wants it beside them. */
+    public Quantities quantities() {
+        return quantities;
     }
 
     /**

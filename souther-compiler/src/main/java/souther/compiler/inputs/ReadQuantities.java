@@ -49,6 +49,15 @@ final class ReadQuantities implements Quantities {
      */
     private final java.util.function.Function<TermPath, Type> typeAt;
     /**
+     * The reading this was made from.
+     *
+     * <p>Held so that a caller handed both can be asked whether they are of one reading, and for
+     * nothing else: two readings of two behaviors can have a parameter spelled the same way, and a
+     * term made against one of them is answered by the other without either saying anything is
+     * wrong. Nothing here reads it, and it is not reachable from outside this package.
+     */
+    private final InputDomain of;
+    /**
      * What each term has been fixed at, as the least and the greatest of the values fixed there.
      *
      * <p>A pair and not a value, because what a caller settles has to accumulate the same way
@@ -115,11 +124,12 @@ final class ReadQuantities implements Quantities {
         }
     }
 
-    private ReadQuantities(Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
+    private ReadQuantities(InputDomain of, Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
                            Map<TermPath, Position> byPath,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
                            souther.compiler.check.Symbols symbols, List<Assumed> assumed) {
+        this.of = of;
         this.symbols = symbols;
         this.typeAt = typeAt;
         this.assumed = List.copyOf(assumed);
@@ -137,11 +147,19 @@ final class ReadQuantities implements Quantities {
     }
 
     /** Before anything is fixed. */
-    static ReadQuantities of(Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
+    static ReadQuantities of(InputDomain from, Map<TermPath, PlacedRules> byRoot,
+                             Set<TermPath> roots,
                              Map<TermPath, Position> byPath,
                              java.util.function.Function<TermPath, Type> typeAt,
                              souther.compiler.check.Symbols symbols) {
-        return new ReadQuantities(byRoot, roots, byPath, typeAt, Map.of(), symbols, List.of());
+        return new ReadQuantities(from, byRoot, roots, byPath, typeAt, Map.of(), symbols,
+                List.of());
+    }
+
+    /** Whether {@code reading} is the one this was made from, which is what a caller handed both of
+     *  them has to establish before it uses them together. */
+    boolean isOf(InputDomain reading) {
+        return of == reading;
     }
 
     /**
@@ -162,11 +180,20 @@ final class ReadQuantities implements Quantities {
     }
 
     @Override
-    public int mostHeldAt(TermPath at) {
-        Position position = byPath.get(at);
+    public int mostHeldAt(PositionId at) {
+        Position position = byPath.get(at.at());
+        // Refused where this reading has no such position, the way a term under nothing this
+        // behavior takes is refused. A coordinate a value is built at is spelled the same way and is
+        // not one of these, and answered with "no rule bounds it" the reading would be saying
+        // something about a place it has never been.
+        if (position == null) {
+            throw new IllegalArgumentException(
+                    "`" + at + "` is no position of this input, so there is nothing here to say"
+                            + " how many it holds");
+        }
         // The position's own count, which is the one question here that names an arm — and it names
         // it because it is about that arm.
-        if (position == null || !(position.term() instanceof NumericTerm.TakenOf taken)
+        if (!(position.term() instanceof NumericTerm.TakenOf taken)
                 || !(taken.takenAs()
                         instanceof souther.compiler.semantics.TakenAs.HowManyItHolds)) {
             return Integer.MAX_VALUE;
@@ -246,7 +273,7 @@ final class ReadQuantities implements Quantities {
         }
         List<Assumed> both = new java.util.ArrayList<>(assumed);
         both.add(taking);
-        return new ReadQuantities(byRoot, roots, byPath, typeAt, fixed, symbols, both);
+        return new ReadQuantities(of, byRoot, roots, byPath, typeAt, fixed, symbols, both);
     }
 
     /**
@@ -479,7 +506,7 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byRoot, roots, byPath, typeAt, both, symbols, assumed);
+        return new ReadQuantities(of, byRoot, roots, byPath, typeAt, both, symbols, assumed);
     }
 
     /**

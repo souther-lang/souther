@@ -3447,7 +3447,10 @@ public final class Generator {
      */
     private static boolean holdsNothing(Subject subject, Axis axis) {
         for (TermPath inside : axis.path().sequencesContainingIt()) {
-            if (subject.quantities().mostHeldAt(inside) < 1) {
+            // A position of the input, because the axis is at one and a container it stands inside
+            // is a position the same reading found on the way down to it.
+            if (subject.quantities().mostHeldAt(
+                    new souther.compiler.inputs.PositionId(inside)) < 1) {
                 return true;
             }
         }

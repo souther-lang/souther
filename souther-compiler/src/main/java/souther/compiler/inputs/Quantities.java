@@ -119,12 +119,14 @@ public sealed interface Quantities permits ReadQuantities {
      * operation whose number is not how many the value holds has no business bounding it:
      * {@code Time.hour(t) <= 5} would otherwise be read as a container of at most five.
      *
-     * <p>About the positions of the input and about nothing else. A coordinate of a construction
-     * plan is spelled with the same {@link TermPath} and is a different thing: the plan goes on past
-     * where the reading stops, and puts positions under a sum the declaration has none of. What a
-     * plan's node holds is read off that node's own type, which is where its rules are.
+     * <p>About the positions of the input and about nothing else, which is why it takes one rather
+     * than a path. A coordinate of a construction plan is spelled with the same {@link TermPath} and
+     * is a different thing: the plan goes on past where the reading stops, and puts positions under
+     * a sum the declaration has none of. What a plan's node holds is read off that node's own type,
+     * which is where its rules are — and a reading handed one of those answers that nothing here is
+     * a position of it, rather than that no rule bounds it.
      */
-    int mostHeldAt(TermPath at);
+    int mostHeldAt(PositionId at);
 
     /**
      * Where the values of {@code form} run, or null at either end where nothing bounds them.

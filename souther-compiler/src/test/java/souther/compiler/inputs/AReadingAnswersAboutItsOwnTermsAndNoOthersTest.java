@@ -79,6 +79,41 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
                 "the refusal names the path nothing here takes: " + refused.getMessage());
     }
 
+    /**
+     * And two readings of one spelling are told apart, which the root alone cannot do.
+     *
+     * <p>What a term is under says which parameter it names and not which reading named it. Two
+     * behaviors taking a parameter spelled the same way have a root apiece, so a comparison read
+     * against one of them and measured on the other passes every question about where the term
+     * sits — and comes back with the order of a position the comparison is not about.
+     */
+    @Test
+    void twoReadingsWithAParameterSpelledAlikeAreNotOneReading() {
+        InputDomain text = InputDomain.of(
+                List.of(new InputDomain.Parameter("x", null, Type.STRING)),
+                SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+        InputDomain number = InputDomain.of(
+                List.of(new InputDomain.Parameter("x", null, Type.INT)),
+                SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+
+        assertEquals(souther.compiler.check.Carrier.TEXT,
+                text.quantities(SYMBOLS).ordersOf(new NumericTerm.ValueOf(TermPath.of("x")))
+                        .observed(),
+                "the reading that takes a string reads a string there");
+        assertEquals(souther.compiler.check.Carrier.WHOLE,
+                number.quantities(SYMBOLS).ordersOf(new NumericTerm.ValueOf(TermPath.of("x")))
+                        .observed(),
+                "and the one that takes a number reads a number, at a path spelled the same way");
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> souther.compiler.inputs.ComparedNumber.of(null, text,
+                        number.quantities(SYMBOLS), null, SYMBOLS));
+
+        assertEquals(true, refused.getMessage().contains("reading"),
+                "a comparison read against one and measured on the other is refused: "
+                        + refused.getMessage());
+    }
+
     /** What the answer would have been, which is what makes the refusal load-bearing. */
     @Test
     void theAnswerItWouldHaveGivenIsHalfOne() {
