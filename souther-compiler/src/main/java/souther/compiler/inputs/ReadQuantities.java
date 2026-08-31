@@ -334,8 +334,8 @@ final class ReadQuantities implements Quantities {
             return read;
         }
         java.util.SequencedMap<InputAtom, String> made = new LinkedHashMap<>();
-        conditioned().forEach((root, carried) -> carried.positions().forEach(
-                // What a newtype wraps has no path of its own, so the place is the value itself.
+        conditioned().forEach((root, carried) -> carried.named().forEach(
+                // What a newtype wraps is at no name of its own, so the place is the value itself.
                 (atom, path) -> made.put(atom, path.isEmpty()
                         ? root.toString() : root + "." + path)));
         read = java.util.Collections.unmodifiableSequencedMap(made);

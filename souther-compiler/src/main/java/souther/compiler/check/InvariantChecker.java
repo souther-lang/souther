@@ -1428,8 +1428,8 @@ public final class InvariantChecker {
         if (about != null && InvariantBound.ordering(op)
                 && coordinatesIn(bound, at, byName).isEmpty()
                 && shape instanceof ClauseStates.SomethingElse named) {
-            Set<RuleKey> positions = new LinkedHashSet<>(named.positions());
-            // The position the bound sits at, which the walk over the comparison names anyway. Added
+            Set<RuleKey> positions = new LinkedHashSet<>(named.named());
+            // The name the bound sits at, which the walk over the comparison writes anyway. Added
             // so that the arm cannot be reached with nothing to be about.
             positions.add(about.path());
             // And the number the line is on, which is the coordinate this reading already holds. Not

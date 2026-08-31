@@ -4,7 +4,7 @@ package souther.compiler.check;
  * One question a rule raises, and what it is about.
  *
  * <p><b>The question and its subject are one thing and not two beside each other.</b> The
- * obligations do not share a subject — what values may stand somewhere is about a position, where a
+ * obligations do not share a subject — what values may stand somewhere is about a name, where a
  * line falls is about a number of one — and a rule bounding a {@code String} on its length raises
  * both, the values being the string's and the line being on the length. Which subject an obligation
  * has does not vary, so it is the arm. Carried as an obligation beside a subject, the pair was a
@@ -24,9 +24,9 @@ package souther.compiler.check;
 public sealed interface Owed {
 
     /**
-     * Which values may stand at a position.
+     * Which values may stand at a name.
      *
-     * <p>The position and never a number of it. What a rule about the length of a string admits is
+     * <p>The name and never a number at it. What a rule about the length of a string admits is
      * a set of strings; the length is where its line falls, which is the question below.
      *
      * @param path what the value's own rules call the place, {@link RuleKey#THE_VALUE} for the
@@ -48,10 +48,10 @@ public sealed interface Owed {
     }
 
     /**
-     * Where a line falls on one number of one position.
+     * Where a line falls on one number at one name.
      *
-     * <p>The number itself, which is the position's own value or what an operation answers of it.
-     * Two operations over one path are two of these, and that is the whole reason the coordinate is
+     * <p>The number itself, which is the value at the name or what an operation answers of it.
+     * Two operations over one name are two of these, and that is the whole reason the coordinate is
      * carried rather than a flag saying that a number was taken: told apart by the flag, a rule
      * about one operation's number was filed at another's, and every reader that wanted the name
      * reached past the question to whatever stood beside it.

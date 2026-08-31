@@ -342,7 +342,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                             subject -> "?" + subject);
 
             assertEquals(readIn.holdsNothing().isPresent(),
-                    taken.constraints().holdsNothing(taken.positions()).isPresent(),
+                    taken.constraints().holdsNothing(taken.named()).isPresent(),
                     "whether anything is left, with x at " + at);
             assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
                             new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),

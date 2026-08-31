@@ -191,16 +191,16 @@ public sealed interface Required {
             // A `LinkedHashSet` and not `Set.of`, which iterates in an order salted once per JVM
             // run — the questions reach a document in the order they are written here.
             case ClauseStates.ABound bound -> {
-                Set<Owed> owed = bound.positions().stream().map(Owed.AdmittedValues::new)
+                Set<Owed> owed = bound.named().stream().map(Owed.AdmittedValues::new)
                         .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
                 owed.add(new Owed.Boundary(bound.line()));
                 yield new Some(owed);
             }
-            // A clause about no position of this value raises no question about one. Not a rule
+            // A clause writing no name of this value raises no question about one. Not a rule
             // that went unread: what it says was read, and what it says is about nothing here.
-            case ClauseStates.SomethingElse other -> other.positions().isEmpty()
+            case ClauseStates.SomethingElse other -> other.named().isEmpty()
                     ? new Irrelevant(Set.of(Because.IT_NAMES_NO_POSITION))
-                    : new Some(other.positions().stream()
+                    : new Some(other.named().stream()
                             .map(Owed.AdmittedValues::new).collect(java.util.stream.Collectors
                                     .toCollection(LinkedHashSet::new)));
             case ClauseStates.ARelation _ -> new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));

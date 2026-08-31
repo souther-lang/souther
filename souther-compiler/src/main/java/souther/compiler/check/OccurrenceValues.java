@@ -9,7 +9,7 @@ import souther.compiler.types.TypeSymbol;
 import java.math.BigDecimal;
 
 /**
- * How many values a position's own value may take, which is not how much it holds.
+ * How many values the value at a name may take, which is not how much it holds.
  *
  * <p>The same numbers answer two questions and they are never one question. A rule reading
  * {@code >= 2} bounds the values of a field where the field is a number and counts what it holds
@@ -30,7 +30,7 @@ import java.math.BigDecimal;
  */
 public final class OccurrenceValues {
 
-    /** What a position no declaration wrote about leaves: no count of values at all. */
+    /** What a name no declaration wrote about leaves: no count of values at all. */
     public static final OccurrenceValues NOTHING_READ = new OccurrenceValues(null);
 
     private final InvariantChecker.Seeded seeded;
@@ -39,7 +39,7 @@ public final class OccurrenceValues {
         this.seeded = seeded;
     }
 
-    /** What {@code data}, declared as {@code named}, leaves the values at each of its positions. */
+    /** What {@code data}, declared as {@code named}, leaves the values at each of its names. */
     public static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
                                        ReadingPolicy policy) {
         return of(named, data, symbols, policy, _ -> false);
@@ -64,8 +64,8 @@ public final class OccurrenceValues {
      * How many whole numbers the value at {@code path} may be, or {@link Cardinality#UNKNOWN} where
      * that is not what it is or the rules leave it open at an end.
      *
-     * <p>Both ends are read as they are held. A position whose values are spaced one apart has its
-     * ends recorded as whole numbers it stops at, so an end that is neither is a position this cannot
+     * <p>Both ends are read as they are held. A number spaced one apart has its
+     * ends recorded as whole numbers it stops at, so an end that is neither is one this cannot
      * count — and counting it anyway by rounding would name a number of values the rules never left.
      */
     public Cardinality wholeValuesAt(RuleKey path) {
