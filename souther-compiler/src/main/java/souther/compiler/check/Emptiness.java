@@ -139,7 +139,13 @@ public sealed interface Emptiness {
      * is here rather than on the proofs below it so that one place in a value is written down once —
      * a proof carrying a path of its own beside this one would be the same fact in two spellings.
      *
-     * @param path where the position sits, {@link FieldDomains#THE_VALUE} for what a newtype wraps
+     * <p><b>Written out, and by two vocabularies.</b> A reading of a declaration spells what that
+     * declaration's own rules call the place ({@link RuleKey}); a reading of a behavior's input
+     * spells where the value stands under a parameter. Both reach here as text and nothing tells a
+     * reader which it has, which is why what is spelled empty is read back by comparing it.
+     *
+     * @param path where the lack is, written out. Empty is the value the reading is of — what a
+     *             newtype wraps, or the parameter itself
      */
     record AtAField(String path, Emptiness under) implements Emptiness {}
 

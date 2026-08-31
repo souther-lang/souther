@@ -189,23 +189,33 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The value {@code path} is a position of, or null where it is a position of nothing this
-     * reading holds.
+     * The value {@code path} is a position of and what that value's rules call it, or null where no
+     * value this reading holds can name it.
      *
      * <p>The nearest, which is the one whose clauses can name it: a field of a case is under the
      * parameter as well, and what the parameter's own rules say stops at the narrowing. Read as the
      * outermost, a clause of the sum would be asked about a position inside one of its cases.
+     *
+     * <p><b>The name comes back with the root, because it is why that root was chosen.</b> Handed
+     * back alone, every caller works the name out again and has to answer for a root it cannot
+     * name — and the answers do not agree: one drops the term, one refuses. A root a caller is
+     * given is one whose rules name the place, so there is no such case to answer for.
      */
-    private TermPath rootOf(TermPath path) {
-        TermPath nearest = null;
+    private UnderARoot rootOf(TermPath path) {
+        UnderARoot nearest = null;
         for (TermPath root : roots) {
-            if (path.isAtOrUnder(root)
-                    && (nearest == null || root.isAtOrUnder(nearest))) {
-                nearest = root;
+            RuleKey named = path.ruleKeyUnder(root);
+            if (named != null
+                    && (nearest == null || root.isAtOrUnder(nearest.root()))) {
+                nearest = new UnderARoot(root, named);
             }
         }
         return nearest;
     }
+
+    /** A value whose rules reach a place, and what those rules call it. Made only by
+     *  {@link #rootOf}, so holding one is holding a root that can name what was asked about. */
+    private record UnderARoot(TermPath root, RuleKey named) {}
 
     /** Each parameter's rules read with what is fixed under it, once, under this input's names. */
     private Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned() {
@@ -343,7 +353,14 @@ final class ReadQuantities implements Quantities {
         return read;
     }
 
-    /** What this input calls the number at one of a value's coordinates. */
+    /**
+     * What this input calls the number at one of a value's coordinates.
+     *
+     * <p>The name and not a place, because a name is what the coordinate is about: what the cases
+     * of a sum share is named at the sum and stands at a position under each of them, so a subject
+     * turned into one of those positions would be one of however many the name reaches, chosen by
+     * nothing.
+     */
     private static InputAtom called(TermPath root, FieldDomains.Coordinate at) {
         return new InputAtom.Named(root.toString(), at.path(), at.kind());
     }
@@ -351,18 +368,9 @@ final class ReadQuantities implements Quantities {
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
     private InputAtom.Named called(NumericTerm term) {
-        TermPath root = rootOf(term.subjectPath());
-        FieldDomains.Coordinate at = coordinateOf(root, term);
-        if (at == null) {
-            // The reading roots a value's rules at every value they are written about, so a term of
-            // this input reaches its root with fields alone below it. Arriving without a name is
-            // this compiler disagreeing with itself about which value's rules a term is under, and
-            // there is no number to answer with.
-            throw new IllegalStateException(
-                    "`" + term.subjectPath() + "` is under `" + root
-                            + "`, whose rules cannot name it");
-        }
-        return new InputAtom.Named(root.toString(), at.path(), at.kind());
+        UnderARoot at = rootOf(term.subjectPath());
+        FieldDomains.Coordinate where = coordinateOf(at, term);
+        return new InputAtom.Named(at.root().toString(), where.path(), where.kind());
     }
 
     /**
@@ -574,8 +582,9 @@ final class ReadQuantities implements Quantities {
     private NumericTerm held(NumericTerm term) {
         if (rootOf(term.subjectPath()) == null) {
             throw new IllegalArgumentException(
-                    "`" + term.subjectPath() + "` is under nothing this behavior takes, so there is"
-                            + " nothing here to answer about " + term);
+                    "`" + term.subjectPath() + "` is under no value whose rules this reading holds"
+                            + " and can name it by, so there is nothing here to answer about "
+                            + term);
         }
         return term;
     }
@@ -583,20 +592,16 @@ final class ReadQuantities implements Quantities {
     /** What is fixed under one value, named the way that value's own rules name it. */
     private Map<FieldDomains.Coordinate, Count> under(TermPath root) {
         Map<FieldDomains.Coordinate, Count> out = new LinkedHashMap<>();
-        fixed.forEach((term, at) -> {
-            // Which number of the position was settled, and not only which position. A count taken
-            // of a position is a coordinate of its own, and a fixing that named only the value left
-            // a rule over two counts unconditioned while the same rule was read whole when the
-            // counts were asked about.
-            // Only where one value was fixed there. A position fixed at two settles nothing the
+        fixed.forEach((term, fixedAt) -> {
+            UnderARoot at = rootOf(term.subjectPath());
+            // Which number of the place was settled, and not only which place. A count taken of one
+            // is a coordinate of its own, and a fixing that named only the value left a rule over
+            // two counts unconditioned while the same rule was read whole when the counts were
+            // asked about.
+            // Only where one value was fixed there. A place fixed at two settles nothing the
             // declarations could be told, and what it contradicts is said here rather than by them.
-            if (root.equals(rootOf(term.subjectPath())) && at.isOne()) {
-                FieldDomains.Coordinate where = coordinateOf(root, term);
-                // Nothing to settle where the rules of this value have no name for the place: what
-                // they say about it is nothing, so there is nothing for a fixing to reach.
-                if (where != null) {
-                    out.put(where, at.least());
-                }
+            if (at != null && root.equals(at.root()) && fixedAt.isOne()) {
+                out.put(coordinateOf(at, term), fixedAt.least());
             }
         });
         return out;
@@ -604,30 +609,25 @@ final class ReadQuantities implements Quantities {
 
     /**
      * The coordinate of one term, in the words the rules of the value it is a position of are read
-     * in — or null where those rules have no name for the place.
+     * in.
      *
-     * <p>The name comes from the one translation between a position and what a rule calls it
-     * ({@link TermPath#ruleKeyUnder}), so a place no rule of this value can name makes no
-     * coordinate. A position inside a sequence and a position under a case are the two, and each of
-     * them is a value with rules of its own that the reading roots there — which is why a term of
-     * this input reaches one of these with fields alone below its root.
+     * <p>Total, because the name arrives with the root that answers by it ({@link #rootOf}). Which
+     * steps of a place are names a rule writes is settled once, where the root is chosen, so
+     * nothing here decides it again and there is no place a term could arrive at that this cannot
+     * name.
      *
      * <p>Named by the operation and not by "something was taken here". A count of a string and the
      * magnitude of a number at the same place are two quantities, and a flag brought them to one
      * name — so a guard bounding one would have been read against the clauses written about the
      * other (#1027).
      */
-    private static FieldDomains.Coordinate coordinateOf(TermPath root, NumericTerm term) {
-        RuleKey named = term.subjectPath().ruleKeyUnder(root);
-        if (named == null) {
-            return null;
-        }
+    private static FieldDomains.Coordinate coordinateOf(UnderARoot at, NumericTerm term) {
         return switch (term) {
-            case NumericTerm.ValueOf _ -> FieldDomains.Coordinate.value(named);
+            case NumericTerm.ValueOf _ -> FieldDomains.Coordinate.value(at.named());
             case NumericTerm.TakenOf taken ->
-                    FieldDomains.Coordinate.takenBy(named, taken.operation());
+                    FieldDomains.Coordinate.takenBy(at.named(), taken.operation());
             case NumericTerm.TakenOver over ->
-                    FieldDomains.Coordinate.takenBy(named, over.operation());
+                    FieldDomains.Coordinate.takenBy(at.named(), over.operation());
         };
     }
 

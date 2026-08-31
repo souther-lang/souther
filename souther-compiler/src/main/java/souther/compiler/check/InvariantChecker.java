@@ -403,13 +403,13 @@ public final class InvariantChecker {
      *                 on — those are {@link #handedOn()}, and they are somebody's to read rather
      *                 than nobody's
      *
-     *                 <p>Where and not whether, because a rule that narrows a position names it,
-     *                 and a clause written under one field can name no position outside that field.
-     *                 Recorded as one flag for the value, a stop under a regex-bounded code spoiled
-     *                 the plain {@code Int} beside it, and a report said a rule about that
-     *                 {@code Int} may have gone unread when nothing was written about it at all.
-     *                 A stop at {@link FieldDomains#THE_VALUE} is the declaration's own clause and
-     *                 does reach every position of it.
+     *                 <p>Where and not whether, because a rule that narrows what stands at a name
+     *                 writes that name, and a clause written under one field writes no name outside
+     *                 that field. Recorded as one flag for the value, a stop under a regex-bounded
+     *                 code spoiled the plain {@code Int} beside it, and a report said a rule about
+     *                 that {@code Int} may have gone unread when nothing was written about it at
+     *                 all. A stop at {@link RuleKey#THE_VALUE} is the declaration's own clause and
+     *                 does reach every name of it.
      *
      *                 <p>A different question from {@code everyClauseRead}, which is one reading's
      *                 account of the clauses it was handed: a clause that reading could not turn
@@ -1428,14 +1428,15 @@ public final class InvariantChecker {
         if (about != null && InvariantBound.ordering(op)
                 && coordinatesIn(bound, at, byName).isEmpty()
                 && shape instanceof ClauseStates.SomethingElse named) {
-            Set<RuleKey> positions = new LinkedHashSet<>(named.named());
+            Set<RuleKey> names = new LinkedHashSet<>(named.named());
             // The name the bound sits at, which the walk over the comparison writes anyway. Added
             // so that the arm cannot be reached with nothing to be about.
-            positions.add(about.path());
+            names.add(about.path());
             // And the number the line is on, which is the coordinate this reading already holds. Not
-            // rebuilt from the path: which of a position's numbers a line is on is what the operation
-            // beside it says, and a reader handed the path alone has to go and ask something else.
-            shape = new ClauseStates.ABound(about.at(), positions);
+            // rebuilt from the name: which of the numbers at a name a line is on is what the
+            // operation beside it says, and a reader handed the name alone has to ask something
+            // else.
+            shape = new ClauseStates.ABound(about.at(), names);
         }
         // And where this part raises the question of where the values there stop and no end came of
         // it, the answer to that question. Made once, when the question is first met: which limit
