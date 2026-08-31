@@ -6,6 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
@@ -111,7 +112,12 @@ public final class UnreachableClaims {
     private static void claimedIn(Core.Match match, InputReads reads, Symbols symbols,
                                   souther.compiler.coverage.CoverageSites.Plan plan,
                                   NormalReturn answering, List<Claim> found) {
-        TermPath path = reads.pathOf(match.scrutinee(), symbols);
+        // A claim is about a position, so a scrutinee that names none carries none — and one this
+        // reading did not follow carries none it could name either.
+        TermPath path = switch (reads.pathOf(match.scrutinee(), symbols)) {
+            case PathResolution.At(var at) -> at;
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+        };
         if (path == null) {
             return;
         }

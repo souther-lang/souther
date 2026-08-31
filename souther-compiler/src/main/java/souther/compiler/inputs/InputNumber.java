@@ -38,7 +38,12 @@ public final class InputNumber {
     public static NumericTerm of(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
-            TermPath of = reads.pathOf(measured.of(), symbols);
+            // A taking is of a location, and a walk that named none is a walk with no location to
+            // take it of — whether the argument stands nowhere or was not read to the end.
+            TermPath of = switch (reads.pathOf(measured.of(), symbols)) {
+                case PathResolution.At(var at) -> at;
+                case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            };
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of,
                         inputs.typeAt(of, symbols), symbols);
@@ -48,8 +53,13 @@ public final class InputNumber {
             // those values are read from a place.
             return overARun(measured, inputs, reads, symbols);
         }
-        TermPath path = reads.pathOf(e, symbols);
-        return path == null ? null : new NumericTerm.ValueOf(path);
+        // And a number of the input is the value at a position, so an expression naming none names
+        // no number here — the same answer for a value the input does not hold and for one this
+        // reading did not follow.
+        return switch (reads.pathOf(e, symbols)) {
+            case PathResolution.At(var at) -> new NumericTerm.ValueOf(at);
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+        };
     }
 
     /**
@@ -104,7 +114,12 @@ public final class InputNumber {
             return null;
         }
         ElementProjection answered = where.elements().projectionAt(element);
-        TermPath at = where.elementAt(element, symbols);
+        // Where the elements stand, and nothing where they stand nowhere: a run is over the values
+        // at a position, so a container this reading could not place leaves no run to take.
+        TermPath at = switch (where.elementAt(element, symbols)) {
+            case PathResolution.At(var stands) -> stands;
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+        };
         if (answered == null || at == null) {
             return null;
         }

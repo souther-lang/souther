@@ -141,11 +141,10 @@ public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Co
                     provenance.projectedFrom(parameter), held)) {
                 return;
             }
-            java.util.List<String> steps =
-                    souther.compiler.inputs.InputPath.projectionOf(body, parameter, held, symbols);
-            if (steps != null) {
-                out.put(read.binding(),
-                        new souther.compiler.inputs.ElementProjection(steps));
+            souther.compiler.inputs.ElementProjection projected =
+                    souther.compiler.inputs.ElementProjection.read(body, parameter, held, symbols);
+            if (projected != null) {
+                out.put(read.binding(), projected);
             }
         });
         return out;

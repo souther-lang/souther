@@ -12,6 +12,7 @@ import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
@@ -179,9 +180,16 @@ public final class GuardThresholds {
     static void cameFrom(Core.Binary comparison, InputReads reads, Symbols symbols,
                                  List<TermPath> out) {
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            TermPath at = reads.cameFrom(side, symbols);
-            if (at != null && !out.contains(at)) {
-                out.add(at);
+            // Where a side's values came from, and nothing where that was not reached. A side this
+            // reading did not follow came from somewhere it cannot name, which is as much use here
+            // as a side that came from nowhere.
+            switch (reads.cameFrom(side, symbols)) {
+                case PathResolution.At(var at) -> {
+                    if (!out.contains(at)) {
+                        out.add(at);
+                    }
+                }
+                case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
             }
         }
     }
@@ -238,12 +246,24 @@ public final class GuardThresholds {
                 }
                 // A call the language defines the meaning of stands for what it answers and not for
                 // a location, however the reading spells the two apart.
-                return here instanceof Core.PreservedCall ? null : at.pathOf(here, symbols);
+                if (here instanceof Core.PreservedCall) {
+                    return null;
+                }
+                // Which position the expression is, and none where the reading did not arrive at
+                // one: the walk this answers for reads through what names nothing, and a shape it
+                // did not follow is one it has nothing to read through with either.
+                return switch (at.pathOf(here, symbols)) {
+                    case PathResolution.At(var stands) -> stands;
+                    case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+                };
             }
 
             @Override
             public TermPath madeFrom(Core here, InputReads at) {
-                return at.cameFrom(here, symbols);
+                return switch (at.cameFrom(here, symbols)) {
+                    case PathResolution.At(var from) -> from;
+                    case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+                };
             }
 
             /**
