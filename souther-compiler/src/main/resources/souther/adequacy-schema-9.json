@@ -622,6 +622,7 @@
           "relation",
           "knownWritable",
           "status",
+          "disposition",
           "readings"
         ],
         "additionalProperties": false,
@@ -659,6 +660,26 @@
                 "the_rules_prove_it",
                 "a_row_is_at_it",
                 "a_value_was_built"
+              ]
+            }
+          },
+          "disposition": {
+            "description": "How an account treats this obligation, which the evidence beside it is why. `met`, `unmet` and `undecided` are the three a count holds; `not_counted` is out of it and says why under `notCountedBecause`. A build refuses over `unmet` and over nothing else here.",
+            "enum": [
+              "met",
+              "unmet",
+              "undecided",
+              "not_counted"
+            ]
+          },
+          "notCountedBecause": {
+            "description": "Every reason this obligation is out of the count, written where `disposition` is `not_counted` and never elsewhere. Both can hold of one obligation.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "nothing_was_read",
+                "not_known_to_be_writable"
               ]
             }
           },

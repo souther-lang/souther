@@ -79,7 +79,7 @@ public sealed interface ObligationDisposition {
             return new Met();
         }
         Set<Reason> because = EnumSet.noneOf(Reason.class);
-        if (!coverage.counted()) {
+        if (!coverage.hasAnswer()) {
             because.add(Reason.NOTHING_WAS_READ);
         }
         if (!writable.known()) {

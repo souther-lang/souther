@@ -25,7 +25,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.ObligationAssessment;
 import souther.compiler.query.ObligationCoverage;
+import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -487,7 +489,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (!debts.isEmpty()) {
             out.append(String.format("  declarations   obligations %d/%d%s%n",
                     account.met().size(), account.counted(),
-                    notes(account.nothingWasRead(),
+                    notes(excludedSaid(account, Surface.UNDER_THE_COUNT),
                             each -> whyNoBoundaryItem(each.debt().owed().coverage()))));
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
@@ -501,7 +503,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // And the ones the count leaves out, said here for the reason it counts them here: a line
         // a declaration drew is nobody's behavior's, so a block above has nothing to say about it
         // and this is the only place it can be said at all.
-        for (Adequacy.DeclaredDebt each : account.notKnownWritable()) {
+        for (Adequacy.DeclaredDebt each : excludedSaid(account, Surface.ON_ITS_OWN_LINE)) {
             out.append(String.format("      · not known to be writable: the %s point %s (%s)%n",
                     each.debt().role(), each.said(), each.debt().describe(names, null)));
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
@@ -1210,7 +1212,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // sentence; each is said under the block, by the reading it is a point of.
             out.append(String.format("    border      borders %d   obligations %d/%d%s%s%n",
                     lines.size(), owed.met().size(), owed.counted(),
-                    notes(owed.nothingWasRead(), p -> whyNoBoundaryItem(p.owed().coverage())),
+                    notes(excludedSaid(owed, Surface.UNDER_THE_COUNT),
+                            p -> whyNoBoundaryItem(p.owed().coverage())),
                     inFull(bounded.status())));
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
@@ -1274,7 +1277,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // could not read every rule of the value, and nothing built one either — so they are not
         // rows anybody is owed, and they are still the only thing there is to say about the
         // position.
-        for (BorderObligationPointAssessment p : owed.notKnownWritable()) {
+        for (BorderObligationPointAssessment p : excludedSaid(owed, Surface.ON_ITS_OWN_LINE)) {
             out.append(String.format("      · not known to be writable: the %s point (%s)%n",
                     p.role(), p.describe(names, declaredIn)));
             // What each reading's search came to, beside the verdict none of them decided. Whether
@@ -1623,6 +1626,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         counted.forEach((said, count) ->
                 out.append("   (").append(count).append(" not measured: ").append(said).append(')'));
         return out.toString();
+    }
+
+    /** Where a reason an obligation is out of the count is said. */
+    private enum Surface {
+        /** Grouped into a note beside the two numbers, since what a reader does about it is
+         *  nothing: the measure was not made and no row would change that. */
+        UNDER_THE_COUNT,
+        /** A line of its own, since what a reader is owed is the point and what was tried there. */
+        ON_ITS_OWN_LINE
+    }
+
+    /**
+     * Which surface each reason is said on.
+     *
+     * <p>Exhaustive, and the only place a reason is put on a surface. A reason added to
+     * {@link ObligationDisposition.Reason} arrives here as a compile error rather than as an
+     * obligation that leaves the count and is said nowhere.
+     */
+    private static Surface surfaceOf(ObligationDisposition.Reason reason) {
+        return switch (reason) {
+            case NOTHING_WAS_READ -> Surface.UNDER_THE_COUNT;
+            case NOT_KNOWN_TO_BE_WRITABLE -> Surface.ON_ITS_OWN_LINE;
+        };
+    }
+
+    /** The obligations this block says on {@code surface}, in the order the account holds them. */
+    private static <T> List<T> excludedSaid(ObligationSummary<T> account, Surface surface) {
+        return account.excluded().stream()
+                .filter(each -> each.because().stream()
+                        .anyMatch(reason -> surfaceOf(reason) == surface))
+                .map(ObligationSummary.Excluded::item)
+                .toList();
     }
 
     private static String whyNoAxis(souther.compiler.observe.MeasureReason reason) {
@@ -2737,15 +2772,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 o.put("axis", axis);
                 o.put("against", point.against(axis));
             }
-            ItemAssessment.WritabilityEvidence evidence = point.owed().writabilityEvidence();
-            o.put("knownWritable", evidence.known());
-            ArrayNode because = o.putArray("writableBecause");
-            for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
-                if (evidence.has(ground)) {
-                    because.add(wire(ground));
-                }
-            }
-            owedIn(o, point.owed().coverage());
+            owedIn(o, point.owed());
             // The readings, each as the position it met the line at and what a row there has to
             // do in that position's terms. In the order the sentences sort and never the walk's;
             // the order is not a contract, and a consumer reads these as a bag: two entries that
@@ -3022,24 +3049,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * What an obligation came to, in the fields a measure of a reading is written in.
+     * What became of one obligation: the evidence, and where that evidence puts it.
      *
-     * <p>The one place the two vocabularies are joined. An obligation's coverage is a fold of the
-     * readings and not a measurement ({@link ObligationCoverage}), and the document says of it what
-     * it says of every other measure — a status, what it went without, and whether a row is at the
-     * point. Which word says how far it got is {@link ReportMeasurement}'s, where the other measures
-     * ask it — a debt has no state where something went unread and a row was seen anyway, so
-     * {@code partial} here is always a point left undecided, and that is the difference between the
-     * two arms rather than a reason to answer them apart.
+     * <p><b>Both, because they answer different questions.</b> The evidence says what was seen and
+     * how far the seeing got; the disposition says how an account treats it. A consumer handed only
+     * the evidence works the second out from the first — a status, a hit and a writability read
+     * together — which is the derivation this report stopped doing internally, pushed onto whoever
+     * reads the document.
+     *
+     * <p>The coverage is a fold of the readings and not a measurement ({@link ObligationCoverage}),
+     * and the document says of it what it says of every other measure. Which word says how far it
+     * got is {@link ReportMeasurement}'s, where the other measures ask it.
      */
-    private static void owedIn(ObjectNode of, ObligationCoverage coverage) {
+    private static void owedIn(ObjectNode of, ObligationAssessment owed) {
+        ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
+        of.put("knownWritable", evidence.known());
+        ArrayNode because = of.putArray("writableBecause");
+        for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
+            if (evidence.has(ground)) {
+                because.add(wire(ground));
+            }
+        }
+        ObligationCoverage coverage = owed.coverage();
         of.put("status", wire(ReportMeasurement.statusOf(coverage)));
         if (coverage.why() != null) {
             of.put("reason", word(coverage.why()));
         }
         weakening(of, coverage.weakening());
-        if (coverage.counted()) {
+        if (coverage.hasAnswer()) {
             of.put("hit", coverage.hasRowWitness());
+        }
+        of.put("disposition", wire(owed.disposition()));
+        if (owed.disposition() instanceof ObligationDisposition.NotCounted out) {
+            ArrayNode left = of.putArray("notCountedBecause");
+            for (ObligationDisposition.Reason reason : ObligationDisposition.Reason.values()) {
+                if (out.because().contains(reason)) {
+                    left.add(wire(reason));
+                }
+            }
         }
     }
 
@@ -3146,6 +3193,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_RULES_PROVE_IT -> "the_rules_prove_it";
             case A_ROW_IS_AT_IT -> "a_row_is_at_it";
             case A_VALUE_WAS_BUILT -> "a_value_was_built";
+        };
+    }
+
+    /**
+     * How an account treats one obligation, in the document's word for it.
+     *
+     * <p>Exhaustive, so a state added to {@link ObligationDisposition} arrives here as a compile
+     * error rather than as an obligation the document has no word for.
+     */
+    public static String wire(ObligationDisposition disposition) {
+        return switch (disposition) {
+            case ObligationDisposition.Met _ -> "met";
+            case ObligationDisposition.Unmet _ -> "unmet";
+            case ObligationDisposition.Undecided _ -> "undecided";
+            case ObligationDisposition.NotCounted _ -> "not_counted";
+        };
+    }
+
+    /** Why an account leaves an obligation out, likewise exhaustive. */
+    public static String wire(ObligationDisposition.Reason reason) {
+        return switch (reason) {
+            case NOTHING_WAS_READ -> "nothing_was_read";
+            case NOT_KNOWN_TO_BE_WRITABLE -> "not_known_to_be_writable";
         };
     }
 

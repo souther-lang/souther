@@ -56,8 +56,14 @@ public sealed interface ObligationCoverage {
         return this instanceof Witnessed;
     }
 
-    /** Whether the readings came to an answer about this point at all. */
-    default boolean counted() {
+    /**
+     * Whether the readings came to an answer about this point at all.
+     *
+     * <p>Not whether an account counts it. That is {@link ObligationDisposition}'s, and it reads
+     * this beside what has shown a row can be written here: a point read to the end and missed has
+     * an answer and is out of the count where nothing promises a row could stand there.
+     */
+    default boolean hasAnswer() {
         return !(this instanceof NotMeasured);
     }
 

@@ -80,6 +80,7 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         int undecided = 0;
         for (Reported reported : reports()) {
             String page = reported.report().human(reported.names());
+            int openHere = 0;
             for (AdequacyReport.ModuleReport module : reported.report().modules()) {
                 ObligationSummary<Adequacy.DeclaredDebt> declared =
                         ObligationSummary.of(module.debts(), each -> each.debt().owed());
@@ -96,11 +97,14 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                                 + gap.debt().point() + " carries " + found + " findings");
                     }
                 }
+                openHere += declared.undecided().size();
                 for (Adequacy.DeclaredDebt open : declared.undecided()) {
-                    named(wrong, reported.name(), page, open.debt(), module.declarations().stream()
-                            .filter(f -> f.about() instanceof About.APointOfADeclaredBorder(var at)
-                                    && at.debt().point().equals(open.debt().point()))
-                            .count());
+                    carriesNoFinding(wrong, reported.name(), open.debt(),
+                            module.declarations().stream()
+                                    .filter(f -> f.about()
+                                            instanceof About.APointOfADeclaredBorder(var at)
+                                            && at.debt().point().equals(open.debt().point()))
+                                    .count());
                 }
                 for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
                     ObligationSummary<BorderObligationPointAssessment> account =
@@ -116,11 +120,14 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                                     + gap.point() + " carries " + found + " findings");
                         }
                     }
+                    openHere += account.undecided().size();
                     for (BorderObligationPointAssessment open : account.undecided()) {
-                        named(wrong, reported.name(), page, open, findingsAbout(behavior, open));
+                        carriesNoFinding(wrong, reported.name(), open,
+                                findingsAbout(behavior, open));
                     }
                 }
             }
+            asManyLinesAsThereAre(wrong, reported.name(), "the report", page, openHere);
         }
 
         String reached = "met " + met + ", unmet " + unmet + ", undecided " + undecided;
@@ -128,16 +135,29 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         assertTrue(met > 0 && unmet > 0 && undecided > 0, "every state is reached: " + reached);
     }
 
-    /** A point nobody could decide carries no finding and is on the page all the same. */
-    private static void named(List<String> wrong, String source, String page,
-                              BorderObligationPointAssessment open, long findings) {
+    /** A point nobody could decide carries no finding. */
+    private static void carriesNoFinding(List<String> wrong, String source,
+                                         BorderObligationPointAssessment open, long findings) {
         if (findings != 0) {
             wrong.add(source + ": an undecided point at " + open.point() + " carries " + findings
                     + " findings");
         }
-        String said = "? undecided whether a row is at the " + open.role();
-        if (!page.contains(said)) {
-            wrong.add(source + ": nothing on the page says `" + said + "`");
+    }
+
+    /**
+     * As many `?` lines under a block as it counted obligations nobody could decide.
+     *
+     * <p>Counted rather than looked for. A block owing ten of them and printing one says the
+     * sentence a reader searches for and answers for one of the ten, so what the law is about is the
+     * correspondence and not the wording being present somewhere.
+     */
+    private static void asManyLinesAsThereAre(List<String> wrong, String source, String where,
+                                              String block, int undecided) {
+        long said = block.lines()
+                .filter(line -> line.strip().startsWith("? undecided whether a row is at")).count();
+        if (said != undecided) {
+            wrong.add(source + " " + where + ": " + undecided + " obligations nobody could decide"
+                    + " and " + said + " lines saying so");
         }
     }
 
