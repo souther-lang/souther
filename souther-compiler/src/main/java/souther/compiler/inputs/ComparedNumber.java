@@ -40,26 +40,27 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonClai
      * line asks for one ({@link #drawsALine}); a reader wanting to know what the decision is about
      * takes the number and needs no more.
      */
-    public static ComparedNumber of(Core.Binary comparison, InputDomain inputs, InputReads reads,
-                                    Symbols symbols) {
+    public static ComparedNumber of(Core.Binary comparison, InputDomain inputs,
+                                    Quantities quantities, InputReads reads, Symbols symbols) {
         // Whichever side draws a line, and the left where neither does and it names a number. A
         // number on the left that the right is not a value of is still the number the comparison
         // is about, unless the right is a number the left is a value of — then the line is on that
         // one, and the comparison is read turned round.
         ComparedNumber left = onOneSide(comparison.left(), comparison.right(), comparison.op(),
-                inputs, reads, symbols);
+                inputs, quantities, reads, symbols);
         if (left != null && left.at() != null) {
             return left;
         }
         ComparedNumber right = onOneSide(comparison.right(), comparison.left(),
-                mirrored(comparison.op()), inputs, reads, symbols);
+                mirrored(comparison.op()), inputs, quantities, reads, symbols);
         return right != null && right.at() != null ? right : left != null ? left : right;
     }
 
     /** The comparison read as being about a number {@code side} names, or null where it names none. */
     private static ComparedNumber onOneSide(Core side, Core other, BinOp op, InputDomain inputs,
-                                            InputReads reads, Symbols symbols) {
-        Named named = namedBy(side, inputs, reads, symbols);
+                                            Quantities quantities, InputReads reads,
+                                            Symbols symbols) {
+        Named named = namedBy(side, inputs, quantities, reads, symbols);
         if (named == null) {
             return null;
         }
@@ -89,12 +90,13 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonClai
 
     /** The number an expression names together with the orders it is read and counted on, or null
      *  where it names none. */
-    private static Named namedBy(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
+    private static Named namedBy(Core e, InputDomain inputs, Quantities quantities,
+                                 InputReads reads, Symbols symbols) {
         NumericTerm term = InputNumber.of(e, inputs, reads, symbols);
         if (term == null) {
             return null;
         }
-        TermOrders orders = inputs.ordersOf(term, symbols);
+        TermOrders orders = quantities.ordersOf(term);
         return new Named(term, orders == null || orders.answered() == null ? null : orders);
     }
 

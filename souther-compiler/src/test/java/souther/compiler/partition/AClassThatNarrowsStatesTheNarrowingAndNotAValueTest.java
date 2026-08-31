@@ -106,7 +106,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
                 new Generator.Subject(spec.name(), new BehaviorInputs(
                         spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(),
                         symbols, ReadAs.THE_COMPILATION_DOES),
-                        axes.axes(), HeldCounts.of(domain, symbols)),
+                        domain.quantities(symbols), axes.axes(), HeldCounts.of(domain)),
                 List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
         return filled.rows();

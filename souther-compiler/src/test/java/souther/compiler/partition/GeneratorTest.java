@@ -111,8 +111,9 @@ class GeneratorTest {
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(new Generator.Subject(spec.name(),
-                new BehaviorInputs(parameters, sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), partitioning.axes(),
-                HeldCounts.of(domain, symbols)),
+                new BehaviorInputs(parameters, sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                domain.quantities(symbols), partitioning.axes(),
+                HeldCounts.of(domain)),
                 symbols);
     }
 
@@ -199,11 +200,24 @@ class GeneratorTest {
         NumericTerm.ValueOf atB = new NumericTerm.ValueOf(TermPath.of("b"));
         Axis a = new Axis(new AxisId("f", "a"), atA, Type.INT, classesOf(left, atA), List.of());
         Axis b = new Axis(new AxisId("f", "b"), atB, Type.INT, classesOf(right, atB), List.of());
-        // Axes written here rather than read off a model, so there is no reading of the input's
-        // counts to hand over and none is invented.
+        // Axes written here rather than read off a model, so nothing counts a container of this
+        // input. The reading is still the input's own: what a number at one of these positions is
+        // measured on is what the declarations say, and the subject asks it for that.
         return new Generator.Subject("f",
                 new BehaviorInputs(List.of("a", "b"), List.of(Type.INT, Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                List.of(a, b), HeldCounts.NONE);
+                readingOf(symbols, "a", "b"), List.of(a, b), HeldCounts.NONE);
+    }
+
+    /** The reading of an input whose parameters are bare numbers, which is what says what a number
+     *  at one of them is measured on. */
+    private static souther.compiler.inputs.Quantities readingOf(Symbols symbols,
+                                                                String... parameters) {
+        List<souther.compiler.inputs.InputDomain.Parameter> declared = new java.util.ArrayList<>();
+        for (String each : parameters) {
+            declared.add(new souther.compiler.inputs.InputDomain.Parameter(each, null, Type.INT));
+        }
+        return souther.compiler.inputs.InputDomain.of(declared, symbols,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).quantities(symbols);
     }
 
     /** The classes said to be of the number the axis they are put on measures, which is what a
@@ -396,7 +410,8 @@ class GeneratorTest {
         Axis only = new Axis(new AxisId("f", "a"), atA, Type.INT,
                 classesOf(List.of(number("low", 1), number("high", 9)), atA), List.of());
         Generator.Subject subject = new Generator.Subject("f",
-                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), List.of(only),
+                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                readingOf(symbols, "a"), List.of(only),
                 HeldCounts.NONE);
 
         FillResult filled =

@@ -6,6 +6,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.RationalCut;
+import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -34,6 +35,19 @@ final class ReadQuantities implements Quantities {
      *  its own term runs between, and the reading that relates positions has a name for some of
      *  those terms and not for others. */
     private final Map<TermPath, Position> byPath;
+    /**
+     * What stands where a path names, as the reading that made this has it.
+     *
+     * <p>Beside {@link #byPath} and not the same question. That one answers whether this reading
+     * measured a position, which is what a term's own bounds are read off; this one answers what a
+     * path stands at whether or not the reading stopped above it, which is what an order follows
+     * from. Answered here off the positions alone, a rule naming a field every case of a sum
+     * spreads would be told nothing stands where the language reads a value.
+     *
+     * <p>The resolution and not the walk. What is handed over is one question already answered, so
+     * nothing here can reach the rest of the reading or ask it something else.
+     */
+    private final java.util.function.Function<TermPath, Type> typeAt;
     /**
      * What each term has been fixed at, as the least and the greatest of the values fixed there.
      *
@@ -102,9 +116,12 @@ final class ReadQuantities implements Quantities {
     }
 
     private ReadQuantities(Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
-                           Map<TermPath, Position> byPath, Map<NumericTerm, Fixed> fixed,
+                           Map<TermPath, Position> byPath,
+                           java.util.function.Function<TermPath, Type> typeAt,
+                           Map<NumericTerm, Fixed> fixed,
                            souther.compiler.check.Symbols symbols, List<Assumed> assumed) {
         this.symbols = symbols;
+        this.typeAt = typeAt;
         this.assumed = List.copyOf(assumed);
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
@@ -122,8 +139,21 @@ final class ReadQuantities implements Quantities {
     /** Before anything is fixed. */
     static ReadQuantities of(Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
                              Map<TermPath, Position> byPath,
+                             java.util.function.Function<TermPath, Type> typeAt,
                              souther.compiler.check.Symbols symbols) {
-        return new ReadQuantities(byRoot, roots, byPath, Map.of(), symbols, List.of());
+        return new ReadQuantities(byRoot, roots, byPath, typeAt, Map.of(), symbols, List.of());
+    }
+
+    /**
+     * Both orders of {@code term}, from where the reading has its subject standing.
+     *
+     * <p>Carried into every refinement of this reading rather than answered against what is fixed:
+     * what a term is measured on is a fact about where it sits, and fixing a position at a value
+     * says nothing about the order that value is counted on.
+     */
+    @Override
+    public TermOrders ordersOf(NumericTerm term) {
+        return term.ordersAt(typeAt.apply(term.subjectPath()), symbols);
     }
 
     /**
@@ -194,7 +224,7 @@ final class ReadQuantities implements Quantities {
         }
         List<Assumed> both = new java.util.ArrayList<>(assumed);
         both.add(taking);
-        return new ReadQuantities(byRoot, roots, byPath, fixed, symbols, both);
+        return new ReadQuantities(byRoot, roots, byPath, typeAt, fixed, symbols, both);
     }
 
     /**
@@ -350,16 +380,12 @@ final class ReadQuantities implements Quantities {
         if (symbols == null) {
             return null;
         }
-        // Asked of the term, which is what knows. What an operation answers is spaced by what that
-        // operation answers and a position measured by its own values is spaced by its type, and
-        // both of those are {@link NumericTerm#answeredOn}'s one answer — so the position is looked up to be handed
-        // over rather than to decide anything. Asked of the position instead, a fact the term owns
-        // would depend on whether the walk that reads this input reached the place the term sits
-        // at, and a count under more steps than that walk goes down would lose the floor every
-        // count has.
-        Position at = byPath.get(term.subjectPath());
-        souther.compiler.check.Carrier carrier =
-                term.answeredOn(at == null ? null : at.type(), symbols);
+        // The order this reading measures the term on, which is the same answer every other reader
+        // of it gets. Worked out here from the positions alone, a term whose subject the reading
+        // stopped above — a field every case of a sum spreads is one — was spaced by nothing while
+        // the order was there to be had, and a count under more steps than the enumeration goes
+        // down would lose the floor every count has.
+        souther.compiler.check.Carrier carrier = ordersOf(term).answered();
         return carrier == null ? null : carrier.spacing();
     }
 
@@ -431,7 +457,7 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byRoot, roots, byPath, both, symbols, assumed);
+        return new ReadQuantities(byRoot, roots, byPath, typeAt, both, symbols, assumed);
     }
 
     /**

@@ -170,6 +170,10 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
         Generator.Subject subject = new Generator.Subject("fee",
                 new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
                         ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.inputs.InputDomain.of(
+                        List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
+                                Type.INT)),
+                        SYMBOLS, ReadAs.THE_COMPILATION_DOES).quantities(SYMBOLS),
                 List.of(days), HeldCounts.NONE);
         return new GenerationPlan(subject, classes, arms);
     }

@@ -61,8 +61,10 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      * arithmetic's answer, and this reading is reached only where the arithmetic had none.
      */
     static ComparedLine asWritten(Core.Binary comparison, souther.compiler.inputs.InputDomain inputs,
-                                  InputReads reads, Symbols symbols) {
-        return of(souther.compiler.inputs.ComparedNumber.of(comparison, inputs, reads, symbols));
+                                  souther.compiler.inputs.Quantities quantities, InputReads reads,
+                                  Symbols symbols) {
+        return of(souther.compiler.inputs.ComparedNumber.of(comparison, inputs, quantities, reads,
+                symbols));
     }
 
     /** The same comparison as a line, or null where it says nothing a line is drawn from. */
@@ -89,8 +91,8 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      * nine is not one of them, and reading it as a line on {@code a} would put a row at four and a
      * half. That is a quantity of its own ({@link BorderQuantity.OverAForm}) and is read elsewhere.
      */
-    static ComparedLine fromTheForm(AffineReading read, souther.compiler.inputs.InputDomain inputs,
-                                    Symbols symbols) {
+    static ComparedLine fromTheForm(AffineReading read,
+                                    souther.compiler.inputs.Quantities quantities) {
         if (read == null) {
             return null;
         }
@@ -103,7 +105,7 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         // reading two methods up asks the same question of the same place, and `10 >= a + 1` names
         // the position on the right.
         souther.compiler.inputs.TermOrders orders =
-                term == null ? null : inputs.ordersOf(term, symbols);
+                term == null ? null : quantities.ordersOf(term);
         if (orders == null || orders.answered() == null || !orders.answered().counts()) {
             return null;
         }

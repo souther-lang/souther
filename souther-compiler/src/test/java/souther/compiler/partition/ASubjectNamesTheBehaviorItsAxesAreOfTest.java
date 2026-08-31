@@ -30,13 +30,24 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
 
+    /** The reading of an input of one parameter, which is what a subject is asked its numbers
+     *  through. */
+    private static souther.compiler.inputs.Quantities readingOf(String... parameters) {
+        List<souther.compiler.inputs.InputDomain.Parameter> declared = new java.util.ArrayList<>();
+        for (String each : parameters) {
+            declared.add(new souther.compiler.inputs.InputDomain.Parameter(each, null, Type.INT));
+        }
+        return souther.compiler.inputs.InputDomain.of(declared, SYMBOLS,
+                ReadAs.THE_COMPILATION_DOES).quantities(SYMBOLS);
+    }
+
     /** A behavior with no divided position, which is where reading the name off an axis ran out. */
     @Test
     void theNameHoldsWhereNothingIsDivided() {
         Generator.Subject subject = new Generator.Subject("fee",
                 new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
                         ReadAs.THE_COMPILATION_DOES),
-                List.of(), HeldCounts.NONE);
+                readingOf("days"), List.of(), HeldCounts.NONE);
 
         assertEquals("fee", subject.behavior(),
                 "the behavior is named whether or not anything divided its positions");
@@ -49,7 +60,7 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
                 () -> new Generator.Subject("fee",
                         new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
                                 ReadAs.THE_COMPILATION_DOES),
-                        List.of(axisOf("charge", "days")), HeldCounts.NONE));
+                        readingOf("days"), List.of(axisOf("charge", "days")), HeldCounts.NONE));
 
         assertEquals(true, refused.getMessage().contains("charge"),
                 "the refusal names the axis that disagrees: " + refused.getMessage());
@@ -62,6 +73,7 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
                 () -> new Generator.Subject("fee",
                         new BehaviorInputs(List.of("days", "cap"), List.of(Type.INT, Type.INT),
                                 SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+                        readingOf("days", "cap"),
                         List.of(axisOf("fee", "days"), axisOf("charge", "cap")), HeldCounts.NONE),
                 "an axis of another behavior standing second is still one");
     }

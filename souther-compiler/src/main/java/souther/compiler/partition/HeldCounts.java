@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
@@ -28,10 +27,10 @@ import java.util.Map;
  * plan goes on past where the reading stops, and puts positions under a sum the declaration has none
  * of. What a plan's node holds is read off that node's own type, which is where its rules are.
  */
-public record HeldCounts(Quantities counts, Map<TermPath, NumericTerm> sizes) {
+public record HeldCounts(Map<TermPath, NumericTerm> sizes) {
 
-    /** No reading, which is what axes written by hand rather than read off a model come to. */
-    public static final HeldCounts NONE = new HeldCounts(null, Map.of());
+    /** Nothing counted, which is what an input with no container in it comes to. */
+    public static final HeldCounts NONE = new HeldCounts(Map.of());
 
     public HeldCounts {
         sizes = Map.copyOf(sizes);
@@ -44,7 +43,7 @@ public record HeldCounts(Quantities counts, Map<TermPath, NumericTerm> sizes) {
      * answer, and answering it once per position up front would fix the numbers before the row has
      * settled anything.
      */
-    public static HeldCounts of(InputDomain domain, Symbols symbols) {
+    public static HeldCounts of(InputDomain domain) {
         Map<TermPath, NumericTerm> sizes = new LinkedHashMap<>();
         for (Position each : domain.positions()) {
             // Counts of containers and nothing else. What this feeds is how many elements to build,
@@ -56,14 +55,20 @@ public record HeldCounts(Quantities counts, Map<TermPath, NumericTerm> sizes) {
                 sizes.put(each.path(), each.term());
             }
         }
-        return sizes.isEmpty() ? NONE : new HeldCounts(domain.quantities(symbols), sizes);
+        return sizes.isEmpty() ? NONE : new HeldCounts(sizes);
     }
 
-    /** How many the rules say the container at {@code at} holds at the most, or every number where
-     *  they say nothing about how many. */
-    public int most(TermPath at) {
+    /**
+     * How many the rules say the container at {@code at} holds at the most, or every number where
+     * they say nothing about how many.
+     *
+     * <p>{@code counts} is the reading these positions were found in. Held here instead, a caller
+     * with a reading of its own could ask what one reading's positions come to under another's
+     * rules, and the answer would be about neither.
+     */
+    public int most(TermPath at, Quantities counts) {
         NumericTerm term = sizes.get(at);
-        if (counts == null || term == null) {
+        if (term == null) {
             return Integer.MAX_VALUE;
         }
         NumericDomain.Bounds runs = counts.runsBetween(term);

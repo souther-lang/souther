@@ -71,6 +71,37 @@ import java.util.Optional;
 public sealed interface Quantities permits ReadQuantities {
 
     /**
+     * Both orders of {@code term} as this reading has it: the one a value at its position is read
+     * on, and the one the number it names is answered on.
+     *
+     * <p><b>The one public answer to it.</b> Which order a term is measured on follows from what
+     * stands where its number comes from, and where that is is settled once by the reading that
+     * made this. A caller working it out from a type it holds is answering with whatever walk put
+     * that type in its hand — a walk that follows a written value stops where a value is built, and
+     * a shared name of a sum is a position a number is taken at and not a place a value is composed
+     * for.
+     *
+     * <p>Both ends together, because a term that is what an operation answered has two orders and a
+     * caller handed one of them has whichever end the caller before it meant. The day the two part
+     * is the day a row is decoded on a count the value is not written in.
+     *
+     * <p><b>And so that nothing derives it from an expression.</b> A rule is written beside
+     * operands, and the type of an operand is not the type of the position the rule is about: an
+     * operation the arithmetic rewrote into a form over two positions is compared as what it
+     * answers with, so {@code Date.daysBetween(a, b) > 10} has {@code Int} on both sides and dates
+     * at both positions. Read off the comparison, every position of that rule was written back as a
+     * whole number and read off a row as one, and both directions agreed with each other and with
+     * nothing else.
+     *
+     * <p><b>A term under no position of the reading still has an order.</b> The reading stops where
+     * a path returns to a declaration already open on it, and it reports the end of a path the
+     * measurement named rather than every step on the way; nothing stops a rule from naming what is
+     * under either. What a report is about and what a declaration says are two questions, and only
+     * the first of them stops there.
+     */
+    TermOrders ordersOf(NumericTerm term);
+
+    /**
      * Where the values of {@code form} run, or null at either end where nothing bounds them.
      *
      * <p>The form as the rule wrote it, over this input's terms. What it comes to is asked of the

@@ -929,10 +929,13 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     private static souther.compiler.partition.Generator.Subject nothingIsDivided() {
+        souther.compiler.check.Symbols symbols =
+                souther.compiler.check.Symbols.none(DefaultStdlib.get());
         return new souther.compiler.partition.Generator.Subject("pick",
-                new souther.compiler.partition.BehaviorInputs(List.of(), List.of(),
-                        souther.compiler.check.Symbols.none(DefaultStdlib.get()),
+                new souther.compiler.partition.BehaviorInputs(List.of(), List.of(), symbols,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.inputs.InputDomain.of(List.of(), symbols,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES).quantities(symbols),
                 List.of(), souther.compiler.partition.HeldCounts.NONE);
     }
 

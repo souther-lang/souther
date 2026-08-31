@@ -278,7 +278,9 @@ public final class GuardThresholds {
     static java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped>
             whatEachPlaceIsLeftWith(Core.Binary comparison,
                                     AffineReading.OfAComparison.Stopped stopped,
-                                    InputDomain inputs, InputReads reads, Symbols symbols) {
+                                    InputDomain inputs,
+                                    souther.compiler.inputs.Quantities quantities,
+                                    InputReads reads, Symbols symbols) {
         Names left = namesIn(comparison.left(), reads, symbols);
         Names right = namesIn(comparison.right(), reads, symbols);
         Names here = namesIn(stopped.node(), stopped.at(), symbols);
@@ -291,7 +293,7 @@ public final class GuardThresholds {
                 at -> met.containsKey(at) && orderable(met.get(at), symbols);
         java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
                 new java.util.LinkedHashMap<>();
-        for (FilingCoordinate at : filedAt(comparison, inputs, reads, symbols)) {
+        for (FilingCoordinate at : filedAt(comparison, inputs, quantities, reads, symbols)) {
             out.putIfAbsent(at,
                     UnreadComparison.whereItStopped(ruleAt(at, left, right), notRead, ordered));
         }
@@ -345,10 +347,11 @@ public final class GuardThresholds {
      * not read.
      */
     static List<FilingCoordinate> filedAt(Core.Binary comparison, InputDomain inputs,
+                                               souther.compiler.inputs.Quantities quantities,
                                                InputReads reads, Symbols symbols) {
         List<FilingCoordinate> out = new ArrayList<>();
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            Named named = namedBy(side, inputs, reads, symbols);
+            Named named = namedBy(side, inputs, quantities, reads, symbols);
             if (named != null) {
                 // The term itself, because this side named one: a rule about a length that nothing
                 // could read leaves the length short and the string's own values alone.
@@ -549,7 +552,7 @@ public final class GuardThresholds {
      * <p>The two together because no reader of a line wants one without the other, and both readings
      * of a comparison want them the same way round. Neither answer is made here: which position an
      * expression names is {@link InputNumber}'s and which order that position is counted on is the
-     * reading of the declarations' ({@link InputDomain#carrierOf}).
+     * reading of the declarations' ({@link souther.compiler.inputs.Quantities#ordersOf}).
      *
      * <p>In particular the expression's own type is not read, here or anywhere a line is drawn. It
      * would agree wherever a rule names its positions itself and disagree wherever an operation
@@ -558,12 +561,13 @@ public final class GuardThresholds {
      * as whole numbers and read them off a row as whole numbers, which agreed with itself about a
      * border nothing could meet (#1018).
      */
-    static Named namedBy(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
+    static Named namedBy(Core e, InputDomain inputs, souther.compiler.inputs.Quantities quantities,
+                         InputReads reads, Symbols symbols) {
         NumericTerm term = InputNumber.of(e, inputs, reads, symbols);
         if (term == null) {
             return null;
         }
-        souther.compiler.inputs.TermOrders orders = inputs.ordersOf(term, symbols);
+        souther.compiler.inputs.TermOrders orders = quantities.ordersOf(term);
         return orders.answered() == null ? null : new Named(term, orders);
     }
 

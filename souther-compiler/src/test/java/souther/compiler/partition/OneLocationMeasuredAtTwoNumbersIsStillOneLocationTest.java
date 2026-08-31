@@ -142,6 +142,11 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         Generator.Subject subject = new Generator.Subject("f",
                 new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.inputs.InputDomain.of(
+                        List.of(new souther.compiler.inputs.InputDomain.Parameter("a", null,
+                                Type.INT)),
+                        symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                        .quantities(symbols),
                 List.of(hour, minute), HeldCounts.NONE);
 
         FillResult filled = Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY,

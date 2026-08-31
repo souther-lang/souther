@@ -207,8 +207,9 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         return new Generator.Subject(spec().name(),
                 new BehaviorInputs(names, sigs.get(spec().name()).inputTypes(), symbols(),
                         ReadAs.THE_COMPILATION_DOES),
+                domain().quantities(symbols()),
                 Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES)
                         .axes(),
-                HeldCounts.of(domain(), symbols()));
+                HeldCounts.of(domain()));
     }
 }

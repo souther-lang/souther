@@ -172,9 +172,9 @@ public final class LinesWhereTheyFall {
         }
         FiledName moves = filed.getFirst();
         List<LineDrawn> made = new ArrayList<>();
-        made.add(lineAt(line, moves.name(), moves.at().first(), inputs, quantities, symbols));
+        made.add(lineAt(line, moves.name(), moves.at().first(), quantities));
         for (NumericTerm to : moves.at().rest()) {
-            made.add(lineAt(line, moves.name(), to, inputs, quantities, symbols));
+            made.add(lineAt(line, moves.name(), to, quantities));
         }
         out.addAll(made);
     }
@@ -188,9 +188,8 @@ public final class LinesWhereTheyFall {
      * fewer places than the name was filed.
      */
     private static LineDrawn lineAt(LineDrawn line, NumericTerm moves, NumericTerm to,
-                                    InputDomain inputs,
-                                    souther.compiler.inputs.Quantities quantities, Symbols symbols) {
-        Cutting cut = line.cuts().movedTo(moves, to, inputs.ordersOf(to, symbols), quantities);
+                                    souther.compiler.inputs.Quantities quantities) {
+        Cutting cut = line.cuts().movedTo(moves, to, quantities.ordersOf(to), quantities);
         if (cut == null) {
             throw new IllegalStateException(
                     "`" + moves + "` was filed at " + to + " and the line on it cannot be taken "

@@ -32,6 +32,10 @@ import java.util.Map;
 public final class ComparedNumbers {
 
     private final InputDomain inputs;
+    /** The same reading, asked what order a term it named is measured on. Taken from the caller
+     *  rather than made here: what it answers is read off every parameter's declarations, and a
+     *  body's comparisons are read beside other readers of the same input. */
+    private final Quantities quantities;
     private final Symbols symbols;
 
     /** What each comparison came to and what it was read under, shared by every reader of one
@@ -40,15 +44,17 @@ public final class ComparedNumbers {
 
     private record Read(InputReads under, ComparedNumber said) { }
 
-    private ComparedNumbers(InputDomain inputs, Symbols symbols, Map<Core.Binary, Read> said) {
+    private ComparedNumbers(InputDomain inputs, Quantities quantities, Symbols symbols,
+                            Map<Core.Binary, Read> said) {
         this.inputs = inputs;
+        this.quantities = quantities;
         this.symbols = symbols;
         this.said = said;
     }
 
     /** The comparisons of one body, read against {@code inputs}. */
-    public static ComparedNumbers of(InputDomain inputs, Symbols symbols) {
-        return new ComparedNumbers(inputs, symbols, new IdentityHashMap<>());
+    public static ComparedNumbers of(InputDomain inputs, Quantities quantities, Symbols symbols) {
+        return new ComparedNumbers(inputs, quantities, symbols, new IdentityHashMap<>());
     }
 
     /**
@@ -71,7 +77,7 @@ public final class ComparedNumbers {
             }
             return had.said();
         }
-        ComparedNumber read = ComparedNumber.of(comparison, inputs, at, symbols);
+        ComparedNumber read = ComparedNumber.of(comparison, inputs, quantities, at, symbols);
         said.put(comparison, new Read(at, read));
         return read;
     }

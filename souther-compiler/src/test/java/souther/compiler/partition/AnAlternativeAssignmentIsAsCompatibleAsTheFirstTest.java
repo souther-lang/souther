@@ -100,7 +100,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
         return new Model(new Generator.Subject(spec.name(),
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                axes.axes(), HeldCounts.of(inputs, symbols)),
+                inputs.quantities(symbols), axes.axes(), HeldCounts.of(inputs)),
                 CoverageRead.of(spec.name(), body, plan, inputs, symbols));
     }
 

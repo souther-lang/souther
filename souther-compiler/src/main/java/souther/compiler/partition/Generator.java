@@ -101,7 +101,8 @@ public final class Generator {
      *
      * @param behavior what the behavior is called, which every axis of it agrees with
      */
-    public record Subject(String behavior, BehaviorInputs inputs, List<Axis> axes,
+    public record Subject(String behavior, BehaviorInputs inputs,
+                          souther.compiler.inputs.Quantities quantities, List<Axis> axes,
                           HeldCounts held) {
 
         public Subject {
@@ -122,15 +123,20 @@ public final class Generator {
         }
 
         /**
-         * What the reading of the input says about how many its containers hold.
+         * How many the rules leave the container at {@code at}, or every number where they leave it
+         * unsaid.
          *
-         * <p>Handed in rather than read here, and answered about the positions of the input alone.
-         * A coordinate of a {@link ConstructionPlan} is spelled the same way and is not one of
-         * these, and what a plan's node holds is read off that node's own type -- which is the
-         * separation {@code AConstructionPositionIsNotAnInputPositionTest} keeps.
+         * <p>The two halves of the answer are put together here and nowhere else: which positions
+         * are containers is what the reading found, and what its rules leave one of them is what the
+         * same reading says. A caller holding the first and choosing the second would be asking one
+         * reading's positions what another reading's rules leave them.
+         *
+         * <p>Answered about the positions of the input alone. A coordinate of a
+         * {@link ConstructionPlan} is spelled the same way and is not one of these, and what a
+         * plan's node holds is read off that node's own type.
          */
-        public HeldCounts held() {
-            return held;
+        public int mostHeldAt(TermPath at) {
+            return held.most(at, quantities);
         }
 
 
@@ -2375,7 +2381,8 @@ public final class Generator {
             // condition above the line is over positions the quantity is not taken of, and each of
             // those is read and written on its own order like any other.
             Carrier carrier = fixing.containsKey(each.getKey())
-                    ? on.apply(each.getKey().term()) : carrierOf(subject, each.getKey().term());
+                    ? on.apply(each.getKey().term())
+                    : subject.quantities().ordersOf(each.getKey().term()).answered();
             if (carrier == null) {
                 throw new IllegalStateException("a row is owed at " + each.getKey()
                         + " and the quantity it is owed for is over no such position");
@@ -2552,7 +2559,8 @@ public final class Generator {
             // chosen for the first without asking is right about its own run and wrong about the
             // pair as often as not.
             Map<NumericTerm.FromOnePosition, Place> standing = shared || !placeable ? null
-                    : NumericWitness.of(here, owing, term -> carrierOf(subject, term));
+                    : NumericWitness.of(here, owing,
+                            term -> subject.quantities().ordersOf(term).answered());
             if (standing == null) {
                 unrepresented.add(new ReachabilityGap.Uncomposed(cut, shared
                         ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
@@ -2581,25 +2589,6 @@ public final class Generator {
      */
     private record Standing(Map<RealizationTarget, Place> at,
                             List<ReachabilityGap.Uncomposed> unrepresented) {}
-
-    /**
-     * The order a number taken at a position of this subject is measured on, or null where the
-     * declarations put nothing there.
-     *
-     * <p><b>Asked of the declarations and never of the axes.</b> An axis is where the model divides
-     * a position, and an order is what a number there is counted on; a position nothing divides has
-     * the second and not the first. Read off the axes, a condition above a line over a field the
-     * model happens not to partition was one nothing could put a value under — the reachability was
-     * stated, and the composer answered that it had no order for it.
-     *
-     * <p>Which number is measured there is the term's own to say ({@link NumericTerm#answeredOn}):
-     * the content of a position is counted on the position's order, and what an operation answers of
-     * it is counted on the operation's.
-     */
-    private static Carrier carrierOf(Subject subject, NumericTerm term) {
-        Type declared = subject.inputs().declaredAt(term.subjectPath());
-        return declared == null ? null : term.answeredOn(declared, subject.symbols());
-    }
 
     /**
      * {@code check}, refusing any candidate at this parameter that does not read back at the place
@@ -2744,17 +2733,21 @@ public final class Generator {
         // kind of term here as well, an operation would gain a value nothing writes for it on the
         // day the arm for it was written, with nothing failing to say so.
         //
-        // The root is read wherever the declarations reach it and not only where it is a parameter.
-        // What is declared there is the inputs' to say, and a walk of its own that stopped at the
-        // parameter left a condition above a line over a field as one nothing could put a value
-        // under.
-        Type declared = subject.inputs().declaredAt(target.writeRoot());
-        if (declared == null) {
+        // Where the value is written, which is the traversal that follows one. It stops where a
+        // value is built rather than where a name is read, and that is the answer this question
+        // wants: a name every case of a sum spreads is readable on a value of the sum and is not a
+        // place a value is composed for.
+        Type writtenAt = subject.inputs().typeAtWrittenPath(target.writeRoot());
+        if (writtenAt == null) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
+        // And the order the value is read back on, which is the reading's. Taken off the type above,
+        // the walk that answers where a value is written would be answering what a number there is
+        // measured on as well, and the two are one value only for as long as no term arrives where
+        // they part.
         souther.compiler.inputs.TermOrders on = new souther.compiler.inputs.TermOrders(
-                target.term().observedOn(declared, subject.symbols()), carrier);
-        return edgeFrom(TermRealizations.at(target, declared, on, at, within, subject.symbols(),
+                subject.quantities().ordersOf(target.term()).observed(), carrier);
+        return edgeFrom(TermRealizations.at(target, writtenAt, on, at, within, subject.symbols(),
                 subject.inputs().policy()), target, at, on);
     }
 
@@ -3472,7 +3465,7 @@ public final class Generator {
      */
     private static boolean holdsNothing(Subject subject, Axis axis) {
         for (TermPath inside : axis.path().sequencesContainingIt()) {
-            if (subject.held().most(inside) < 1) {
+            if (subject.mostHeldAt(inside) < 1) {
                 return true;
             }
         }

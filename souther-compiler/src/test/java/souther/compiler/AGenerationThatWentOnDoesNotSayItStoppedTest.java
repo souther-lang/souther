@@ -78,7 +78,8 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         return new Generator.Subject(spec.name(), new souther.compiler.partition.BehaviorInputs(
                 spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(), symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
+                domain.quantities(symbols),
+                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), souther.compiler.partition.HeldCounts.of(domain));
     }
 
     private static String written(souther.compiler.partition.FillResult result) {
