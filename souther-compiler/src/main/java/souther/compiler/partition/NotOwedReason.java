@@ -10,11 +10,16 @@ package souther.compiler.partition;
  * and a point no carrier names is one the technique asks for and this language cannot write down.
  * Left to a count, both read as the report being short.
  *
- * <p>Three and not more, because there are three things that settle it: what the rules leave, what
- * the carrier can name, and what kind of rule drew the line. Two of these can hold of one border at
- * once — an invariant on a {@code Decimal} refuses the far side and names no neighbour either — and
- * the one said is the one about the model, since a reader told that this language has no name for a
- * value that may not exist would go looking for a missing conversion.
+ * <p>Two and not more, because there are two things that settle it: what the rules leave, and what
+ * the carrier can name. Both can hold of one border at once — an invariant on a {@code Decimal}
+ * refuses the far side and names no neighbour either — and the one said is the one about the model,
+ * since a reader told that this language has no name for a value that may not exist would go
+ * looking for a missing conversion.
+ *
+ * <p>What kind of rule drew the line settles which points a border <em>has</em> and never whether a
+ * row is owed at one it has ({@link Border#pointsOf}). A rule that names a value has a point
+ * outside it on each side, so there is nothing for it to decline; a bound has the same points as
+ * any other order and the rules refuse the ones outside it, which is the first of these.
  */
 public enum NotOwedReason {
 
@@ -43,15 +48,5 @@ public enum NotOwedReason {
      * <p>The point the technique asks for cannot be written down either way, which is a limit of the
      * language and not a gap in the rows: an item that cannot exist is not one anybody is short of.
      */
-    THE_CARRIER_NAMES_NO_NEIGHBOUR,
-
-    /**
-     * The rule names a value rather than ordering the values around it.
-     *
-     * <p>What an equality draws. {@code x == 5} says which value is singled out and says nothing
-     * about which side of it anything is on, so there is no side for a nearest-outside point to be
-     * nearest on — 4 and 6 stand alike, and choosing one would invent the answer. What such a rule
-     * does divide is the value from every other value, which the {@code OUT} point covers.
-     */
-    THE_RULE_NAMES_A_VALUE_NOT_A_SIDE
+    THE_CARRIER_NAMES_NO_NEIGHBOUR
 }

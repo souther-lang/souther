@@ -79,26 +79,21 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
             Bound reaches = end.reaches();
             if (reaches == null) {
                 if (!claims.equals(List.of(new RegionClaim(
-                        new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(side.outward())),
-                        PointContributions.none())))) {
+                        new FarEnd.AtTheOrderEnd(side.outward()), PointContributions.none())))) {
                     throw new IllegalArgumentException("a run nothing stops at its " + side
                             + " end, stopped by " + claims);
                 }
                 return;
             }
             for (RegionClaim claim : claims) {
-                if (!(claim.basis() instanceof RegionBasis.Beside beside)) {
-                    throw new IllegalArgumentException("a run of the arrangement is beside what"
-                            + " stops it, and this is not: " + claim.basis());
-                }
-                Bound at = switch (beside.farEnd()) {
+                Bound at = switch (claim.basis()) {
                     case FarEnd.AtALine line -> Band.atTheLine(line.where(), side.inward());
                     case FarEnd.AtTheDomain domain -> domain.reaches();
                     case FarEnd.AtTheOrderEnd _ -> null;
                 };
                 if (at == null || !at.canonical().equals(reaches.canonical())) {
                     throw new IllegalArgumentException("a run reaching " + reaches + " at its "
-                            + side + " end, claimed to be stopped at " + beside.farEnd());
+                            + side + " end, claimed to be stopped at " + claim.basis());
                 }
             }
         }
@@ -137,16 +132,14 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         Bound reaches = end.reaches();
         if (reaches == null) {
             return List.of(new RegionClaim(
-                    new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(side.outward())),
-                    PointContributions.none()));
+                    new FarEnd.AtTheOrderEnd(side.outward()), PointContributions.none()));
         }
         List<RegionClaim> out = new ArrayList<>();
         if (parted != null
                 && Band.atTheLine(parted.geometry(), side.inward()).canonical().equals(
                         reaches.canonical())) {
             parted.alternatives().forEach(line -> out.add(new RegionClaim(
-                    new RegionBasis.Beside(new FarEnd.AtALine(line, parted.geometry())),
-                    PointContributions.by(line))));
+                    new FarEnd.AtALine(line, parted.geometry()), PointContributions.by(line))));
         }
         // The end of the rules and the place the run gets to, which are two answers about two
         // layers: the attribution came matched to where the reading left the quantity, and this asks
@@ -154,8 +147,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         // is written, and neither is the other's answer — so the names are read here and not where
         // the end was lowered.
         if (leaves != null && leaves.bound().canonical().equals(reaches.canonical())) {
-            out.add(new RegionClaim(
-                    new RegionBasis.Beside(new FarEnd.AtTheDomain(leaves.bound())),
+            out.add(new RegionClaim(new FarEnd.AtTheDomain(leaves.bound()),
                     PointContributions.byNarrowing(leaves)));
         }
         if (out.isEmpty()) {

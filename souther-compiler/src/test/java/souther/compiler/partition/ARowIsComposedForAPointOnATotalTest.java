@@ -296,7 +296,7 @@ class ARowIsComposedForAPointOnATotalTest {
             if (!border.label().contains("List.sum")) {
                 continue;
             }
-            ItemAssessment at = border.items().get(PointRole.ON);
+            ItemAssessment at = border.at(PointRole.ON);
             if (at instanceof ItemAssessment.Owed owed
                     && owed.attempt() instanceof ItemAssessment.Attempt.Unresolved why) {
                 said.add(why.why().reason().toString());
@@ -352,7 +352,8 @@ class ARowIsComposedForAPointOnATotalTest {
         for (BorderAssessment border : lines(MODEL, behavior)) {
             if (border.label().contains("List.sum")) {
                 border.items().forEach(
-                        (role, item) -> at.accept(border.label() + " " + role, item));
+                        (role, item) -> at.accept(
+                                border.label() + " " + border.border().named(role), item));
             }
         }
     }
@@ -371,11 +372,12 @@ class ARowIsComposedForAPointOnATotalTest {
     private static boolean met(String source, String point) {
         for (String behavior : ON_A_TOTAL) {
             for (BorderAssessment border : lines(source, behavior)) {
-                for (Map.Entry<PointRole, ItemAssessment> each : border.items().entrySet()) {
+                for (Map.Entry<DomainPoint, ItemAssessment> each : border.items().entrySet()) {
                     // Named by the line and the role together, so a point of the element's own
                     // border is not read as the total's.
 
-                    if (point.equals(border.label() + " " + each.getKey())) {
+                    if (point.equals(border.label() + " "
+                            + border.border().named(each.getKey()))) {
                         return each.getValue() instanceof ItemAssessment.Owed owed
                                 && owed.hasRowWitness();
                     }

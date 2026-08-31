@@ -22,6 +22,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
+import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.PointRole;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
@@ -1672,7 +1673,7 @@ public final class Adequacy {
                     debt.id().owedToTheDeclaration().isPresent()
                             ? axisOf(debt.id(), declarations, symbols, policy) : null,
                     PointResolver.resolveAt(debt.owed(), List.copyOf(debt.met().keySet()),
-                            reading -> readingOf(db, module, scope, debt, debt.role(), reading))));
+                            reading -> readingOf(db, module, scope, debt, debt.at(), reading))));
         }
         return new BorderAccount(module, scope, resolved);
     }
@@ -1747,7 +1748,7 @@ public final class Adequacy {
      */
     static PointResolver.ReadingEvidence readingOf(
             Db db, String module, GenerationScope scope, BorderObligationPointAssessment debt,
-            souther.compiler.partition.PointRole role,
+            DomainPoint role,
             BorderObligationPointAssessment.Reading reading) {
         if (!scope.admits(reading.behavior())) {
             return new PointResolver.ReadingEvidence.OutOfScope();

@@ -31,6 +31,23 @@ public enum PointRole {
     /** Outside it and away from the border, likewise against {@link #OFF}. */
     OUT;
 
+    /**
+     * Which of the four a point of a border is, from the two questions that tell them apart.
+     *
+     * <p>Derived and never chosen. Where the point is says whether it is against the line, and the
+     * rule says whether it holds there; the four are the pairs. Assigned by hand wherever a border
+     * is built, the same two facts are read into a role by a switch per shape of line, and a role is
+     * what everything downstream reports and counts.
+     *
+     * @param holdsThere whether the rule that drew the line is satisfied by a row at this point
+     */
+    public static PointRole of(DomainPoint point, boolean holdsThere) {
+        if (point.againstTheLine()) {
+            return holdsThere ? ON : OFF;
+        }
+        return holdsThere ? IN : OUT;
+    }
+
     /** Whether a row at this point stands inside the partition the border bounds. */
     public boolean inside() {
         return this == ON || this == IN;

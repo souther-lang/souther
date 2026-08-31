@@ -382,15 +382,15 @@ public sealed interface OriginRef {
     default LineFacts lineFacts() {
         return switch (this) {
             case ComparisonOrigin g ->
-                    new LineFacts(g.valueBelongsBelow(), g.holdsAtTheValue(), g.singles());
+                    LineFacts.of(g.valueBelongsBelow(), g.holdsAtTheValue(), g.singles());
             case EnsuresOrigin e ->
-                    new LineFacts(e.valueBelongsBelow(), e.holdsAtTheValue(), e.singles());
+                    LineFacts.of(e.valueBelongsBelow(), e.holdsAtTheValue(), e.singles());
             // Which side the value a bound stops at is on, from the end it placed and whether it
             // admits that value: a minimum keeps what is above, so its value is below the line
             // exactly when the bound does not admit it. A bound singles nothing out — it keeps a run
             // of the order — and that the far side holds no value at all is a different answer,
             // given where a border reads what a line has sides.
-            case InvariantOrigin i -> new LineFacts(
+            case InvariantOrigin i -> LineFacts.of(
                     (i.keeps() == souther.compiler.numeric.EndSide.UPPER) == i.holdsAtTheValue(),
                     i.holdsAtTheValue(), false);
             case NarrowedOrigin n -> n.bound().lineFacts();

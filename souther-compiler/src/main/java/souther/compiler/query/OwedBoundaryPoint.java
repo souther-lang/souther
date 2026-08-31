@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.OwedPoint;
 import souther.compiler.partition.PointAttribution;
 import souther.compiler.partition.PointRole;
@@ -37,7 +38,7 @@ import java.util.List;
 public final class OwedBoundaryPoint {
 
     private final Border line;
-    private final PointRole role;
+    private final DomainPoint at;
     private final BorderObligationPoint owed;
     private final ItemAssessment.Owed item;
 
@@ -54,25 +55,25 @@ public final class OwedBoundaryPoint {
      * an entry of a behavior's account may not reach the points beside it, which is the whole of
      * what the account is for.
      */
-    private OwedBoundaryPoint(BorderAssessment at, PointRole role, BorderObligationPoint owed) {
-        if (at == null || role == null || owed == null) {
+    private OwedBoundaryPoint(BorderAssessment at, DomainPoint point, BorderObligationPoint owed) {
+        if (at == null || point == null || owed == null) {
             throw new IllegalArgumentException("a row owed here is owed at a point of a line, for"
                     + " something: " + owed);
         }
         // And the thing owed is a thing owed at that point of that line. Checked rather than
-        // trusted: the line and the role say where a report writes this, and what is owed says what
+        // trusted: the line and the place say where a report writes this, and what is owed says what
         // a row here answers, so a value whose halves named different points would be a finding
         // about one line printed at another.
-        if (!owed.line().equals(at.border().obligation()) || owed.role() != role) {
-            throw new IllegalArgumentException("a point of " + at.border().label() + " at " + role
+        if (!owed.line().equals(at.border().obligation()) || !owed.point().equals(point)) {
+            throw new IllegalArgumentException("a point of " + at.border().label() + " at " + point
                     + " owed for something at another point: " + owed);
         }
-        if (!(at.at(role) instanceof ItemAssessment.Owed measured)) {
+        if (!(at.at(point) instanceof ItemAssessment.Owed measured)) {
             throw new IllegalArgumentException("a row owed at a point this border owes none at: "
-                    + at.border().label() + " " + role);
+                    + at.border().label() + " " + point);
         }
         this.line = at.border();
-        this.role = role;
+        this.at = point;
         this.owed = owed;
         this.item = measured;
     }
@@ -82,9 +83,14 @@ public final class OwedBoundaryPoint {
         return line;
     }
 
-    /** Which of the border's four points this is. */
+    /** Which point of the border this is, as a place on the quantity. */
+    public DomainPoint at() {
+        return at;
+    }
+
+    /** Which of the four it is, which the line it is a point of answers. */
     public PointRole role() {
-        return role;
+        return line.roleOf(at);
     }
 
     /** What a row here is owed for, which several readings of the line share. */
@@ -108,20 +114,20 @@ public final class OwedBoundaryPoint {
     public static List<OwedBoundaryPoint> across(List<BorderAssessment> lines) {
         List<OwedBoundaryPoint> out = new ArrayList<>();
         for (BorderAssessment each : lines) {
-            for (PointRole role : PointRole.values()) {
-                // Nothing is owed in this role at all, so neither account holds anything here and
+            for (DomainPoint point : each.items().keySet()) {
+                // Nothing is owed at this point at all, so neither account holds anything here and
                 // the border says as much. What a report shows of such a point is the block's.
-                if (!(each.at(role) instanceof ItemAssessment.Owed)) {
+                if (!(each.at(point) instanceof ItemAssessment.Owed)) {
                     continue;
                 }
-                for (OwedPoint owed : each.border().owes(role)) {
+                for (OwedPoint owed : each.border().owes(point)) {
                     // Every arm answered, so that whose a point is stays a question with as many
                     // answers as there are accounts. Asked as "is it this one", an arm added later
                     // would fall out of both accounts and be measured nowhere, and both producers
                     // would go on compiling.
                     switch (owed.attribution()) {
                         case PointAttribution.TheReading _ ->
-                                out.add(new OwedBoundaryPoint(each, role, owed.point()));
+                                out.add(new OwedBoundaryPoint(each, point, owed.point()));
                         // Answered once for the module, from every reading of it
                         // ({@link Adequacy.DeclaredBorders}).
                         case PointAttribution.TheDeclarations _ -> { }
@@ -140,18 +146,18 @@ public final class OwedBoundaryPoint {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof OwedBoundaryPoint that && role == that.role
+        return other instanceof OwedBoundaryPoint that && at.equals(that.at)
                 && line.equals(that.line) && owed.equals(that.owed) && item.equals(that.item);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(line, role, owed, item);
+        return java.util.Objects.hash(line, at, owed, item);
     }
 
     @Override
     public String toString() {
-        return role + " of " + line.label() + " for " + owed;
+        return at + " of " + line.label() + " for " + owed;
     }
 
     /**
@@ -187,7 +193,7 @@ public final class OwedBoundaryPoint {
         List<OwedBoundaryPoint> at = new ArrayList<>();
         for (OwedBoundaryPoint each : account) {
             if (at.stream().noneMatch(
-                    seen -> seen.role() == each.role() && seen.line().equals(each.line()))) {
+                    seen -> seen.at().equals(each.at()) && seen.line().equals(each.line()))) {
                 at.add(each);
             }
         }

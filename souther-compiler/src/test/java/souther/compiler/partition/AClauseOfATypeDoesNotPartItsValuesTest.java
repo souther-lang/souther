@@ -20,7 +20,9 @@ import souther.compiler.types.TypeSymbols;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A clause of a type does not part the values of the position it is about.
@@ -46,7 +48,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     /** A bound is where what it leaves stops, and stops nothing else. */
     @Test
     void aBoundPartsNothing() {
-        assertNull(Border.partedBy(aLineAt(100), aBound()),
+        assertEquals(List.of(), Border.partedBy(aLineAt(100), aBound()),
                 "nothing is outside a bound, so there is no run on the far side to be beside");
     }
 
@@ -54,7 +56,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     @Test
     void aBoundADeclarationTookInPartsNothingEither() {
         Endpoint at = Endpoint.inclusive(Count.of(100));
-        assertNull(Border.partedBy(aLineAt(100),
+        assertEquals(List.of(), Border.partedBy(aLineAt(100),
                         OriginRef.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
                 "taking an end in moves where the position stops, which is not dividing it");
     }

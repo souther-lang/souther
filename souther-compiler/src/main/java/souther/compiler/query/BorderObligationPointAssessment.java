@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.Demand;
+import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.PointRole;
 
 import java.util.ArrayList;
@@ -218,7 +219,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         List<BorderAssessment> readings = List.copyOf(met.values());
         Demand asked = asked(point, readings);
         return new BorderObligationPointAssessment(point, attribution,
-                foundAt(point, readings), asked, came(point.role(), readings, asked), met);
+                foundAt(point, readings), asked, came(point.point(), readings, asked), met);
     }
 
     /**
@@ -304,9 +305,26 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         return point.line();
     }
 
-    /** Which of a border's four points this is. */
+    /** Which point of a border this is, as a place on the quantity. */
+    public DomainPoint at() {
+        return point.point();
+    }
+
+    /** Which of the four it is, which the line it is a point of answers. */
     public PointRole role() {
-        return point.role();
+        return met.firstEntry().getValue().border().roleOf(at());
+    }
+
+    /**
+     * Which side of the line this point is on, where the role alone does not tell it from another
+     * point of the same line.
+     *
+     * <p>What a mark says beside the role. Which side a point is on is the line's own and is the
+     * same at every reading of it, so any of them answers; where on the quantity it is takes a
+     * reading's words and is said under the mark rather than in it.
+     */
+    public String whichSide() {
+        return met.firstEntry().getValue().border().whichSide(at());
     }
 
     /**
@@ -318,9 +336,9 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * them is the wrong one is exactly what is not known.
      */
     private static Demand asked(BorderObligationPoint point, List<BorderAssessment> readings) {
-        Demand asked = readings.get(0).border().demand(point.role());
+        Demand asked = readings.get(0).border().demand(point.point());
         for (BorderAssessment reading : readings) {
-            Demand also = reading.border().demand(point.role());
+            Demand also = reading.border().demand(point.point());
             if (!asked.sameAs(also)) {
                 throw new IllegalStateException("two readings of one point disagree about what it"
                         + " asks for, so they are not one point: " + point
@@ -348,7 +366,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * to undo. What it is here for is that a value at the point was built, which is evidence the
      * point exists.
      */
-    private static ObligationAssessment came(PointRole role, List<BorderAssessment> readings,
+    private static ObligationAssessment came(DomainPoint role,
+                                             List<BorderAssessment> readings,
                                              Demand asked) {
         if (asked instanceof Demand.NotOwed not) {
             throw new IllegalStateException(
@@ -504,7 +523,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     public List<ReadingSaid> readingsSaid() {
         List<ReadingSaid> out = new ArrayList<>();
         met.forEach((where, at) -> out.add(new ReadingSaid(where, at.axis(),
-                new BorderAssessment.Point(at, role(), at.at(role())).asked())));
+                new BorderAssessment.Point(at, at(), at.at(at())).asked())));
         out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
                 .thenComparing(ReadingSaid::asks));
         return List.copyOf(out);

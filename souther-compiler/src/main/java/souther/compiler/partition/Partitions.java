@@ -990,10 +990,7 @@ public final class Partitions {
                 // Every rule that drew a line here, as it was read. Which of them fall in one place
                 // is the arrangement's answer, and telling them apart here kept the first and lost
                 // the rest — so a run bounded by two rules knew about one of them.
-                Parting parts = Border.partedBy(where, origin);
-                if (parts != null) {
-                    parted.add(parts);
-                }
+                parted.addAll(Border.partedBy(where, origin));
             }
         }
         for (Cut cut : axis.cuts()) {

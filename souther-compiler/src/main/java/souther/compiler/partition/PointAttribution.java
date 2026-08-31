@@ -98,7 +98,7 @@ public sealed interface PointAttribution {
      *
      * <p>Whose a point is follows from what settled it, and what settled it is part of what the
      * point is: the line it is at, and whatever stops the region beside it
-     * ({@link RegionBasis}). So two readings of one point were settled by the same things and
+     * ({@link FarEnd}). So two readings of one point were settled by the same things and
      * answer this the same way, and a pair that does not says something has called two points one.
      * Refused here rather than resolved, the way two readings disagreeing about what a point asks
      * for are refused — picking one of them would file a body's row under a declaration, or the

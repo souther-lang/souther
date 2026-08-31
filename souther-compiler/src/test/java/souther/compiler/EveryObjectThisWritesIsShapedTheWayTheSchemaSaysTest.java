@@ -84,8 +84,14 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
 
             behavior unwritten : (r: R) -> Found | Missing
 
+            behavior named : (r: R) -> Found | Missing
+            let named (r) = if r.a == 7 then Found else Missing
+
             example f
                 | "one" : (R { a = 1 }) -> Missing
+
+            example named
+                | "seven" : (R { a = 7 }) -> Found
             """;
 
     @Test
@@ -126,8 +132,9 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                 "the branch forbids what it does not name, rather than naming what it forbids");
         Set<String> named = new java.util.LinkedHashSet<>();
         notOwed.get("properties").propertyNames().forEach(named::add);
-        assertEquals(Set.of("point", "notOwed"), named,
-                "and what it names is which point it is and why no row is owed there");
+        assertEquals(Set.of("point", "location", "notOwed"), named,
+                "and what it names is which point of the border it is, where on the quantity it is,"
+                        + " and why no row is owed there");
     }
 
     /**

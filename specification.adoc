@@ -3555,6 +3555,17 @@ guard n <= 100    ON  n = 100    OFF n = 101    IN  n < 100    OUT n > 101
 guard n <  100    ON  n =  99    OFF n = 100    IN  n <  99    OUT n > 100
 ....
 
+[[a-role-may-have-a-point-on-each-side-of-the-line]]A role is what a point is and not which point it is, and a border can have two points in one role. Where a border has them is where the values on both sides of the line it drew fall in another class than the line's own value: a rule that names a value — `+x == 10+`, `+x /= 10+` — parts that value from every other one, so each neighbour crosses and each is a point of its own. A rule that orders the values has one neighbour that crosses and one that does not, and the second is a row away from the line rather than a row against it.
+
+....
+guard n == 10     ON  n = 10     OFF n = 9   OFF n = 11    OUT n < 9    OUT n > 11
+guard n /= 10     OFF n = 10     ON  n = 9   ON  n = 11    IN  n < 9    IN  n > 11
+....
+
+A row at one of them says nothing about the other: an `+x == 10+` written as `+x <= 10+` is caught by the 9 and not by the 11, and one written as `+x >= 10+` the other way about. So they are two coverage items, and a row that legitimately stands at both — which no row here can, they are two values — would answer both without making them one.
+
+Which of the four a point is follows from where it is and from whether the rule holds there, and from nothing else. `+ON+` and `+OFF+` are the values against the line, `+IN+` and `+OUT+` the runs away from it, and which of each pair a point is, is whether a row there satisfies the rule that drew the line. So the same three places are the equality's `+ON+`, `+OFF+`, `+OFF+` and the disequality's `+OFF+`, `+ON+`, `+ON+`, and neither rule needs a role the other does not have.
+
 [[a-point-away-from-a-line-lies-in-the-partition-that-line-bounds]]`+ON+` and `+OFF+` ask for a place. `+IN+` and `+OUT+` ask for a *partition* — the one the border bounds and the one it keeps out — less the value against the line, so a row anywhere in that partition other than at the line is at the point. Which is not the same as everywhere past the line, and the difference only shows where a position has more than one line through it:
 
 ....
@@ -3567,12 +3578,14 @@ With the second line written, a row at thirty is in a third partition and answer
 What the report writes for a point is the relation and what it is against, whole — a value alone would name a witness of a partition as though it were the partition.
 
 * [[a-border-says-which-point-it-owes]]a point the report names MUST say which of the four it is. A border can owe a row at all of them, two of the values differ by one step, and a report naming neither role leaves an author to work the closed-border rule out for themselves — which is the reading this vocabulary exists to hand over rather than ask for.
+* [[a-border-says-which-side-a-point-is-on-where-the-role-does-not]]and where the border has two points in that role (<<a-role-may-have-a-point-on-each-side-of-the-line>>), it MUST say which side of the line the point is on. The role alone prints the same sentence twice and asks for a row without saying which value either time. The side is the line's own and is the same at every coordinate it was read at, so it is said where the point is named; where on the quantity the point falls takes a coordinate's words and is said under it, as every other word with a quantity in it is.
 
-[[a-border-says-why-a-point-is-not-owed]]Which of the four a border owes a row in is the rule's to say, and it is not always all four — and a point it owes none in MUST say which of three things settled that. Left out, they read as the report being short of items the technique asks for, and two of the three are not shortfalls at all:
+[[a-border-says-why-a-point-is-not-owed]]Which of its points a border owes a row at is the rule's to say, and it is not always all of them — and a point it owes none at MUST say which of two things settled that. Left out, they read as the report being short of items the technique asks for, and neither is a shortfall:
 
 * the rules leave no value there. An invariant leaves nothing outside its bound, so its `+OFF+` and `+OUT+` points are *excluded* — the same reading a case its rules refuse gets (<<a-case-the-rules-refuse-is-not-covered-or-uncovered>>), one step further in — and a side the rules leave one value wide has no `+IN+` point for the same reason;
-* the carrier names no neighbouring value, so the point one step away is not named at all. A closed border there has only its `+ON+` point and an open one only its `+OFF+` point — the missing one is decided by which side the cut falls on and not by a rule that decimals lose their `+OFF+` points. This is the item that cannot exist rather than one nobody has got to (<<the-report-claims-no-coverage-criterion>>);
-* the rule names a value rather than ordering the values around it. An equality says which value is singled out and nothing about which side of it anything is on, so neither neighbour is nearer to being outside than the other and there is no `+OFF+` point to ask for. What it does divide is the value from every other value, which is what its `+OUT+` point covers.
+* the carrier names no neighbouring value, so the point one step away is not named at all. A closed border there has only its `+ON+` point and an open one only its `+OFF+` point — the missing one is decided by which side the cut falls on and not by a rule that decimals lose their `+OFF+` points. This is the item that cannot exist rather than one nobody has got to (<<the-report-claims-no-coverage-criterion>>).
+
+What kind of rule drew the line settles which points a border has and never whether a row is owed at one it has. A rule that names a value has a point outside it on each side, so it declines neither of them; where one of those values is outside what the rules leave, or is one the carrier cannot name, that point is answered by the first or the second of these like any other.
 
 A strict bound on a `+Decimal+` is further along again: its cut is a value the type refuses, and this draws no border there at all rather than drawing one and owing a row at it.
 

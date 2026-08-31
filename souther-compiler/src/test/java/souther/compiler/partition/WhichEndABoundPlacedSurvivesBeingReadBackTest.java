@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.types.TypeKey;
@@ -79,10 +80,10 @@ class WhichEndABoundPlacedSurvivesBeingReadBackTest {
                     DeclaredThresholds.endKept(row.valueBelongsBelow(), row.holdsAtTheValue()),
                     row.holdsAtTheValue());
 
-            assertEquals(row.valueBelongsBelow(), origin.lineFacts().valueBelongsBelow(),
-                    () -> "which side the threshold's own value is on, read back: " + row);
-            assertEquals(row.holdsAtTheValue(), origin.lineFacts().holdsAtTheValue(),
-                    () -> "and whether the rule admits it: " + row);
+            assertEquals(new ComparisonClaim.Cut(row.valueBelongsBelow(), row.holdsAtTheValue()),
+                    origin.lineFacts().claim(),
+                    () -> "which side the threshold's own value is on and whether the rule admits"
+                            + " it, read back: " + row);
         }
     }
 

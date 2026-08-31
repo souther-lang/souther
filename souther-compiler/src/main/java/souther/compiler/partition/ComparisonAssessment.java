@@ -329,9 +329,7 @@ sealed interface ComparisonAssessment {
         // The line and not one of its points. A rule drawing where the quantity never reaches
         // divides the position into nothing, and a reader told that the rule went unread would go
         // looking for a limit of this compiler that is not there.
-        if (!Border.reaches(cutting.at(), cutting.seam(),
-                Border.satisfyingSide(cutting.holdsAtTheValue(), cutting.valueBelongsBelow()),
-                Border.ordersAroundTheCut(drawnByAnInvariant, cutting.singles()),
+        if (!Border.reaches(cutting.at(), cutting.seam(), cutting.claim(), drawnByAnInvariant,
                 cutting.within())) {
             return new OutsideTheDomain(cutting);
         }
@@ -345,11 +343,8 @@ sealed interface ComparisonAssessment {
                 return new NothingArrivesAtItsLine(cutting);
             }
             case souther.compiler.reach.ComparisonArrival.Values values -> {
-                if (!Border.reaches(cutting.at(), cutting.seam(),
-                        Border.satisfyingSide(cutting.holdsAtTheValue(),
-                                cutting.valueBelongsBelow()),
-                        Border.ordersAroundTheCut(drawnByAnInvariant, cutting.singles()),
-                        cutting.withinGiven(values))) {
+                if (!Border.reaches(cutting.at(), cutting.seam(), cutting.claim(),
+                        drawnByAnInvariant, cutting.withinGiven(values))) {
                     return new NothingArrivesAtItsLine(cutting);
                 }
             }

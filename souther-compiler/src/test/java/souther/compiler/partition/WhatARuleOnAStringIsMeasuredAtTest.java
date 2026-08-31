@@ -194,10 +194,12 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
             Partitions.bordersOf(axis, symbols, reading.runsBetween(axis.term()), new LinesRead())
-                    .forEach(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
-                            .filter(role -> border.demand(role).criterion() != null)
-                            .forEach(role -> owed.add(role + " "
-                                    + border.demand(role).criterion().asked(border.cut().of()).substring(2))));
+                    .forEach(border -> border.answers().keySet().stream()
+                            .filter(DomainPoint::againstTheLine)
+                            .filter(point -> border.demand(point).criterion() != null)
+                            .forEach(point -> owed.add(border.named(point) + " "
+                                    + border.demand(point).criterion()
+                                            .asked(border.cut().of()).substring(2))));
         }
         return new Measured(classes, stands, owed);
     }

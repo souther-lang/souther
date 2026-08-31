@@ -131,9 +131,9 @@ class OneBorderReadTwiceIsOneReadingTest {
 
     /** The same border with what stops each of its runs listed the other way round. */
     private static Border reversed(Border border) {
-        java.util.Map<PointRole, PointAnswer> answers =
-                new java.util.EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
+        java.util.Map<DomainPoint, PointAnswer> answers =
+                new java.util.LinkedHashMap<>();
+        for (DomainPoint role : border.answers().keySet()) {
             PointAnswer answer = border.answer(role);
             answers.put(role, answer instanceof PointAnswer.InRegion in && in.claims().size() > 1
                     ? new PointAnswer.InRegion(in.criterion(), reversed(in.claims()))
@@ -218,6 +218,6 @@ class OneBorderReadTwiceIsOneReadingTest {
         return new AuthoredLine(new RuleRef.Comparison("weigh",
                 new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
                         souther.compiler.types.CoverageConstruct.BINARY)),
-                0, new LineFacts(true, true, false), List.of());
+                0, LineFacts.of(true, true, false), List.of());
     }
 }

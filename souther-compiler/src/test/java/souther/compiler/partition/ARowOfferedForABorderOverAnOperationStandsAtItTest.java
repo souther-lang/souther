@@ -213,7 +213,7 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
                         && !owed.hasRowWitness()) {
-                    points.add(border.label() + " " + role);
+                    points.add(border.label() + " " + border.border().named(role));
                 }
             });
         }
@@ -245,7 +245,8 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
                         && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
-                    rows.put(border.label() + " " + role, as.apply(built.row()));
+                    rows.put(border.label() + " " + border.border().named(role),
+                            as.apply(built.row()));
                 }
             });
         }

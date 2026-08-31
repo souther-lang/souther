@@ -4,12 +4,11 @@ import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.PointRole;
 import souther.compiler.source.SourceId;
 
-import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.Map;
 
 /**
@@ -29,21 +28,21 @@ import java.util.Map;
  * of the four roles had no obligation to be in it — they were counted by the measure that counts a
  * position's classes, which is a different unit and has no word for a row on the far side of a line.
  */
-public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> items) {
+public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items) {
 
     public BorderAssessment {
-        if (items == null || !items.keySet().equals(EnumSet.allOf(PointRole.class))) {
+        if (items == null || !items.keySet().equals(border.answers().keySet())) {
             throw new IllegalArgumentException(
-                    "a border assessed in some of its roles and not others: " + items);
+                    "a border assessed at some of its points and not others: " + items);
         }
         // And each of them assessed as what the border says it owes. The two records answer the same
-        // question about the same role — what is owed there — and holding them apart without holding
-        // them together leaves a point the rules refuse carrying a row that is at it. What a report
-        // prints and what a build refuses over read one of the two, so they may not disagree.
-        for (PointRole role : EnumSet.allOf(PointRole.class)) {
-            agrees(border, role, items.get(role));
+        // question about the same point — what is owed there — and holding them apart without
+        // holding them together leaves a point the rules refuse carrying a row that is at it. What a
+        // report prints and what a build refuses over read one of the two, so they may not disagree.
+        for (DomainPoint point : items.keySet()) {
+            agrees(border, point, items.get(point));
         }
-        items = java.util.Collections.unmodifiableMap(new EnumMap<>(items));
+        items = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(items));
     }
 
     /**
@@ -54,14 +53,14 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
      * it had not been told about is the two coming apart. Deriving the item from the demand instead
      * would put the measure's answer where its question is.
      */
-    private static void agrees(Border border, PointRole role, ItemAssessment item) {
-        Demand demand = border.demand(role);
+    private static void agrees(Border border, DomainPoint point, ItemAssessment item) {
+        Demand demand = border.demand(point);
         switch (item) {
             case null -> throw new IllegalArgumentException(
-                    "a border with a point role it names and does not assess: " + role);
+                    "a border with a point it names and does not assess: " + point);
             case ItemAssessment.NotOwed not -> {
                 if (!(demand instanceof Demand.NotOwed owed) || owed.reason() != not.reason()) {
-                    throw new IllegalArgumentException("the " + role + " point of " + border.label()
+                    throw new IllegalArgumentException("the " + point + " of " + border.label()
                             + " is assessed as not owed for " + not.reason()
                             + ", and its border says " + demand);
                 }
@@ -69,7 +68,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
             case ItemAssessment.Owed owed -> {
                 if (!(demand instanceof Demand.Owed asked)
                         || !asked.criterion().sameAs(owed.criterion())) {
-                    throw new IllegalArgumentException("the " + role + " point of " + border.label()
+                    throw new IllegalArgumentException("the " + point + " of " + border.label()
                             + " is assessed against " + owed.criterion()
                             + ", and its border asks " + demand);
                 }
@@ -77,9 +76,27 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
         }
     }
 
-    /** What became of one role. Never null. */
+    /** What became of one point. Never null. */
+    public ItemAssessment at(DomainPoint point) {
+        return items.get(point);
+    }
+
+    /**
+     * The same of the one point playing {@code role}.
+     *
+     * <p>For a reader holding a classification, which is what a person asking about a border does.
+     * The line refuses where two of its points play the role ({@link Border#theOne}), so this is a
+     * question about a line whose shape the caller has established and never a way to key on the
+     * role.
+     */
     public ItemAssessment at(PointRole role) {
-        return items.get(role);
+        return at(border.theOne(role));
+    }
+
+    /** The measured half of the one point playing {@code role}, or null where no row is owed
+     *  there. */
+    public ItemAssessment.Owed owedAt(PointRole role) {
+        return owedAt(border.theOne(role));
     }
 
     /**
@@ -89,8 +106,8 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
      * reading and not a state anything can be built in: what is owed is settled where the border is
      * made, and nothing can produce an item that is both refused by the rules and sat on by a row.
      */
-    public ItemAssessment.Owed owedAt(PointRole role) {
-        return at(role) instanceof ItemAssessment.Owed owed ? owed : null;
+    public ItemAssessment.Owed owedAt(DomainPoint point) {
+        return at(point) instanceof ItemAssessment.Owed owed ? owed : null;
     }
 
     /** The position this border is on, as a report names it. The line's own answer, so that a point
@@ -130,18 +147,31 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
     }
 
     /** What a row at one point of it would be written as, or null where none is owed there. */
-    public String label(PointRole role) {
-        return border.label(role);
+    public String label(DomainPoint point) {
+        return border.label(point);
     }
 
     /** How one point relates a row's value to what it is against, or null where none is owed. */
-    public String operator(PointRole role) {
-        return border.operator(role);
+    public String operator(DomainPoint point) {
+        return border.operator(point);
     }
 
     /** What that point is against, or null where none is owed. */
+    public String against(DomainPoint point) {
+        return border.against(point);
+    }
+
+    /** The same three of the one point playing {@code role}. */
+    public String label(PointRole role) {
+        return label(border.theOne(role));
+    }
+
+    public String operator(PointRole role) {
+        return operator(border.theOne(role));
+    }
+
     public String against(PointRole role) {
-        return border.against(role);
+        return against(border.theOne(role));
     }
 
     /** The left of the {@code left = right} a report names this line by. */
@@ -165,29 +195,34 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
      * read it. This list has one entry per reading of each point, so anything counting it counts
      * the walk.
      */
-    public record Point(BorderAssessment border, PointRole role, ItemAssessment item) {
+    public record Point(BorderAssessment border, DomainPoint at, ItemAssessment item) {
+
+        /** Which of the four this is, which the line it is a point of answers. */
+        public PointRole role() {
+            return border.border().roleOf(at);
+        }
 
         /** What a row here would be written as, or null where none is owed. */
         public String label() {
-            return border.label(role);
+            return border.label(at);
         }
 
         /** What this asks of a row, as a report writes it, or null where none is owed. */
         public String asked() {
-            return border.operator(role) == null ? null
-                    : border.operator(role) + " " + border.against(role);
+            return border.operator(at) == null ? null
+                    : border.operator(at) + " " + border.against(at);
         }
 
         /** What the point is against, or null where none is owed. */
         public String against() {
-            return border.against(role);
+            return border.against(at);
         }
 
         /** The class a row here falls in, as one line of a class list is written. The line's own
          *  answer, so that a point taken out of this and one of a behavior's account say it
          *  alike. */
         public String said() {
-            return border.border().said(role);
+            return border.border().said(at);
         }
 
         /** The measured half, or null where no row is owed here. */
@@ -196,10 +231,9 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
         }
     }
 
-    /** Every one of this border's four items, in role order. */
+    /** Every one of this border's items, in the order its points are in. */
     public java.util.List<Point> points() {
-        return EnumSet.allOf(PointRole.class).stream()
-                .map(role -> new Point(this, role, at(role))).toList();
+        return items.keySet().stream().map(point -> new Point(this, point, at(point))).toList();
     }
 
     /** The same over a list of borders. */
@@ -223,7 +257,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
      * @throws IllegalStateException where no line here is that one, or where more than one is
      */
     public static ItemAssessment owedAt(java.util.List<BorderAssessment> lines, Border line,
-                                        PointRole role) {
+                                        DomainPoint point) {
         ItemAssessment found = null;
         for (BorderAssessment each : lines) {
             if (!each.border().sameReadingAs(line)) {
@@ -232,26 +266,26 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
             if (found != null) {
                 throw new IllegalStateException(
                         "one behavior's lines hold " + line.label() + " twice, so the "
-                                + role + " point of it is two points");
+                                + point + " of it is two points");
             }
-            found = each.at(role);
+            found = each.at(point);
         }
         if (found == null) {
             throw new IllegalStateException("no line here is " + line.label()
-                    + ", so its " + role + " point is not one of these");
+                    + ", so its " + point + " is not one of these");
         }
         return found;
     }
 
-    /** The roles a row is owed in, which is what a coverage count is over. */
-    public java.util.List<PointRole> owed() {
-        return EnumSet.allOf(PointRole.class).stream().filter(role -> at(role).owed()).toList();
+    /** The points a row is owed at, which is what a coverage count is over. */
+    public java.util.List<DomainPoint> owed() {
+        return items.keySet().stream().filter(point -> at(point).owed()).toList();
     }
 
-    /** The roles the model's own rules discharged, which a report counts as excluded rather than as
+    /** The points the model's own rules discharged, which a report counts as excluded rather than as
      *  items nobody has got to. */
-    public java.util.List<PointRole> excluded() {
-        return EnumSet.allOf(PointRole.class).stream()
-                .filter(role -> border.demand(role).excluded()).toList();
+    public java.util.List<DomainPoint> excluded() {
+        return items.keySet().stream()
+                .filter(point -> border.demand(point).excluded()).toList();
     }
 }

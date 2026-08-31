@@ -105,26 +105,90 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
-     * An equality names a value and orders nothing around it, so neither neighbour is the nearer.
+     * A rule that names a value owes a row at it and at the nearest value on each side of it.
      *
-     * <p>Against an ordering at the same value, where the neighbour is exactly what the rule places.
-     * What the equality does divide is the value from every other value, and that is what its
-     * {@code OUT} point is for — reported as one thing the border owes rather than as a class of the
-     * partition beside it.
+     * <p>Both neighbours are in the class such a rule keeps out. What it distinguishes is the one
+     * value from every other one, so each of the two crosses the line and each is a point of its
+     * own — and a row at one of them says nothing about the other, which is what makes them two.
+     *
+     * <p>Against an ordering at the same value, where one neighbour crosses and the other does not.
+     * That is the whole of the difference between the two shapes of line: the value below
+     * {@code <= 100} is in the partition the border bounds, and a row there answers for the point
+     * away from the line rather than for a point against it.
+     *
+     * <p>Both spellings of the naming rule, because the roles reverse and the values do not.
+     * {@code == 100} is met at the value and not beside it and {@code /= 100} is the other way
+     * about, and the three places a row is asked for are the same three.
      */
     @Test
-    void aRuleThatNamesAValueOwesNoPointBesideIt() {
-        BorderAssessment singled = bordersOf(model("Int", ">= 0", "== 100", "50")).get("h.a = 100");
-        assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
-                        NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE), singled.at(PointRole.OFF));
-        assertEquals("/= 100",
-                singled.operator(PointRole.OUT) + " " + singled.against(PointRole.OUT),
-                "what it divides is the value from every other value");
+    void aRuleThatNamesAValueOwesAPointOnEachSideOfIt() {
+        assertEquals(java.util.Set.of("h.a = 99", "h.a = 100", "h.a = 101"),
+                atALevel(model("Int", ">= 0", "== 100", "50")),
+                "the value the rule names, and the nearest value on each side of it");
 
-        assertEquals("101",
-                bordersOf(model("Int", ">= 0", "<= 100", "50")).get("h.a = 100")
-                        .against(PointRole.OFF),
-                "an ordering at the same value places the neighbour the equality does not");
+        assertEquals(java.util.Set.of("h.a = 99", "h.a = 100", "h.a = 101"),
+                atALevel(model("Int", ">= 0", "/= 100", "50")),
+                "the same three places, whichever of the two classes the rule selects");
+
+        assertEquals(java.util.Set.of("h.a = 100", "h.a = 101"),
+                atALevel(model("Int", ">= 0", "<= 100", "50")),
+                "an ordering leaves the value below its line in the partition it bounds, so that"
+                        + " one is no point against the line");
+    }
+
+    /**
+     * A rule that names a value draws a line exactly where the rules leave that value.
+     *
+     * <p>Such a rule parts the value it names from every other one, so what says whether it divides
+     * anything is whether the position holds the value — and not whether it holds anything one step
+     * either side of it. A rule naming a value the rules refuse divides nothing: every value left
+     * is in one class, and there is no line for a row to be beside.
+     *
+     * <p>Every spelling at every place, because the question is about the value and the two
+     * operators and the three places must not be able to answer it differently. A rule satisfied at
+     * the value and one refusing it name the same value, and a value at the end of the range is as
+     * much a value the rules leave as one in the middle.
+     */
+    @Test
+    void aRuleThatNamesAValueDrawsWhereverTheRulesLeaveThatValue() {
+        assertEquals(List.of("/= 0 -> [h.a = 0]", "== 0 -> [h.a = 0]",
+                        "/= 50 -> [h.a = 50]", "== 50 -> [h.a = 50]",
+                        "/= 100 -> [h.a = 100]", "== 100 -> [h.a = 100]",
+                        "/= 200 -> []", "== 200 -> []"),
+                linesDrawnBy("/= 0", "== 0", "/= 50", "== 50", "/= 100", "== 100",
+                        "/= 200", "== 200"),
+                "a value the rules leave is a line wherever in the range it falls, and a value they"
+                        + " refuse is no line at all");
+    }
+
+    /** The lines each guard draws over a position the rules leave {@code 0..100}, without the two
+     *  the bounds of that range draw themselves. */
+    private static List<String> linesDrawnBy(String... guards) {
+        List<String> drawn = new java.util.ArrayList<>();
+        for (String guard : guards) {
+            Compilation compilation = Compilation.ofSource(
+                    model("Int", ">= 0 && value <= 100", guard, "50"), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            drawn.add(guard + " -> " + Adequacy.boundariesOf(compilation.db(), "example.owed")
+                    .values().stream().flatMap(List::stream)
+                    .filter(each -> !(each.origin() instanceof OriginRef.InvariantOrigin))
+                    .map(BorderAssessment::label).toList());
+        }
+        return drawn;
+    }
+
+    /** Every value of the quantity this model's line asks a row at, as a report writes it. Asked of
+     *  the answers themselves rather than of the four roles, because what is being counted is how
+     *  many places the line asks for and a role is what one of them is. */
+    private static java.util.Set<String> atALevel(String model) {
+        BorderAssessment line = bordersOf(model).get("h.a = 100");
+        assertNotNull(line, bordersOf(model).keySet().toString());
+        return line.border().answers().values().stream()
+                .map(PointAnswer::criterion)
+                .filter(each -> each instanceof Criterion.AtTheLevel)
+                .map(line.border()::label)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
     /**

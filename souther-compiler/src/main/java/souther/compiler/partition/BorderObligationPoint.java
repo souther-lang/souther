@@ -14,7 +14,7 @@ package souther.compiler.partition;
  * whichever position met it. A point away from it names a region, and where a region stops is
  * settled by the line together with whatever bounds it on the far side; so two readings of one line
  * are owed one row there only where the far side is the same thing, and that is what
- * {@link RegionBasis} carries. Keyed on the line alone, a run stopping at a body's own comparison
+ * {@link FarEnd} carries. Keyed on the line alone, a run stopping at a body's own comparison
  * and a run running to the end of the order were one debt and could not both be answered.
  *
  * <p><b>Not where it was read.</b> Which position of which behavior met the line is an occurrence,
@@ -32,25 +32,44 @@ public sealed interface BorderObligationPoint {
     /** Which line of the model a row here is owed for. */
     BorderObligationId line();
 
-    /** Which of the four points of it. */
-    PointRole role();
+    /**
+     * Which point of that line, as a place on the quantity's order.
+     *
+     * <p>The place and not what it is. Two points of one line can be the same one of the four —
+     * a rule that names a value owes a row on each side of it and both of those are outside what it
+     * names — so the role tells them apart nowhere. What it is is read off the line that has it
+     * ({@link Border#roleOf}), which knows the rule as well as the place.
+     */
+    DomainPoint point();
 
     /**
-     * A row at the line itself.
+     * Which of the four this is, which the rule that drew the line answers together with the place.
+     *
+     * <p>A projection and never a key. Two points of one line can come back with one of these, so a
+     * reader telling points apart by it is telling apart fewer things than there are. It is here
+     * rather than only on the border because a debt outlives the reading it was made at: what a
+     * report prints and what a build is held to are about the point, and both want the word.
+     */
+    default PointRole role() {
+        return PointRole.of(point(), line().line().facts().holdsAt(point()));
+    }
+
+    /**
+     * A row at a value of the quantity: the one the rule wrote, or the one beside it on a side.
      *
      * <p>Whether a row standing at length 1 is believed is a question about the type and not about
      * any body carrying it, so one row anywhere settles it.
      */
-    record AtLine(BorderObligationId line, PointRole role) implements BorderObligationPoint {
+    record AtLine(BorderObligationId line, DomainPoint point) implements BorderObligationPoint {
 
         public AtLine {
             if (line == null) {
                 throw new IllegalArgumentException("a point is some authored line's");
             }
-            if (role == null || !role.againstTheLine()) {
+            if (point == null || !point.againstTheLine()) {
                 throw new IllegalArgumentException(
-                        "a point at the line is one of the two against it, and " + role
-                                + " is a region beside it");
+                        "a point at a value of the quantity is one of the places against the line,"
+                                + " and " + point + " is a run beside it");
             }
         }
     }
@@ -61,7 +80,7 @@ public sealed interface BorderObligationPoint {
      * @param region what settled the region beside the line, which is what tells this from the same
      *               point of the same line where something else stopped it
      */
-    record InRegion(BorderObligationId line, PointRole role, RegionBasis region)
+    record InRegion(BorderObligationId line, DomainPoint point, FarEnd region)
             implements BorderObligationPoint {
 
         public InRegion {
@@ -70,9 +89,9 @@ public sealed interface BorderObligationPoint {
                         "a region a row is owed in is some line's, and stops somewhere: " + line
                                 + " " + region);
             }
-            if (role == null || role.againstTheLine()) {
-                throw new IllegalArgumentException("a point in a region is one of the two beside"
-                        + " the line, and " + role + " is at it");
+            if (point == null || point.againstTheLine()) {
+                throw new IllegalArgumentException("a point in a region is one of the runs beside"
+                        + " the line, and " + point + " is at a value of it");
             }
         }
     }
