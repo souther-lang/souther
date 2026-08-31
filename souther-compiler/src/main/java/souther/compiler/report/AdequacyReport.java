@@ -1225,10 +1225,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // because what to say differs between here — where a file has a name — and the warning built
         // from the same finding, where nothing knows what to call one.
         //
-        // The two kinds are printed alike and refuse differently. A row against the line is a gap a
-        // build can be told to refuse over and a row away from it is not, which is a decision about
-        // what a build is held to and not about what a reader is shown — printed apart, the second
-        // would read as a lesser finding rather than as the second half of one technique.
+        // The two kinds are printed alike and refuse under different criteria. A gap against the
+        // line is refused by a build held to either of them and a gap away from it only by one held
+        // to reliable domain coverage, which is a decision about what a build is held to and not
+        // about what a reader is shown — printed apart, the second would read as a lesser finding
+        // rather than as the second half of one technique.
         // The points against the line first and the ones away from it after, which is why this is
         // two passes over one list rather than one: the measure finds a border's four items
         // together, and printed in that order the two halves would be interleaved.
