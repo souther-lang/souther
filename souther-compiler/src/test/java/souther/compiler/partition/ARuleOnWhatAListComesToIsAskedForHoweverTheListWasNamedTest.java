@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -98,7 +99,7 @@ class ARuleOnWhatAListComesToIsAskedForHoweverTheListWasNamedTest {
     void theRowBelowTheThresholdIsOwedAndMissing() {
         ItemAssessment.Owed off = totalsLine().owedAt(PointRole.OFF);
         assertNotNull(off, "a row below the threshold is owed");
-        assertTrue(!off.hasRowWitness(), () -> "no row is below it yet: " + off);
+        assertFalse(off.hasRowWitness(), () -> "no row is below it yet: " + off);
     }
 
     /** No position is left saying the rule is about a value made from it: the rule was read. */

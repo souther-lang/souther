@@ -18,7 +18,8 @@ package souther.compiler.inputs;
  * answer says so where it asks, arm by arm, and there is nothing here to say it with — a method
  * that answered "the position, or nothing" would be that decision made once for every caller, and
  * an answer added later would arrive at all of them as nothing without one of them being asked.
- * What the arms cost a reader is the same fourteen decisions being visible, which is what they are.
+ * What the arms cost a reader is that every one of those decisions is visible, which is what they
+ * are.
  */
 public sealed interface PathResolution {
 

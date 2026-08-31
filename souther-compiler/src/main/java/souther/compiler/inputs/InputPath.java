@@ -32,6 +32,10 @@ import souther.compiler.types.BindingId;
  * a count of how many names a reading may pass through is a count of how a model was written, and
  * one name more than it allows is a position this reports as one nothing names.
  *
+ * <p>Which is about what stops the steps and not about how many shapes are taken. Not every shape
+ * is descended — an expression that binds a name of its own is one this does not go under, and it
+ * comes back said rather than answered ({@link PathResolution.Reason}).
+ *
  * <p>What is known of the names comes in as facts and nothing else ({@link BindingEnvironment}).
  * How many of them there are is not a fact about how far a value's provenance runs — a name bound in
  * an arm is read under bindings written elsewhere — and a reading of what a name means is built on
@@ -156,15 +160,7 @@ public final class InputPath {
                 // walks over one collection joined into one leave a binding that is both: it
                 // holds what the first walk made, and it is what the second was handed. Stopping
                 // at the first left every rule inside the second reading as being about nothing.
-                PathResolution element = elementOf(r.binding(), names);
-                if (element instanceof PathResolution.At) {
-                    yield element;
-                }
-                // And where neither reached one, what the name holds decides which of the two
-                // answers this is. A name holding a shape this does not read is a name whose
-                // position is not known; saying instead that it stands at none would be this
-                // compiler's reach reported as the model's silence.
-                yield holds instanceof PathResolution.Unread ? holds : element;
+                yield either(holds, elementOf(r.binding(), names));
             }
             case Core.FieldAccess fa -> switch (named(fa.target(), names)) {
                 case PathResolution.At(var base) -> new PathResolution.At(
@@ -225,17 +221,36 @@ public final class InputPath {
         if (named instanceof PathResolution.At) {
             return named;
         }
-        // And where the expression does not name a position, its elements may still be at one — so
-        // the ways an operation's answer holds them are tried, and what the expression itself came
-        // to is what is left where none of them arrives.
-        PathResolution through = elementsOf(e, names, named);
-        return through instanceof PathResolution.At || !(named instanceof PathResolution.Unread)
-                ? through : named;
+        // And where the expression names no position, its elements may still be at one, so the ways
+        // an operation's answer holds them are tried beside it.
+        return either(named, elementsOf(e, names));
     }
 
-    /** The ways an operation's answer holds the elements of what it was given, and {@code named}
-     *  where none of them reaches a position. */
-    private PathResolution elementsOf(Core e, BindingEnvironment names, PathResolution named) {
+    /**
+     * The answer of two readings of one expression.
+     *
+     * <p>A position wherever either reached one, since each is a way to the same place and neither
+     * is asked unless the other came back without it. Where neither did, what this compiler did not
+     * read stands over what the model does not hold: one of the two says the answer is not known
+     * here, and an absence that has that in it is not an absence.
+     *
+     * <p>The one place the three are ordered. Written at each meeting of two readings instead, the
+     * orderings drift apart, and the one that forgets turns a reading that stopped into a model
+     * that states nothing — which is the whole of what this type is for.
+     */
+    private static PathResolution either(PathResolution one, PathResolution other) {
+        if (one instanceof PathResolution.At) {
+            return one;
+        }
+        if (other instanceof PathResolution.At) {
+            return other;
+        }
+        return one instanceof PathResolution.Unread ? one : other;
+    }
+
+    /** The ways an operation's answer holds the elements of what it was given, and no position
+     *  where the expression is not one of them. */
+    private PathResolution elementsOf(Core e, BindingEnvironment names) {
         if (e instanceof Core.Read r) {
             // Through a binding an expansion wrote, where the operation it removed answered the
             // elements it was given. The operation is gone from this tree, so what says so was
@@ -249,16 +264,16 @@ public final class InputPath {
             // path to here: a container built by one operation and handed to the next is bound
             // beside the closure that reads it rather than above it.
             Core held = names.heldAnywhereBy(r.binding());
-            return held == null ? named
+            return held == null ? new PathResolution.NotAPosition()
                     : trail.through(r.binding(), () -> containerPath(held, names));
         }
         // Or through an operation the language keeps standing that answers what it was given.
         if (!(e instanceof Core.Call call) || !(call.fn() instanceof Core.Reached reached)) {
-            return named;
+            return new PathResolution.NotAPosition();
         }
         ArgumentRef holds = ElementLineage.holdsTheElementsOf(reached.denotes());
         int argument = holds == null ? -1 : CallArguments.positionIn(holds, reached.denotes());
-        return argument < 0 || argument >= call.args().size() ? named
+        return argument < 0 || argument >= call.args().size() ? new PathResolution.NotAPosition()
                 : containerPath(call.args().get(argument), names);
     }
 }

@@ -80,7 +80,11 @@ public record InputReads(Map<BindingId, TermPath> roots,
 
     @Override
     public Core heldAnywhereBy(BindingId binding) {
-        return bound.containsKey(binding) ? bound.get(binding) : elements.boundTo(binding);
+        // What is bound on the way here first, and what the body bound anywhere after it. No
+        // binding holds nothing — this environment refuses a null value — so what is not here is
+        // absent rather than bound to nothing, and one lookup says so.
+        Core here = bound.get(binding);
+        return here != null ? here : elements.boundTo(binding);
     }
 
     @Override
