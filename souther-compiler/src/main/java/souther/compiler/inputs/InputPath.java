@@ -9,7 +9,8 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.types.BindingId;
 
 /**
- * Which position of a behavior's input an expression names, or nothing where it names none.
+ * Which position of a behavior's input an expression names, where it names none, or where this did
+ * not read far enough to say ({@link PathResolution}).
  *
  * <p>One answer, for every reader of a body that has something to say about a position. A
  * {@code guard} comparing a field, a {@code match} on a parameter and an arm declaring a case
@@ -77,10 +78,23 @@ public final class InputPath {
         /**
          * The binding whose elements {@code binding}'s are, or null where this question is not
          * entitled to one.
+         *
+         * <p>Answered per question and never by asking whether this is one of them. A question added
+         * here is one nobody has said what these edges mean for, and read as "not that one" it would
+         * follow whichever edges the last question happened to leave — the answer arrived at by not
+         * being asked.
          */
         BindingId predecessorOf(BindingId binding, BindingEnvironment names) {
             BindingId same = names.sameElementsAs(binding);
-            return same != null || this == NAMED_POSITION ? same : names.madeFrom(binding);
+            if (same != null) {
+                return same;
+            }
+            return switch (this) {
+                // What is made from a position came from it and is not it, so the walk after which
+                // position an expression names stops where the elements stop being the same ones.
+                case NAMED_POSITION -> null;
+                case VALUE_ORIGIN -> names.madeFrom(binding);
+            };
         }
     }
 
@@ -108,7 +122,7 @@ public final class InputPath {
     }
 
     /**
-     * The position {@code e}'s value came from, or null where it came from none.
+     * Where {@code e}'s value came from, and that it came from none where it did.
      *
      * <p>Beside {@link #of} and licensing less. That one answers which position an expression names,
      * and what a row writes at a position is what a rule about it is about; this answers where a
@@ -125,7 +139,7 @@ public final class InputPath {
     }
 
     /**
-     * The position an element handed to {@code binding} stands at, or null where it stands at none.
+     * Where an element handed to {@code binding} stands, and that it stands at none where it does.
      *
      * <p>What an operation of the language hands its closure is an element of the container it was
      * given, so the name it arrives under stands at that container's position, inside it. Asked of
@@ -203,7 +217,7 @@ public final class InputPath {
     }
 
     /**
-     * Which position holds the elements {@code e} holds, or null where none does.
+     * Which position holds the elements {@code e} holds, and that none does where none does.
      *
      * <p>Beside {@link #named} and not the same question. That one answers what an expression names,
      * and an operation's answer names no position — {@code List.reverse(xs)} is a value, not a place
@@ -239,13 +253,17 @@ public final class InputPath {
      * that states nothing — which is the whole of what this type is for.
      */
     private static PathResolution either(PathResolution one, PathResolution other) {
-        if (one instanceof PathResolution.At) {
-            return one;
-        }
-        if (other instanceof PathResolution.At) {
-            return other;
-        }
-        return one instanceof PathResolution.Unread ? one : other;
+        return switch (one) {
+            case PathResolution.At _ -> one;
+            case PathResolution.Unread _ -> switch (other) {
+                case PathResolution.At _ -> other;
+                case PathResolution.NotAPosition _, PathResolution.Unread _ -> one;
+            };
+            case PathResolution.NotAPosition _ -> switch (other) {
+                case PathResolution.At _, PathResolution.NotAPosition _,
+                     PathResolution.Unread _ -> other;
+            };
+        };
     }
 
     /** The ways an operation's answer holds the elements of what it was given, and no position
