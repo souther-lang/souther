@@ -1065,16 +1065,24 @@ public final class InputDomain {
                     // A branch that is the whole of a value puts no position anywhere, and one the
                     // rules leave nothing at has no row to be written at it. Neither is a place the
                     // rules were passed to, so neither is owed a reading.
+                    //
+                    // Whether the rules leave the case is asked first, because it is the question
+                    // the other one presupposes: that naming a case builds it says there is nothing
+                    // under it to read, and says nothing about whether a value may stand there at
+                    // all. Asked the other way round, a case the rules refuse comes back standing
+                    // on its own wherever it holds nothing — which is a case with no value being
+                    // recorded as the plainest kind of value there is, and read as one by everything
+                    // that asks whether a sum has a value.
+                    if (!owed(here, branch.refinement())) {
+                        observed.became(path, branch.refinement(),
+                                new CaseOutcome.RefusedByTheRules());
+                        continue;
+                    }
                     if (branch.under() == null) {
                         // A name has nowhere to stand under a case that holds nothing, which is not
                         // a shortfall and is not the answer below. Said apart from it so that a
                         // reader of what became of this case reads which it was.
                         observed.became(path, branch.refinement(), new CaseOutcome.StandsAlone());
-                        continue;
-                    }
-                    if (!owed(here, branch.refinement())) {
-                        observed.became(path, branch.refinement(),
-                                new CaseOutcome.RefusedByTheRules());
                         continue;
                     }
                     standing.add(branch);
