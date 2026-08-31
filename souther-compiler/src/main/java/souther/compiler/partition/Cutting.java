@@ -274,7 +274,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                   InputReading read, InputReads reads) {
         Quantities quantities = read.quantities();
         Cutting drawn = atAPosition(behavior,
-                ComparedLine.asWritten(comparison.at(), read, reads), quantities);
+                ComparedLine.asWritten(comparison, read, reads), quantities);
         if (drawn == null) {
             // What the rule placed, carried from where the comparison was recognised. Read off the
             // operator again here, this reading would be a second answer to a question the value in

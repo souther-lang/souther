@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ComparisonPlacement;
 import souther.compiler.core.Core;
@@ -54,41 +55,88 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
     /**
      * What {@code binary} says, or null where it names no number of this input at all.
      *
-     * <p>The number-bearing side is read first and the comparison is turned round where the number
-     * is on the right. What is answered here is layered: the number always, and the place and the
-     * side only where the other operand is a value the number's order writes. A reader wanting a
-     * line asks for one ({@link #line}); a reader wanting to know what the decision is about takes
-     * the number and needs no more.
+     * <p><b>The way in for a reader of any binary a walk met.</b> Not for one holding a recognised
+     * comparison: it would arrive with what the operator placed and leave through a door that reads
+     * the operator for itself, and the classification it was handed would be worked out a second
+     * time. Such a reader asks {@link #lineOf}. Kept to this package so that the difference is
+     * javac's to enforce rather than a habit — {@link ComparedNumbers} is the one way in from
+     * outside, and what it reads is a body's binaries.
+     *
+     * <p>What is answered here is layered: the number always, and the place and the side only where
+     * the other operand is a value the number's order writes. A reader wanting a line asks for one
+     * ({@link #line}); a reader wanting to know what the decision is about takes the number and
+     * needs no more.
      */
-    public static ComparedNumber of(Core.Binary binary, InputReading read, InputReads reads) {
-        ComparisonPlacement placed = ComparisonPlacement.of(binary.op());
-        // Whichever side draws a line, and the left where neither does and it names a number. A
-        // number on the left that the right is not a value of is still the number the comparison
-        // is about, unless the right is a number the left is a value of — then the line is on that
-        // one, and the comparison is read turned round.
-        ComparedNumber left = onOneSide(binary.left(), binary.right(), placed, read, reads);
-        if (left != null && left.at() != null) {
-            return left;
+    static ComparedNumber of(Core.Binary binary, InputReading read, InputReads reads) {
+        OnASide side = sideOf(binary, read, reads);
+        if (side == null) {
+            return null;
         }
         // Turned round as what it states and not as the operator it would have been written with:
         // which side a number stands on is how the source was spelled, and what the rule places is
         // read off the operator once.
-        ComparedNumber right =
-                onOneSide(binary.right(), binary.left(), placed.turned(), read, reads);
+        ComparisonPlacement placed = ComparisonPlacement.of(binary.op());
+        return new ComparedNumber(side.named().term(), side.named().orders(),
+                side.turned() ? placed.turned() : placed, side.at());
+    }
+
+    /**
+     * The line {@code comparison} draws on one position, or null where it draws none there.
+     *
+     * <p><b>The way in for a reader that has a comparison.</b> What the rule placed comes from the
+     * comparison, so nothing here reads an operator, and there is no case for one that places
+     * nothing — this answers with a line or with nothing, and never with a reading that has to be
+     * asked what it is.
+     *
+     * <p>The same side and the same turn as {@link #of}, because which side a comparison is about
+     * is one question. Answered here a second time, a rule written with the number on the right
+     * would be about one position for a reader that came this way and another for one that came the
+     * other.
+     */
+    public static DrawnLine lineOf(Comparison comparison, InputReading read, InputReads reads) {
+        OnASide side = sideOf(comparison.at(), read, reads);
+        NumericTerm.FromOnePosition position =
+                side == null ? null : side.named().term().atOnePosition();
+        if (position == null || side.at() == null || side.named().orders() == null) {
+            return null;
+        }
+        ComparisonClaim claim = comparison.claim();
+        return new DrawnLine(position, side.at(), side.named().orders(),
+                side.turned() ? claim.turned() : claim);
+    }
+
+    /**
+     * Which side of a binary the reading is about, and whether saying so turned the two round.
+     *
+     * <p>Whichever side draws a line, and the left where neither does and it names a number. A
+     * number on the left that the right is not a value of is still the number the comparison is
+     * about, unless the right is a number the left is a value of — then the line is on that one,
+     * and the comparison is read turned round.
+     */
+    private static OnASide sideOf(Core.Binary binary, InputReading read, InputReads reads) {
+        OnASide left = onOneSide(binary.left(), binary.right(), false, read, reads);
+        if (left != null && left.at() != null) {
+            return left;
+        }
+        OnASide right = onOneSide(binary.right(), binary.left(), true, read, reads);
         return right != null && right.at() != null ? right : left != null ? left : right;
     }
 
-    /** The comparison read as being about a number {@code side} names, or null where it names none. */
-    private static ComparedNumber onOneSide(Core side, Core other, ComparisonPlacement placed,
-                                            InputReading read, InputReads reads) {
+    /** What {@code side} names, or null where it names no number of this input. */
+    private static OnASide onOneSide(Core side, Core other, boolean turned, InputReading read,
+                                     InputReads reads) {
         Named named = namedBy(side, read, reads);
         if (named == null) {
             return null;
         }
         Carrier order = named.orders() == null ? null : named.orders().answered();
-        return new ComparedNumber(named.term(), named.orders(), placed,
-                order == null ? null : order.literalOf(other, read.symbols()));
+        return new OnASide(named, order == null ? null : order.literalOf(other, read.symbols()),
+                turned);
     }
+
+    /** One side's number, where the other side falls on its order, and whether reading it this way
+     *  put the two round the other way. */
+    private record OnASide(Named named, Place at, boolean turned) { }
 
     /** The number this is about where one position answers it, and null where none does. */
     public NumericTerm.FromOnePosition atOnePosition() {

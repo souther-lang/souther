@@ -13,14 +13,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeSet;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Who reads an operator for what it places, which is what keeps a recognised comparison recognised.
+ * Who reads an operator for what it places, and how often.
  *
  * <p>A reader below the point where a binary was recognised as a comparison holds
  * {@link ComparisonClaim}, which has no case for an operator that places nothing. That stands only
@@ -28,11 +28,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * hands back the wide answer, and whoever made it has a case to invent an answer for again — which
  * is how six readings came to answer for a comparison that was never one.
  *
- * <p>So the readers of the wide answer are named here. Outside the classification itself they are
- * the two boundaries this arrangement has: {@link Comparison} refines a node into a comparison, and
- * {@link souther.compiler.inputs.ComparedNumber} reads any binary a walk met, where an operator
- * that places nothing is a thing that really arrives. Beside them is the boolean spelling of the
- * same answer, which is in the classification and asked in one place of its own.
+ * <p><b>How often, and not only where.</b> A method is licensed here for the question it asks, and
+ * a second call inside it is a second question wearing the first one's licence — a reading that
+ * reaches the wide answer twice has somewhere in it that could disagree with itself. So the count
+ * is part of what is declared, and a call added anywhere lands as a number that does not match.
+ *
+ * <p>What a count cannot say is who came through a door: a licence given to a method covers every
+ * caller of it. So the doors are held apart by the language instead.
+ * {@link souther.compiler.inputs.ComparedNumber#of} is the wide one and is package-private, which
+ * makes {@code ComparedNumbers} the one way to it from outside and a body's binaries the one thing
+ * that arrives; a reader holding a comparison takes {@code lineOf} and hands over the claim it
+ * already has.
  *
  * <p>Read off the compiled classes, because what a method calls is what the class file says. A
  * reading of the sources would answer the same question a second way, and would not see a call
@@ -42,49 +48,59 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
 
     private static final String PLACEMENT = "souther/compiler/check/ComparisonPlacement";
 
-    /** Who may read an operator for what it places, and why. */
-    private static final Map<String, String> MAY_ASK = asking();
+    /** A method that may read an operator for what it places, how many times it does, and why. */
+    private record Licence(String who, int calls, String why) { }
 
-    private static Map<String, String> asking() {
-        Map<String, String> may = new LinkedHashMap<>();
-        may.put("souther.compiler.check.Comparison.of",
-                "the one place a node becomes a comparison, which is what carries the claim to"
-                        + " every reader below it");
-        may.put("souther.compiler.check.ComparisonPlacement.orders",
-                "the same answer asked as a boolean, for a reader that holds an operator and no"
-                        + " comparison");
-        may.put("souther.compiler.inputs.ComparedNumber.of",
-                "reads any binary a walk met, so an operator that places nothing arrives here and"
-                        + " is answered rather than excluded");
-        return may;
-    }
+    private static final List<Licence> MAY_ASK = List.of(
+            new Licence("souther.compiler.check.Comparison.of", 1,
+                    "the one place a node becomes a comparison, which is what carries the claim to"
+                            + " every reader below it"),
+            new Licence("souther.compiler.check.ComparisonPlacement.orders", 1,
+                    "the same answer asked as a boolean, for a reader that holds an operator and"
+                            + " no comparison"),
+            new Licence("souther.compiler.inputs.ComparedNumber.of", 1,
+                    "reads any binary a walk met, so an operator that places nothing arrives here"
+                            + " and is answered rather than excluded"));
 
     /** Who may ask whether an operator orders its values, which is the wide answer read as a
      *  boolean. The reading of an invariant's clauses is the one left, and it is where the same
      *  arrangement is still to be made. */
-    private static final Map<String, String> MAY_ASK_ORDERS = Map.of(
-            "souther.compiler.check.InvariantBound.ordering",
-            "a clause of a data is read off the syntax tree and has no recognised comparison to"
-                    + " carry a claim");
+    private static final List<Licence> MAY_ASK_ORDERS = List.of(
+            new Licence("souther.compiler.check.InvariantBound.ordering", 1,
+                    "a clause of a data is read off the syntax tree and has no recognised"
+                            + " comparison to carry a claim"));
 
     @Test
     void onlyTheTwoBoundariesReadAnOperatorForWhatItPlaces() throws IOException {
-        assertEquals(new TreeSet<>(MAY_ASK.keySet()), callersOf("of"),
+        assertEquals(declared(MAY_ASK), callsTo("of"),
                 "a reader below a recognised comparison that asks the operator again holds the"
-                        + " wide answer, and has a case to invent an answer for. Each of the two"
-                        + " that may is here with why: " + MAY_ASK);
+                        + " wide answer, and has a case to invent an answer for; a second call in a"
+                        + " licensed reader is a second question under the first one's licence."
+                        + " What each of these may ask, and why: " + why(MAY_ASK));
     }
 
     @Test
     void whetherAnOperatorOrdersIsAskedOnlyWhereNoComparisonIsHeld() throws IOException {
-        assertEquals(new TreeSet<>(MAY_ASK_ORDERS.keySet()), callersOf("orders"),
+        assertEquals(declared(MAY_ASK_ORDERS), callsTo("orders"),
                 "asked as a boolean, what an operator places is left behind at the test. Where"
-                        + " that is still done is here with why: " + MAY_ASK_ORDERS);
+                        + " that is still done, and why: " + why(MAY_ASK_ORDERS));
     }
 
-    /** Every method of the compiler that calls {@code ComparisonPlacement.<name>}. */
-    private static TreeSet<String> callersOf(String name) throws IOException {
-        TreeSet<String> callers = new TreeSet<>();
+    private static Map<String, Integer> declared(List<Licence> licences) {
+        Map<String, Integer> out = new TreeMap<>();
+        licences.forEach(each -> out.put(each.who(), each.calls()));
+        return out;
+    }
+
+    private static Map<String, String> why(List<Licence> licences) {
+        Map<String, String> out = new LinkedHashMap<>();
+        licences.forEach(each -> out.put(each.who(), each.why()));
+        return out;
+    }
+
+    /** How many times each method of the compiler calls {@code ComparisonPlacement.<name>}. */
+    private static Map<String, Integer> callsTo(String name) throws IOException {
+        Map<String, Integer> calls = new TreeMap<>();
         int read = 0;
         for (Path each : classes()) {
             ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
@@ -95,13 +111,13 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
                     if (element instanceof InvokeInstruction call
                             && call.owner().asInternalName().equals(PLACEMENT)
                             && call.name().stringValue().equals(name)) {
-                        callers.add(owner + "." + method.methodName().stringValue());
+                        calls.merge(owner + "." + method.methodName().stringValue(), 1, Integer::sum);
                     }
                 }));
             }
         }
         assertFalse(read == 0, "no compiled class was read at all, so this says nothing");
-        return callers;
+        return calls;
     }
 
     private static List<Path> classes() throws IOException {

@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.core.Core;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -58,16 +58,12 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      * nothing, and there is nothing else for a spelling to try: which quantity a rule cuts is the
      * arithmetic's answer, and this reading is reached only where the arithmetic had none.
      */
-    static ComparedLine asWritten(Core.Binary comparison,
+    static ComparedLine asWritten(Comparison comparison,
                                   InputReading read, InputReads reads) {
-        ComparedNumber said = ComparedNumber.of(comparison, read, reads);
-        return said == null ? null : of(said.line());
-    }
-
-    /** The same comparison as a line, or null where it says nothing a line is drawn from. */
-    private static ComparedLine of(ComparedNumber.DrawnLine drawn) {
-        // What the rule placed is carried as what it placed: a line here is the rule's own
-        // classification, so nothing along the way has a side to fill in for a rule that has none.
+        // What the rule placed comes from the comparison and is carried as what it placed, so
+        // nothing on the way here has a side to fill in for a rule that has none — and nothing on
+        // the way here reads the operator, which the comparison has already been read for.
+        ComparedNumber.DrawnLine drawn = ComparedNumber.lineOf(comparison, read, reads);
         return drawn == null ? null
                 : new ComparedLine(drawn.term(), drawn.at(), drawn.orders(), drawn.claim());
     }
