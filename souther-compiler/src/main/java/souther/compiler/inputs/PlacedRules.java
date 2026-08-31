@@ -186,8 +186,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * What is left for the position at {@code path}, which is read from the value this is of.
      *
      * <p>Nothing at a position inside a sequence, and nothing at the value's own path. The clauses
-     * read here relate the fields of a record ({@link TermPath#fieldKey}), and neither of those is
-     * one of them.
+     * read here relate the fields of a record ({@link TermPath#ruleKeyUnder}, since the value this
+     * is of need not be the parameter), and neither of those is one of them.
      */
     NarrowedBounds at(TermPath path) {
         RuleKey where = keyOf(path);
