@@ -48,11 +48,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /**
      * What reading {@code comparison} as a line came to.
      *
-     * <p>Three answers, and the two that are not a line are not one absence. A comparison whose
-     * positions cancel was read from end to end and there was no line in it; one this compiler could
-     * not take apart leaves whatever it states unknown. Told apart by a {@code null}, whoever asked
-     * had to work out which — and worked it out by reading the comparison a second time, which is
-     * how a rule read in full came to be described as one whose spelling defeated this compiler.
+     * <p>Four answers, and the three that are not a line are not one absence. A comparison whose
+     * positions cancel was read from end to end and there was no line in it; one this compiler
+     * could not take apart leaves whatever it states unknown; and one whose quantity was read and
+     * stands on no order this counts is neither. Told apart by a {@code null}, whoever asked had to
+     * work out which — and worked it out by reading the comparison a second time, which is how a
+     * rule read in full came to be described as one whose spelling defeated this compiler.
+     *
+     * <p>Each of them says what was found rather than what came of it. An arm named for the absence
+     * of a line holds every way of failing to draw one, so the next one added goes out under the
+     * word the last one earned.
      */
     sealed interface Read {
 
@@ -125,7 +130,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * The same, said as which of the three it is.
+     * The same, said as which of the four it is.
      *
      * <p>The reason a reading stopped is settled here, where it stopped, and not asked for
      * afterwards by whoever met the absence. Worked out later, the reason came from a second walk
@@ -185,6 +190,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Three shapes and one order among them, which is the arithmetic's: one position's own
      * values, two positions held apart, and a form over several. Nothing here reads the comparison
      * again — what each of them is handed is the form the reading already came to.
+     *
+     * <p><b>Which shape it is, and what that shape needs, are two questions and only the second is
+     * a fact about the model.</b> The two narrower readings answer nothing for a form that is not
+     * theirs, and read as an answer that told a rule whose shape was simply not a line on one
+     * position that its values carry no order. So the shapes are tried first and say nothing when
+     * they decline, and what the general form needs — an order that counts, under every term — is
+     * asked once, between the last of them and it.
+     *
+     * <p>Asked in that order and not before them. The narrower readings reach orders this counts
+     * nothing on: two strings stand no measurable distance apart and the place they meet is still a
+     * line, so a reader wanting counting orders first refuses lines the model draws.
      */
     private static Read realized(String behavior, AffineReading read,
                                  Quantities quantities) {
@@ -295,8 +311,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * variable — and the four sides of the box its positions sit in are not it.
      *
      * <p>Each position on the order it is written back on, which the reading answers per position.
-     * Only where every one of them has an order with counts under it: a position with no number is
-     * one a sum has nothing to add.
+     * The orders are the parameter and not something asked for here: a position with no number is
+     * one a sum has nothing to add, and whether every term has one is what the caller settled
+     * before choosing this shape at all. So this draws a line and never declines — left able to,
+     * the next refusal added to it would arrive where a missing order is reported and be described
+     * as one.
      *
      * <p><b>Whatever the operator states, and not orders alone.</b> {@code 2 * a == 8} names four
      * and {@code a + b == 10} names the place their sum reaches ten, and both are quantities this
@@ -310,10 +329,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Cutting drawn = made(new BorderQuantity.OverAForm(behavior, read.form(), on),
                 new Level.ACount(new Count(read.cut())), read.claim(), quantities);
         if (drawn == null) {
-            // Every term of this form stands on an order that counts, and an order that counts is
-            // parted anywhere. So this is the two saying different things about one order rather
-            // than a rule this compiler is short of — and told apart from one, it would go out as a
-            // rule about values nothing draws a line on, which is the opposite of what happened.
+            // What this watches: `OverAForm.levels()` answers `steppingBy` or `overFiniteDecimals`,
+            // and neither of those parts anywhere but everywhere — the one order that names a
+            // single place is the one two values meet on, and every term here counts, so that order
+            // is not reachable from this shape. An override added to either of those two is what
+            // would bring it here, and it should stop rather than be reported as a rule about
+            // values nothing draws a line on, which is the opposite of what would have happened.
             throw new IllegalStateException(
                     "a form over orders that count produced a line its order has no place for: "
                             + read.form() + " at " + read.cut());
