@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.types.BinOp;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -62,14 +61,12 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      * it had no answer.
      */
     static ComparedTerms asWritten(Core.Binary comparison,
-                                   souther.compiler.inputs.InputDomain inputs,
-                                   souther.compiler.inputs.Quantities quantities, InputReads reads,
-                                   Symbols symbols) {
+                                   souther.compiler.inputs.InputReading read, InputReads reads) {
         if (ordersStrictly(comparison.op())) {
             GuardThresholds.Named on =
-                    GuardThresholds.namedBy(comparison.left(), inputs, quantities, reads, symbols);
+                    GuardThresholds.namedBy(comparison.left(), read, reads);
             GuardThresholds.Named against =
-                    GuardThresholds.namedBy(comparison.right(), inputs, quantities, reads, symbols);
+                    GuardThresholds.namedBy(comparison.right(), read, reads);
             // A distance runs between two positions, so each side has to be a number one answers.
             NumericTerm.FromOnePosition here = on == null ? null : on.term().atOnePosition();
             NumericTerm.FromOnePosition there =

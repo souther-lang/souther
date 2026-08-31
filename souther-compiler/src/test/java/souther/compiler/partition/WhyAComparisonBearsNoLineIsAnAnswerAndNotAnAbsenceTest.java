@@ -74,10 +74,9 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
 
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
         for (ComparisonReadings.Reading each
-                : ComparisonReadings.of("read", body, plan, inputs,
+                : ComparisonReadings.of("read", body, plan, inputs.reading(symbols),
                         InputReads.ofParameters(inputs.parameterReads(),
                                 checked.elementBindings().get("read")),
-                        symbols, inputs.quantities(symbols),
                         // What arrives is not what this is about: read with nothing said about it,
                         // every line is held to the declarations alone.
                         souther.compiler.check.PathReachability.Answers.NONE).all()) {

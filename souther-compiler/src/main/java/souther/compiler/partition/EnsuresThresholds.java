@@ -104,7 +104,7 @@ public final class EnsuresThresholds {
      * its own is every rule of every parameter read again to arrive at the same answers.
      */
     public static Clauses of(StatedContract stated, InputDomain inputs, Symbols symbols) {
-        return of(stated, inputs, inputs.quantities(symbols), symbols);
+        return of(stated, inputs.reading(symbols));
     }
 
     /**
@@ -119,8 +119,9 @@ public final class EnsuresThresholds {
      *               not be read. Both leave nothing to draw a line from, and which of them happened
      *               is said where the declaration is held to its rules
      */
-    public static Clauses of(StatedContract stated, InputDomain inputs,
-                             souther.compiler.inputs.Quantities quantities, Symbols symbols) {
+    public static Clauses of(StatedContract stated, souther.compiler.inputs.InputReading read) {
+        InputDomain inputs = read.domain();
+        Symbols symbols = read.symbols();
         if (stated == null || stated.isEmpty()) {
             return Clauses.NONE;
         }
@@ -139,9 +140,8 @@ public final class EnsuresThresholds {
                 // a statement that the model has none there. It is still counted, so that which
                 // line of the clause the next one is does not move with what this reading managed.
                 line = conjunct.stated().orNull() == null ? line + 1
-                        : stated(conjunct.stated().orNull(), rule, clause, line, inputs, reads,
-                                symbols,
-                                quantities, drawn);
+                        : stated(conjunct.stated().orNull(), rule, clause, line, read, reads,
+                                drawn);
             }
         }
         return new Clauses(drawn.evidence(), drawn.between(), drawn.rulesWithoutALine());
@@ -166,13 +166,13 @@ public final class EnsuresThresholds {
      *         one numbers the rest the same as a reading that could
      */
     private static int stated(Core e, StatedContract.StatedRule rule, String clause, int line,
-                              InputDomain inputs, InputReads reads, Symbols symbols,
-                              souther.compiler.inputs.Quantities quantities, Drawn out) {
+                              souther.compiler.inputs.InputReading read, InputReads reads,
+                              Drawn out) {
+        Symbols symbols = read.symbols();
         if (e instanceof Core.Binary both && both.op() == BinOp.AND) {
             return stated(both.right(), rule, clause,
-                    stated(both.left(), rule, clause, line, inputs, reads, symbols, quantities,
-                            out),
-                    inputs, reads, symbols, quantities, out);
+                    stated(both.left(), rule, clause, line, read, reads, out),
+                    read, reads, out);
         }
         // Through what a `let` binds, which is not a choice: what the expression comes to is its
         // body, so the body states whatever the rule states. This is the shape a helper called from
@@ -180,9 +180,8 @@ public final class EnsuresThresholds {
         // parameter — and a walk that stopped here found the rule stating nothing while the model
         // plainly says something about the position.
         if (e instanceof Core.LetIn let) {
-            return stated(let.body(), rule, clause, line, inputs,
-                    reads.and(let.binder(), let.value()),
-                    symbols, quantities, out);
+            return stated(let.body(), rule, clause, line, read,
+                    reads.and(let.binder(), let.value()), out);
         }
         // A disjunction was read, and what it states is not what either side of it states. Said as
         // nothing rather than as a rule this could not read: reporting it would send an author after
@@ -214,8 +213,8 @@ public final class EnsuresThresholds {
         // No arrival either: a clause stands in no body, it is checked whenever the behavior
         // answers, so there is nothing on the way to it and what arrives is the declarations'
         // whole domain — which is what an arrival that restricts nothing reads as.
-        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, inputs,
-                reads, symbols, quantities, rule.value(), false,
+        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, read,
+                reads, rule.value(), false,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard

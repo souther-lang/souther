@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -120,10 +119,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * with it.
      */
     static Read read(String behavior, Core.Binary comparison,
-                     souther.compiler.inputs.InputDomain inputs, InputReads reads, Symbols symbols,
-                     souther.compiler.inputs.Quantities quantities) {
+                     souther.compiler.inputs.InputReading read, InputReads reads) {
         AffineReading.OfAComparison canonical =
-                AffineReading.read(comparison, inputs, reads, symbols);
+                AffineReading.read(comparison, read.domain(), reads, read.symbols());
         return switch (canonical) {
             // Nothing was missing: the form was read from end to end, and the quantity in it is
             // empty. Unconditional, and before anything about how the comparison was spelled —
@@ -136,12 +134,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // left to try. Read the other way round, a spelling that produced a line took the
             // comparison before the canonical form was consulted at all.
             case AffineReading.OfAComparison.Cuts cuts ->
-                    realized(behavior, cuts.read(), quantities);
+                    realized(behavior, cuts.read(), read.quantities());
             // And only here does how it was written decide anything. The arithmetic stopped, which
             // is what a date against a written date and a case of an enumeration do: the values are
             // ones it cannot count, and the comparison still states a line.
             case AffineReading.OfAComparison.Stopped stopped ->
-                    asWritten(behavior, comparison, stopped, inputs, reads, symbols, quantities);
+                    asWritten(behavior, comparison, stopped, read, reads);
         };
     }
 
@@ -204,22 +202,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read asWritten(String behavior, Core.Binary comparison,
                                   AffineReading.OfAComparison.Stopped canonical,
-                                  souther.compiler.inputs.InputDomain inputs, InputReads reads,
-                                  Symbols symbols,
-                                  souther.compiler.inputs.Quantities quantities) {
+                                  souther.compiler.inputs.InputReading read, InputReads reads) {
+        souther.compiler.inputs.Quantities quantities = read.quantities();
         Cutting drawn = atAPosition(behavior,
-                ComparedLine.asWritten(comparison, inputs, quantities, reads, symbols), quantities);
+                ComparedLine.asWritten(comparison, read, reads), quantities);
         if (drawn == null) {
-            drawn = apart(behavior,
-                    ComparedTerms.asWritten(comparison, inputs, quantities, reads, symbols),
+            drawn = apart(behavior, ComparedTerms.asWritten(comparison, read, reads),
                     ComparisonClaim.of(comparison.op()), quantities);
         }
         if (drawn != null) {
             return new Read.Cuts(drawn);
         }
         return new Read.Stopped(
-                GuardThresholds.whatEachPlaceIsLeftWith(comparison, canonical, inputs, quantities,
-                        reads, symbols));
+                GuardThresholds.whatEachPlaceIsLeftWith(comparison, canonical, read, reads));
     }
 
     /** One position's own values, cut where the reading found the line, or null where that reading

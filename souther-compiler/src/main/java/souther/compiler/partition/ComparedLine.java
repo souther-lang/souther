@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -60,11 +59,9 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      * nothing, and there is nothing else for a spelling to try: which quantity a rule cuts is the
      * arithmetic's answer, and this reading is reached only where the arithmetic had none.
      */
-    static ComparedLine asWritten(Core.Binary comparison, souther.compiler.inputs.InputDomain inputs,
-                                  souther.compiler.inputs.Quantities quantities, InputReads reads,
-                                  Symbols symbols) {
-        return of(souther.compiler.inputs.ComparedNumber.of(comparison, inputs, quantities, reads,
-                symbols));
+    static ComparedLine asWritten(Core.Binary comparison,
+                                  souther.compiler.inputs.InputReading read, InputReads reads) {
+        return of(souther.compiler.inputs.ComparedNumber.of(comparison, read, reads));
     }
 
     /** The same comparison as a line, or null where it says nothing a line is drawn from. */

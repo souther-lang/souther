@@ -257,7 +257,7 @@ public final class Partitions {
      */
     public static Partitioning of(String behavior, InputDomain inputs, Symbols symbols,
                                   ReadingPolicy policy) {
-        return of(behavior, inputs, inputs.quantities(symbols), symbols, policy);
+        return of(behavior, inputs.reading(symbols), policy);
     }
 
     /**
@@ -269,9 +269,11 @@ public final class Partitions {
      *
      * @param behavior what the axes are named after, which is the behavior the reading was made for
      */
-    public static Partitioning of(String behavior, InputDomain inputs,
-                                  souther.compiler.inputs.Quantities quantities, Symbols symbols,
+    public static Partitioning of(String behavior, souther.compiler.inputs.InputReading input,
                                   ReadingPolicy policy) {
+        InputDomain inputs = input.domain();
+        souther.compiler.inputs.Quantities quantities = input.quantities();
+        Symbols symbols = input.symbols();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         List<RuleWithoutALine> rulesWithoutALine = new ArrayList<>();
         // What the reading could not hold together, asked of every position it read rather than of

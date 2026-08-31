@@ -7,7 +7,6 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
-import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.EndSide;
@@ -52,20 +51,19 @@ public final class DeclaredThresholds {
      * <p>Already obligations rather than thresholds, for the reason an {@code ensures}'s are: a line
      * between two positions divides neither, so there is no class for a partition to be told about.
      */
-    public static List<LineDrawn> between(String behavior, InputDomain inputs,
-                                   souther.compiler.inputs.Quantities quantities,
-                                   Symbols symbols) {
+    public static List<LineDrawn> between(String behavior,
+                                   souther.compiler.inputs.InputReading read) {
         List<LineDrawn> out = new ArrayList<>();
-        for (ClauseWithoutAnEnd clause : inputs.clausesWithoutAnEnd()) {
-            drawn(behavior, clause, inputs, quantities, symbols, out);
+        for (ClauseWithoutAnEnd clause : read.domain().clausesWithoutAnEnd()) {
+            drawn(behavior, clause, read, out);
         }
         return List.copyOf(out);
     }
 
     /** What one conjunct draws, or nothing where it draws no line on a quantity of its own. */
-    private static void drawn(String behavior, ClauseWithoutAnEnd clause, InputDomain inputs,
-                              souther.compiler.inputs.Quantities quantities, Symbols symbols,
-                              List<LineDrawn> out) {
+    private static void drawn(String behavior, ClauseWithoutAnEnd clause,
+                              souther.compiler.inputs.InputReading read, List<LineDrawn> out) {
+        Symbols symbols = read.symbols();
         if (!(clause.part() instanceof Core.Binary comparison) || !comparison.op().compares()) {
             return;
         }
@@ -77,8 +75,8 @@ public final class DeclaredThresholds {
         // there is nothing a behavior answered for it to be about.
         // And no arrival: a declaration's clause stands in no body for anything to be on the way
         // to, which reads as an arrival that restricts nothing.
-        ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison, inputs,
-                InputReads.ofADeclaredClause(roots), symbols, quantities, null, true,
+        ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison, read,
+                InputReads.ofADeclaredClause(roots), null, true,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,

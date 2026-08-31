@@ -80,38 +80,36 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
     }
 
     /**
-     * And two readings of one spelling are told apart, which the root alone cannot do.
+     * And two readings of one spelling answer differently, which the root alone cannot tell apart.
      *
      * <p>What a term is under says which parameter it names and not which reading named it. Two
-     * behaviors taking a parameter spelled the same way have a root apiece, so a comparison read
-     * against one of them and measured on the other passes every question about where the term
-     * sits — and comes back with the order of a position the comparison is not about.
+     * behaviors taking a parameter spelled the same way have a root apiece, so a term made against
+     * one of them passes every question the other asks about where it sits — and comes back with the
+     * order of a position it is not about.
+     *
+     * <p>Which is why the pairing is a value rather than a check: an {@link InputReading} is made
+     * where the quantities are made from the positions, and there is no constructor outside this
+     * package to put one behavior's positions beside another's rules. What is left to hold is that
+     * the two readings do disagree, so that the value is carrying something.
      */
     @Test
     void twoReadingsWithAParameterSpelledAlikeAreNotOneReading() {
-        InputDomain text = InputDomain.of(
+        InputReading text = InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.STRING)),
-                SYMBOLS, ReadAs.THE_COMPILATION_DOES);
-        InputDomain number = InputDomain.of(
+                SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS);
+        InputReading number = InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.INT)),
-                SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+                SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS);
+        NumericTerm at = new NumericTerm.ValueOf(TermPath.of("x"));
 
         assertEquals(souther.compiler.check.Carrier.TEXT,
-                text.quantities(SYMBOLS).ordersOf(new NumericTerm.ValueOf(TermPath.of("x")))
-                        .observed(),
+                text.quantities().ordersOf(at).observed(),
                 "the reading that takes a string reads a string there");
         assertEquals(souther.compiler.check.Carrier.WHOLE,
-                number.quantities(SYMBOLS).ordersOf(new NumericTerm.ValueOf(TermPath.of("x")))
-                        .observed(),
+                number.quantities().ordersOf(at).observed(),
                 "and the one that takes a number reads a number, at a path spelled the same way");
-
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> souther.compiler.inputs.ComparedNumber.of(null, text,
-                        number.quantities(SYMBOLS), null, SYMBOLS));
-
-        assertEquals(true, refused.getMessage().contains("reading"),
-                "a comparison read against one and measured on the other is refused: "
-                        + refused.getMessage());
+        assertEquals(true, text.domain() != number.domain(),
+                "and each carries the positions its own quantities were made from");
     }
 
     /** What the answer would have been, which is what makes the refusal load-bearing. */

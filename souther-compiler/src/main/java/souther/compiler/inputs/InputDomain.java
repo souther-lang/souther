@@ -668,6 +668,19 @@ public final class InputDomain {
     }
 
     /**
+     * This reading and what it says about its numbers, as one value.
+     *
+     * <p>The way a reader that uses both gets them. Which position a name stands at and what a
+     * number there is measured on are two questions such a reader asks together, and asked of two
+     * values it was handed separately they can be of two behaviors — a parameter spelled the same
+     * way in both is all it takes. So the pairing is made here, where the second is made from the
+     * first, and there is nowhere else to make one.
+     */
+    public InputReading reading(Symbols symbols) {
+        return new InputReading(this, quantities(symbols), symbols);
+    }
+
+    /**
      * The same input, asked about a quantity over several of its positions.
      *
      * <p>The relational half of what a reading of an input can say. A {@link Position} answers about
@@ -698,8 +711,8 @@ public final class InputDomain {
         // position first and the declarations under one the reading stopped above, which is the one
         // resolution of it — worked out again from the positions this hands over, a rule about a
         // name every case of a sum spreads would be read as naming nothing.
-        return ReadQuantities.of(this, byRoot, byRoot.keySet(), byPath,
-                path -> typeAt(path, symbols), symbols);
+        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, path -> typeAt(path, symbols),
+                symbols);
     }
 
     /**

@@ -90,10 +90,14 @@ final class ComparisonReadings {
      * reading is one value for the whole of this walk. Put in it, the reading would be copied at
      * every step and asked of whichever copy a reader happened to hold.
      */
-    private record Body(String behavior, CoverageSites.Plan plan, Symbols symbols,
-                        souther.compiler.inputs.InputDomain inputs,
-                        souther.compiler.inputs.Quantities quantities,
-                        souther.compiler.check.PathReachability.Answers arrives) {}
+    private record Body(String behavior, CoverageSites.Plan plan,
+                        souther.compiler.inputs.InputReading read,
+                        souther.compiler.check.PathReachability.Answers arrives) {
+
+        Symbols symbols() {
+            return read.symbols();
+        }
+    }
 
     /**
      * One reading of {@code body}, which is {@code behavior}'s.
@@ -103,12 +107,11 @@ final class ComparisonReadings {
      * in here because this is where a comparison is read, and a reading of it is made once.
      */
     static ComparisonReadings of(String behavior, Core body, CoverageSites.Plan plan,
-                                 souther.compiler.inputs.InputDomain inputs,
-                                 InputReads reads, Symbols symbols,
-                                 souther.compiler.inputs.Quantities quantities,
+                                 souther.compiler.inputs.InputReading read,
+                                 InputReads reads,
                                  souther.compiler.check.PathReachability.Answers arrives) {
         List<Reading> readings = new ArrayList<>();
-        walk(body, new Body(behavior, plan, symbols, inputs, quantities, arrives), reads,
+        walk(body, new Body(behavior, plan, read, arrives), reads,
                 LiveFlow.of(body), List.of(), true, readings);
         return new ComparisonReadings(readings);
     }
@@ -138,8 +141,8 @@ final class ComparisonReadings {
             BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(comparison, plan, live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
-                            ComparisonAssessment.of(in.behavior(), comparison, in.inputs(), reads,
-                                    symbols, in.quantities(), null, false,
+                            ComparisonAssessment.of(in.behavior(), comparison, in.read(), reads,
+                                    null, false,
                                     in.arrives().arrivalAt(
                                             plan.requireComparisonAt(comparison)))));
             out.add(new Reading(comparison, reads, assumed, standing));
@@ -152,12 +155,12 @@ final class ComparisonReadings {
             case Core.Binary both when both.op() == BinOp.AND -> {
                 walk(both.left(), in, reads, flow, assumed, live, out);
                 walk(both.right(), in, reads, flow,
-                        taking(both.left(), true, in.inputs(), reads, assumed, symbols), live, out);
+                        taking(both.left(), true, in.read().domain(), reads, assumed, symbols), live, out);
             }
             case Core.Binary either when either.op() == BinOp.OR -> {
                 walk(either.left(), in, reads, flow, assumed, live, out);
                 walk(either.right(), in, reads, flow,
-                        taking(either.left(), false, in.inputs(), reads, assumed, symbols),
+                        taking(either.left(), false, in.read().domain(), reads, assumed, symbols),
                         live, out);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
@@ -165,9 +168,9 @@ final class ComparisonReadings {
             case Core.If iff -> {
                 walk(iff.cond(), in, reads, flow, assumed, live, out);
                 walk(iff.then(), in, reads, flow,
-                        taking(iff.cond(), true, in.inputs(), reads, assumed, symbols), live, out);
+                        taking(iff.cond(), true, in.read().domain(), reads, assumed, symbols), live, out);
                 walk(iff.els(), in, reads, flow,
-                        taking(iff.cond(), false, in.inputs(), reads, assumed, symbols), live, out);
+                        taking(iff.cond(), false, in.read().domain(), reads, assumed, symbols), live, out);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
@@ -190,7 +193,7 @@ final class ComparisonReadings {
                 walk(match.scrutinee(), in, reads, flow, assumed, live, out);
                 for (Core.Case arm : match.cases()) {
                     walk(arm.body(), in, reads.insideArm(match, arm, symbols), flow,
-                            entering(match, arm, in.inputs(), reads, assumed, symbols), live, out);
+                            entering(match, arm, in.read().domain(), reads, assumed, symbols), live, out);
                 }
             }
             default -> Core.forEachChild(e, child ->

@@ -42,9 +42,8 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                 checked.behaviorBodies().get(behavior),
                 CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                         checked.supplied()),
-                inputs, InputReads.ofParameters(inputs.parameterReads(),
+                inputs.reading(symbols), InputReads.ofParameters(inputs.parameterReads(),
                         checked.elementBindings().get(behavior)),
-                symbols, inputs.quantities(symbols),
                 // Nothing said about what arrives, so every line here is held to what the
                 // declarations leave — which is what a fixture about standing wants.
                 souther.compiler.check.PathReachability.Answers.NONE).all(), inputs, symbols);
