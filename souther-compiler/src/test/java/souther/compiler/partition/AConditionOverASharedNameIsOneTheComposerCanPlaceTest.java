@@ -17,7 +17,6 @@ import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.source.SourceId;
@@ -169,14 +168,11 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
                                 + axes().stream().map(each -> each.id().toString()).toList()));
     }
 
-    private static Generator.Subject subject() {
+    private static MeasuredInput subject() {
         Map<String, Sig> sigs = COMPILATION.db().ask(new Bodies.Signatures(module())).value();
         List<String> names = new ArrayList<>();
         spec().params().forEach(each -> names.add(each.name()));
         assertTrue(names.contains("n"), "the model takes the position the row is fixed at");
-        return new Generator.Subject(spec().name(),
-                new BehaviorInputs(names, sigs.get(spec().name()).inputTypes(), symbols(),
-                        ReadAs.THE_COMPILATION_DOES),
-                domain().quantities(symbols()), axes());
+        return MeasuredInput.of(spec().name(), domain().reading(symbols()), axes());
     }
 }

@@ -267,13 +267,11 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
     private static Adequacy.Filling nothingOffered() {
         souther.compiler.check.Symbols symbols =
                 souther.compiler.check.Symbols.none(DefaultStdlib.get());
-        souther.compiler.partition.Generator.Subject subject =
-                new souther.compiler.partition.Generator.Subject("findTodo",
-                        new souther.compiler.partition.BehaviorInputs(List.of(), List.of(), symbols,
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        souther.compiler.partition.MeasuredInput subject =
+                souther.compiler.partition.MeasuredInput.of("findTodo",
                         souther.compiler.inputs.InputDomain.of(List.of(), symbols,
                                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
-                                .quantities(symbols),
+                                .reading(symbols),
                         List.of());
         return new Adequacy.Filling(
                 souther.compiler.partition.FillResult.nothingAskedOf(

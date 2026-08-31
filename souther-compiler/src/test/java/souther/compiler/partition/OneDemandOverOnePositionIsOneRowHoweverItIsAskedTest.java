@@ -133,7 +133,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
                 .toList();
     }
 
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -159,11 +159,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sig.inputTypes(), symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    inputs.quantities(symbols),
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
                     Partitions.of(spec.name(), inputs, symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes()),
                     CoverageRead.of(spec.name(), body,

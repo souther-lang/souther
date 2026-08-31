@@ -3,8 +3,12 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.ComparedNumber;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 
@@ -38,14 +42,14 @@ import souther.compiler.numeric.Place;
  *                          distinguishes is the value from every other value
  */
 record ComparedLine(NumericTerm.FromOnePosition term, Place value,
-                    souther.compiler.inputs.TermOrders orders,
+                    TermOrders orders,
                     boolean valueBelongsBelow, boolean holdsAtTheValue, boolean singles) {
 
     /**
      * What {@code comparison} draws, or null where it draws nothing.
      *
      * <p>Read once, by the reading every reader of a comparison shares
-     * ({@link souther.compiler.inputs.ComparedNumber}): which number is compared, which side of it
+     * ({@link ComparedNumber}): which number is compared, which side of it
      * the comparison keeps, and where the other side falls on that number's order. What is left
      * here is turning that into a line.
      *
@@ -60,12 +64,12 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      * arithmetic's answer, and this reading is reached only where the arithmetic had none.
      */
     static ComparedLine asWritten(Core.Binary comparison,
-                                  souther.compiler.inputs.InputReading read, InputReads reads) {
-        return of(souther.compiler.inputs.ComparedNumber.of(comparison, read, reads));
+                                  InputReading read, InputReads reads) {
+        return of(ComparedNumber.of(comparison, read, reads));
     }
 
     /** The same comparison as a line, or null where it says nothing a line is drawn from. */
-    private static ComparedLine of(souther.compiler.inputs.ComparedNumber drawn) {
+    private static ComparedLine of(ComparedNumber drawn) {
         if (drawn == null || !drawn.drawsALine()) {
             return null;
         }
@@ -89,7 +93,7 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      * half. That is a quantity of its own ({@link BorderQuantity.OverAForm}) and is read elsewhere.
      */
     static ComparedLine fromTheForm(AffineReading read,
-                                    souther.compiler.inputs.Quantities quantities) {
+                                    Quantities quantities) {
         if (read == null) {
             return null;
         }
@@ -101,7 +105,7 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         // The position's own order, not the order of whichever operand it was written beside. The
         // reading two methods up asks the same question of the same place, and `10 >= a + 1` names
         // the position on the right.
-        souther.compiler.inputs.TermOrders orders =
+        TermOrders orders =
                 term == null ? null : quantities.ordersOf(term);
         if (orders == null || orders.answered() == null || !orders.answered().counts()) {
             return null;

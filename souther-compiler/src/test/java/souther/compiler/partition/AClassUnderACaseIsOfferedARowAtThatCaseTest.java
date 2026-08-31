@@ -54,7 +54,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
             let read (query) = Page { n = 1 }
             """;
 
-    private record Model(Generator.Subject subject, List<Axis> axes) {}
+    private record Model(MeasuredInput subject, List<Axis> axes) {}
 
     private static Model model() {
         Compilation compilation = Compilation.ofSource(QUERIES, "Main");
@@ -69,10 +69,8 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         InputDomain domain = InputDomain.of(spec, sig, symbols, ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning =
                 Partitions.of(spec.name(), domain, symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Model(new Generator.Subject(spec.name(),
-                new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                        sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                domain.quantities(symbols), partitioning.axes()),
+        return new Model(
+                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning.axes()),
                 partitioning.axes());
     }
 

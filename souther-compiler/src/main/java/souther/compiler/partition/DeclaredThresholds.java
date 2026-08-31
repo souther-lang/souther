@@ -7,6 +7,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.EndSide;
@@ -52,7 +53,7 @@ public final class DeclaredThresholds {
      * between two positions divides neither, so there is no class for a partition to be told about.
      */
     public static List<LineDrawn> between(String behavior,
-                                   souther.compiler.inputs.InputReading read) {
+                                   InputReading read) {
         List<LineDrawn> out = new ArrayList<>();
         for (ClauseWithoutAnEnd clause : read.domain().clausesWithoutAnEnd()) {
             drawn(behavior, clause, read, out);
@@ -62,7 +63,7 @@ public final class DeclaredThresholds {
 
     /** What one conjunct draws, or nothing where it draws no line on a quantity of its own. */
     private static void drawn(String behavior, ClauseWithoutAnEnd clause,
-                              souther.compiler.inputs.InputReading read, List<LineDrawn> out) {
+                              InputReading read, List<LineDrawn> out) {
         Symbols symbols = read.symbols();
         if (!(clause.part() instanceof Core.Binary comparison) || !comparison.op().compares()) {
             return;

@@ -4,6 +4,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
 import java.util.ArrayList;
@@ -91,7 +92,7 @@ final class ComparisonReadings {
      * every step and asked of whichever copy a reader happened to hold.
      */
     private record Body(String behavior, CoverageSites.Plan plan,
-                        souther.compiler.inputs.InputReading read,
+                        InputReading read,
                         souther.compiler.check.PathReachability.Answers arrives) {
 
         Symbols symbols() {
@@ -107,7 +108,7 @@ final class ComparisonReadings {
      * in here because this is where a comparison is read, and a reading of it is made once.
      */
     static ComparisonReadings of(String behavior, Core body, CoverageSites.Plan plan,
-                                 souther.compiler.inputs.InputReading read,
+                                 InputReading read,
                                  InputReads reads,
                                  souther.compiler.check.PathReachability.Answers arrives) {
         List<Reading> readings = new ArrayList<>();

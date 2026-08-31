@@ -16,6 +16,7 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Budgets;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -64,7 +65,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
             let submit (request) = Accepted { at = "now" }
             """;
 
-    private static Generator.Subject subject() {
+    private static MeasuredInput subject() {
         Compilation compilation = Compilation.ofSource(TRIP, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -75,10 +76,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return new Generator.Subject(spec.name(), new souther.compiler.partition.BehaviorInputs(
-                spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(), symbols,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                domain.quantities(symbols),
+        return MeasuredInput.of(spec.name(), domain.reading(symbols),
                 Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes());
     }
 
@@ -111,7 +109,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
      */
     @Test
     void aPositionLeftOutIsNotAGenerationThatStopped() {
-        Generator.Subject subject = subject();
+        MeasuredInput subject = subject();
         Axis first = subject.axes().get(0);
         Axis second = subject.axes().get(1);
         Map<AxisId, Classification> row = new LinkedHashMap<>();

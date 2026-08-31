@@ -8,6 +8,7 @@ import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RuleWithoutALine;
@@ -119,7 +120,7 @@ public final class EnsuresThresholds {
      *               not be read. Both leave nothing to draw a line from, and which of them happened
      *               is said where the declaration is held to its rules
      */
-    public static Clauses of(StatedContract stated, souther.compiler.inputs.InputReading read) {
+    public static Clauses of(StatedContract stated, InputReading read) {
         InputDomain inputs = read.domain();
         Symbols symbols = read.symbols();
         if (stated == null || stated.isEmpty()) {
@@ -166,7 +167,7 @@ public final class EnsuresThresholds {
      *         one numbers the rest the same as a reading that could
      */
     private static int stated(Core e, StatedContract.StatedRule rule, String clause, int line,
-                              souther.compiler.inputs.InputReading read, InputReads reads,
+                              InputReading read, InputReads reads,
                               Drawn out) {
         Symbols symbols = read.symbols();
         if (e instanceof Core.Binary both && both.op() == BinOp.AND) {

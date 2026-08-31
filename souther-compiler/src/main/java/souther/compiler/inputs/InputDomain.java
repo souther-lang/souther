@@ -344,6 +344,22 @@ public final class InputDomain {
     }
 
     /**
+     * What the behavior takes, in the order it declares them.
+     *
+     * <p>What this reading was made from, so that a reader needing the parameters takes the ones it
+     * was read at rather than assembling its own from a signature — two lists of what one behavior
+     * takes are two chances to disagree about which position a row's value goes to.
+     */
+    public List<Parameter> parameters() {
+        return parameters;
+    }
+
+    /** How the names in it are read, which is the policy this reading was made under. */
+    public ReadingPolicy policy() {
+        return policy;
+    }
+
+    /**
      * The position at {@code path}, or null where this reading has none there.
      *
      * <p>Null for two unlike paths: one below where this reading stops, and one that is not a

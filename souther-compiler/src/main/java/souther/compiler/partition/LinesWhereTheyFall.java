@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.PlacementFiling;
 import souther.compiler.inputs.PlacementSeed;
 import souther.compiler.inputs.Position;
@@ -74,10 +76,10 @@ public final class LinesWhereTheyFall {
     }
 
     /** Every measurement where its name was filed, and the lines this had nowhere to put. */
-    public static Filed of(souther.compiler.inputs.InputReading read, List<LineEvidence> evidence,
+    public static Filed of(InputReading read, List<LineEvidence> evidence,
                            List<LineDrawn> between) {
         InputDomain inputs = read.domain();
-        souther.compiler.inputs.Quantities quantities = read.quantities();
+        Quantities quantities = read.quantities();
         Symbols symbols = read.symbols();
         List<LineEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
@@ -148,10 +150,10 @@ public final class LinesWhereTheyFall {
      * second how many come out of it. Answered off one count, a name filed at one position and a
      * name left where it was written would be the same answer.
      */
-    private static void place(souther.compiler.inputs.InputReading read, LineDrawn line,
+    private static void place(InputReading read, LineDrawn line,
                               List<LineDrawn> out, List<RuleWithoutALine> notPlaced) {
         InputDomain inputs = read.domain();
-        souther.compiler.inputs.Quantities quantities = read.quantities();
+        Quantities quantities = read.quantities();
         Symbols symbols = read.symbols();
         List<FiledName> filed = new ArrayList<>();
         for (NumericTerm term : line.cuts().of().terms()) {
@@ -192,7 +194,7 @@ public final class LinesWhereTheyFall {
      * fewer places than the name was filed.
      */
     private static LineDrawn lineAt(LineDrawn line, NumericTerm moves, NumericTerm to,
-                                    souther.compiler.inputs.Quantities quantities) {
+                                    Quantities quantities) {
         Cutting cut = line.cuts().movedTo(moves, to, quantities.ordersOf(to), quantities);
         if (cut == null) {
             throw new IllegalStateException(

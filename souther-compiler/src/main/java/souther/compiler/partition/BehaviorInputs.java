@@ -26,7 +26,8 @@ import java.util.Map;
  *
  * <p>And because the same three are what a row is generated from. Two spellings of what a behavior
  * takes are two chances to read a position differently, which is the shape of every defect this
- * package has been fixing: {@link Generator.Subject} is these inputs and the axes derived at them.
+ * package has been fixing: a {@link MeasuredInput} is these inputs and the axes derived at them,
+ * both taken from the one reading they were made from.
  */
 public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols symbols,
                              souther.compiler.check.ReadingPolicy policy) {
@@ -34,6 +35,23 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     public BehaviorInputs {
         parameters = List.copyOf(parameters);
         types = List.copyOf(types);
+    }
+
+    /**
+     * The walk into what a row writes, of the input {@code read} was made of.
+     *
+     * <p>Taken from the reading rather than assembled beside it. What a behavior takes is what its
+     * reading was made from, so a caller building this from a signature would be writing down a
+     * second answer to that — and a row would be walked by one of them and measured by the other.
+     */
+    public static BehaviorInputs of(souther.compiler.inputs.InputReading read) {
+        List<String> parameters = new ArrayList<>();
+        List<Type> types = new ArrayList<>();
+        for (souther.compiler.inputs.InputDomain.Parameter each : read.domain().parameters()) {
+            parameters.add(each.name());
+            types.add(each.type());
+        }
+        return new BehaviorInputs(parameters, types, read.symbols(), read.domain().policy());
     }
 
     /** Which input {@code path} starts at, or -1 where the behavior has no such parameter. */

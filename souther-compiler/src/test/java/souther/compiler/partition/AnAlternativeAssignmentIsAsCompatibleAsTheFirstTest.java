@@ -70,7 +70,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
             let fee (e, p, q) = Fee(one(p) + one(q))
             """;
 
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -97,10 +97,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                 checked.supplied());
         Partitions.Partitioning axes =
                 Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Model(new Generator.Subject(spec.name(),
-                new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                        sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                inputs.quantities(symbols), axes.axes()),
+        return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols), axes.axes()),
                 CoverageRead.of(spec.name(), body, plan, inputs, symbols));
     }
 

@@ -4,6 +4,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -237,7 +238,7 @@ sealed interface ComparisonAssessment {
      * state would come back as one about no input at all.
      */
     static ComparisonAssessment of(String behavior, Core.Binary comparison,
-                                   souther.compiler.inputs.InputReading read, InputReads reads,
+                                   InputReading read, InputReads reads,
                                    BindingId answer,
                                    boolean drawnByAnInvariant,
                                    souther.compiler.reach.ComparisonArrival arrival) {

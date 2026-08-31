@@ -8,8 +8,11 @@ import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.FilingCoordinate;
@@ -137,7 +140,7 @@ public final class GuardThresholds {
      * {@code arrives} says what the paths leave arriving at each of those sites, which is what a
      * line is dropped by ({@link ComparisonAssessment.NothingArrivesAtItsLine}). */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
-                            souther.compiler.inputs.InputReading read,
+                            InputReading read,
                             souther.compiler.check.ElementBindings elements,
                             souther.compiler.check.PathReachability.Answers arrives) {
         InputDomain inputs = read.domain();
@@ -278,7 +281,7 @@ public final class GuardThresholds {
     static java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped>
             whatEachPlaceIsLeftWith(Core.Binary comparison,
                                     AffineReading.OfAComparison.Stopped stopped,
-                                    souther.compiler.inputs.InputReading read, InputReads reads) {
+                                    InputReading read, InputReads reads) {
         Symbols symbols = read.symbols();
         Names left = namesIn(comparison.left(), reads, symbols);
         Names right = namesIn(comparison.right(), reads, symbols);
@@ -346,7 +349,7 @@ public final class GuardThresholds {
      * not read.
      */
     static List<FilingCoordinate> filedAt(Core.Binary comparison,
-                                               souther.compiler.inputs.InputReading read,
+                                               InputReading read,
                                                InputReads reads) {
         Symbols symbols = read.symbols();
         List<FilingCoordinate> out = new ArrayList<>();
@@ -538,7 +541,7 @@ public final class GuardThresholds {
      * @param term  what the expression names
      * @param order what it is counted on
      */
-    record Named(NumericTerm term, souther.compiler.inputs.TermOrders orders) {
+    record Named(NumericTerm term, TermOrders orders) {
 
         /** What a line on it is measured on, which is what most readers of a pair want. */
         Carrier order() {
@@ -552,7 +555,7 @@ public final class GuardThresholds {
      * <p>The two together because no reader of a line wants one without the other, and both readings
      * of a comparison want them the same way round. Neither answer is made here: which position an
      * expression names is {@link InputNumber}'s and which order that position is counted on is the
-     * reading of the declarations' ({@link souther.compiler.inputs.Quantities#ordersOf}).
+     * reading of the declarations' ({@link Quantities#ordersOf}).
      *
      * <p>In particular the expression's own type is not read, here or anywhere a line is drawn. It
      * would agree wherever a rule names its positions itself and disagree wherever an operation
@@ -561,12 +564,12 @@ public final class GuardThresholds {
      * as whole numbers and read them off a row as whole numbers, which agreed with itself about a
      * border nothing could meet (#1018).
      */
-    static Named namedBy(Core e, souther.compiler.inputs.InputReading read, InputReads reads) {
+    static Named namedBy(Core e, InputReading read, InputReads reads) {
         NumericTerm term = InputNumber.of(e, read.domain(), reads, read.symbols());
         if (term == null) {
             return null;
         }
-        souther.compiler.inputs.TermOrders orders = read.quantities().ordersOf(term);
+        TermOrders orders = read.quantities().ordersOf(term);
         return orders.answered() == null ? null : new Named(term, orders);
     }
 

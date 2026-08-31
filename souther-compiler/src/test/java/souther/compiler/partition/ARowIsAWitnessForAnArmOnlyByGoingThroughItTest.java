@@ -16,7 +16,6 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.reading.CoverageRead;
@@ -159,7 +158,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         }
     }
 
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         static Model of(String source) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -188,10 +187,8 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
             assertFalse(partitioning.axes().isEmpty() || partitioning.axes().stream()
                             .allMatch(axis -> axis.classes().isEmpty()),
                     "and divides it into classes a row can be composed at");
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sigs.get("fee").inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                    inputs.quantities(symbols), partitioning.axes()),
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
+                    partitioning.axes()),
                     CoverageRead.of("fee", body, plan, inputs, symbols));
         }
     }

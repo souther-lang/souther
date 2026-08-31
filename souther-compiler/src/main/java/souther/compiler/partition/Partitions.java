@@ -11,6 +11,8 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
@@ -269,10 +271,10 @@ public final class Partitions {
      *
      * @param behavior what the axes are named after, which is the behavior the reading was made for
      */
-    public static Partitioning of(String behavior, souther.compiler.inputs.InputReading input,
+    public static Partitioning of(String behavior, InputReading input,
                                   ReadingPolicy policy) {
         InputDomain inputs = input.domain();
-        souther.compiler.inputs.Quantities quantities = input.quantities();
+        Quantities quantities = input.quantities();
         Symbols symbols = input.symbols();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         List<RuleWithoutALine> rulesWithoutALine = new ArrayList<>();
@@ -462,7 +464,7 @@ public final class Partitions {
      */
     private static BodyCutInspection measureAt(List<Axis> out, PositionMeasurements at, Axis axis,
                                   NumericTerm.FromOnePosition term, List<LineEvidence> evidence,
-                                  souther.compiler.inputs.Quantities reading, Symbols symbols,
+                                  Quantities reading, Symbols symbols,
                                   ReadingPolicy policy,
                                   List<RuleWithoutALine> rules, EvidenceAccount account) {
         String behavior = at.position().behavior();
@@ -618,7 +620,7 @@ public final class Partitions {
      * which has no reading to be in the order of.
      */
     static Partitioning withThresholds(Partitioning base,
-                                       souther.compiler.inputs.Quantities reading,
+                                       Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy) {
         return withThresholds(base, reading, thresholds, symbols, policy, List.of());
@@ -633,7 +635,7 @@ public final class Partitions {
      * place that knows is the reader that gave up.
      */
     static Partitioning withThresholds(Partitioning base,
-                                       souther.compiler.inputs.Quantities reading,
+                                       Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy,
                                        List<RuleWithoutALine> rulesWithoutALine) {
@@ -650,7 +652,7 @@ public final class Partitions {
      * is one more line among the ranges.
      */
     static Partitioning withThresholds(Partitioning base,
-                                       souther.compiler.inputs.Quantities reading,
+                                       Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy,
                                        List<RuleWithoutALine> rulesWithoutALine,
@@ -667,7 +669,7 @@ public final class Partitions {
      * losing the line its body draws about it.
      */
     static Partitioning withThresholds(Partitioning base,
-                                       souther.compiler.inputs.Quantities reading,
+                                       Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy,
                                        List<RuleWithoutALine> rulesWithoutALine,
@@ -686,7 +688,7 @@ public final class Partitions {
      * could read.
      */
     static Partitioning withThresholds(Partitioning base,
-                                       souther.compiler.inputs.Quantities reading,
+                                       Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy,
                                        List<RuleWithoutALine> rulesWithoutALine,
@@ -711,7 +713,7 @@ public final class Partitions {
      * measured at one kind alone is measured at neither.
      */
     public static Partitioning withEvidence(Partitioning base,
-                                            souther.compiler.inputs.Quantities reading,
+                                            Quantities reading,
                                             List<LineEvidence> evidence,
                                             Symbols symbols, ReadingPolicy policy,
                                             List<RuleWithoutALine> rulesWithoutALine,
@@ -808,7 +810,7 @@ public final class Partitions {
      * has no line to draw, and an entry saying so would be a list of nothings per behavior.
      */
     private static java.util.Map<AxisId, List<Border>> linesAlong(
-            List<Axis> axes, souther.compiler.inputs.Quantities reading, Symbols symbols,
+            List<Axis> axes, Quantities reading, Symbols symbols,
             LinesRead read) {
         Map<AxisId, List<Border>> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
@@ -905,7 +907,7 @@ public final class Partitions {
      * and what such a term guarantees of its own values is what bounds it. Asked of the reading
      * rather than kept per term beside it, which is where the two came to disagree.
      */
-    private static NumericDomain.Bounds domainOf(souther.compiler.inputs.Quantities reading,
+    private static NumericDomain.Bounds domainOf(Quantities reading,
                                                  NumericTerm term) {
         return reading.runsBetween(term);
     }

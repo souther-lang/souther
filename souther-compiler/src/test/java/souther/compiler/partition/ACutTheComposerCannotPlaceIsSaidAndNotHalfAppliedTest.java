@@ -200,14 +200,11 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                 .axes();
     }
 
-    private static Generator.Subject subject() {
+    private static MeasuredInput subject() {
         Map<String, Sig> sigs = COMPILATION.db().ask(new Bodies.Signatures(module())).value();
         List<String> names = new ArrayList<>();
         spec().params().forEach(each -> names.add(each.name()));
-        return new Generator.Subject(spec().name(),
-                new BehaviorInputs(names, sigs.get(spec().name()).inputTypes(), symbols(),
-                        ReadAs.THE_COMPILATION_DOES),
-                domain().quantities(symbols()),
+        return MeasuredInput.of(spec().name(), domain().reading(symbols()),
                 Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES)
                         .axes());
     }

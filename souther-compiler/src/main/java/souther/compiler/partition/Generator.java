@@ -90,82 +90,6 @@ public final class Generator {
     private static final int MOST_RUNS_PER_INTERPRETATION = 3;
 
     /**
-     * The behavior a row would be written for: what it is called, what its inputs are called, what
-     * they are, and where the model divides them.
-     *
-     * <p><b>Named here rather than read back off a position.</b> Which behavior this is about is a
-     * fact about the subject and holds whether or not the model divides any of its positions —
-     * while an axis carries the name only because a report names axes across behaviors. Taken from
-     * the first axis, a run with no divided position had nowhere to read it, and every sentence
-     * this generation says about the behavior as a whole was reachable only through a position.
-     *
-     * @param behavior what the behavior is called, which every axis of it agrees with
-     */
-    public record Subject(String behavior, BehaviorInputs inputs,
-                          souther.compiler.inputs.Quantities quantities, List<Axis> axes) {
-
-        public Subject {
-            axes = List.copyOf(axes);
-            if (behavior == null || behavior.isEmpty()) {
-                throw new IllegalArgumentException("a row is written for a behavior with a name");
-            }
-            // An axis of another behavior, which is a subject assembled from two measurements. The
-            // name would then be one of two answers rather than the subject's, and whichever
-            // sentence read it would be right about one of them.
-            for (Axis axis : axes) {
-                if (!axis.id().behavior().equals(behavior)) {
-                    throw new IllegalArgumentException(
-                            "an axis of " + axis.id().behavior() + " in the subject of " + behavior
-                                    + ": " + axis.id());
-                }
-            }
-        }
-
-
-
-        /**
-         * The same three facts a row is read by, which is the point of holding one value.
-         *
-         * <p>Written out here as well, a row would be generated from one reading of what the
-         * behavior takes and read back by another — and how a position is written is exactly what
-         * the two came to disagree about.
-         */
-        public List<String> parameters() {
-            return inputs.parameters();
-        }
-
-        public List<Type> types() {
-            return inputs.types();
-        }
-
-        public Symbols symbols() {
-            return inputs.symbols();
-        }
-
-        /**
-         * Whether the model divides this position into a class spelled this way.
-         *
-         * <p>The one place the question is answered. A reader working it out from a partition's
-         * axes beside this one is a second reading of what a search's own universe is, and the two
-         * agree until either moves — which is how a case of an input came to be told there was no
-         * axis at its position by one reading while the search had classes there under the other.
-         */
-        public boolean divides(ClassOwed owed) {
-            for (Axis axis : axes) {
-                if (!axis.id().equals(owed.at())) {
-                    continue;
-                }
-                for (PartitionClass cls : axis.classes()) {
-                    if (cls.id().equals(owed.classId())) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-    }
-
-    /**
      * One row's worth of input, and what it was composed for.
      *
      * <p>The purpose and not the classes it turned out to sit in. Those are two questions — which
@@ -756,7 +680,7 @@ public final class Generator {
      * nothing consults a clock or a hash order — the same model and the same rows produce the same
      * rows twice. Nothing is asked about the body here, so no arm is looked for.
      */
-    public static FillResult fill(Subject subject, List<ObservedRow> existing,
+    public static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check,
@@ -773,7 +697,7 @@ public final class Generator {
      * is owed is one row, and a budget the arms spent first left a class the report names with
      * nothing offered for it.
      */
-    public static FillResult fill(Subject subject, List<ObservedRow> existing,
+    public static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         AdequacyPolicy.OfTheGeneration budget) {
@@ -791,7 +715,7 @@ public final class Generator {
      * <p>A row that missed is not offered and the arm stays unanswered. It is not evidence that the
      * arm is unreachable: what was shown is that these candidates were not witnesses (ADR-0091).
      */
-    public static FillResult fill(Subject subject, List<ObservedRow> existing,
+    public static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, AdequacyPolicy.OfTheGeneration budget) {
@@ -810,7 +734,7 @@ public final class Generator {
      * handed over here would leave that to whatever collection the caller happened to hold — so
      * this takes the answer rather than the collection it was kept in.
      */
-    public static GenerationPlan planOver(Subject subject, List<ClassOwed> classes,
+    public static GenerationPlan planOver(MeasuredInput subject, List<ClassOwed> classes,
                                           List<Integer> arms) {
         return new GenerationPlan(subject, classes, arms.stream().map(ArmOwed::new).toList());
     }
@@ -822,7 +746,7 @@ public final class Generator {
      * the search is asked with — there is no way in that does not carry one — and this is where the
      * one such a caller holds is assembled.
      */
-    public static FillResult fill(Subject subject, List<ObservedRow> existing,
+    public static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
@@ -854,7 +778,7 @@ public final class Generator {
      * found says what each place it was looked in came to.
      */
     public static Set<Integer> everyArmACombinationMayTake(
-            Subject subject, List<souther.compiler.reading.Interaction> groups,
+            MeasuredInput subject, List<souther.compiler.reading.Interaction> groups,
             AdequacyPolicy.OfTheGeneration budget) {
         Set<Integer> out = new LinkedHashSet<>();
         InteractionCells.Offered offered = InteractionCells.of(groups, ordered(subject), budget);
@@ -905,7 +829,7 @@ public final class Generator {
      * one element under a line and one over it — and each of them is covered. Read as one class,
      * the rest would be asked for again, which is work the author has already done.
      */
-    public static List<ClassOwed> everyClassNoRowSitsIn(Subject subject,
+    public static List<ClassOwed> everyClassNoRowSitsIn(MeasuredInput subject,
                                                        List<ObservedRow> existing) {
         // Gathered once apiece and handed over in the order the walk reached them, which is the
         // order the search fixes the positions in. The set is how "once apiece" is kept; what a
@@ -942,7 +866,7 @@ public final class Generator {
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
                                         AdequacyPolicy.OfTheGeneration budget) {
-        Subject subject = plan.subject();
+        MeasuredInput subject = plan.subject();
         List<ClassOwed> classesOwed = plan.classesOwed();
         List<Integer> armsOwed = plan.armsOwed().stream().map(ArmOwed::probe).toList();
         List<Axis> ordered = ordered(subject);
@@ -1514,7 +1438,7 @@ public final class Generator {
      * the row and no part of what it is for: the row is still named for the class alone
      * ({@link Purpose.ForAClass}).
      */
-    private static ClassAttempt rowFor(Subject subject, List<Axis> axes, int at, int cls,
+    private static ClassAttempt rowFor(MeasuredInput subject, List<Axis> axes, int at, int cls,
                                        List<ResolvedOrigin> origins, CandidateCheck check) {
         Axis axis = axes.get(at);
         String classId = axis.classes().get(cls).id();
@@ -1587,7 +1511,7 @@ public final class Generator {
         // satisfied and nowhere else: a walk that stopped and a walk that finished are two answers
         // now, and reading a field to tell them apart is what having three of them is for.
 
-        private final Subject subject;
+        private final MeasuredInput subject;
 
         private final List<Axis> axes;
 
@@ -1610,7 +1534,7 @@ public final class Generator {
         /** The row, once one lands in the class. */
         private GeneratedRow found;
 
-        private Building(Subject subject, List<Axis> axes, int at, String classId, String label,
+        private Building(MeasuredInput subject, List<Axis> axes, int at, String classId, String label,
                          CandidateCheck check, int most) {
             this.subject = subject;
             this.axes = axes;
@@ -1960,7 +1884,7 @@ public final class Generator {
      * <p>Nothing where no runtime built the values: a distance measured from a baseline nothing
      * looked at would be measured from a guess, and the composition is the origin this run has.
      */
-    private static int[] stands(Subject subject, List<Axis> axes, Baseline baseline,
+    private static int[] stands(MeasuredInput subject, List<Axis> axes, Baseline baseline,
                                 CandidateCheck check) {
         List<souther.compiler.observe.ObservedValue> observed = new ArrayList<>();
         for (String parameter : subject.parameters()) {
@@ -2012,7 +1936,7 @@ public final class Generator {
      * ordered among them; and it is not a baseline that failed, so nothing the baselines spend takes
      * it away.
      */
-    private static List<ResolvedOrigin> resolve(Subject subject, List<Axis> axes,
+    private static List<ResolvedOrigin> resolve(MeasuredInput subject, List<Axis> axes,
                                                 List<Baseline> baselines, CandidateCheck check) {
         List<ResolvedOrigin> out = new ArrayList<>();
         for (Baseline baseline : baselines) {
@@ -2084,7 +2008,7 @@ public final class Generator {
      * here can say where it went — and a row nothing could judge is offered as it was composed,
      * which is what {@code Trial.NOTHING_RUNS} leaves a row that nothing ran.
      */
-    private static boolean inTheClass(Subject subject, List<Axis> axes, int at, String classId,
+    private static boolean inTheClass(MeasuredInput subject, List<Axis> axes, int at, String classId,
                                       List<FixtureTemplate> inputs, CandidateCheck check) {
         List<souther.compiler.observe.ObservedValue> observed = new ArrayList<>();
         for (int p = 0; p < inputs.size(); p++) {
@@ -2120,7 +2044,7 @@ public final class Generator {
      * rest of the row — each of them leaves that parameter composed from its classes, which is a
      * row that says the same thing in more words.
      */
-    private static Map<String, FixtureTemplate> against(Subject subject, List<Axis> axes,
+    private static Map<String, FixtureTemplate> against(MeasuredInput subject, List<Axis> axes,
                                                         Delta delta, int[] where,
                                                         Baseline baseline) {
         Map<String, FixtureTemplate> out = new LinkedHashMap<>();
@@ -2156,7 +2080,7 @@ public final class Generator {
      * @param moved which axes under this parameter the row does not stand where the origin does,
      *              read off the one difference the search ordered itself by
      */
-    private static FixtureTemplate withFieldsMoved(Subject subject, int p, List<Axis> axes,
+    private static FixtureTemplate withFieldsMoved(MeasuredInput subject, int p, List<Axis> axes,
                                                    List<Integer> moved, int[] where,
                                                    FixtureTemplate baseline) {
         if (!(subject.types().get(p) instanceof Type.Ref(TypeSymbol built))
@@ -2227,7 +2151,7 @@ public final class Generator {
      * another's fields has those too, and a row that wrote over the listed ones and dropped the
      * spread would drop the included ones with it.
      */
-    private static List<String> fieldsOf(Subject subject, TypeSymbol built) {
+    private static List<String> fieldsOf(MeasuredInput subject, TypeSymbol built) {
         return subject.symbols().declarations().declaration(built) instanceof Hir.Data data
                 && !data.newtype()
                 ? List.copyOf(TypeOps.fieldTypes(data, subject.symbols()).keySet())
@@ -2334,7 +2258,7 @@ public final class Generator {
      * candidates that were tried, and another value of the same edge may build; what comes back says
      * which of the two happened and leaves the reading to the caller.
      */
-    public static BoundaryAttempt probeFixing(Subject subject, String label,
+    public static BoundaryAttempt probeFixing(MeasuredInput subject, String label,
                                               java.util.function.Function<NumericTerm, Carrier> on,
                                               Map<RealizationTarget, Place> fixing,
                                               Reachability.Reaching reaching, CandidateCheck check) {
@@ -2485,7 +2409,7 @@ public final class Generator {
      * those is a row that cannot be written, and each is a row this composes the way it did before
      * the way was carried here at all.
      */
-    private static Standing alsoOnTheWay(Subject subject, Map<RealizationTarget, Place> fixing,
+    private static Standing alsoOnTheWay(MeasuredInput subject, Map<RealizationTarget, Place> fixing,
                                          Reachability.Reaching reaching) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         List<ReachabilityGap.Uncomposed> unrepresented = new ArrayList<>();
@@ -2596,7 +2520,7 @@ public final class Generator {
      * @param refused set where a candidate was turned away for this and nothing else, which is what
      *                tells a search that ran out of candidates from one that certified none
      */
-    private static CandidateCheck certifying(CandidateCheck check, Subject subject, int parameter,
+    private static CandidateCheck certifying(CandidateCheck check, MeasuredInput subject, int parameter,
                                              Map<RealizationTarget, Place> fixing,
                                              Map<NumericTerm, souther.compiler.inputs.TermOrders> builtOn,
                                              boolean[] refused) {
@@ -2637,7 +2561,7 @@ public final class Generator {
      *           back on anything else, this would be a second reading of the position free to
      *           disagree with the one the value came from
      */
-    private static String readsElsewhere(Subject subject, int parameter,
+    private static String readsElsewhere(MeasuredInput subject, int parameter,
                                          souther.compiler.observe.ObservedValue observed,
                                          RealizationTarget target, Place at,
                                          souther.compiler.inputs.TermOrders on) {
@@ -2692,7 +2616,7 @@ public final class Generator {
      *                      collapsing the two searches into one changed nothing, and removing it is
      *                      its own answer to give
      */
-    private static Edge edgeAt(Subject subject, Carrier carrier, RealizationTarget target, Place at,
+    private static Edge edgeAt(MeasuredInput subject, Carrier carrier, RealizationTarget target, Place at,
                                boolean besideAnother,
                                souther.compiler.inputs.SearchRegion within) {
         // A number met by several values can offer only one of them beside a second position being
@@ -2739,7 +2663,7 @@ public final class Generator {
      * <p>Most classes first, and then parameter order and the path, so that two runs of one model
      * order them the same way and the rows come out in the same order twice.
      */
-    private static List<Axis> ordered(Subject subject) {
+    private static List<Axis> ordered(MeasuredInput subject) {
         List<Axis> divided = new ArrayList<>(subject.axes().stream().filter(Axis::derivable).toList());
         divided.sort(Comparator.comparingInt((Axis a) -> -a.classes().size())
                 .thenComparingInt(a -> {
@@ -2837,7 +2761,7 @@ public final class Generator {
      * beside the obligation. A label copied into the obligation would be a second spelling of the
      * class, free to disagree with the axis the day either moved.
      */
-    static String labelOf(Subject subject, ClassOwed owed) {
+    static String labelOf(MeasuredInput subject, ClassOwed owed) {
         for (Axis axis : subject.axes()) {
             if (!axis.id().equals(owed.at())) {
                 continue;
@@ -2929,7 +2853,7 @@ public final class Generator {
      * not that the combination is unreachable, and it is not by itself that the reading naming the
      * combination is wrong — the assignments were this search's, and so was the number of them.
      */
-    private static Witness witnessFor(Subject subject, List<Axis> axes,
+    private static Witness witnessFor(MeasuredInput subject, List<Axis> axes,
                                       CellSelection selection, CandidateCheck check, Trial trial,
                                       Map<List<String>, Watched> applied, List<Integer> takes,
                                       List<ResolvedOrigin> origins) {
@@ -2955,7 +2879,7 @@ public final class Generator {
      */
     private static final class Reading implements Taking<Interpretation> {
 
-        private final Subject subject;
+        private final MeasuredInput subject;
 
         private final List<Axis> axes;
 
@@ -2994,7 +2918,7 @@ public final class Generator {
          *  it. */
         private Witness found;
 
-        private Reading(Subject subject, List<Axis> axes, CellSelection selection,
+        private Reading(MeasuredInput subject, List<Axis> axes, CellSelection selection,
                         CandidateCheck check, Trial trial, Map<List<String>, Watched> applied,
                         List<Integer> takes, List<ResolvedOrigin> origins) {
             this.subject = subject;
@@ -3214,7 +3138,7 @@ public final class Generator {
      * stops at {@link #MAX_TUPLES}, and stopping is reported as having stopped rather than as
      * everything having been refused.
      */
-    private static Attempt build(Subject subject, List<Axis> axes, int[] where,
+    private static Attempt build(MeasuredInput subject, List<Axis> axes, int[] where,
                                  CandidateCheck check) {
         return build(subject, axes, where, check, Map.of());
     }
@@ -3228,7 +3152,7 @@ public final class Generator {
      * alone breaks a rule relating two positions while the model's own value does not — and a row
      * the baseline needed nothing beside came back carrying whatever the composition had needed.
      */
-    private static Attempt build(Subject subject, List<Axis> axes, int[] where,
+    private static Attempt build(MeasuredInput subject, List<Axis> axes, int[] where,
                                  CandidateCheck check, Map<String, FixtureTemplate> given) {
         LocationWrites decided = new LocationWrites();
         // What every position of this row has to be for the classes it sits in to exist. Read off
@@ -3334,7 +3258,7 @@ public final class Generator {
      * would spend the bound on assignments that differ only in a parameter already settled. Two
      * parameters of eight either-or fields are two searches of 256, not one of 65,536.
      */
-    private static Outcome valueFor(Subject subject, int p, List<Axis> axes,
+    private static Outcome valueFor(MeasuredInput subject, int p, List<Axis> axes,
                                     LocationWrites decided,
                                     Requirements required, CandidateCheck check) {
         TermPath at = TermPath.of(subject.parameters().get(p));
@@ -3376,7 +3300,7 @@ public final class Generator {
      * plan puts the two together — so a caller with nothing of its own to add hands over nothing
      * and loses none of it.
      */
-    private static Outcome valueAt(Subject subject, int p,
+    private static Outcome valueAt(MeasuredInput subject, int p,
                                    Map<TermPath, List<FixtureTemplate>> decided,
                                    Map<TermPath, Place> settled,
                                    Requirements additional, CandidateCheck check) {
@@ -3445,7 +3369,7 @@ public final class Generator {
      * sequences deep needs each of them to hold something — read off the outermost alone, a list of
      * lists whose inner lists hold nothing was offered rows for what the inner lists hold.
      */
-    private static boolean holdsNothing(Subject subject, Axis axis) {
+    private static boolean holdsNothing(MeasuredInput subject, Axis axis) {
         for (TermPath inside : axis.path().sequencesContainingIt()) {
             // A position of the input, because the axis is at one and a container it stands inside
             // is a position the same reading found on the way down to it.
@@ -3488,7 +3412,7 @@ public final class Generator {
      * without them answers about a rule this row is no longer under — and would say "every value
      * tried was refused" of a position whose values were never built.
      */
-    private static UnresolvedCombination.Reason heldBack(Subject subject, int p,
+    private static UnresolvedCombination.Reason heldBack(MeasuredInput subject, int p,
                                                          ConstructionPlan plan,
                                                          Map<TermPath, Place> settled) {
         TermPath root = TermPath.of(subject.parameters().get(p));
@@ -3533,7 +3457,7 @@ public final class Generator {
      * branch, and the search in front of it answers most rows without any of that; running this one
      * first would spend it on every row to change none of them.
      */
-    private static Outcome conditioned(Subject subject, int p, ConstructionPlan plan,
+    private static Outcome conditioned(MeasuredInput subject, int p, ConstructionPlan plan,
                                        Map<TermPath, List<FixtureTemplate>> decided,
                                        Map<TermPath, Place> settled,
                                        CandidateCheck check) {
@@ -3593,7 +3517,7 @@ public final class Generator {
      * @param settled the numbers among them, which is what a projection can be asked about
      * @param budget  assignments left to compose, shared down the whole search
      */
-    private static FixtureTemplate descend(Subject subject, int p, ConstructionPlan plan,
+    private static FixtureTemplate descend(MeasuredInput subject, int p, ConstructionPlan plan,
                                            List<ConstructionPlan.Slot> positions, int index,
                                            Map<TermPath, FixtureTemplate> chosen,
                                            Map<TermPath, Place> settled,
@@ -3629,7 +3553,7 @@ public final class Generator {
     }
 
     /** What one position can take, given what the positions before it took. */
-    private static List<FixtureTemplate> candidatesAt(Subject subject, int p,
+    private static List<FixtureTemplate> candidatesAt(MeasuredInput subject, int p,
                                                       ConstructionPlan.Slot position,
                                                       Map<TermPath, Place> settled,
                                                       Map<TermPath, List<FixtureTemplate>> decided) {
@@ -3697,7 +3621,7 @@ public final class Generator {
      * @param decided what the caller fixed: the classes of an axis, or the single value a boundary is
      *                to be reached at
      */
-    private static Choices choicesOf(Subject subject, int p, ConstructionPlan plan,
+    private static Choices choicesOf(MeasuredInput subject, int p, ConstructionPlan plan,
                                      Map<TermPath, List<FixtureTemplate>> decided,
                                      Map<TermPath, Place> settled) {
         Symbols symbols = subject.symbols();
@@ -3930,7 +3854,7 @@ public final class Generator {
      * wider set of choices is a longer walk to every assignment in it, and a widening meant for one
      * position would otherwise take rows away from the rest.
      */
-    private static Outcome walk(Subject subject, int p, Choices choices, CandidateCheck check) {
+    private static Outcome walk(MeasuredInput subject, int p, Choices choices, CandidateCheck check) {
         Outcome tried = over(subject, p, choices.plan(), choices.at(), choices.values(), check);
         // Only where the ordinary assignments ran out. A search that stopped at the bound has not
         // tried them all, and starting a wider one in front of the ones it never reached would spend
@@ -3945,7 +3869,7 @@ public final class Generator {
 
     /** One pass over one set of choices, from the assignment where every position takes its first
      * value outward. */
-    private static Outcome over(Subject subject, int p, ConstructionPlan plan, List<TermPath> at,
+    private static Outcome over(MeasuredInput subject, int p, ConstructionPlan plan, List<TermPath> at,
                                 List<List<FixtureTemplate>> values, CandidateCheck check) {
         int positions = at.size();
         ArrayDeque<int[]> next = new ArrayDeque<>();
