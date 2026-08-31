@@ -60,12 +60,46 @@ public record InputReads(Map<BindingId, TermPath> roots,
                          Map<BindingId, Core> bound,
                          souther.compiler.check.ElementBindings elements,
                          Map<BindingId, java.util.List<Denotation>> alternatives,
-                         boolean callsStand) {
+                         boolean callsStand) implements BindingEnvironment {
 
     public InputReads {
         roots = Map.copyOf(roots);
         bound = Map.copyOf(bound);
         alternatives = Map.copyOf(alternatives);
+    }
+
+    @Override
+    public TermPath rootOf(BindingId binding) {
+        return roots.get(binding);
+    }
+
+    @Override
+    public Core boundValueOf(BindingId binding) {
+        return bound.get(binding);
+    }
+
+    @Override
+    public Core heldAnywhereBy(BindingId binding) {
+        // What is bound on the way here first, and what the body bound anywhere after it. No
+        // binding holds nothing — this environment refuses a null value — so what is not here is
+        // absent rather than bound to nothing, and one lookup says so.
+        Core here = bound.get(binding);
+        return here != null ? here : elements.boundTo(binding);
+    }
+
+    @Override
+    public Core containerOf(BindingId binding) {
+        return elements.containerOf(binding);
+    }
+
+    @Override
+    public BindingId sameElementsAs(BindingId binding) {
+        return elements.provenance().sameElementsAs(binding);
+    }
+
+    @Override
+    public BindingId madeFrom(BindingId binding) {
+        return elements.provenance().madeFrom(binding);
     }
 
     /**
@@ -150,7 +184,12 @@ public record InputReads(Map<BindingId, TermPath> roots,
         if (arm.caseTypes().size() != 1) {
             return admitting(match, arm, symbols);
         }
-        TermPath scrutinee = pathOf(match.scrutinee(), symbols);
+        // What the arm narrows is a position of the input, and a scrutinee that is not one narrows
+        // nothing — whether because it stands nowhere or because this reading did not follow it.
+        TermPath scrutinee = switch (pathOf(match.scrutinee(), symbols)) {
+            case PathResolution.At(var at) -> at;
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+        };
         if (scrutinee == null) {
             return admitting(match, arm, symbols);
         }
@@ -267,9 +306,9 @@ public record InputReads(Map<BindingId, TermPath> roots,
         return new InputReads(roots, wider, elements, alternatives, callsStand);
     }
 
-    /** The position {@code e} names here, or null where it names none. */
-    public TermPath pathOf(Core e, Symbols symbols) {
-        return InputPath.of(e, roots, bound, elements, symbols, callsStand);
+    /** Where {@code e} stands, read here ({@link PathResolution}). */
+    public PathResolution pathOf(Core e, Symbols symbols) {
+        return InputPath.of(e, this, symbols);
     }
 
     /**
@@ -308,9 +347,14 @@ public record InputReads(Map<BindingId, TermPath> roots,
      */
     private ReadMeaning meaningOf(Core.Read read, Symbols symbols,
                                   java.util.Set<BindingId> met) {
-        TermPath path = pathOf(read, symbols);
-        if (path != null) {
-            return new ReadMeaning.Position(path);
+        // A name is what it stands at where it stands at one. The two other answers are alike here:
+        // a name this reading did not follow to a position is one whose meaning the answers below
+        // are asked for, as a name that stands at none is.
+        switch (pathOf(read, symbols)) {
+            case PathResolution.At(var at) -> {
+                return new ReadMeaning.Position(at);
+            }
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
         }
         java.util.List<Denotation> narrowed = alternatives.get(read.binding());
         if (narrowed != null) {
@@ -405,15 +449,14 @@ public record InputReads(Map<BindingId, TermPath> roots,
         }
     }
 
-    /** The position an element handed to {@code binding} stands at, or null where it stands at
-     *  none ({@link InputPath#elementAt}). */
-    public TermPath elementAt(BindingId binding, Symbols symbols) {
-        return InputPath.elementAt(binding, roots, bound, elements, symbols, callsStand);
+    /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}). */
+    public PathResolution elementAt(BindingId binding, Symbols symbols) {
+        return InputPath.elementAt(binding, this, symbols);
     }
 
-    /** The position {@code e}'s value came from, or null where it came from none. Not where it is:
-     *  a value made from a position is not that position ({@link InputPath#cameFrom}). */
-    public TermPath cameFrom(Core e, Symbols symbols) {
-        return InputPath.cameFrom(e, roots, bound, elements, symbols, callsStand);
+    /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
+     *  position ({@link InputPath#cameFrom}). */
+    public PathResolution cameFrom(Core e, Symbols symbols) {
+        return InputPath.cameFrom(e, this, symbols);
     }
 }
