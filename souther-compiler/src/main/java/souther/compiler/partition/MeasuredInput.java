@@ -12,12 +12,15 @@ import java.util.List;
 /**
  * One behavior's input as it was read, and where the model divides it.
  *
- * <p><b>Made from a reading and from nothing else.</b> The walk a row's values are written by, the
- * orders its numbers are measured on and the classes it is divided into all follow from one reading
- * of one behavior's declarations. Handed over as three values, a caller could hand a search the
- * walk of one reading and the orders of another — two behaviors taking a parameter spelled the same
- * way is all it takes, and then a row is composed on one reading's orders and read back by
- * another's walk. There is one argument here, so there is nothing to put together wrongly.
+ * <p><b>One reading, and the geometry measured against it.</b> The walk a row's values are written
+ * by and the orders its numbers are measured on both follow from one reading of one behavior's
+ * declarations; where the values are divided does not — a body draws lines the declarations say
+ * nothing about — so the classes come from a measurement made against that reading rather than from
+ * the reading itself. Handed over as separate values, a caller could give a search the walk of one
+ * reading and the orders of another, or classes measured against a third: two behaviors taking a
+ * parameter spelled the same way is all it takes, and then a row is composed on one measurement's
+ * orders and read back by another's walk. There is one value here, so there is nothing to put
+ * together wrongly — and one place makes it, from one {@code (module, behavior)}.
  *
  * <p><b>The reading itself does not come through.</b> What is offered is the two questions a search
  * asks — where a value is written, and what a number there is measured on — and not a way of asking
