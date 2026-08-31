@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.check.Comparison;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 
@@ -35,42 +36,52 @@ public final class ComparisonCatalog {
      * it, so one comparison the author wrote stands here once per call — each reached under its
      * caller's own conditions, and each its own thing to say something about.
      *
-     * @param node the comparison itself, which is what every reader joins on. Held by identity:
-     *             Core nodes are records, so two comparisons that look the same are equal, and a
-     *             reader handed the wrong one of two would be answering about the other body
-     * @param at   where it is written, as a report may say it. A {@link Citation} and not a
-     *             position, because a comparison spliced in from another module is written in that
-     *             module's file and reached from a call in this one — and it is here rather than
-     *             taken again wherever a report needs one, so that a rule and the line it draws are
-     *             found at one place because they read one answer
+     * @param comparison the comparison itself, which is what every reader joins on, together with
+     *                   what its operator placed. Recognising the node as a comparison is what puts
+     *                   it here, so what the recognition established travels with it and a reader
+     *                   below has no operator left to read again. Joined on by identity: Core nodes
+     *                   are records, so two comparisons that look the same are equal, and a reader
+     *                   handed the wrong one of two would be answering about the other body
+     * @param at         where it is written, as a report may say it. A {@link Citation} and not a
+     *                   position, because a comparison spliced in from another module is written in
+     *                   that module's file and reached from a call in this one — and it is here
+     *                   rather than taken again wherever a report needs one, so that a rule and the
+     *                   line it draws are found at one place because they read one answer
      */
-    public record Comparison(Core.Binary node, Citation at) {}
+    public record Catalogued(Comparison comparison, Citation at) {
 
-    private final IdentityHashMap<Core, Comparison> byNode;
+        /** The node itself, for a reader joining on the tree. */
+        public Core.Binary node() {
+            return comparison.at();
+        }
+    }
 
-    private ComparisonCatalog(IdentityHashMap<Core, Comparison> byNode) {
+    private final IdentityHashMap<Core, Catalogued> byNode;
+
+    private ComparisonCatalog(IdentityHashMap<Core, Catalogued> byNode) {
         this.byNode = byNode;
     }
 
     /** The comparisons of every behavior body of one module. */
     public static ComparisonCatalog of(Map<String, Core> behaviorBodies) {
-        IdentityHashMap<Core, Comparison> byNode = new IdentityHashMap<>();
+        IdentityHashMap<Core, Catalogued> byNode = new IdentityHashMap<>();
         for (Core body : behaviorBodies.values()) {
             walk(body, byNode);
         }
         return new ComparisonCatalog(byNode);
     }
 
-    private static void walk(Core e, IdentityHashMap<Core, Comparison> byNode) {
+    private static void walk(Core e, IdentityHashMap<Core, Catalogued> byNode) {
         // What a representation kept standing for an analysis to read. What a run does is measured
         // over the tree that runs, which keeps none of these, so reaching one would mean this
         // enumeration was taken over a tree nothing executes.
         if (e instanceof Core.PreservedCall preserved) {
             throw preserved.unexpectedIn("the comparisons of a body");
         }
-        if (e instanceof Core.Binary binary && binary.op().compares()
-                && binary.origin() != null && binary.origin().isWritten()) {
-            byNode.put(binary, new Comparison(binary, Citation.of(binary.pos())));
+        if (e instanceof Core.Binary binary && binary.origin() != null
+                && binary.origin().isWritten()) {
+            Comparison.of(binary).ifPresent(comparison ->
+                    byNode.put(binary, new Catalogued(comparison, Citation.of(binary.pos()))));
         }
         Core.forEachChild(e, child -> walk(child, byNode));
     }
@@ -83,7 +94,7 @@ public final class ComparisonCatalog {
      * standing in a tree this catalog was not taken over — three things a reader deciding for itself
      * would have had to remember to ask about separately.
      */
-    public Optional<Comparison> at(Core node) {
+    public Optional<Catalogued> at(Core node) {
         return Optional.ofNullable(byNode.get(node));
     }
 }

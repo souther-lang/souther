@@ -159,7 +159,7 @@ public final class GuardThresholds {
         for (ComparisonReadings.Reading each : comparisons.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
-                        lineAt(behavior, each.comparison(), plan, symbols,
+                        lineAt(behavior, each.at(), plan, symbols,
                                 admitted.read(), found, between, withoutALine);
                 // Not a rule with no line here: its outcome is about no row, whichever of the
                 // reasons refused it ({@link NotABoundary}), so there is nothing for a report to
@@ -452,8 +452,6 @@ public final class GuardThresholds {
                     case ComparisonClaim.Cut order -> out.add(new LineEvidence.Divides(
                             new Threshold(at.position(), at.cutting().seam(),
                                     order.valueBelongsBelow(), origin)));
-                    case ComparisonClaim.Nothing _ -> throw new IllegalStateException(
-                            "a line no comparison placed, filed as one a guard drew: " + origin);
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at. It divides the position — the classes either side are what the model

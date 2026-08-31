@@ -106,8 +106,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                 points.add(new DomainPoint.BesideTheLine(Towards.BELOW));
                 points.add(new DomainPoint.BesideTheLine(Towards.ABOVE));
             }
-            case ComparisonClaim.Nothing _ -> throw new IllegalStateException(
-                    "a line no comparison placed, asked which points it has: " + origin);
         }
         points.add(new DomainPoint.InTheRegion(Towards.BELOW));
         points.add(new DomainPoint.InTheRegion(Towards.ABOVE));
@@ -608,9 +606,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                             pointAt(space, cut, side, false, reach));
                 }
             }
-            // Refused where a line's facts are made, and written out so the switch stays exhaustive.
-            case ComparisonClaim.Nothing _ -> throw new IllegalStateException(
-                    "a line no comparison placed, asked what a row against it stands at: " + origin);
         }
     }
 
@@ -701,9 +696,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                         // for the line's own value to settle anything about.
                         || !drawnByAnInvariant && admits(within, cut);
             }
-            // Refused where a line's facts are made, and written out so the switch stays exhaustive.
-            case ComparisonClaim.Nothing _ -> throw new IllegalStateException(
-                    "a line no comparison placed, asked whether the quantity reaches it");
         };
     }
 
@@ -841,8 +833,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
             case ComparisonClaim.Singled _ -> List.of(
                     Parting.by(Seam.of(space, cut, Towards.ABOVE), origin.authoredLine()),
                     Parting.by(Seam.of(space, cut, Towards.BELOW), origin.authoredLine()));
-            case ComparisonClaim.Nothing _ -> throw new IllegalStateException(
-                    "a line no comparison placed, asked where it parts the values: " + origin);
         };
     }
 

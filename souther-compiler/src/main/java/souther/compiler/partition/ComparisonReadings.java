@@ -1,9 +1,11 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.ComparisonCatalog;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.types.BinOp;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
@@ -57,8 +59,14 @@ final class ComparisonReadings {
      *                reading has no arithmetic for is on the list as a decline, so the two are not
      *                one answer
      */
-    record Reading(Core.Binary comparison, InputReads reads, List<OnTheWay> assumed,
-                   BoundaryPolicy.Standing standing) {}
+    record Reading(Comparison comparison, InputReads reads, List<OnTheWay> assumed,
+                   BoundaryPolicy.Standing standing) {
+
+        /** The node this is a reading of, for a reader joining on the tree. */
+        Core.Binary at() {
+            return comparison.at();
+        }
+    }
 
     private final List<Reading> readings;
 
@@ -75,7 +83,7 @@ final class ComparisonReadings {
     ReachingCuts reaching(CoverageSites.Plan plan) {
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
         for (Reading each : readings) {
-            plan.comparisonAt(each.comparison())
+            plan.comparisonAt(each.at())
                     .ifPresent(site -> cuts.reached(site, each.assumed()));
         }
         return cuts.made();
@@ -127,7 +135,14 @@ final class ComparisonReadings {
                              List<OnTheWay> assumed, boolean live, List<Reading> out) {
         CoverageSites.Plan plan = in.plan();
         Symbols symbols = in.symbols();
-        if (e instanceof Core.Binary comparison && plan.comparisons().at(comparison).isPresent()) {
+        ComparisonCatalog.Catalogued catalogued = e instanceof Core.Binary binary
+                ? plan.comparisons().at(binary).orElse(null) : null;
+        if (catalogued != null) {
+            // What the catalog holds, which is the node together with what its operator placed.
+            // Recognising it as a comparison is what put it there, so the recognition is taken from
+            // it rather than made again here.
+            Comparison comparison = catalogued.comparison();
+            Core.Binary at = catalogued.node();
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
@@ -139,13 +154,12 @@ final class ComparisonReadings {
             // existing. Asked as an optional, a policy that stopped proving it would hand the
             // reading below the answer that restricts nothing, and this stage disagreeing with the
             // plan would go out as an arrival nobody could project.
-            BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(comparison, plan, live)
+            BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(at, plan, live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
                             ComparisonAssessment.of(in.behavior(), comparison, in.read(), reads,
                                     null, false,
-                                    in.arrives().arrivalAt(
-                                            plan.requireComparisonAt(comparison)))));
+                                    in.arrives().arrivalAt(plan.requireComparisonAt(at)))));
             out.add(new Reading(comparison, reads, assumed, standing));
         }
         switch (e) {

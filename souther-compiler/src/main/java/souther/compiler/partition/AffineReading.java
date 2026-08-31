@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
@@ -42,11 +43,12 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     /**
      * {@code comparison} as this form, or null where nothing here reads it.
      *
-     * <p>Null where the arithmetic names no position, where an operand is outside the affine
-     * fragment, and where the comparison places nothing — an operand of a variable product is one
-     * value and the rule about it is one this does not model.
+     * <p>Null where the arithmetic names no position and where an operand is outside the affine
+     * fragment — an operand of a variable product is one value and the rule about it is one this
+     * does not model. What the rule places is not among the reasons: a comparison carries it, and
+     * every comparison places something.
      */
-    static AffineReading of(Core.Binary comparison, InputDomain inputs, InputReads reads,
+    static AffineReading of(Comparison comparison, InputDomain inputs, InputReads reads,
                             Symbols symbols) {
         return read(comparison, inputs, reads, symbols) instanceof OfAComparison.Cuts cuts
                 ? cuts.read() : null;
@@ -105,17 +107,14 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     }
 
     /** The same, saying which of the three it is. */
-    static OfAComparison read(Core.Binary comparison, InputDomain inputs, InputReads reads,
+    static OfAComparison read(Comparison comparison, InputDomain inputs, InputReads reads,
                               Symbols symbols) {
-        if (!comparison.op().compares()) {
-            return new OfAComparison.CutsNothing(java.util.Set.of());
-        }
         // What this reading names as it goes, kept so that a reading which ran to the end can say
         // what it was about without anybody reading the comparison again.
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
-        for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
+        for (Core side : java.util.List.of(comparison.at().left(), comparison.at().right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
                     AffineForms.outcome(side, reads, reading(inputs, symbols, named));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
@@ -131,13 +130,13 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 }
                 AffineReading here = new AffineReading(
                         new LinearForm<>(BigDecimal.ZERO, whole.coefs()),
-                        whole.constant().negate(), ComparisonClaim.of(comparison.op()));
+                        whole.constant().negate(), comparison.claim());
                 // Turned round here and nowhere else. `48 >= 3a + 6b` and `3a + 6b <= 48` are one
                 // rule, and a reader that met the first without turning it round drew its border on
                 // `-3a - 6b` — the same four points under a name no author wrote, and a different
                 // line from the rule written the other way.
                 return new OfAComparison.Cuts(
-                        here.facesTheOtherWay(subjectOf(comparison, left, reads, symbols))
+                        here.facesTheOtherWay(subjectOf(comparison.at(), left, reads, symbols))
                                 ? here.mirrored() : here);
             }
         }
@@ -301,7 +300,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * whichever way the author wrote the subtraction, and it is not a difference between two rules.
      */
     private AffineReading mirrored() {
-        return new AffineReading(form.negate(), cut.negate(), turned(claim));
+        return new AffineReading(form.negate(), cut.negate(), claim.turned());
     }
 
     /**
@@ -338,19 +337,6 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             }
         }
         return null;
-    }
-
-    /** What the operator states once both sides are turned round. */
-    private static ComparisonClaim turned(ComparisonClaim claim) {
-        return switch (claim) {
-            // Turning the sides round moves the threshold's own value to the other class and leaves
-            // whether the rule holds there alone: `x <= c` and `-x >= -c` are one statement.
-            case ComparisonClaim.Cut cut ->
-                    new ComparisonClaim.Cut(!cut.valueBelongsBelow(), cut.holdsAtTheValue());
-            // An equality names a value and orders nothing, so there is nothing to turn round.
-            case ComparisonClaim.Singled singled -> singled;
-            case ComparisonClaim.Nothing nothing -> nothing;
-        };
     }
 
     /**

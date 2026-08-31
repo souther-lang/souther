@@ -191,7 +191,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
 
     /** Whether {@code op} says where values stop rather than which one a value is. */
     static boolean ordering(BinOp op) {
-        return ComparisonClaim.orders(op);
+        return ComparisonPlacement.orders(op);
     }
 
     /** One end, from the comparison and how the carrier's counts are spaced. */

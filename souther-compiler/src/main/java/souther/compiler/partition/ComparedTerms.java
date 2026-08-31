@@ -1,9 +1,8 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -63,13 +62,16 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      * nothing here has taken apart at all — the canonical form is what says a pair is a pair, and
      * it had no answer.
      */
-    static ComparedTerms asWritten(Core.Binary comparison,
+    static ComparedTerms asWritten(Comparison comparison,
                                    InputReading read, InputReads reads) {
-        if (ordersStrictly(comparison.op())) {
+        // A distance is what an order between the two sides states. A rule that names a value
+        // orders nothing, and what tells the two apart is the claim the comparison carries — an
+        // operator list of this reading's own would be a second answer to that.
+        if (comparison.claim() instanceof ComparisonClaim.Cut) {
             GuardThresholds.Named on =
-                    GuardThresholds.namedBy(comparison.left(), read, reads);
+                    GuardThresholds.namedBy(comparison.at().left(), read, reads);
             GuardThresholds.Named against =
-                    GuardThresholds.namedBy(comparison.right(), read, reads);
+                    GuardThresholds.namedBy(comparison.at().right(), read, reads);
             // A distance runs between two positions, so each side has to be a number one answers.
             NumericTerm.FromOnePosition here = on == null ? null : on.term().atOnePosition();
             NumericTerm.FromOnePosition there =
@@ -133,7 +135,7 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      */
     static ComparedTerms fromTheForm(AffineReading read,
                                      Quantities quantities) {
-        if (read == null || read.claim() instanceof ComparisonClaim.Nothing) {
+        if (read == null) {
             return null;
         }
         NumericTerm[] pair = read.twoCoordinates();
@@ -173,11 +175,4 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
         return new ComparedTerms(two[0], two[1], carriers, new Count(read.cut()));
     }
 
-    /** Whether an operator orders its two sides, which {@code ==} and {@code /=} do not. */
-    private static boolean ordersStrictly(BinOp op) {
-        return switch (op) {
-            case LT, LE, GT, GE -> true;
-            case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
-    }
 }

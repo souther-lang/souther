@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
@@ -194,7 +195,9 @@ public final class EnsuresThresholds {
         // Anything else is a form this walk does not read. Which positions it is about is still
         // said, because a position left out of every answer is reported as one the model draws no
         // line through — and the model says otherwise in the rule this stopped on.
-        if (!(e instanceof Core.Binary comparison) || !comparison.op().compares()) {
+        Comparison comparison = e instanceof Core.Binary binary
+                ? Comparison.of(binary).orElse(null) : null;
+        if (comparison == null) {
             // A statement that is not a comparison was not assessed as one, so what stopped this
             // is the form it is written in — the one of the reasons that does not turn on what two
             // sides name — and the positions the walk met are all there is to file it at.
@@ -221,7 +224,7 @@ public final class EnsuresThresholds {
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
-        reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(),
+        reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison.at(), rule.value(),
                 assessed.whatEachPlaceIsLeftWith(), out.rulesWithoutALine());
         // And the geometry, which is this reader's own. Only the two arms that draw something have
         // anything to add here.
@@ -248,9 +251,6 @@ public final class EnsuresThresholds {
                             out.evidence().add(new LineEvidence.Divides(
                                     new Threshold(at.position(), at.cutting().seam(),
                                             order.valueBelongsBelow(), origin)));
-                    case ComparisonClaim.Nothing _ ->
-                            throw new IllegalStateException("a line no comparison placed, filed as"
-                                    + " one an ensures drew: " + origin);
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at: the classes either side are what the model tells apart, and the border is

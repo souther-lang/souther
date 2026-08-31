@@ -53,7 +53,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
      *  them by where it stands, after which a fixture could be about a rule nobody meant. */
     ComparisonReadings.Reading only() {
         assertEquals(1, comparisons.size(), () -> "the body under test writes one comparison: "
-                + comparisons.stream().map(each -> each.comparison().pos().toString()).toList());
+                + comparisons.stream().map(each -> each.at().pos().toString()).toList());
         return comparisons.get(0);
     }
 }

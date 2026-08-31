@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -137,7 +137,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * over the comparison and answered about the shape rather than about what this reading could do
      * with it.
      */
-    static Read read(String behavior, Core.Binary comparison,
+    static Read read(String behavior, Comparison comparison,
                      InputReading read, InputReads reads) {
         AffineReading.OfAComparison canonical =
                 AffineReading.read(comparison, read.domain(), reads, read.symbols());
@@ -269,21 +269,24 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * a case of an enumeration, one string against another. Reached only from a reading that
      * stopped, so a spelling never answers a question the canonical form has already answered.
      */
-    private static Read asWritten(String behavior, Core.Binary comparison,
+    private static Read asWritten(String behavior, Comparison comparison,
                                   AffineReading.OfAComparison.Stopped canonical,
                                   InputReading read, InputReads reads) {
         Quantities quantities = read.quantities();
         Cutting drawn = atAPosition(behavior,
                 ComparedLine.asWritten(comparison, read, reads), quantities);
         if (drawn == null) {
+            // What the rule placed, carried from where the comparison was recognised. Read off the
+            // operator again here, this reading would be a second answer to a question the value in
+            // hand already answers.
             drawn = apart(behavior, ComparedTerms.asWritten(comparison, read, reads),
-                    ComparisonClaim.of(comparison.op()), quantities);
+                    comparison.claim(), quantities);
         }
         if (drawn != null) {
             return new Read.Cuts(drawn);
         }
-        return new Read.Stopped(
-                GuardThresholds.whatEachPlaceIsLeftWith(comparison, canonical, read, reads));
+        return new Read.Stopped(GuardThresholds.whatEachPlaceIsLeftWith(
+                comparison.at(), canonical, read, reads));
     }
 
     /** One position's own values, cut where the reading found the line, or null where that reading
@@ -594,14 +597,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     ComparisonClaim.Cut ordering() {
         return claim instanceof ComparisonClaim.Cut cut ? cut : null;
-    }
-
-    boolean holdsAtTheValue() {
-        return switch (claim) {
-            case ComparisonClaim.Cut cut -> cut.holdsAtTheValue();
-            case ComparisonClaim.Singled singled -> singled.holdsAtTheValue();
-            case ComparisonClaim.Nothing _ -> false;
-        };
     }
 
     /** The line this draws, as a border reads it. */

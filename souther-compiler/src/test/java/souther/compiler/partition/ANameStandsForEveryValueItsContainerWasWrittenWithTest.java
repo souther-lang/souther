@@ -144,7 +144,7 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
         ComparisonReadings.Reading only = read.only();
         Symbols symbols = read.symbols();
 
-        Core side = only.comparison().right();
+        Core side = only.at().right();
         InputReads at = only.reads();
         while (true) {
             if (side instanceof Core.FieldAccess field) {
