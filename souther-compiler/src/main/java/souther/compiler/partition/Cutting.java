@@ -191,12 +191,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * values, two positions held apart, and a form over several. Nothing here reads the comparison
      * again — what each of them is handed is the form the reading already came to.
      *
-     * <p><b>Which shape it is, and what that shape needs, are two questions and only the second is
-     * a fact about the model.</b> The two narrower readings answer nothing for a form that is not
-     * theirs, and read as an answer that told a rule whose shape was simply not a line on one
-     * position that its values carry no order. So the shapes are tried first and say nothing when
-     * they decline, and what the general form needs — an order that counts, under every term — is
-     * asked once, between the last of them and it.
+     * <p><b>A shape declining and a recognised shape failing to draw are two different things.</b>
+     * A recogniser answers nothing where the form is not its shape and where the orders that shape
+     * would need are not there, and neither of those is an answer about the model — the next shape
+     * may still draw the line, which is exactly what a form on an order that counts nothing does
+     * one reading further down. What must not happen is the other one: a shape that was recognised
+     * and then could not be realized falling to the next reading, where whatever that reading is
+     * short of becomes the reason. So a recogniser is asked first and its answer decides which
+     * reading owns the form, and only then is a line built.
      *
      * <p>Asked in that order and not before them. The narrower readings reach orders this counts
      * nothing on: two strings stand no measurable distance apart and the place they meet is still a
@@ -204,18 +206,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read realized(String behavior, AffineReading read,
                                  Quantities quantities) {
-        // Which shape this quantity is, asked narrowest first. Both of these answer null for a form
-        // that is not theirs, and that is a dispatch and no fact about the model — read as one, a
-        // rule whose shape simply was not a line on one position came out as a rule about values
-        // nothing draws a line on.
-        Cutting drawn = atAPosition(behavior, ComparedLine.fromTheForm(read, quantities),
-                quantities);
-        if (drawn == null) {
-            drawn = apart(behavior, ComparedTerms.fromTheForm(read, quantities), read.claim(),
-                    quantities);
+        // Which shape this quantity is, asked narrowest first, and each answered before anything is
+        // built. A recogniser answering nothing is this form not being that shape, and the next
+        // shape is asked; a recogniser that answered and a line that then could not be built are
+        // two facts about one shape, and falling from the second to the next shape is how the
+        // first came to be reported as the last one's absence.
+        ComparedLine line = ComparedLine.fromTheForm(read, quantities);
+        if (line != null) {
+            return new Read.Cuts(realizedAt(atAPosition(behavior, line, quantities),
+                    "a line on one position", read));
         }
-        if (drawn != null) {
-            return new Read.Cuts(drawn);
+        ComparedTerms pair = ComparedTerms.fromTheForm(read, quantities);
+        if (pair != null) {
+            return new Read.Cuts(realizedAt(apart(behavior, pair, read.claim(), quantities),
+                    "a distance between two positions", read));
         }
         // And what the general form needs, asked once and here. Not before the two above: they
         // reach orders that do not count — two strings stand no measurable distance apart and the
@@ -227,6 +231,31 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     AffineReading.filedAt(read.form().coefs().keySet()));
         }
         return new Read.Cuts(overAForm(behavior, read, on, quantities));
+    }
+
+    /**
+     * The line a recognised shape draws, which is one it draws.
+     *
+     * <p>What is watched here is a shape this reading recognised and could not put a line on. Only
+     * one thing refuses past recognition — an order with no place at the level the rule wrote
+     * ({@link LevelSpace#canCutAt}) — and it is a fact about the model rather than a limit of this
+     * compiler: a rule holding two strings three apart asks for a line at a distance the order has
+     * no place for at all, and there is none to find.
+     *
+     * <p>Unreachable while the language admits no arithmetic over an order that counts nothing, so
+     * a distance on such an order is only ever the place the two meet, which every such order has.
+     * That is a fact about what can be written and not about these types, so it stops here rather
+     * than falling to the reading below — where a shape that was recognised would have been
+     * answered for by whether the general form's orders were there, and gone out as values nothing
+     * draws a line on.
+     */
+    private static Cutting realizedAt(Cutting drawn, String shape, AffineReading read) {
+        if (drawn == null) {
+            throw new IllegalStateException("this reading recognised " + shape
+                    + " and its order has no place at the level the rule wrote: "
+                    + read.form() + " at " + read.cut());
+        }
+        return drawn;
     }
 
     /**
