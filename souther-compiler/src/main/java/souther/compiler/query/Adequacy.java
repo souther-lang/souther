@@ -2960,7 +2960,13 @@ public final class Adequacy {
                 composed = rowsFor(spec, sig, symbols, asked,
                         baselines(name, spec, sig,
                                 db.ask(new Bodies.ModuleDefinitions(name)).value(),
-                                prepared.value(), symbols, Shapes.fieldTypes(db, symbols)),
+                                prepared.value(), symbols,
+                                // What the declarations of this module denote, and not what a check
+                                // settled about them: a generation is a measurement of a module
+                                // that need not have been accepted — this same answer is worked out
+                                // where a body did not check — and a declaration the check said
+                                // nothing about is a value this cannot reach rather than a fault.
+                                new souther.compiler.check.ResolvedFieldTypes(symbols)),
                         divided, bodies.get(behavior), plan,
                         Rows.readingFor(byTarget, behavior),
                         constructing(db, name),

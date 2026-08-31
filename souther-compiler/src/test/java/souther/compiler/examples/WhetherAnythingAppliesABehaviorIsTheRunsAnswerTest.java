@@ -219,7 +219,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 () -> ExampleVerifier.check(
                         mine.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                         Scopes.derived(mine.db(), name).value(),
-                        Shapes.fieldTypes(mine.db(), Scopes.derived(mine.db(), name).value()),
+                        souther.compiler.query.ExampleExecutions.of(mine.db(), name).fieldTypes(),
                         mine.db().ask(new Bodies.Reachable(name)).value(),
                         artifactOf(other, "example.elsewhere"),
                         () -> {
@@ -313,7 +313,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
-                Shapes.fieldTypes(c.db(), Scopes.derived(c.db(), name).value()),
+                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifactOf(c, name),
                 // Every answer here applies this compile's own classes, so nothing is held against

@@ -2,12 +2,11 @@ package souther.compiler.program;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.execute.ExampleExecution;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -19,6 +18,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -83,10 +83,16 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
         return all;
     }
 
-    /** What this compile answers about a value's fields, which is what the rows are read against. */
-    private static FieldTypes compileSide(Compilation c) {
-        Symbols symbols = Scopes.derived(c.db(), c.modules().get(0)).value();
-        return Shapes.fieldTypes(c.db(), symbols);
+    /**
+     * What this compile answers about a value's fields, which is what the rows are read against.
+     *
+     * <p>Taken the way a run of the rows takes it, because that is the reading with the warrant for
+     * it: what runs a module's rows is downstream of that module having checked.
+     */
+    private static FieldTypes compileSide(Compilation c, String module) {
+        ExampleExecution reading = ExampleExecutions.of(c.db(), module);
+        assertNotNull(reading, "`" + module + "` did not check, so its rows have no reading");
+        return reading.fieldTypes();
     }
 
     private static Compilation compiled() {
@@ -99,7 +105,7 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
      *  something. */
     @Test
     void whatTheCheckSettledIsWhatTheDeclarationsWrote() {
-        FieldTypes fields = compileSide(compiled());
+        FieldTypes fields = compileSide(compiled(), "demo");
         assertEquals(List.of("tag", "kinds"), List.copyOf(fields.of(named("Wide")).keySet()),
                 "a spread's field comes first and the declaration's own after it");
         assertInstanceOf(Type.SetOf.class, fields.of(named("Wide")).get("kinds"),
@@ -114,7 +120,7 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
     @Test
     void andBothReadersAnswerAlikeAboutEveryDeclaration() {
         Compilation c = compiled();
-        FieldTypes compile = compileSide(c);
+        FieldTypes compile = compileSide(c, "demo");
         CheckedProgram program = CheckedProgram.of(List.of(MODULE));
         List<CheckedData> declarations = declarationsOf(program);
         FieldTypes snapshot = FieldTypes.over(DeclaredFields.over(declarations));
@@ -207,15 +213,14 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
     void andADeclarationAnotherModuleWroteIsReadFromThatModulesCheck() {
         Compilation c = Compilation.ofSources(List.of(DECLARING, HOLDING), ModulePath.EMPTY);
         c.answerEverything();
-        Symbols down = Scopes.derived(c.db(), "down").value();
-        FieldTypes readInDown = Shapes.fieldTypes(c.db(), down);
+        FieldTypes readInDown = compileSide(c, "down");
         TypeSymbol foreign = TypeSymbols.declared(new TypeKey("up", "Foreign"));
 
         assertInstanceOf(Type.SetOf.class, readInDown.of(foreign).get("values"),
                 "a module reading another's declaration takes the fields that module was checked to"
                         + " have");
         assertEquals(readInDown.of(foreign),
-                Shapes.fieldTypes(c.db(), Scopes.derived(c.db(), "up").value()).of(foreign),
+                compileSide(c, "up").of(foreign),
                 "and reads them the same as the module that declared it");
 
         FieldTypes snapshot = FieldTypes.over(DeclaredFields.over(

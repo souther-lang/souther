@@ -10,7 +10,6 @@ import souther.compiler.query.Scopes;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.Position;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -68,7 +67,9 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
     private final Compilation compilation = compiled(MODULE);
     private final Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
     private final NeutralForm neutral =
-            new NeutralForm(symbols, Shapes.fieldTypes(compilation.db(), symbols));
+            new NeutralForm(symbols,
+                    souther.compiler.query.ExampleExecutions.of(compilation.db(), "demo")
+                            .fieldTypes());
 
     private static Compilation compiled(String module) {
         Compilation c = Compilation.ofSource(module, "Main");
@@ -193,7 +194,8 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
     void anotherSumListingTheCaseDoesNotMoveWhatAPlaceNothingReadsWrites() throws Exception {
         Compilation with = compiled(AND_ANOTHER_SUM);
         Symbols theirs = Scopes.derived(with.db(), "demo").value();
-        NeutralForm and = new NeutralForm(theirs, Shapes.fieldTypes(with.db(), theirs));
+        NeutralForm and = new NeutralForm(theirs,
+                souther.compiler.query.ExampleExecutions.of(with.db(), "demo").fieldTypes());
         assertEquals(Map.of(), neutral.of(unit("Filed"), Position.UNREAD, "h"));
         assertEquals(Map.of(), and.of(value(with, "Filed", Map.of()), Position.UNREAD, "h"));
         // and each sum that does read it there still writes what it reads it under

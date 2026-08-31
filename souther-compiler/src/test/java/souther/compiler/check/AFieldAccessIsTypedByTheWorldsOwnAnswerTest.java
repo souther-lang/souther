@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
@@ -122,8 +123,38 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
         return assertInstanceOf(Type.Ref.class, sample).name();
     }
 
+    /**
+     * A reading that is not downstream of a check reads a declaration the check settled nothing
+     * about, and answers rather than raising.
+     *
+     * <p>A clause that is not a condition leaves its declaration without a settled shape while the
+     * declaration itself stands: a measurement of that module — what a generation reads to find the
+     * values a row could be written against — still crosses a field of it. What it is owed there is
+     * what the declarations denote, because it is measuring a text and not running an accepted
+     * program, and a measure that raised where it could not measure would report a compiler fault
+     * for a mistake the author is being told about anyway.
+     */
+    @Test
+    void aReadingThatIsNotDownstreamOfACheckAnswersWhereTheCheckSettledNothing() {
+        Compilation c = Compilation.ofSource("""
+                module demo
+
+                data Bad =
+                    { n: Int }
+                    invariant broken = n
+                """, "Main");
+        c.answerEverything();
+        Symbols scope = Scopes.derived(c.db(), "demo").value();
+        TypeSymbol bad = TypeSymbols.declared(new TypeKey("demo", "Bad"));
+        assertEquals(Map.of(), c.db().ask(new Shapes.ValueShapes("demo")).value(),
+                "the clause did not elaborate, so the check settled nothing about `Bad`");
+
+        assertEquals(Type.INT, new ResolvedFieldTypes(scope).field(bad, "n"),
+                "and what the declaration denotes is still there to be read");
+    }
+
     private FieldTypes checked() {
-        return Shapes.fieldTypes(compilation.db(), symbols);
+        return ExampleExecutions.of(compilation.db(), module).fieldTypes();
     }
 
     private Hir.Expr bodyOf(String name) {

@@ -2,12 +2,16 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.CheckedDeclarations;
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
+import souther.compiler.core.ValueShape;
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.observe.FieldTypes;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -89,10 +93,33 @@ public final class ExampleExecutions {
         // reaches none by name, which is a module rather than an unanswered question.
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
         return new ExampleExecution(prepared.value(), scope.value(),
-                Shapes.fieldTypes(db, scope.value()), sigs.value(),
+                checkedFieldTypes(db, scope.value()), sigs.value(),
                 requirements, values == null ? Map.of() : values, contracts,
                 Output.policyOf(db),
                 withDeclaring ? declaringOf(db, prepared.value()) : Map.of());
+    }
+
+    /**
+     * What the check settled the declarations hold, for a reading that is going to run rows.
+     *
+     * <p>Made here and nowhere else. A reading that runs a row is downstream of the module having
+     * checked — which is what {@link #of(Db, String, boolean)} establishes before anything is built
+     * — and that is the warrant for the one thing this answer does that no other reading may: a
+     * declaration it can see that the check settled nothing about is a broken world rather than a
+     * value with no fields. Handed out to whoever asked for it with a {@code Db} and a scope, that
+     * warrant would be nobody's to hold, and the first reading of a text that had not been accepted
+     * would turn what it could not measure into a fault.
+     *
+     * <p>Reached by the declaration's own identity: a data names the module that wrote it, and that
+     * module's shapes say what a value of it is made of. So there is no order in which one module's
+     * declarations are tried before another's, and nothing is gathered into a table beforehand.
+     */
+    private static FieldTypes checkedFieldTypes(Db db, Symbols symbols) {
+        return FieldTypes.over(new CheckedDeclarations(symbols, declared -> {
+            Map<TypeSymbol.AtModule, ValueShape> shapes =
+                    db.ask(new Shapes.ValueShapes(declared.module())).value();
+            return shapes == null ? null : shapes.get(declared);
+        }));
     }
 
     /**
