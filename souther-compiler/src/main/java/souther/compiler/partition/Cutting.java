@@ -599,10 +599,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return claim instanceof ComparisonClaim.Cut cut ? cut : null;
     }
 
-    boolean holdsAtTheValue() {
-        return claim.holdsAtTheValue();
-    }
-
     /** The line this draws, as a border reads it. */
     BoundaryTarget target() {
         return BoundaryTarget.at(of, at);
