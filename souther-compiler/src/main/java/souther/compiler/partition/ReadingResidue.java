@@ -12,15 +12,16 @@ import java.util.Set;
  * What a reading of one position left behind that no later phase can take away.
  *
  * <p><b>Two facts with one lifetime, held together so that one cannot be carried without the
- * other.</b> An axis is rebuilt whenever a body's rules re-point it at another number
- * ({@link Axis#measuredAt}) or divide it ({@link Axis#carrying}), and each of those is a place a
- * caller writes the parts out by hand. A position whose elements could not be reached once came
- * back from the second phase with nothing to say it had ever stopped, because one such rebuild did
- * not name the field. Written as one value, a rebuild names it or does not compile.
+ * other.</b> What a position is measured at is rebuilt as a body's rules are read
+ * ({@link PositionMeasurements#measuredAt}), which is a place a caller writes the parts out by
+ * hand. A position whose elements could not be reached once came back from the second phase with
+ * nothing to say it had ever stopped, because one such rebuild did not name the field. Written as
+ * one value, a rebuild names it or does not compile.
  *
- * <p><b>Not what the position is still waiting on.</b> {@link Axis#pending} is a fallback: it is
- * what a position is left with <em>if nothing else answers for it</em>, and it is gone the moment
- * something does. These two are observations, and they stay true whatever answers later — a
+ * <p><b>Not what the position is still waiting on.</b> {@link PositionAccount#pending} is a
+ * fallback: it is what a position is left with <em>if nothing else answers for it</em>, and it is
+ * gone the moment something does. These two are observations, and they stay true whatever answers
+ * later — a
  * {@code Map} nothing can be read into is one nothing was read into however plainly a rule about its
  * size divides it. Holding the three in one value would put a phase-local state and two settled
  * facts under one lifetime, which is the merge issue #1084 is about, one level up.

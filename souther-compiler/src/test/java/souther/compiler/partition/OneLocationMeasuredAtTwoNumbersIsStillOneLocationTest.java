@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.BlockedDescent;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -133,21 +132,9 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
      */
     @Test
     void twoClassesOfOneLocationWantingDifferentValuesComposeNoRow() {
-        Symbols symbols = symbolsOf();
-        NumericTerm.ValueOf at = new NumericTerm.ValueOf(TermPath.of("a"));
-        Axis hour = new Axis(new AxisId("f", "Time.hour(a)"), at, Type.INT,
-                List.of(number("early", 1).ofTheNumber(at)), List.of());
-        Axis minute = new Axis(new AxisId("f", "Time.minute(a)"), at, Type.INT,
-                List.of(number("late", 40).ofTheNumber(at)), List.of());
-        Generator.Subject subject = new Generator.Subject("f",
-                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                souther.compiler.inputs.InputDomain.of(
-                        List.of(new souther.compiler.inputs.InputDomain.Parameter("a", null,
-                                Type.INT)),
-                        symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
-                        .quantities(symbols),
-                List.of(hour, minute), HeldCounts.NONE);
+        Partitions.Partitioning read = partitioningOf();
+        Generator.Subject subject =
+                new Generator.Subject("gate", inputsOf(), readingOf(), read.axes());
 
         FillResult filled = Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY,
                 Budgets.generation());
@@ -158,9 +145,16 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 filled.unresolved().toString());
     }
 
-    private static PartitionClass number(String id, long candidate) {
-        return PartitionClass.of(id, id, new Recognition.Nothing(),
-                RepresentativeSource.of(FixtureTemplate.integer(candidate)));
+    /** What the behavior takes, as the reader that composes a row is told it. */
+    private static BehaviorInputs inputsOf() {
+        Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        return new BehaviorInputs(List.of("slot"),
+                compilation.db().ask(new souther.compiler.query.Bodies.Signatures(module)).value()
+                        .get("gate").inputTypes(),
+                souther.compiler.query.Scopes.derived(compilation.db(), module).value(),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static Symbols symbolsOf() {
@@ -168,6 +162,17 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         compilation.answerEverything();
         return souther.compiler.query.Scopes.derived(compilation.db(),
                 compilation.modules().get(0)).value();
+    }
+
+    /** What the reading of that input says about its numbers, which is what a subject is asked
+     *  through. */
+    private static souther.compiler.inputs.Quantities readingOf() {
+        Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = souther.compiler.query.Scopes.derived(compilation.db(), module).value();
+        return compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate")
+                .quantities(symbols);
     }
 
     private static Partitions.Partitioning partitioningOf() {

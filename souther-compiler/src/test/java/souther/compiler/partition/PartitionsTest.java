@@ -107,7 +107,7 @@ class PartitionsTest {
 
         assertEquals(List.of(), classIds(cost));
         assertFalse(cost.derivable());
-        assertTrue(cost.measurable(), "there is still an edge to reach");
+        assertTrue(cost.asksForARow(), "there is still an edge to reach");
         assertEquals(List.of(Count.of(0L), Count.of(1000L)),
                 cost.cuts().stream().map(Cut::at).toList());
     }
@@ -219,10 +219,15 @@ class PartitionsTest {
 
     @Test
     void aTypeTheModelDrawsNoLineThroughIsNotDerivable() {
-        Axis note = axis(partitioningOf(KINDS, "submit"), "request.note");
+        Partitions.Partitioning partitioning = partitioningOf(KINDS, "submit");
+        PositionMeasurements note = partitioning.measurements().stream()
+                .filter(each -> each.position().path().toString().equals("request.note"))
+                .findFirst().orElseThrow();
 
-        assertFalse(note.measurable());
-        assertEquals(List.of(), classIds(note));
+        assertEquals(List.of(), note.axes(), "a plain string is measured at nothing");
+        assertTrue(partitioning.undivided().stream()
+                        .anyMatch(each -> each.at().toString().equals("request.note")),
+                "and the position says so, which is where a report reads it");
     }
 
     @Test
@@ -248,7 +253,7 @@ class PartitionsTest {
      */
     @Test
     void aProductIsTakenApartFieldByField() {
-        List<String> paths = partitioningOf(KINDS, "submit").axes().stream()
+        List<String> paths = partitioningOf(KINDS, "submit").positions().stream()
                 .map(a -> a.path().toString()).toList();
 
         assertEquals(List.of("request.kind", "request.cost", "request.urgent", "request.memo",
@@ -302,7 +307,7 @@ class PartitionsTest {
                 let feeFor (amount, region) = Fee { yen = 0 }
                 """, "feeFor");
 
-        assertEquals(2, shipping.derivable().size());
+        assertEquals(2, shipping.partitionAxes().size());
         assertEquals(List.of("UnderThreeThousand", "ThreeThousandOrOver"),
                 classIds(axis(shipping, "amount")));
         assertEquals(List.of("Remote", "NotRemote"), classIds(axis(shipping, "region")));
@@ -340,11 +345,11 @@ class PartitionsTest {
 
         Partitions.Partitioning partitioning = partitioningOf(wide, "run");
 
-        assertEquals(15, partitioning.derivable().size(),
-                () -> "every field is divided: " + partitioning.derivable().stream()
+        assertEquals(15, partitioning.partitionAxes().size(),
+                () -> "every field is divided: " + partitioning.partitionAxes().stream()
                         .map(each -> each.id().toString()).toList());
         assertEquals("run/wide.f14",
-                partitioning.derivable().get(14).id().toString(),
+                partitioning.partitionAxes().get(14).id().toString(),
                 "including the last, which no ordering may quietly leave out");
     }
 }

@@ -393,7 +393,8 @@ final class AnswerClosure {
             // has — and the walk that asks each object what it is meets the end on the way.
             narrowedEnd(Q + "Adequacy$Divided", walked(Scenario.VALID_CORPUS),
                     m(ANSWER, "value"),
-                    m("souther.compiler.partition.Partitions$Partitioning", "axes"), ELEMENT,
+                    m("souther.compiler.partition.Partitions$Partitioning", "measurements"),
+                    ELEMENT, m("souther.compiler.partition.PositionMeasurements", "axes"), ELEMENT,
                     m("souther.compiler.partition.Axis", "narrowed"),
                     m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
             new Known(at(EVERY_ANSWER, "souther.compiler.diag.Diagnostic",
@@ -565,7 +566,8 @@ final class AnswerClosure {
         // The machine a class denotes where what it denotes is a pattern's strings, reached at each
         // of the two places an axis is carried from.
         theMachineUnderALanguage(out, Q + "Adequacy$Divided",
-                part("souther.compiler.partition.Partitions$Partitioning", "axes"), HELD,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
                 part("souther.compiler.partition.Axis", "classes"), HELD,
                 part("souther.compiler.partition.PartitionClass", "denotes"));
         theMachineUnderALanguage(out, Q + "Adequacy$Generated",
@@ -574,7 +576,8 @@ final class AnswerClosure {
                         part("souther.compiler.partition.PartitionClass", "denotes")));
         // The same ends, reached where an axis carries what the reading left the position.
         bothEndsOfARange(out, Q + "Adequacy$Divided",
-                part("souther.compiler.partition.Partitions$Partitioning", "axes"), HELD,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
                 part("souther.compiler.partition.Axis", "narrowed"));
         bothEndsOfARange(out, Q + "Adequacy$Generated",
                 then(A_SUBJECT, part("souther.compiler.partition.Generator$Subject", "axes"), HELD,

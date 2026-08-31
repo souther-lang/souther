@@ -8,20 +8,22 @@ import souther.compiler.types.Type;
 /**
  * One position of a behavior's input, and what this phase is left answering for at it.
  *
- * <p>Held once for the position and pointed at by every axis on it, because a position is measured
- * at as many numbers as the rules name of it and none of what is here is one of those numbers.
- * Where the walk stopped, what the reading of the declarations left standing, and what the position
- * is if nothing answers are facts about the location — true of it once, whether it is measured at
- * its own content, at how long it is, or at both.
+ * <p>Held once for the position, with the measures made of it under it
+ * ({@link PositionMeasurements}), because a position is measured at as many numbers as the rules
+ * name of it and none of what is here is one of those numbers. Where the walk stopped, what the
+ * reading of the declarations left standing, and what the position is if nothing answers are facts
+ * about the location — true of it once, whether it is measured at its own content, at how long it
+ * is, at both, or at nothing.
  *
  * <p><b>Kept on the position and not on a measure of it.</b> Whether a position is still waiting on
  * anything is a question about the location ({@link PendingPosition}), and a measure that could
  * answer it lets any reader ask through whichever number it happens to hold. Which one that is
  * decides nothing, so a reader that has to pick has been handed the wrong thing.
  *
- * <p>An axis holds one of these rather than a copy of what is in it. A copy per measure is a fact
- * with as many representations as the position has numbers, and any of them may be rebuilt without
- * one of its parts — which is what {@link ReadingResidue} guards one field at a time.
+ * <p>A measure holds none of this. What a measure needs of the location is what stands there, and
+ * it has that; a copy of the rest per measure would be a fact with as many representations as the
+ * position has numbers, and any of them may be rebuilt without one of its parts — which is what
+ * {@link ReadingResidue} guards one field at a time.
  *
  * @param pending  where nothing has answered for this position yet, what the structural reading
  *                 found — and so what the position is left with if nothing else answers. Null where
