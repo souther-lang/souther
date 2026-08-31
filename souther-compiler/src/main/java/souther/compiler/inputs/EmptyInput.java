@@ -35,6 +35,21 @@ public sealed interface EmptyInput {
     record TwoValuesAtOnePosition(NumericTerm term, Count one, Count other) implements EmptyInput {}
 
     /**
+     * One position was asked to be two cases.
+     *
+     * <p>Beside {@link TwoValuesAtOnePosition} and the same kind of fact: what contradicts is what
+     * the caller said, and the declarations were never asked. A position holds one value, so a
+     * value that is a {@code GlobalQuery} is not also a {@code FeedQuery}, and something fixed under
+     * each of them is fixed in no row.
+     *
+     * <p>Refinements and not cases, because a sum's cases and an optional's presence are narrowings
+     * of one kind ({@link Refinement}) — read as cases, the same contradiction under an optional
+     * would arrive as a shape of its own with nothing to be an instance of.
+     */
+    record TwoRefinementsAtOnePosition(TermPath at, Refinement one, Refinement other)
+            implements EmptyInput {}
+
+    /**
      * A position was fixed at a value the term itself cannot take.
      *
      * <p>Against what the term guarantees of its own values and against nothing else, which is the

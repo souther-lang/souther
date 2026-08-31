@@ -733,13 +733,18 @@ public final class InputDomain {
      * comparison written about it. Built at the top of whatever is walking, and handed down.
      */
     public Quantities quantities(Symbols symbols) {
-        Map<TermPath, PlacedRules> byRoot = new LinkedHashMap<>();
+        Map<TermPath, OpenedRules> byRoot = new LinkedHashMap<>();
         for (RuleRoot root : roots) {
             // The first reading under a path stands, for the same reason the first reading of a
             // position does: two roots at one path would be one place answering differently
             // depending on which reader looked it up.
+            //
+            // And with the condition it was opened under, which is what says whose rows its rules
+            // are about. Read without it, the cases of a sum are rules about every row and refuse
+            // an input between them.
             byRoot.computeIfAbsent(root.at(),
-                    at -> PlacedRules.of(at, root.type(), symbols, policy));
+                    at -> new OpenedRules(PlacedRules.of(at, root.type(), symbols, policy),
+                            root.opening()));
         }
         // Where a term's subject stands, handed over already answered. What comes back asks a
         // position first and the declarations under one the reading stopped above, which is the one

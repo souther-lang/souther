@@ -10,6 +10,9 @@ import souther.compiler.numeric.RationalCut;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +28,8 @@ import java.util.Set;
  */
 final class ReadQuantities implements Quantities {
 
-    private final Map<TermPath, PlacedRules> byRoot;
+    /** Every value whose rules reach this input, with the condition each reading holds under. */
+    private final Map<TermPath, OpenedRules> byRoot;
     /** What says how the values of a position are spaced, which the arithmetic needs of every
      *  number it is told a bound on. Held rather than asked for per question: the reading of an
      *  input is what a caller has, and where a position's values step is a fact about its type. */
@@ -66,39 +70,6 @@ final class ReadQuantities implements Quantities {
      * accumulates, and what the whole of it leaves is worked out where everything else is.
      */
     private final List<Assumed> assumed;
-    /**
-     * The rules read with everything fixed, worked out when something is asked and not before.
-     *
-     * <p>One reading per value and not one per question. A search asks where a position runs and
-     * whether anything is left of the same refinement, and reading the declarations once per
-     * question would read them twice a step. Held here rather than shared, since what it is a
-     * reading of is what this refinement fixed.
-     */
-    private volatile Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned;
-    /**
-     * Every rule reaching this input, about this input's own subjects, in one place.
-     *
-     * <p>Not one reading per parameter with the answers added afterwards. Adding per-parameter
-     * answers is the composition a rule spanning two parameters cannot survive, and where such a
-     * rule comes from is not this layer's business — what is here is a constraint space over the
-     * input, and where one parameter's positions run is a projection out of it rather than a
-     * reading of its own.
-     *
-     * <p><b>The whole state and not the numbers of it.</b> Whether anything is left of this input is
-     * one question, and this is the one thing that answers it: a per-parameter reading kept beside
-     * this one could answer it too, over the same numbers renamed, and then which of two proofs is
-     * written would be settled by the order they are asked in — with the weaker of them, the one
-     * that cannot see across two parameters, asked first. The parameters supply rules here and
-     * answer nothing.
-     *
-     * <p>Worked out when something is asked and kept, the same as {@link #conditioned}: it is a
-     * reading of what this refinement fixed, so it belongs to this value and not to a shared table.
-     */
-    private volatile souther.compiler.check.ConstraintState<InputAtom> constraints;
-    /** Where each position of the input sits, in the order the parameters and their positions are
-     *  declared. What a proof of emptiness names a place out of. */
-    private volatile java.util.SequencedMap<InputAtom,
-            souther.compiler.check.Emptiness.AtAField.Where> positions;
 
     /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
     private record Assumed(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {}
@@ -117,7 +88,7 @@ final class ReadQuantities implements Quantities {
         }
     }
 
-    private ReadQuantities(Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
+    private ReadQuantities(Map<TermPath, OpenedRules> byRoot, Set<TermPath> roots,
                            Map<TermPath, Position> byPath,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
@@ -128,18 +99,18 @@ final class ReadQuantities implements Quantities {
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
-        this.byRoot = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(byRoot));
+        this.byRoot = Collections.unmodifiableMap(new LinkedHashMap<>(byRoot));
         this.roots = Set.copyOf(roots);
         this.byPath = Map.copyOf(byPath);
         // Kept in the order the fixings arrived, so that the order they are answered in is chosen
         // here rather than inherited. An immutable copy iterates in an order salted once per JVM
         // run, which is a fine order and not one anybody chose — read off it, which of two
         // contradictions a proof names would move between runs of the same compiler.
-        this.fixed = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(fixed));
+        this.fixed = Collections.unmodifiableMap(new LinkedHashMap<>(fixed));
     }
 
     /** Before anything is fixed. */
-    static ReadQuantities of(Map<TermPath, PlacedRules> byRoot, Set<TermPath> roots,
+    static ReadQuantities of(Map<TermPath, OpenedRules> byRoot, Set<TermPath> roots,
                              Map<TermPath, Position> byPath,
                              java.util.function.Function<TermPath, Type> typeAt,
                              souther.compiler.check.Symbols symbols) {
@@ -218,19 +189,25 @@ final class ReadQuantities implements Quantities {
      *  {@link #rootOf}, so holding one is holding a root that can name what was asked about. */
     private record UnderARoot(TermPath root, RuleKey named) {}
 
-    /** Each parameter's rules read with what is fixed under it, once, under this input's names. */
-    private Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned() {
-        Map<TermPath, FieldDomains.Carried<InputAtom>> read = conditioned;
-        if (read == null) {
-            Map<TermPath, FieldDomains.Carried<InputAtom>> made = new LinkedHashMap<>();
-            byRoot.forEach((root, rules) -> made.put(root,
-                    rules.given(under(root)).constraintsOver(
-                            at -> called(root, at),
-                            subject -> new InputAtom.Anonymous(root.toString(), subject))));
-            read = java.util.Collections.unmodifiableMap(made);
-            conditioned = read;
-        }
-        return read;
+    /**
+     * The rules of every value this context says stands, read with what is fixed under each and
+     * said in this input's names.
+     *
+     * <p>Under the context and not all of them. A reading opened at a case holds of the rows whose
+     * value turned out to be that case, so putting one into a space asked about rows that are some
+     * other case would be stating a rule of nobody's — and putting every case in at once is a sum
+     * refusing an input between its alternatives.
+     */
+    private Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned(StructuralContext under) {
+        Map<TermPath, FieldDomains.Carried<InputAtom>> made = new LinkedHashMap<>();
+        byRoot.forEach((root, opened) -> {
+            if (under.holds(opened.opening())) {
+                made.put(root, opened.rules().given(under(root)).constraintsOver(
+                        at -> called(root, at, under),
+                        subject -> new InputAtom.Anonymous(root.toString(), subject)));
+            }
+        });
+        return Collections.unmodifiableMap(made);
     }
 
     @Override
@@ -255,9 +232,12 @@ final class ReadQuantities implements Quantities {
         if (form == null || form.coefs().isEmpty()) {
             return this;
         }
+        form.coefs().keySet().forEach(this::held);
+        // Refused where the form is over positions no one value has, the same as a question about
+        // where it runs: what would be taken in is a condition on a row nobody can write.
+        StructuralContext under = asked(form.coefs().keySet());
         for (NumericTerm term : form.coefs().keySet()) {
-            held(term);
-            if (spacingOf(constraints().numbers(), term, called(term)) == null) {
+            if (spacingOf(constraints(under).numbers(), term, called(term, under)) == null) {
                 return this;
             }
         }
@@ -265,7 +245,7 @@ final class ReadQuantities implements Quantities {
         if (assumed.contains(taking)) {
             return this;
         }
-        List<Assumed> both = new java.util.ArrayList<>(assumed);
+        List<Assumed> both = new ArrayList<>(assumed);
         both.add(taking);
         return new ReadQuantities(byRoot, roots, byPath, typeAt, fixed, symbols, both);
     }
@@ -288,11 +268,8 @@ final class ReadQuantities implements Quantities {
      * nothing about a form that also names a third the rules leave unbounded, and met afterwards
      * against a floor this reading did have, the rule is gone.
      */
-    private souther.compiler.check.ConstraintState<InputAtom> constraints() {
-        souther.compiler.check.ConstraintState<InputAtom> read = constraints;
-        if (read != null) {
-            return read;
-        }
+    private souther.compiler.check.ConstraintState<InputAtom> constraints(
+            StructuralContext under) {
         souther.compiler.check.ConstraintState<InputAtom> made =
                 souther.compiler.check.ConstraintState.top();
         // What the values of this space cost to work out. One for the space and not one per
@@ -301,30 +278,107 @@ final class ReadQuantities implements Quantities {
         // answer being built and this is where building it is charged.
         souther.compiler.values.Allowance<InputAtom> sets =
                 souther.compiler.values.Allowance.ofAdmittedValues();
-        for (FieldDomains.Carried<InputAtom> each : conditioned().values()) {
+        for (FieldDomains.Carried<InputAtom> each : conditioned(under).values()) {
             made = made.meet(each.constraints().under(sets));
         }
         // And what the caller took in, onto the same rules rather than met against the answer
         // afterwards. A condition relating two positions says nothing about either of them alone,
         // so met afterwards it would be gone.
+        //
+        // Read under this context like everything else. A condition is about the positions it
+        // names, so one taken in about a case says nothing where the value is another — left in, it
+        // would be a rule about a row that is not the row being asked about.
         for (Assumed each : assumed) {
+            if (!stands(each.form().coefs().keySet(), under)) {
+                continue;
+            }
             Map<InputAtom, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
             for (NumericTerm term : each.form().coefs().keySet()) {
                 souther.compiler.numeric.Granularity spaced =
-                        spacingOf(made.numbers(), term, called(term));
+                        spacingOf(made.numbers(), term, called(term, under));
                 if (spaced == null) {
                     spacing = null;
                     break;
                 }
-                spacing.put(called(term), spaced);
+                spacing.put(called(term, under), spaced);
             }
             if (spacing != null) {
-                made = made.taking(over(each.form()), each.rel(), spacing);
+                made = made.taking(over(each.form(), under), each.rel(), spacing);
             }
         }
-        read = made;
-        constraints = read;
-        return read;
+        return made;
+    }
+
+    /** Whether every one of these terms stands in the values {@code under} describes. */
+    private static boolean stands(Collection<NumericTerm> terms,
+                                  StructuralContext under) {
+        for (NumericTerm term : terms) {
+            if (!(StructuralContext.of(term.subjectPath()).merge(under)
+                    instanceof StructuralContext.Merge.Together)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * What this reading has been told stands, from everything taken in so far.
+     *
+     * <p>Assembled here and nowhere else, out of the three things that can say a value is a case:
+     * where a fixing put a number, what a condition was taken in about, and — where a question is
+     * being answered — what the question names. A reader working it out from the paths it happens to
+     * hold would answer the same question two ways as soon as two of them were taken in.
+     */
+    private StructuralContext.Merge accumulated() {
+        StructuralContext.Merge merged = new StructuralContext.Merge.Together(
+                StructuralContext.NONE);
+        List<NumericTerm> said = new ArrayList<>(fixed.keySet());
+        assumed.forEach(each -> said.addAll(each.form().coefs().keySet()));
+        for (NumericTerm term : said) {
+            if (!(merged instanceof StructuralContext.Merge.Together it)) {
+                return merged;
+            }
+            merged = it.context().merge(StructuralContext.of(term.subjectPath()));
+        }
+        return merged;
+    }
+
+    /**
+     * The context a question over {@code terms} is answered in, or the disagreement that says no
+     * value is being asked about.
+     *
+     * <p>The question's own and what has already been taken in, together. Built from the question
+     * alone, a region that has fixed a number under one case would answer about another as though
+     * nothing had been said.
+     */
+    private StructuralContext.Merge asking(Collection<NumericTerm> terms) {
+        StructuralContext.Merge merged = accumulated();
+        for (NumericTerm term : terms) {
+            if (!(merged instanceof StructuralContext.Merge.Together it)) {
+                return merged;
+            }
+            merged = it.context().merge(StructuralContext.of(term.subjectPath()));
+        }
+        return merged;
+    }
+
+    /**
+     * The same, where the question is one no value of this input stands for.
+     *
+     * <p>Refused rather than answered wide. What was asked is where a quantity runs, and a quantity
+     * over positions no one value has is one nothing runs between — an answer of "nothing bounds it"
+     * would be read as the rules leaving it open. That two fixings cannot both hold is the other
+     * question and is an emptiness ({@link #emptiness}), because there the caller said something
+     * about the input rather than asking for a number.
+     */
+    private StructuralContext asked(Collection<NumericTerm> terms) {
+        return switch (asking(terms)) {
+            case StructuralContext.Merge.Together it -> it.context();
+            case StructuralContext.Merge.Disagreeing it -> throw new IllegalArgumentException(
+                    "`" + it.why().at() + "` is asked to be " + it.why().one().spelled()
+                            + " and " + it.why().other().spelled() + ", which no value of this"
+                            + " input is, so there is nothing here to answer about " + terms);
+        };
     }
 
     /**
@@ -344,22 +398,20 @@ final class ReadQuantities implements Quantities {
      * nothing of its own comes out as the parameter and not as the value the proof is about.
      */
     private java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where>
-            positions() {
-        java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where> read =
-                positions;
-        if (read != null) {
-            return read;
-        }
+            positions(StructuralContext under) {
         java.util.SequencedMap<InputAtom, souther.compiler.check.Emptiness.AtAField.Where> made =
                 new LinkedHashMap<>();
-        conditioned().forEach((root, carried) -> carried.named().forEach(
-                // What a newtype wraps is at no name of its own, so the place is the parameter.
+        conditioned(under).forEach((root, carried) -> carried.named().forEach(
+                // Off the subject and not off the reading it arrived from. A field the cases of a
+                // sum share is one place named by the sum's rules and by the case's, and the two
+                // arrive here as one subject — so the place is the one that subject stands at,
+                // which is what the subject itself says.
+                // What a newtype wraps is at no name of its own, so the place is the value.
                 (atom, path) -> made.put(atom,
                         new souther.compiler.check.Emptiness.AtAField.Where.In(
-                                path.isEmpty() ? root.toString() : root + "." + path))));
-        read = java.util.Collections.unmodifiableSequencedMap(made);
-        positions = read;
-        return read;
+                                atom instanceof InputAtom.Named named ? named.place()
+                                        : path.isEmpty() ? root.toString() : root + "." + path))));
+        return Collections.unmodifiableSequencedMap(made);
     }
 
     /**
@@ -370,16 +422,72 @@ final class ReadQuantities implements Quantities {
      * turned into one of those positions would be one of however many the name reaches, chosen by
      * nothing.
      */
-    private static InputAtom called(TermPath root, FieldDomains.Coordinate at) {
-        return new InputAtom.Named(root.toString(), at.path(), at.kind());
+    private InputAtom called(TermPath root, FieldDomains.Coordinate at, StructuralContext under) {
+        return atomAt(standingUnder(pathOf(root, at.path()), under), at.kind());
     }
 
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
-    private InputAtom.Named called(NumericTerm term) {
+    private InputAtom.Named called(NumericTerm term, StructuralContext under) {
         UnderARoot at = rootOf(term.subjectPath());
         FieldDomains.Coordinate where = coordinateOf(at, term);
-        return new InputAtom.Named(at.root().toString(), where.path(), where.kind());
+        return atomAt(standingUnder(pathOf(at.root(), where.path()), under), where.kind());
+    }
+
+    /** Where a value's own rules put a coordinate, as a place of this input. */
+    private static TermPath pathOf(TermPath root, RuleKey named) {
+        TermPath at = root;
+        for (String field : named.steps()) {
+            at = at.then(field);
+        }
+        return at;
+    }
+
+    /**
+     * The subject at a place: the nearest value whose rules can name it, and what those rules call
+     * it.
+     *
+     * <p>The nearest, so that a place reached from two readings is one subject. A field the cases of
+     * a sum share is named by the sum's rules and by the case's, and named by the sum it would be a
+     * number standing under however many cases there are — chosen by nothing.
+     */
+    private InputAtom.Named atomAt(TermPath place,
+                                   FieldDomains.CoordinateKind kind) {
+        UnderARoot at = rootOf(place);
+        return new InputAtom.Named(at.root().toString(), at.named(), kind);
+    }
+
+    /**
+     * Where a place stands once every narrowing this context selects has been taken.
+     *
+     * <p><b>All of them at once and not one crossing at a time.</b> What the rules of a value above
+     * say about a name its cases share is what they say about the number standing under the case,
+     * and a question can select narrowings under several sums — so a clause relating two of those
+     * names is about two numbers under two cases. Renamed a crossing at a time, either copy of the
+     * clause still spells the other name the way the value above wrote it, and the two copies
+     * relate nothing when they are met.
+     *
+     * <p>Nothing moves under a narrowing this context has not selected. A shared name whose case is
+     * undecided is one number all the same, standing at the sum's own name — and the rules about it
+     * stay one relation until a context says which case the value turned out to be.
+     */
+    private TermPath standingUnder(TermPath place, StructuralContext under) {
+        boolean moved = true;
+        while (moved) {
+            moved = false;
+            for (OpenedRules opened : byRoot.values()) {
+                if (!(opened.opening() instanceof RootOpening.Refined it)
+                        || !under.holds(it)) {
+                    continue;
+                }
+                TermPath deeper = it.crossing().standingUnderTheCase(place);
+                if (deeper != null) {
+                    place = deeper;
+                    moved = true;
+                }
+            }
+        }
+        return place;
     }
 
     /**
@@ -396,12 +504,13 @@ final class ReadQuantities implements Quantities {
      * is the only shape such a position is ever asked in.
      */
     private souther.compiler.numeric.NumericDomain<InputAtom> holding(
-            souther.compiler.numeric.NumericDomain<InputAtom> rules, NumericTerm term) {
+            souther.compiler.numeric.NumericDomain<InputAtom> rules, NumericTerm term,
+            StructuralContext under) {
         NumericDomain.Bounds runs = whereOneTermRuns(term);
         if (runs == null || (asCut(runs.min()) == null && asCut(runs.max()) == null)) {
             return rules;
         }
-        InputAtom atom = called(term);
+        InputAtom atom = called(term, under);
         souther.compiler.numeric.Granularity spaced = spacingOf(rules, term, atom);
         if (spaced == null) {
             return rules;
@@ -457,11 +566,15 @@ final class ReadQuantities implements Quantities {
         // parameter are said together and what each number is on its own is said onto them, so what
         // a form runs between is read off that space rather than assembled out of per-parameter
         // answers — assembling is what a rule spanning two parameters cannot survive.
-        souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints().numbers();
+        //
+        // Under the context this question is asked in, which is what says which of those rules are
+        // about the row being asked about at all.
+        StructuralContext under = asked(form.coefs().keySet());
+        souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints(under).numbers();
         for (NumericTerm term : form.coefs().keySet()) {
-            rules = holding(rules, term);
+            rules = holding(rules, term, under);
         }
-        NumericDomain.Bounds projected = rules.boundsOf(over(form));
+        NumericDomain.Bounds projected = rules.boundsOf(over(form, under));
         // One term taken as itself, which is the arithmetic being the identity rather than a second
         // answer to the same question. It is also the only shape a position the arithmetic cannot
         // count is ever asked in — a form adds its terms together and two strings have no sum — so
@@ -486,9 +599,10 @@ final class ReadQuantities implements Quantities {
      * caller wrote two spellings of a number this input has one of.
      */
     private NumericDomain.LinearForm<InputAtom> over(
-            NumericDomain.LinearForm<NumericTerm> form) {
+            NumericDomain.LinearForm<NumericTerm> form, StructuralContext under) {
         Map<InputAtom, BigDecimal> coefs = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> coefs.merge(called(term), coef, BigDecimal::add));
+        form.coefs().forEach((term, coef) ->
+                coefs.merge(called(term, under), coef, BigDecimal::add));
         return new NumericDomain.LinearForm<>(form.constant(), coefs);
     }
 
@@ -549,11 +663,20 @@ final class ReadQuantities implements Quantities {
                         each.getValue().least()));
             }
         }
+        // Two things fixed under cases no one value is both of. Said here rather than by the rules,
+        // for the reason a position fixed at two values is: what contradicts is the pair of
+        // assignments, and the declarations were never asked.
+        if (accumulated() instanceof StructuralContext.Merge.Disagreeing it) {
+            return Optional.of(new EmptyInput.TwoRefinementsAtOnePosition(
+                    it.why().at(), it.why().one(), it.why().other()));
+        }
         // And what the rules leave once they are all said together, which is the one thing that
         // answers it. Every parameter's reading is in here, renamed, so there is nothing a
         // per-parameter reading could add — and a contradiction between two parameters, or between a
         // declaration and something a caller took in, can be seen nowhere else.
-        return constraints().holdsNothing(positions()).map(EmptyInput.ProvedByTheRules::new);
+        StructuralContext under = asked(List.of());
+        return constraints(under).holdsNothing(positions(under))
+                .map(EmptyInput.ProvedByTheRules::new);
     }
 
     /**
@@ -563,7 +686,7 @@ final class ReadQuantities implements Quantities {
      * fixings arrived in, which is the caller's business and not the model's.
      */
     private List<Map.Entry<NumericTerm, Fixed>> inOrder() {
-        List<Map.Entry<NumericTerm, Fixed>> out = new java.util.ArrayList<>(fixed.entrySet());
+        List<Map.Entry<NumericTerm, Fixed>> out = new ArrayList<>(fixed.entrySet());
         out.sort(java.util.Comparator.comparing(each -> each.getKey().toString()));
         return out;
     }
