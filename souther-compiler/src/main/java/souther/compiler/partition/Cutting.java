@@ -193,16 +193,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * <p><b>A shape declining and a recognised shape failing to draw are two different things.</b>
      * A recogniser answers nothing where the form is not its shape and where the orders that shape
-     * would need are not there, and neither of those is an answer about the model — the next shape
-     * may still draw the line, which is exactly what a form on an order that counts nothing does
-     * one reading further down. What must not happen is the other one: a shape that was recognised
-     * and then could not be realized falling to the next reading, where whatever that reading is
-     * short of becomes the reason. So a recogniser is asked first and its answer decides which
-     * reading owns the form, and only then is a line built.
+     * would need are not there. The second of those is a fact about the model — an order is missing,
+     * and that is worth saying — but it is not this reading's to classify, because a reading further
+     * down may still answer: a form on an order that counts nothing is turned away by both narrower
+     * shapes and gets its line from neither, and what it is left with is settled at the one place
+     * that knows it has run out of readings.
      *
-     * <p>Asked in that order and not before them. The narrower readings reach orders this counts
-     * nothing on: two strings stand no measurable distance apart and the place they meet is still a
-     * line, so a reader wanting counting orders first refuses lines the model draws.
+     * <p>What must not happen is the other one: a shape that was recognised and then could not be
+     * realized falling to the next reading, where whatever that reading is short of becomes the
+     * reason. So a recogniser is asked first and its answer decides which reading owns the form,
+     * and only then is a line built.
+     *
+     * <p>And that one place is after the narrower shapes, not before them. They reach orders this
+     * counts nothing on: two strings stand no measurable distance apart and the place they meet is
+     * still a line, so a reader asking for counting orders first refuses lines the model draws.
      */
     private static Read realized(String behavior, AffineReading read,
                                  Quantities quantities) {
