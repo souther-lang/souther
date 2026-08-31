@@ -18,7 +18,7 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
-import souther.compiler.partition.PointRole;
+import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
@@ -636,13 +636,12 @@ final class Coverages {
         for (BorderAssessment border : measured.each()) {
             OneSearchOfABorder search = searching(border.border(), input, probe, realizer,
                     wayTo(border.border(), reaching));
-            java.util.EnumMap<PointRole, ItemAssessment> items =
-                    new java.util.EnumMap<>(PointRole.class);
-            for (PointRole role : PointRole.values()) {
-                ItemAssessment item = border.at(role);
-                items.put(role, item instanceof ItemAssessment.Owed owed && owed.worthSearching()
+            java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
+            for (DomainPoint point : border.items().keySet()) {
+                ItemAssessment item = border.at(point);
+                items.put(point, item instanceof ItemAssessment.Owed owed && owed.worthSearching()
                         ? owed.settledBy(search.search(owed.criterion(),
-                                border.border().label(role)))
+                                border.border().label(point)))
                         : item);
             }
             out.add(new BorderAssessment(border.border(), items));
@@ -734,9 +733,9 @@ final class Coverages {
         // many of the four points it is put to.
         List<ObservedInputs> rows = observed.rowsSeen().stream().map(ObservedInputs::of).toList();
 
-        java.util.EnumMap<PointRole, ItemAssessment> items = new java.util.EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
-            items.put(role, switch (border.demand(role)) {
+        java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
+        for (DomainPoint point : border.answers().keySet()) {
+            items.put(point, switch (border.demand(point)) {
                 case Demand.NotOwed not -> new ItemAssessment.NotOwed(not.reason());
                 case Demand.Owed owed -> {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
@@ -872,9 +871,9 @@ final class Coverages {
             throw new IllegalStateException("two readings of one line owing different rows: "
                     + a.border().obligation() + " and " + b.border().obligation());
         }
-        java.util.EnumMap<PointRole, ItemAssessment> kept = new java.util.EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
-            kept.put(role, keeps(a.at(role), b.at(role)) ? a.at(role) : b.at(role));
+        java.util.Map<DomainPoint, ItemAssessment> kept = new java.util.LinkedHashMap<>();
+        for (DomainPoint point : a.items().keySet()) {
+            kept.put(point, keeps(a.at(point), b.at(point)) ? a.at(point) : b.at(point));
         }
         return new BorderAssessment(a.border(), kept);
     }

@@ -51,16 +51,6 @@ public final class LevelCandidateSource {
         return switch (where) {
             case Criterion.AtTheLevel _ -> List.of(from);
             case Criterion.Within within -> inside(levels, within);
-            case Criterion.AnythingBut other -> {
-                // Above first and then below, which is a choice and not a reading of the two sides:
-                // a value is singled out of an order that runs both ways and neither side is the
-                // nearer. Said in one place so that a report's rows do not turn on where a reader
-                // happened to start.
-                List<Level> either = new ArrayList<>(
-                        drawnFrom(levels, other.region(), from, Towards.ABOVE));
-                either.addAll(drawnFrom(levels, other.region(), from, Towards.BELOW));
-                yield either;
-            }
         };
     }
 

@@ -73,8 +73,10 @@ class WhatAClauseDrawsALineOnTest {
         Threshold line = clauses.thresholds().get(0);
         assertEquals("id", line.path().toString());
         assertInstanceOf(OriginRef.EnsuresOrigin.class, line.origin());
-        assertTrue(((OriginRef.EnsuresOrigin) line.origin()).valueBelongsBelow(),
-                "`> 0` puts the zero on the low side, so the row beside it is the one above");
+        assertEquals(new souther.compiler.check.ComparisonClaim.Cut(true, false),
+                ((OriginRef.EnsuresOrigin) line.origin()).facts().claim(),
+                "`> 0` puts the zero on the low side and is not met there, so the row beside it is"
+                        + " the one above");
     }
 
     /** And the clause is named the way a reader will look for it: by the name its author gave it. */
@@ -275,19 +277,21 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(1, clauses.singled().size(), clauses.singled().toString());
-        assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE),
-                Border.at(BoundaryTarget.at(
-                                        new BorderQuantity.OfACoordinate(
-                                                new AxisId("findTodo", "id"),
-                                                new souther.compiler.inputs.NumericTerm.ValueOf(
-                                                        souther.compiler.inputs.TermPath.of("id")),
-                                                souther.compiler.inputs.TermOrders.itself(
-                                                        new Carrier.Whole())),
-                                        new Level.OnACarrier(new Carrier.Whole(),
-                                                clauses.singled().get(0).value())),
-                                clauses.singled().get(0).origin(),
-                                null).demand(PointRole.OFF),
-                "a value singled out orders nothing around it, so neither neighbour is the nearer");
+        Border singled = Border.at(BoundaryTarget.at(
+                        new BorderQuantity.OfACoordinate(
+                                new AxisId("findTodo", "id"),
+                                new souther.compiler.inputs.NumericTerm.ValueOf(
+                                        souther.compiler.inputs.TermPath.of("id")),
+                                souther.compiler.inputs.TermOrders.itself(new Carrier.Whole())),
+                        new Level.OnACarrier(new Carrier.Whole(),
+                                clauses.singled().get(0).value())),
+                clauses.singled().get(0).origin(), null);
+        assertEquals(List.of("ON = 0", "OFF below the line = -1", "OFF above the line = 1"),
+                singled.answers().keySet().stream().filter(DomainPoint::againstTheLine)
+                        .map(point -> singled.named(point) + " = " + singled.against(point))
+                        .toList(),
+                "the value a clause singles out, and the nearest value on each side of it, which"
+                        + " are the two the clause keeps out");
     }
 
     /**

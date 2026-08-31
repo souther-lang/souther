@@ -20,7 +20,9 @@ import souther.compiler.types.TypeSymbols;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A clause of a type does not part the values of the position it is about.
@@ -43,10 +45,89 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
 
     private static final Carrier WHOLE = new Carrier.Whole();
 
+    /**
+     * A clause naming a value of what two positions stand apart keeps neither end of that number.
+     *
+     * <p>What an end is, is where a run of the values stops, and a rule that names a value leaves
+     * the run under it and the run over it — so there is no end it placed and nothing to read one
+     * off. Compiled all the same, and measured: the model states a relation and the report says so.
+     */
+    @Test
+    void aClauseNamingAValueOfTwoPositionsKeepsNeitherEnd() {
+        String block = souther.compiler.report.AdequacyReport.of(compiled("""
+                module example.same
+
+                data R = { lo: Int, hi: Int }
+                    invariant level = lo == hi
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior take : (r: R) -> Answer
+                let take (r) = if r.lo > 0 then Yes else No
+
+                example take
+                    | "one" : (R { lo = 1, hi = 1 }) -> Yes
+                """)).human(souther.compiler.diag.SourceNameResolver.identity());
+
+        org.junit.jupiter.api.Assertions.assertTrue(block.contains("example.same"), block);
+    }
+
+    /**
+     * A clause of a declaration that names one of the value's own numbers draws no line.
+     *
+     * <p>Which is what says where the words for a role with no point can be reached from. Only a
+     * rule that names a value has such a role, and a declaration draws none: what a clause leaves is
+     * a range, and a clause naming one value leaves a range of one rather than a line through the
+     * values. So the sentence belongs under a behavior, where a body's comparison and an
+     * {@code ensures} are, and a report that carried it under the declarations would carry a
+     * sentence no model can reach.
+     *
+     * <p>Asked of the lines rather than reasoned about, because which surface a sentence belongs to
+     * turns on it.
+     */
+    @Test
+    void aClauseNamingOneOfItsOwnValuesDrawsNoLine() {
+        List<String> drawn = new java.util.ArrayList<>();
+        souther.compiler.query.Compilation compilation = compiled("""
+                module example.only
+
+                data A = Int
+                    invariant only = value == 5
+
+                data H = { a: A }
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior take : (h: H) -> Answer
+                let take (h) = if h.a.value > 0 then Yes else No
+
+                example take
+                    | "one" : (H { a = A(5) }) -> Yes
+                """);
+        souther.compiler.query.Adequacy.boundariesOf(compilation.db(), "example.only").values()
+                .forEach(each -> each.forEach(at -> drawn.add(at.label() + " "
+                        + at.border().origin().getClass().getSimpleName() + " "
+                        + at.border().inEachRole().values())));
+        assertEquals(List.of(), drawn,
+                "a clause naming one of the value's own numbers leaves a range of one, and draws"
+                        + " no line through the values for a role to have no point in");
+    }
+
+    private static souther.compiler.query.Compilation compiled(String model) {
+        souther.compiler.query.Compilation compilation =
+                souther.compiler.query.Compilation.ofSource(model, "Main");
+        compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
     /** A bound is where what it leaves stops, and stops nothing else. */
     @Test
     void aBoundPartsNothing() {
-        assertNull(Border.partedBy(aLineAt(100), aBound()),
+        assertEquals(List.of(), Border.partedBy(aLineAt(100), aBound()),
                 "nothing is outside a bound, so there is no run on the far side to be beside");
     }
 
@@ -54,7 +135,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     @Test
     void aBoundADeclarationTookInPartsNothingEither() {
         Endpoint at = Endpoint.inclusive(Count.of(100));
-        assertNull(Border.partedBy(aLineAt(100),
+        assertEquals(List.of(), Border.partedBy(aLineAt(100),
                         OriginRef.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
                 "taking an end in moves where the position stops, which is not dividing it");
     }
@@ -106,6 +187,6 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(3, 5)))),
-                true, true);
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(true, true)));
     }
 }

@@ -723,9 +723,6 @@ public final class LevelRealizer {
                         within.except() == null ? null : onto.apply(within.except()),
                         within.away());
             }
-            case Criterion.AnythingBut other ->
-                    only(new Criterion.AnythingBut(onto.apply(other.excluded())),
-                            onto.apply(other.excluded()));
         };
     }
 
@@ -754,8 +751,6 @@ public final class LevelRealizer {
             // from two places.
             case Criterion.Within within ->
                     within.somewhereInside(carrier, bounds.min(), bounds.max());
-            case Criterion.AnythingBut other ->
-                    carrier.somethingOtherThan(List.of(placeOf(other.excluded())), bounds);
         };
         if (offered == null) {
             return null;

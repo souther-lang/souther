@@ -31,19 +31,14 @@ import souther.compiler.numeric.Place;
  * @param orders both of those, so that a reader writing a row knows what to write there and a
  *               reader placing a line knows what it is placed against
  *
- * @param valueBelongsBelow whether {@code value} itself is on the low side. {@code x <= c} puts it
- *                          there; {@code x < c} puts it on the high side. Getting this wrong moves
- *                          the boundary by one and asks for a row that proves nothing
- * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
- *                          from {@code valueBelongsBelow}: {@code x <= c} and {@code x > c} agree
- *                          about the class the value is in and disagree here
- * @param singles           whether the comparison singles the value out rather than ordering the
- *                          values either side of it. An equality says nothing about ranges: what it
- *                          distinguishes is the value from every other value
+ * @param claim  what the comparison placed on the values, carried as the classification the rule
+ *               already has. An order says which side of the line the value it wrote belongs to and
+ *               whether it holds there; a rule that names a value says the second and has no side
+ *               to say — so opened into a boolean apiece, the second has to answer the first's
+ *               question and what it answers is invented
  */
 record ComparedLine(NumericTerm.FromOnePosition term, Place value,
-                    TermOrders orders,
-                    boolean valueBelongsBelow, boolean holdsAtTheValue, boolean singles) {
+                    TermOrders orders, ComparisonClaim claim) {
 
     /**
      * What {@code comparison} draws, or null where it draws nothing.
@@ -73,15 +68,12 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         if (drawn == null || !drawn.drawsALine()) {
             return null;
         }
-        return switch (drawn.claim()) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(drawn.atOnePosition(), drawn.at(),
-                    drawn.orders(), cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
-            // A value singled out has no low side of its own — the values either side of it are one
-            // class — so the side is written down as one answer and read by nobody.
-            case ComparisonClaim.Singled singled -> new ComparedLine(drawn.atOnePosition(),
-                    drawn.at(), drawn.orders(), true, singled.holdsAtTheValue(), true);
-            case ComparisonClaim.Nothing _ -> null;
-        };
+        // A comparison that placed nothing draws no line, and the two that place one are carried as
+        // what they placed: a line here is the rule's own classification, so nothing along the way
+        // has a side to fill in for a rule that has none.
+        return drawn.claim() instanceof ComparisonClaim.Nothing ? null
+                : new ComparedLine(drawn.atOnePosition(), drawn.at(), drawn.orders(),
+                        drawn.claim());
     }
 
     /**
@@ -112,13 +104,8 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         }
         Carrier carrier = orders.answered();
         Place value = Count.of(read.cut());
-        return switch (read.claim()) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, orders,
-                    cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
-            case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, orders, true, singled.holdsAtTheValue(), true);
-            case ComparisonClaim.Nothing _ -> null;
-        };
+        return read.claim() instanceof ComparisonClaim.Nothing ? null
+                : new ComparedLine(term, value, orders, read.claim());
     }
 
 }

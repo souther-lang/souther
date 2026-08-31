@@ -264,7 +264,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         Carrier carrier = new Carrier.Whole();
         OriginRef closed = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
-                THE_ONLY_CONJUNCT, true, true, false);
+                THE_ONLY_CONJUNCT,
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(true, true)));
         Border border = Border.at(lineAt(new AxisId("cap", "n"), carrier, Count.of(100)), closed,
                 new NumericDomain.Bounds(null, null));
 

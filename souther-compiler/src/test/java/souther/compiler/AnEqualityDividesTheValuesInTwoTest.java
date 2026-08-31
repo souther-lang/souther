@@ -43,6 +43,27 @@ class AnEqualityDividesTheValuesInTwoTest {
                 | "not the last" : (2) -> Again
             """;
 
+    /**
+     * The same behavior with the equality written as an ordering, which is the fault the points
+     * beside the line are asked for.
+     *
+     * <p>Written with no rows, so that a test says which rows it holds this against. Every row a
+     * test adds is one an author could have written for the rule as intended.
+     */
+    private static String writtenAs(String comparison) {
+        return """
+                module example.equal
+
+                data GiveUp
+                data Again
+
+                behavior verdict : (retries: Int) -> GiveUp | Again
+                let verdict (retries) = if retries %s 3 then GiveUp else Again
+
+                example verdict
+                """.formatted(comparison);
+    }
+
     private static final String ALSO_ORDERED = """
             module example.both
 
@@ -78,6 +99,64 @@ class AnEqualityDividesTheValuesInTwoTest {
                 | "at the half" : (Ratio(0.5m)) -> A
             """;
 
+    /**
+     * A row at the value beside the line catches an equality written as an ordering, and the value
+     * on the line with a value far outside does not.
+     *
+     * <p>Which is what the two points beside the line are for. {@code retries <= 3} answers as
+     * {@code retries == 3} does at three and at twenty, so rows there run green against a behavior
+     * that is not the one the author meant; two is where the two rules part, and it is the value
+     * below the line. {@code retries >= 3} parts from it at four, above the line — so one neighbour
+     * catches one of the faults and the other catches the other, and a border owing a single
+     * neighbour would have to choose which fault to be able to find.
+     *
+     * <p>The right behavior is held against the same rows, so that what the rows catch is the fault
+     * and not a row this compiler disagrees with wherever it is put.
+     */
+    @Test
+    void theValueBesideTheLineCatchesAnEqualityWrittenAsAnOrdering() {
+        String onTheLine = "    | \"the last try\" : (3) -> GiveUp\n";
+        String wellAbove = "    | \"well above\"   : (20) -> Again\n";
+        String wellBelow = "    | \"well below\"   : (0) -> Again\n";
+        String below = "    | \"below the line\" : (2) -> Again\n";
+        String above = "    | \"above the line\" : (4) -> Again\n";
+
+        // The rows the fault gets past are rows this compiler reports the border short of, and the
+        // values it asks for are the ones below. Held first, because what the rest of this test
+        // shows is that those values catch the fault — and a reading that stopped asking for them
+        // would leave that true and useless.
+        String short0f = reportOf(writtenAs("==") + onTheLine + wellBelow + wellAbove);
+        assertTrue(short0f.contains("no row is at the OFF point below the line"), short0f);
+        assertTrue(short0f.contains("no row is at the OFF point above the line"), short0f);
+        assertTrue(short0f.contains("= 2") && short0f.contains("= 4"),
+                "and the values it asks for there are the two beside the line:\n" + short0f);
+
+        assertFalse(refused(writtenAs("<=") + onTheLine + wellAbove),
+                "the value on the line and a value well outside the partition answer as `== 3`"
+                        + " does, so `<= 3` runs green against them");
+        assertFalse(refused(writtenAs(">=") + onTheLine + wellBelow),
+                "and the same the other way round");
+
+        assertTrue(refused(writtenAs("<=") + onTheLine + wellAbove + below),
+                "the value below the line is where `<= 3` parts from `== 3`");
+        assertTrue(refused(writtenAs(">=") + onTheLine + wellBelow + above),
+                "and the value above it is where `>= 3` does");
+
+        assertFalse(refused(writtenAs("==") + onTheLine + wellBelow + wellAbove + below + above),
+                "and the rule as it was meant answers every one of those rows");
+    }
+
+    /** Whether a compile of {@code model} refuses it for a row the behavior answers otherwise. */
+    private static boolean refused(String model) {
+        try {
+            Compiler.compiled(model, "Main", new java.util.ArrayList<>());
+            return false;
+        } catch (souther.compiler.diag.CompileException refusal) {
+            return refusal.diagnostics().stream()
+                    .anyMatch(each -> "E1905".equals(each.code()));
+        }
+    }
+
     private static String reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -104,17 +183,25 @@ class AnEqualityDividesTheValuesInTwoTest {
     }
 
     /**
-     * The value itself is a row somebody owes; the value beside it is not.
+     * The value itself is a row somebody owes, and so is the value beside it on each side.
      *
-     * <p>A guard's line usually wants its neighbour, because the two are in different classes and an
-     * off-by-one shows up between them. Here they are not: 2 and 4 are the same class, so asking for
-     * 4 is asking for a row another row already stands for.
+     * <p>Both neighbours are outside what the rule names, and a row at one says nothing about the
+     * other: an implementation that answered as {@code retries <= 3} would would be caught by the 2
+     * and pass the 4, and one that answered as {@code retries >= 3} the other way about. So the two
+     * are two pieces of work, and a report that named them alike would ask twice for a row without
+     * saying which value either time.
      */
     @Test
-    void theValueIsOwedAndItsNeighbourIsNot() {
+    void theValueIsOwedAndSoIsTheValueOnEachSideOfIt() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("border      borders 1   obligations 2/2"), human);
+        assertTrue(human.contains("border      borders 1   obligations 2/5"), human);
+        assertTrue(human.contains("no row is at the OFF point above the line"), human);
+        assertTrue(human.contains("no row is at an OUT point below the line"), human);
+        assertTrue(human.contains("no row is at an OUT point above the line"), human);
+        assertFalse(human.contains("no row is at the OFF point below the line"),
+                "the row at two is at the value below the line, so nothing is owed there:\n"
+                        + human);
     }
 
     /**

@@ -103,30 +103,24 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                         stoppedByTheDomain(Bound.at(at("100"), true))),
                 "the run stops at fifty and says it stops at a hundred");
         assertThrows(IllegalArgumentException.class,
-                () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.BELOW),
-                        List.of(new RegionClaim(RegionBasis.TheRest.INSTANCE,
-                                PointContributions.none()))),
-                "and what a rule leaves outside one value is not a run of the arrangement at all");
-        assertThrows(IllegalArgumentException.class,
                 () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.ABOVE),
                         stoppedByTheDomain(Bound.at(at("50"), true))),
                 "nor is the end of the order the other way round from the end this is");
     }
 
     private static List<RegionClaim> stoppedByTheOrder(Towards towards) {
-        return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(towards)),
+        return List.of(new RegionClaim(new FarEnd.AtTheOrderEnd(towards),
                 PointContributions.none()));
     }
 
     private static List<RegionClaim> stoppedByTheDomain(Bound at) {
-        return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheDomain(at)),
-                PointContributions.none()));
+        return List.of(new RegionClaim(new FarEnd.AtTheDomain(at), PointContributions.none()));
     }
 
     /** What stops the first run of {@code arranged} at its high end, without who can move it. */
     private static List<FarEnd> farEndsOf(QuantityArrangement arranged) {
         return arranged.runs().get(0).endsAt(Towards.ABOVE).stream()
-                .map(each -> ((RegionBasis.Beside) each.basis()).farEnd()).toList();
+                .map(RegionClaim::basis).toList();
     }
 
     /** Each place with a line of its own against it, these being tests about where the values part
@@ -148,7 +142,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                                         new souther.compiler.types.TypeKey("example.runs", "N")),
                                 clause),
                         java.util.Optional.empty())),
-                0, new LineFacts(false, true, false), List.of());
+                0, LineFacts.ordering(false, true), List.of());
     }
 
     /**

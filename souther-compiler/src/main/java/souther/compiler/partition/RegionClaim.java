@@ -7,16 +7,17 @@ import java.util.List;
  * One thing a row in a region is owed for, and who can move it.
  *
  * <p>The two together, from the reading that worked the region out. Which of them a row answers for
- * is what tells one region point from another ({@link RegionBasis}); who can move what settled it is
+ * is what tells one region point from another ({@link FarEnd}); who can move what settled it is
  * what says whose account the point falls in, and it is no part of which point this is. Held apart
  * in two places instead, a reader would have to put them back together by whatever they had in
  * common, and what they have in common is where they were read.
  *
- * @param basis         what a row here is owed for, which is part of the point's identity
+ * @param basis         where the run this row is owed in stops, which is what it is owed for and is
+ *                      part of the point's identity
  * @param contributions what settled that at this end, which is not. One end's worth of what the
  *                      point is owed to, since the line the region lies beside settled it as well
  */
-public record RegionClaim(RegionBasis basis, PointContributions contributions) {
+public record RegionClaim(FarEnd basis, PointContributions contributions) {
 
     public RegionClaim {
         if (basis == null || contributions == null) {

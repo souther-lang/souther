@@ -5,6 +5,9 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.RoleAnswer;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.QuotedFrom;
@@ -80,7 +83,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 9;
+    public static final int SCHEMA_VERSION = 10;
 
     /**
      * Where the schema this writes documents ships.
@@ -507,7 +510,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("      · not known to be writable: the %s point %s (%s)%n",
                     each.debt().role(), each.said(), each.debt().describe(names, null)));
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
-                    at.owedAt(each.debt().role()).attempt(), names, null));
+                    at.owedAt(each.debt().at()).attempt(), names, null));
         }
         Map<String, List<Adequacy.Finding>> byDeclaration = new java.util.LinkedHashMap<>();
         for (Adequacy.Finding each : module.declarations()) {
@@ -520,8 +523,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     // What the point asks, in its own words. A point against the line names a value
                     // and a point beside it names a run, and a sentence that wrote `=` for both said
                     // a run was one value.
-                    out.append(String.format("      %s no row is at the %s point %s (%s)%n",
-                            mark(f), owed.debt().role(), owed.said(),
+                    out.append(String.format("      %s no row is at the %s point%s %s (%s)%n",
+                            mark(f), owed.debt().role(), owed.debt().whichSide(), owed.said(),
                             owed.debt().id().named()));
                 }
             }
@@ -1253,9 +1256,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     // `the` for a point and `an` for a run. Two of the four are one value and the
                     // other two are met anywhere in a run of them, so a reader told there is no row
                     // at `the IN point` is being sent after a value that does not exist.
-                    out.append(String.format("      %s no row is at %s %s point (%s)%n",
+                    //
+                    // And which side of the line, where this line has two points in that role: a
+                    // rule that names a value is owed a row outside it on each side, and the two
+                    // are different work. Said with the role alone, the same sentence printed twice
+                    // and neither of them said which value was being asked for.
+                    out.append(String.format("      %s no row is at %s %s point%s (%s)%n",
                             mark(f), againstTheLine ? "the" : "an", point.role(),
-                            point.describe(names, declaredIn)));
+                            point.whichSide(), point.describe(names, declaredIn)));
                     readings(out, point, _ -> true, _ -> "");
                 }
             }
@@ -1266,11 +1274,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // than as work a strict build refuses over.
         for (BorderObligationPointAssessment point : owed.met()) {
             if (point.readings().stream().anyMatch(
-                    at -> !at.owedAt(point.role()).hasRowWitness())) {
+                    at -> !at.owedAt(point.at()).hasRowWitness())) {
                 out.append(String.format("      · the %s point (%s) is answered, and not at every"
                                 + " reading of the line%n",
                         point.role(), point.describe(names, declaredIn)));
-                readings(out, point, at -> !at.owedAt(point.role()).hasRowWitness(), _ -> "");
+                readings(out, point, at -> !at.owedAt(point.at()).hasRowWitness(), _ -> "");
             }
         }
         // Said and not counted. Nothing has shown a row can be written at these — the projection
@@ -1285,18 +1293,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // reader looking at two models that differ here is looking at what the compiler could
             // establish — and without this the difference reads as the tool being arbitrary.
             readings(out, p, _ -> true, at -> whatWasTried(
-                    at.owedAt(p.role()).attempt(), names, declaredIn));
+                    at.owedAt(p.at()).attempt(), names, declaredIn));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
         // write down are counted out for opposite reasons, and a reader acts on them differently.
         for (BorderAssessment.Point p : BorderAssessment.pointsOf(lines)) {
             if (p.item() instanceof ItemAssessment.NotOwed not) {
-                out.append(String.format("      · no %s point is owed at %s (%s): %s%n",
-                        p.role(), p.border().label(), p.border().describe(names, declaredIn),
-                        whyNotOwed(not.reason())));
+                out.append(String.format("      · no %s point%s is owed at %s (%s): %s%n",
+                        p.role(), p.border().border().whichSide(p.at()), p.border().label(),
+                        p.border().describe(names, declaredIn), whyNotOwed(not.reason())));
             }
         }
+        // And a word of the technique this line has no point in at all, which is not the same news.
+        // A point the rules refuse is an item the model settled; a role with no point is a word for
+        // something this line does not have, and a reader told nothing about it cannot tell the two
+        // apart from the four words being four.
+        for (BorderAssessment line : lines) {
+            line.border().inEachRole().forEach((role, answer) -> {
+                if (answer instanceof RoleAnswer.NoPoint none) {
+                    out.append(String.format("      · no %s point exists at %s (%s): %s%n",
+                            role, line.label(), line.describe(names, declaredIn),
+                            whyNoPoint(none.why())));
+                }
+            });
+        }
+    }
+
+    /** Why a line has no point in one of the four roles, in the report's own words. */
+    private static String whyNoPoint(RoleAnswer.Reason why) {
+        return switch (why) {
+            case THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE ->
+                    "the class at the line holds the value the rule names and nothing else, so"
+                            + " there is no row in it away from the line";
+        };
     }
 
     /**
@@ -1335,8 +1365,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
                     "this order names no value there, so the point cannot be written";
-            case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE ->
-                    "the rule names a value rather than a side, so neither neighbour is the nearer";
         };
     }
 
@@ -2020,20 +2048,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                      souther.compiler.partition.BorderObligationPoint point) {
         authoredLineId(into.putObject("line"), point.line().line());
         level(into.putObject("level"), point.line().at());
-        into.put("point", word(point.role()));
-        // Absent for a point against the line, which is at a value and has no run to be stopped.
+        location(into.putObject("location"), point.point());
+        // Absent for a point at a value of the quantity, which has no run to be stopped.
         if (point instanceof souther.compiler.partition.BorderObligationPoint.InRegion region) {
-            ObjectNode beside = into.putObject("region");
-            switch (region.region()) {
-                case souther.compiler.partition.RegionBasis.Beside(var farEnd) -> {
-                    beside.put("kind", "beside");
-                    farEnd(beside.putObject("stops"), farEnd);
-                }
-                // What a rule naming one value leaves, which carries nothing: which value is left
-                // out is the line's, and the line is above.
-                case souther.compiler.partition.RegionBasis.TheRest _ ->
-                        beside.put("kind", "everything_but_the_value");
-            }
+            farEnd(into.putObject("stops"), region.region());
+        }
+    }
+
+    /**
+     * Where on the quantity a point is, which is what identifies it within its line.
+     *
+     * <p>Which of the four it is is not written here. Two points of one line can be the same one of
+     * the four — a rule that names a value owes a row outside it on each side — so an identity
+     * carrying the role would have the two of them come out equal, and a consumer joining a finding
+     * to its obligation would land on whichever the walk wrote first. The word is published beside
+     * this, where a reader is being told what a point is rather than which one it is.
+     */
+    private static void location(ObjectNode into,
+                                 DomainPoint at) {
+        into.put("kind", switch (at) {
+            case DomainPoint.AtTheLine _ -> "at_the_line";
+            case DomainPoint.BesideTheLine _ -> "beside_the_line";
+            case DomainPoint.InTheRegion _ -> "in_the_region";
+        });
+        if (at.side() != null) {
+            into.put("side", word(at.side()));
         }
     }
 
@@ -2043,7 +2082,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ruleId(into.putObject("rule"), line.rule());
         into.put("conjunct", line.conjunct());
         ObjectNode facts = into.putObject("facts");
-        facts.put("valueBelongsBelow", line.facts().valueBelongsBelow());
+        // Which side of the line the value it wrote belongs to is an order's own answer. A rule
+        // that names a value orders nothing either side of it, so a document writing a side there
+        // would be publishing an answer to a question the rule was never put — and readers telling
+        // two lines apart by these facts would be telling them apart by it.
+        if (line.facts().claim()
+                instanceof ComparisonClaim.Cut order) {
+            facts.put("valueBelongsBelow", order.valueBelongsBelow());
+        }
         facts.put("holdsAtTheValue", line.facts().holdsAtTheValue());
         facts.put("singles", line.facts().singles());
         ArrayNode within = into.putArray("narrowedWithin");
@@ -2573,16 +2619,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (BorderAssessment.Point point : boundary.points()) {
                 ObjectNode i = items.addObject();
                 i.put("point", word(point.role()));
+                // And where the point is, which is what tells one item of this border from another:
+                // a border can have two items in one role, and a document naming only the role
+                // would carry the same entry twice.
+                location(i.putObject("location"), point.at());
                 switch (point.item()) {
-                    // Why no row is owed, in the one word that says which of the three settled it.
-                    // Absent, the two that are not shortfalls read as the report being short.
+                    // Why no row is owed, in the one word that says which of the two settled it.
+                    // Absent, neither of them reads as anything but the report being short.
                     case ItemAssessment.NotOwed not -> i.put("notOwed", word(not.reason()));
                     case ItemAssessment.Owed owed -> {
                         // What a row here has to do, whole. Two of the four ask for a place and two
                         // ask for a side, so a document carrying a value for all four would name a
                         // witness of a side as though it were the side.
-                        i.put("relation", point.border().operator(point.role()));
-                        i.put("against", point.border().against(point.role()));
+                        i.put("relation", point.border().operator(point.at()));
+                        i.put("against", point.border().against(point.at()));
                         // Outside the measurement's gate, because it is not this measurement's
                         // answer. What settles it is its own body of evidence, only one ground of
                         // which the coverage measure reads. So a point nobody measured can carry
@@ -2783,9 +2833,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 ObjectNode r = readings.addObject();
                 r.put("behavior", said.where().behavior());
                 r.put("axis", said.at());
-                r.put("relation", at.border().operator(point.role()));
-                r.put("against", at.border().against(point.role()));
-                measured(r, at.owedAt(point.role()).coverage(), (node, coverage) ->
+                r.put("relation", at.border().operator(point.at()));
+                r.put("against", at.border().against(point.at()));
+                measured(r, at.owedAt(point.at()).coverage(), (node, coverage) ->
                         node.put("hit", ItemAssessment.Coverage.hit(coverage)));
             }
         }

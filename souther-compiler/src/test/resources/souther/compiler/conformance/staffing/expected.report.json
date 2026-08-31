@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 9,
+  "schemaVersion" : 10,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "undetermined",
@@ -38,7 +38,9 @@
             },
             "at" : "1"
           },
-          "point" : "on"
+          "location" : {
+            "kind" : "at_the_line"
+          }
         },
         "point" : "on",
         "rule" : "invariant WorkDays #1",
@@ -89,7 +91,9 @@
             },
             "at" : "7"
           },
-          "point" : "on"
+          "location" : {
+            "kind" : "at_the_line"
+          }
         },
         "point" : "on",
         "rule" : "invariant WorkDays #1",
@@ -149,7 +153,9 @@
             },
             "at" : "0"
           },
-          "point" : "on"
+          "location" : {
+            "kind" : "at_the_line"
+          }
         },
         "point" : "on",
         "rule" : "invariant Rate #1",
@@ -200,7 +206,9 @@
             },
             "at" : "1"
           },
-          "point" : "on"
+          "location" : {
+            "kind" : "at_the_line"
+          }
         },
         "point" : "on",
         "rule" : "invariant Rate #1",
@@ -260,7 +268,9 @@
             },
             "at" : "0"
           },
-          "point" : "on"
+          "location" : {
+            "kind" : "at_the_line"
+          }
         },
         "point" : "on",
         "rule" : "invariant Hours #1",
@@ -311,7 +321,9 @@
             },
             "at" : "200"
           },
-          "point" : "on"
+          "location" : {
+            "kind" : "at_the_line"
+          }
         },
         "point" : "on",
         "rule" : "invariant Hours #1",
@@ -405,6 +417,9 @@
           "value" : "1",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "1",
             "knownWritable" : true,
@@ -413,9 +428,17 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "relation" : "in",
             "against" : "1 < worked < 5",
             "knownWritable" : true,
@@ -424,6 +447,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
@@ -433,6 +460,9 @@
           "value" : "7",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "7",
             "knownWritable" : true,
@@ -441,9 +471,17 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "relation" : "in",
             "against" : "5 <= worked < 7",
             "knownWritable" : true,
@@ -452,6 +490,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
@@ -461,6 +503,9 @@
           "value" : "5",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "5",
             "knownWritable" : true,
@@ -469,6 +514,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
             "relation" : "=",
             "against" : "4",
             "knownWritable" : true,
@@ -477,6 +526,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "relation" : "in",
             "against" : "5 < worked <= 7",
             "knownWritable" : true,
@@ -485,6 +538,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "relation" : "in",
             "against" : "1 <= worked < 4",
             "knownWritable" : true,
@@ -499,6 +556,9 @@
           "value" : "0",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
@@ -507,9 +567,17 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "relation" : "in",
             "against" : "0 < rate < 0.8",
             "knownWritable" : true,
@@ -518,6 +586,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
@@ -527,6 +599,9 @@
           "value" : "1",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "1",
             "knownWritable" : true,
@@ -535,9 +610,17 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "relation" : "in",
             "against" : "0.8 <= rate < 1",
             "knownWritable" : true,
@@ -546,6 +629,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
@@ -555,6 +642,9 @@
           "value" : "0.8",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "0.8",
             "knownWritable" : true,
@@ -563,9 +653,17 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
             "notOwed" : "the_carrier_names_no_neighbour"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "relation" : "in",
             "against" : "0.8 < rate <= 1",
             "knownWritable" : true,
@@ -574,6 +672,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "relation" : "in",
             "against" : "0 <= rate < 0.8",
             "knownWritable" : true,
@@ -606,29 +708,29 @@
               },
               "at" : "1"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_a_line",
-                "line" : {
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.staffing",
-                    "behavior" : "grantLeave",
-                    "ordinal" : 13,
-                    "lowered" : 0
-                  },
-                  "conjunct" : 0,
-                  "facts" : {
-                    "valueBelongsBelow" : false,
-                    "holdsAtTheValue" : true,
-                    "singles" : false
-                  },
-                  "narrowedWithin" : [ ]
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_a_line",
+              "line" : {
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "behavior" : "grantLeave",
+                  "ordinal" : 13,
+                  "lowered" : 0
                 },
-                "where" : "4|5"
-              }
+                "conjunct" : 0,
+                "facts" : {
+                  "valueBelongsBelow" : false,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "where" : "4|5"
             }
           },
           "point" : "in",
@@ -678,29 +780,29 @@
               },
               "at" : "7"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_a_line",
-                "line" : {
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.staffing",
-                    "behavior" : "grantLeave",
-                    "ordinal" : 13,
-                    "lowered" : 0
-                  },
-                  "conjunct" : 0,
-                  "facts" : {
-                    "valueBelongsBelow" : false,
-                    "holdsAtTheValue" : true,
-                    "singles" : false
-                  },
-                  "narrowedWithin" : [ ]
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_a_line",
+              "line" : {
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "behavior" : "grantLeave",
+                  "ordinal" : 13,
+                  "lowered" : 0
                 },
-                "where" : "4|5"
-              }
+                "conjunct" : 0,
+                "facts" : {
+                  "valueBelongsBelow" : false,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "where" : "4|5"
             }
           },
           "point" : "in",
@@ -751,7 +853,9 @@
               },
               "at" : "5"
             },
-            "point" : "on"
+            "location" : {
+              "kind" : "at_the_line"
+            }
           },
           "point" : "on",
           "rule" : "comparison@0:36:30",
@@ -802,7 +906,10 @@
               },
               "at" : "5"
             },
-            "point" : "off"
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            }
           },
           "point" : "off",
           "rule" : "comparison@0:36:30",
@@ -853,21 +960,21 @@
               },
               "at" : "5"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_the_domain",
-                "at" : {
-                  "kind" : "on_a_carrier",
-                  "carrier" : {
-                    "kind" : "whole"
-                  },
-                  "at" : "7"
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
                 },
-                "per" : "1",
-                "inclusive" : true
-              }
+                "at" : "7"
+              },
+              "per" : "1",
+              "inclusive" : true
             }
           },
           "point" : "in",
@@ -919,21 +1026,21 @@
               },
               "at" : "5"
             },
-            "point" : "out",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_the_domain",
-                "at" : {
-                  "kind" : "on_a_carrier",
-                  "carrier" : {
-                    "kind" : "whole"
-                  },
-                  "at" : "1"
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
                 },
-                "per" : "1",
-                "inclusive" : true
-              }
+                "at" : "1"
+              },
+              "per" : "1",
+              "inclusive" : true
             }
           },
           "point" : "out",
@@ -984,29 +1091,29 @@
               },
               "at" : "0"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_a_line",
-                "line" : {
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.staffing",
-                    "behavior" : "grantLeave",
-                    "ordinal" : 15,
-                    "lowered" : 0
-                  },
-                  "conjunct" : 0,
-                  "facts" : {
-                    "valueBelongsBelow" : false,
-                    "holdsAtTheValue" : true,
-                    "singles" : false
-                  },
-                  "narrowedWithin" : [ ]
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_a_line",
+              "line" : {
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "behavior" : "grantLeave",
+                  "ordinal" : 15,
+                  "lowered" : 0
                 },
-                "where" : "|0.8"
-              }
+                "conjunct" : 0,
+                "facts" : {
+                  "valueBelongsBelow" : false,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "where" : "|0.8"
             }
           },
           "point" : "in",
@@ -1056,29 +1163,29 @@
               },
               "at" : "1"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_a_line",
-                "line" : {
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.staffing",
-                    "behavior" : "grantLeave",
-                    "ordinal" : 15,
-                    "lowered" : 0
-                  },
-                  "conjunct" : 0,
-                  "facts" : {
-                    "valueBelongsBelow" : false,
-                    "holdsAtTheValue" : true,
-                    "singles" : false
-                  },
-                  "narrowedWithin" : [ ]
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_a_line",
+              "line" : {
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "behavior" : "grantLeave",
+                  "ordinal" : 15,
+                  "lowered" : 0
                 },
-                "where" : "|0.8"
-              }
+                "conjunct" : 0,
+                "facts" : {
+                  "valueBelongsBelow" : false,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "where" : "|0.8"
             }
           },
           "point" : "in",
@@ -1129,7 +1236,9 @@
               },
               "at" : "0.8"
             },
-            "point" : "on"
+            "location" : {
+              "kind" : "at_the_line"
+            }
           },
           "point" : "on",
           "rule" : "comparison@0:35:16",
@@ -1180,21 +1289,21 @@
               },
               "at" : "0.8"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_the_domain",
-                "at" : {
-                  "kind" : "on_a_carrier",
-                  "carrier" : {
-                    "kind" : "dense"
-                  },
-                  "at" : "1"
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "dense"
                 },
-                "per" : "1",
-                "inclusive" : true
-              }
+                "at" : "1"
+              },
+              "per" : "1",
+              "inclusive" : true
             }
           },
           "point" : "in",
@@ -1246,21 +1355,21 @@
               },
               "at" : "0.8"
             },
-            "point" : "out",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_the_domain",
-                "at" : {
-                  "kind" : "on_a_carrier",
-                  "carrier" : {
-                    "kind" : "dense"
-                  },
-                  "at" : "0"
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "dense"
                 },
-                "per" : "1",
-                "inclusive" : true
-              }
+                "at" : "0"
+              },
+              "per" : "1",
+              "inclusive" : true
             }
           },
           "point" : "out",
@@ -1365,6 +1474,9 @@
           "value" : "0",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
@@ -1373,9 +1485,17 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "relation" : "in",
             "against" : "0 < hours <= 45",
             "knownWritable" : true,
@@ -1384,6 +1504,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
@@ -1393,6 +1517,9 @@
           "value" : "200",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "200",
             "knownWritable" : true,
@@ -1401,9 +1528,17 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "relation" : "in",
             "against" : "100 < hours < 200",
             "knownWritable" : true,
@@ -1412,6 +1547,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
@@ -1421,6 +1560,10 @@
           "value" : "100",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
             "relation" : "=",
             "against" : "101",
             "knownWritable" : true,
@@ -1429,6 +1572,9 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "100",
             "knownWritable" : true,
@@ -1437,6 +1583,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "relation" : "in",
             "against" : "101 < hours <= 200",
             "knownWritable" : true,
@@ -1445,6 +1595,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "relation" : "in",
             "against" : "45 < hours < 100",
             "knownWritable" : true,
@@ -1459,6 +1613,10 @@
           "value" : "45",
           "items" : [ {
             "point" : "on",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
             "relation" : "=",
             "against" : "46",
             "knownWritable" : true,
@@ -1467,6 +1625,9 @@
             "reason" : "no_rows"
           }, {
             "point" : "off",
+            "location" : {
+              "kind" : "at_the_line"
+            },
             "relation" : "=",
             "against" : "45",
             "knownWritable" : true,
@@ -1475,6 +1636,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
             "relation" : "in",
             "against" : "46 < hours <= 100",
             "knownWritable" : true,
@@ -1483,6 +1648,10 @@
             "reason" : "no_rows"
           }, {
             "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
             "relation" : "in",
             "against" : "0 <= hours < 45",
             "knownWritable" : true,
@@ -1515,29 +1684,29 @@
               },
               "at" : "0"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_a_line",
-                "line" : {
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.staffing",
-                    "behavior" : "judgeHours",
-                    "ordinal" : 19,
-                    "lowered" : 0
-                  },
-                  "conjunct" : 0,
-                  "facts" : {
-                    "valueBelongsBelow" : true,
-                    "holdsAtTheValue" : false,
-                    "singles" : false
-                  },
-                  "narrowedWithin" : [ ]
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_a_line",
+              "line" : {
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "behavior" : "judgeHours",
+                  "ordinal" : 19,
+                  "lowered" : 0
                 },
-                "where" : "45|46"
-              }
+                "conjunct" : 0,
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : false,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "where" : "45|46"
             }
           },
           "point" : "in",
@@ -1587,29 +1756,29 @@
               },
               "at" : "200"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_a_line",
-                "line" : {
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.staffing",
-                    "behavior" : "judgeHours",
-                    "ordinal" : 17,
-                    "lowered" : 0
-                  },
-                  "conjunct" : 0,
-                  "facts" : {
-                    "valueBelongsBelow" : true,
-                    "holdsAtTheValue" : false,
-                    "singles" : false
-                  },
-                  "narrowedWithin" : [ ]
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_a_line",
+              "line" : {
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "behavior" : "judgeHours",
+                  "ordinal" : 17,
+                  "lowered" : 0
                 },
-                "where" : "100|101"
-              }
+                "conjunct" : 0,
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : false,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "where" : "100|101"
             }
           },
           "point" : "in",
@@ -1660,7 +1829,10 @@
               },
               "at" : "100"
             },
-            "point" : "on"
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            }
           },
           "point" : "on",
           "rule" : "comparison@0:52:32",
@@ -1711,7 +1883,9 @@
               },
               "at" : "100"
             },
-            "point" : "off"
+            "location" : {
+              "kind" : "at_the_line"
+            }
           },
           "point" : "off",
           "rule" : "comparison@0:52:32",
@@ -1762,21 +1936,21 @@
               },
               "at" : "100"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_the_domain",
-                "at" : {
-                  "kind" : "on_a_carrier",
-                  "carrier" : {
-                    "kind" : "whole"
-                  },
-                  "at" : "200"
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
                 },
-                "per" : "1",
-                "inclusive" : true
-              }
+                "at" : "200"
+              },
+              "per" : "1",
+              "inclusive" : true
             }
           },
           "point" : "in",
@@ -1828,29 +2002,29 @@
               },
               "at" : "100"
             },
-            "point" : "out",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_a_line",
-                "line" : {
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.staffing",
-                    "behavior" : "judgeHours",
-                    "ordinal" : 19,
-                    "lowered" : 0
-                  },
-                  "conjunct" : 0,
-                  "facts" : {
-                    "valueBelongsBelow" : true,
-                    "holdsAtTheValue" : false,
-                    "singles" : false
-                  },
-                  "narrowedWithin" : [ ]
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_a_line",
+              "line" : {
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "behavior" : "judgeHours",
+                  "ordinal" : 19,
+                  "lowered" : 0
                 },
-                "where" : "45|46"
-              }
+                "conjunct" : 0,
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : false,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "where" : "45|46"
             }
           },
           "point" : "out",
@@ -1902,7 +2076,10 @@
               },
               "at" : "45"
             },
-            "point" : "on"
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            }
           },
           "point" : "on",
           "rule" : "comparison@0:53:32",
@@ -1953,7 +2130,9 @@
               },
               "at" : "45"
             },
-            "point" : "off"
+            "location" : {
+              "kind" : "at_the_line"
+            }
           },
           "point" : "off",
           "rule" : "comparison@0:53:32",
@@ -2004,29 +2183,29 @@
               },
               "at" : "45"
             },
-            "point" : "in",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_a_line",
-                "line" : {
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.staffing",
-                    "behavior" : "judgeHours",
-                    "ordinal" : 17,
-                    "lowered" : 0
-                  },
-                  "conjunct" : 0,
-                  "facts" : {
-                    "valueBelongsBelow" : true,
-                    "holdsAtTheValue" : false,
-                    "singles" : false
-                  },
-                  "narrowedWithin" : [ ]
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_a_line",
+              "line" : {
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "behavior" : "judgeHours",
+                  "ordinal" : 17,
+                  "lowered" : 0
                 },
-                "where" : "100|101"
-              }
+                "conjunct" : 0,
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : false,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "where" : "100|101"
             }
           },
           "point" : "in",
@@ -2078,21 +2257,21 @@
               },
               "at" : "45"
             },
-            "point" : "out",
-            "region" : {
-              "kind" : "beside",
-              "stops" : {
-                "kind" : "at_the_domain",
-                "at" : {
-                  "kind" : "on_a_carrier",
-                  "carrier" : {
-                    "kind" : "whole"
-                  },
-                  "at" : "0"
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
                 },
-                "per" : "1",
-                "inclusive" : true
-              }
+                "at" : "0"
+              },
+              "per" : "1",
+              "inclusive" : true
             }
           },
           "point" : "out",

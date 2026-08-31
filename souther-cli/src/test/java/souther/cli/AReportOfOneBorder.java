@@ -16,7 +16,9 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.partition.Demand;
+import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
@@ -29,8 +31,9 @@ import souther.compiler.source.SourceId;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -92,7 +95,7 @@ final class AReportOfOneBorder {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(3, 5)))),
-                true, true);
+                new souther.compiler.partition.LineFacts(new ComparisonClaim.Cut(true, true)));
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
@@ -151,18 +154,18 @@ final class AReportOfOneBorder {
     static BorderAssessment assessed(Border border,
                                      Function<PointRole, Measurement<ItemAssessment.Coverage>>
                                              coverage) {
-        EnumMap<PointRole, ItemAssessment> items = new EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
-            if (border.demand(role) instanceof Demand.NotOwed not) {
-                items.put(role, new ItemAssessment.NotOwed(not.reason()));
+        Map<DomainPoint, ItemAssessment> items = new LinkedHashMap<>();
+        for (DomainPoint point : border.answers().keySet()) {
+            if (border.demand(point) instanceof Demand.NotOwed not) {
+                items.put(point, new ItemAssessment.NotOwed(not.reason()));
                 continue;
             }
             // Proven by the rules, which is the one way of being writable that does not depend on
             // what the coverage beside it says. Written as a verdict, this fixture could claim a row
             // was at the point while handing in a coverage that says none is.
-            items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
-                    coverage.apply(role), ItemAssessment.WritabilityProjection.PROVEN,
-                    null));
+            items.put(point, new ItemAssessment.Owed(border.demand(point).criterion(),
+                    coverage.apply(border.roleOf(point)),
+                    ItemAssessment.WritabilityProjection.PROVEN, null));
         }
         return new BorderAssessment(border, items);
     }

@@ -4,9 +4,13 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -123,13 +127,51 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
         assertTrue(block.contains("border      borders 2"), block);
     }
 
-    /** Both kinds about one number. The ordering divides it and the equality puts one value in a
-     *  class of its own, and the second used to be dropped for the first having spoken. */
+    /**
+     * Both kinds about one number, and the rule that names a value keeps the values either side of
+     * it apart.
+     *
+     * <p>Asked of the lines and not of the report's sentences. What a block prints about a line is
+     * what some row came to at it, and this model has no rows — so a reading that dropped the
+     * second line would print the same nothing as one that kept it. What says the rule is still
+     * measured is that its line is there, cutting where it wrote, with a value of the position on
+     * each side of the one it names.
+     *
+     * <p>Both halves, because either alone passes on a reading this is about. The two labels alone
+     * hold against a reading that kept the equality and read it as an order — which is the shape
+     * that has one neighbour rather than two — and the points alone hold against one that lost the
+     * ordering beside it.
+     */
     @Test
     void aValueSingledOutBesideAnOrderingIsStillALine() {
-        String block = blockOf("orderedAndSingledOnOneNumber");
-        assertTrue(block.contains("partition   axes 1"), block);
-        assertTrue(block.contains("border      borders 2"), block);
-        assertTrue(block.contains("Time.hour(slot.at) = 12"), block);
+        List<BorderAssessment> lines = linesOf("orderedAndSingledOnOneNumber");
+        assertEquals(List.of("Time.hour(slot.at) = 12", "Time.hour(slot.at) = 9"),
+                lines.stream().map(BorderAssessment::label).sorted().toList(),
+                "one number, cut by an order at nine and by a rule naming twelve");
+
+        assertEquals(List.of("ON = 12", "OFF below the line = 11", "OFF above the line = 13"),
+                againstTheLine(lines, "Time.hour(slot.at) = 12"),
+                "the value the rule names, and the nearest value on each side of it");
+        assertEquals(List.of("ON = 9", "OFF = 8"),
+                againstTheLine(lines, "Time.hour(slot.at) = 9"),
+                "and an order beside it has the one neighbour whose class differs");
+    }
+
+    /** What a row is asked for at each point of one line that names a value, by the name that line
+     *  gives the point. */
+    private static List<String> againstTheLine(List<BorderAssessment> lines, String label) {
+        BorderAssessment line = lines.stream().filter(each -> label.equals(each.label()))
+                .findFirst().orElseThrow(() -> new AssertionError("no line here is " + label));
+        return line.border().answers().keySet().stream()
+                .filter(souther.compiler.partition.DomainPoint::againstTheLine)
+                .map(point -> line.border().named(point) + " = " + line.against(point)).toList();
+    }
+
+    /** The lines one behavior of this model draws, as they were measured. */
+    private static List<BorderAssessment> linesOf(String behavior) {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return Adequacy.boundariesOf(compilation.db(), "example.gate").get(behavior);
     }
 }

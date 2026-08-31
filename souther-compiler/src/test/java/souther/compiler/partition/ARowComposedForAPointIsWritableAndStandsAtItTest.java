@@ -118,7 +118,8 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
                 border.items().forEach((role, item) -> {
                     if (item instanceof ItemAssessment.Owed owed
                             && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
-                        held.check(model, border.label() + " " + role, written(built.row()));
+                        held.check(model, border.label() + " " + border.border().named(role),
+                                written(built.row()));
                     }
                 });
             }
@@ -138,8 +139,9 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
     /** Whether the point is met, read off the item rather than out of a report's text. */
     private static boolean met(List<BorderAssessment> lines, String point) {
         for (BorderAssessment border : lines) {
-            for (Map.Entry<PointRole, ItemAssessment> each : border.items().entrySet()) {
-                if (!point.equals(border.label() + " " + each.getKey())) {
+            for (Map.Entry<DomainPoint, ItemAssessment> each : border.items().entrySet()) {
+                if (!point.equals(border.label() + " "
+                        + border.border().named(each.getKey()))) {
                     continue;
                 }
                 return each.getValue() instanceof ItemAssessment.Owed owed

@@ -84,8 +84,14 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
 
             behavior unwritten : (r: R) -> Found | Missing
 
+            behavior named : (r: R) -> Found | Missing
+            let named (r) = if r.a == 7 then Found else Missing
+
             example f
                 | "one" : (R { a = 1 }) -> Missing
+
+            example named
+                | "seven" : (R { a = 7 }) -> Found
             """;
 
     @Test
@@ -126,8 +132,9 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                 "the branch forbids what it does not name, rather than naming what it forbids");
         Set<String> named = new java.util.LinkedHashSet<>();
         notOwed.get("properties").propertyNames().forEach(named::add);
-        assertEquals(Set.of("point", "notOwed"), named,
-                "and what it names is which point it is and why no row is owed there");
+        assertEquals(Set.of("point", "location", "notOwed"), named,
+                "and what it names is which point of the border it is, where on the quantity it is,"
+                        + " and why no row is owed there");
     }
 
     /**
@@ -246,6 +253,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                     }
                 });
             } else if (node.isArray()) {
+                howMany(node, said, at);
                 JsonNode items = itemsOf(said);
                 if (items != null) {
                     for (int i = 0; i < node.size(); i++) {
@@ -253,6 +261,76 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                     }
                 }
             }
+        }
+
+        /**
+         * How many entries an array may have, and how many of them a shape may match.
+         *
+         * <p>Held rather than stepped over. A keyword this walk names as understood and does not
+         * evaluate is a claim the schema makes and nothing checks — and the ones about how many are
+         * exactly where a writer and a contract come apart without either changing: a border that
+         * grows a point writes an array one longer, and every key in it is still declared.
+         */
+        private void howMany(JsonNode node, JsonNode said, String at) {
+            if (said.has("minItems") && node.size() < said.get("minItems").asInt()) {
+                wrong.add(at + ": the schema asks for at least " + said.get("minItems").asInt()
+                        + " here and this has " + node.size());
+            }
+            if (said.has("maxItems") && node.size() > said.get("maxItems").asInt()) {
+                wrong.add(at + ": the schema allows at most " + said.get("maxItems").asInt()
+                        + " here and this has " + node.size());
+            }
+            if (said.has("uniqueItems") && said.get("uniqueItems").booleanValue()) {
+                Set<JsonNode> once = new LinkedHashSet<>();
+                node.forEach(once::add);
+                if (once.size() != node.size()) {
+                    wrong.add(at + ": the schema asks for one of each here and this repeats one");
+                }
+            }
+            for (JsonNode each : said.has("allOf") ? said.get("allOf") : List.<JsonNode>of()) {
+                if (each.has("contains")) {
+                    matching(node, each, at);
+                }
+            }
+            if (said.has("contains")) {
+                matching(node, said, at);
+            }
+        }
+
+        /** How many entries of an array match a `contains`, held to what is asked of that count. */
+        private void matching(JsonNode node, JsonNode said, String at) {
+            JsonNode shape = said.get("contains");
+            int found = 0;
+            for (JsonNode each : node) {
+                if (matches(each, shape)) {
+                    found++;
+                }
+            }
+            int least = said.has("minContains") ? said.get("minContains").asInt() : 1;
+            if (found < least) {
+                wrong.add(at + ": the schema asks for at least " + least + " entry matching "
+                        + shape + " and this has " + found);
+            }
+            if (said.has("maxContains") && found > said.get("maxContains").asInt()) {
+                wrong.add(at + ": the schema allows at most " + said.get("maxContains").asInt()
+                        + " entry matching " + shape + " and this has " + found);
+            }
+        }
+
+        /** Whether one entry is what a `contains` names, which here is a required key at a
+         *  constant. */
+        private boolean matches(JsonNode node, JsonNode shape) {
+            if (!shape.has("properties")) {
+                return true;
+            }
+            for (var each : shape.get("properties").properties()) {
+                JsonNode held = node.get(each.getKey());
+                JsonNode want = each.getValue().get("const");
+                if (held == null || want != null && !held.equals(want)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /** Every keyword of this schema object, held to what this walk was taught. */

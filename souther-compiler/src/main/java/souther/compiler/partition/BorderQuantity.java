@@ -332,7 +332,6 @@ public sealed interface BorderQuantity {
                 // sign is the whole of what the order has.
                 case Criterion.Within within -> within.holds(
                         new Level.ACount(souther.compiler.numeric.Count.of(order)));
-                case Criterion.AnythingBut _ -> order != 0;
             };
         }
 

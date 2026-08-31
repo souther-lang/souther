@@ -145,6 +145,6 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
                         new Clause.Id(TypeSymbols.declared(new TypeKey("example.probe", "Amount")),
                                 0),
                         Optional.of(new ClauseName("floor")))),
-                0, new LineFacts(false, true, false), List.of());
+                0, LineFacts.ordering(false, true), List.of());
     }
 }

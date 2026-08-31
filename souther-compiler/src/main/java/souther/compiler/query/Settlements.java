@@ -348,13 +348,13 @@ public record Settlements(List<OfferItem> requested,
                 }
                 OfferItem.APointOfALine item = new OfferItem.APointOfALine(point.point());
                 point.met().forEach((_, at) -> reads.computeIfAbsent(item, _ -> new ArrayList<>())
-                        .add(new AtAPoint(at.border(), at.owedAt(point.role()).criterion())));
+                        .add(new AtAPoint(at.border(), at.owedAt(point.at()).criterion())));
             }
             // And this behavior's readings of the lines the declarations own, which its own rules
             // are owed none of. Read the same way and for the same reason.
             declared.forEach((point, byBehavior) -> {
                 for (BorderAssessment at : byBehavior.getOrDefault(behavior, List.of())) {
-                    if (at.at(point.role()) instanceof ItemAssessment.Owed owed) {
+                    if (at.at(point.point()) instanceof ItemAssessment.Owed owed) {
                         reads.computeIfAbsent(new OfferItem.APointOfALine(point),
                                 _ -> new ArrayList<>())
                                 .add(new AtAPoint(at.border(), owed.criterion()));

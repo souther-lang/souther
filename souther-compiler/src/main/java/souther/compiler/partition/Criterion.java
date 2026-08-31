@@ -5,16 +5,17 @@ import souther.compiler.numeric.Towards;
 /**
  * What a row has to do to be at one coverage item of a border.
  *
- * <p>Said of the border's {@link BorderQuantity} and of nothing else. Three shapes for every border
- * there is: a row is at one level of the quantity, or anywhere beyond one level, or at any level but
- * one. {@code ON} and {@code OFF} are the first; {@code IN} and {@code OUT} are the second, except
- * where the rule leaves a side that is not a run of the order and then they are the third.
+ * <p>Said of the border's {@link BorderQuantity} and of nothing else. Two shapes for every border
+ * there is: a row is at one level of the quantity, or anywhere in one run of them. A point against
+ * the line is the first, wherever the line falls and whatever kind of rule drew it; a point away
+ * from it is the second, because every region beside a line is a run — a rule that names a value
+ * leaves the run under it and the run over it, which the arrangement holds like any other pair.
  *
  * <p><b>Not one shape per kind of border.</b> A line at a place of one position and a line where two
  * positions stand apart used to ask for two vocabularies here, and every reader of an item had to
  * know which of the two it was holding — a criterion about a place handed to the reader of a pair was
  * an {@code IllegalStateException} rather than a build failure. What tells them apart is the
- * quantity, and the quantity is what the item is about; what it asks of a row is the same three
+ * quantity, and the quantity is what the item is about; what it asks of a row is the same two
  * questions whichever quantity it is on.
  *
  * <p>Which of the four roles a criterion belongs to is the border's to say ({@link PointRole}) and is
@@ -119,28 +120,6 @@ public sealed interface Criterion {
     }
 
     /**
-     * A row at any level of the quantity other than one.
-     *
-     * <p>What a border that has no far side leaves. An invariant refuses everything outside its
-     * bound, so the side it bounds is the whole of what the quantity takes; a rule that singles a
-     * value out puts every other value in one class, and that class is what lies away from the point.
-     * Neither of them is a run of the order from somewhere, which is why it is a shape of its own
-     * rather than a {@link Beyond} with an end nobody wrote.
-     */
-    record AnythingBut(Level excluded) implements Criterion {
-
-        @Override
-        public LevelRegion region() {
-            return LevelRegion.EVERYTHING.without(excluded);
-        }
-
-        @Override
-        public String operator() {
-            return "/=";
-        }
-    }
-
-    /**
      * Which values of the quantity stand at this item.
      *
      * <p>On the interface because it is what a criterion is, and the only thing every shape has to
@@ -173,17 +152,16 @@ public sealed interface Criterion {
             case AtTheLevel(Level at) -> new AtTheLevel(at.canonical());
             case Within(Band band, Level except, Towards away) -> new Within(band.canonical(),
                     except == null ? null : except.canonical(), away);
-            case AnythingBut(Level excluded) -> new AnythingBut(excluded.canonical());
         };
     }
 
     /**
      * Whether two criteria ask a row for the same thing.
      *
-     * <p>The same shape asking for the same values, and not the same region: a rule that names a
-     * value and a run over everything else are two ways of writing one set of rows, and which of
-     * them a border owes is what says where a search starts and what a report prints. So this asks
-     * whether the two are one demand, which is narrower than whether one row answers both.
+     * <p>The same shape asking for the same values, and not the same set of rows: a level and a run
+     * one value wide hold the same rows, and which of them a border owes is what says where a search
+     * starts and what a report prints. So this asks whether the two are one demand, which is
+     * narrower than whether one row answers both.
      */
     default boolean sameAs(Criterion other) {
         if (!(this instanceof Within in)) {
@@ -209,15 +187,14 @@ public sealed interface Criterion {
      * The level this is written against, or null where what it is written against is a run rather
      * than a level.
      *
-     * <p>Two of the three shapes name a level and one names a region, so a reader that wanted one
-     * level from every shape was reading a witness of a run as though it were the run. What every
-     * shape does answer is {@link #asked}.
+     * <p>One shape names a level and the other names a run, so a reader that wanted one level from
+     * both was reading a witness of a run as though it were the run. What both do answer is
+     * {@link #asked}.
      */
     default Level against() {
         return switch (this) {
             case AtTheLevel at -> at.at();
             case Within _ -> null;
-            case AnythingBut other -> other.excluded();
         };
     }
 

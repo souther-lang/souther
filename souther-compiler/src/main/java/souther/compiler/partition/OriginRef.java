@@ -111,12 +111,13 @@ public sealed interface OriginRef {
      *                          from {@code valueBelongsBelow}: {@code x <= c} and {@code x > c} agree
      *                          about the class the value is in and disagree here
      */
-    record ComparisonOrigin(RuleRef.Comparison rule, Read read, boolean valueBelongsBelow,
-                            boolean holdsAtTheValue, boolean singles) implements OriginRef {
+    record ComparisonOrigin(RuleRef.Comparison rule, Read read, LineFacts facts)
+            implements OriginRef {
 
-        public ComparisonOrigin(RuleRef.Comparison rule, Read read, boolean valueBelongsBelow,
-                                boolean holdsAtTheValue) {
-            this(rule, read, valueBelongsBelow, holdsAtTheValue, false);
+        public ComparisonOrigin {
+            if (facts == null) {
+                throw new IllegalArgumentException("a line is what some comparison placed");
+            }
         }
 
         /**
@@ -192,10 +193,13 @@ public sealed interface OriginRef {
      * @param singles           whether the comparison singles the value out rather than ordering
      *                          the values either side of it
      */
-    record EnsuresOrigin(RuleRef.Ensures rule, int conjunct, boolean valueBelongsBelow,
-                         boolean holdsAtTheValue, boolean singles) implements OriginRef {
+    record EnsuresOrigin(RuleRef.Ensures rule, int conjunct, LineFacts facts)
+            implements OriginRef {
 
         public EnsuresOrigin {
+            if (facts == null) {
+                throw new IllegalArgumentException("a line is what some comparison placed");
+            }
             if (conjunct < 0) {
                 throw new IllegalArgumentException(
                         "a conjunct of a clause is counted from zero: " + conjunct);
@@ -381,18 +385,16 @@ public sealed interface OriginRef {
      */
     default LineFacts lineFacts() {
         return switch (this) {
-            case ComparisonOrigin g ->
-                    new LineFacts(g.valueBelongsBelow(), g.holdsAtTheValue(), g.singles());
-            case EnsuresOrigin e ->
-                    new LineFacts(e.valueBelongsBelow(), e.holdsAtTheValue(), e.singles());
+            case ComparisonOrigin g -> g.facts();
+            case EnsuresOrigin e -> e.facts();
             // Which side the value a bound stops at is on, from the end it placed and whether it
             // admits that value: a minimum keeps what is above, so its value is below the line
             // exactly when the bound does not admit it. A bound singles nothing out — it keeps a run
             // of the order — and that the far side holds no value at all is a different answer,
             // given where a border reads what a line has sides.
-            case InvariantOrigin i -> new LineFacts(
+            case InvariantOrigin i -> LineFacts.ordering(
                     (i.keeps() == souther.compiler.numeric.EndSide.UPPER) == i.holdsAtTheValue(),
-                    i.holdsAtTheValue(), false);
+                    i.holdsAtTheValue());
             case NarrowedOrigin n -> n.bound().lineFacts();
         };
     }

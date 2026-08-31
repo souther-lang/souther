@@ -162,7 +162,8 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
                 : souther.compiler.query.Adequacy.readingsOf(compilation.db(), MODULE)
                         .get(behavior)) {
             if (border.label().contains("List.sum")) {
-                border.items().forEach((role, _) -> out.add(border.label() + " " + role));
+                border.items().forEach(
+                        (role, _) -> out.add(border.label() + " " + border.border().named(role)));
             }
         }
         return out;
