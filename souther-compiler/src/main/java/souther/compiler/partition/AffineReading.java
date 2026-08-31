@@ -9,6 +9,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
 import java.math.BigDecimal;
@@ -247,8 +248,14 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
             @Override
             public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
-                return at.pathOf(fa.target(), symbols).found() == null
-                        && !Location.isStep(fa.target().type(), fa.field(), symbols);
+                // Read through where the target is at no position of the input: a field of a value
+                // that stands nowhere is arithmetic's to walk into, and so is a field of one this
+                // reading did not follow — neither is a place a row writes at.
+                boolean stands = switch (at.pathOf(fa.target(), symbols)) {
+                    case PathResolution.At _ -> true;
+                    case PathResolution.NotAPosition _, PathResolution.Unread _ -> false;
+                };
+                return !stands && !Location.isStep(fa.target().type(), fa.field(), symbols);
             }
         };
     }

@@ -8,6 +8,7 @@ import souther.compiler.coverage.ControlPointId;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
@@ -554,10 +555,18 @@ public final class PathReachability {
 
     /** Where a side of a comparison sits, reading through a newtype's own value. */
     private TermPath pathUnder(Core side, InputReads reads) {
-        TermPath here = reads.pathOf(side, symbols).found();
+        TermPath here = positionOf(side, reads);
         return here != null ? here
-                : side instanceof Core.FieldAccess field
-                        ? reads.pathOf(field.target(), symbols).found() : null;
+                : side instanceof Core.FieldAccess field ? positionOf(field.target(), reads) : null;
+    }
+
+    /** Where {@code e} stands, and null where it stands nowhere or was not read — which are one
+     *  answer to a reader asking whether the guards above reach a position. */
+    private TermPath positionOf(Core e, InputReads reads) {
+        return switch (reads.pathOf(e, symbols)) {
+            case PathResolution.At(var at) -> at;
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+        };
     }
 
     /** What the rules leave {@code position}, where they leave it numbers at all. */
@@ -649,9 +658,11 @@ public final class PathReachability {
         if (arms == null) {
             return;
         }
-        TermPath path = reads.pathOf(match.scrutinee(), symbols).found();
+        // Not a position of this input, or not one this reading reached: either way nothing here
+        // has rules about it to carry.
+        TermPath path = positionOf(match.scrutinee(), reads);
         if (path == null) {
-            return;   // not a position of this input: nothing here has rules about it
+            return;
         }
         // The reading this walk was given, which is the one held here. Which location the name
         // stands for is the environment's answer and what the rules leave there is the reading's,

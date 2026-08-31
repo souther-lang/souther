@@ -180,7 +180,12 @@ public record InputReads(Map<BindingId, TermPath> roots,
         if (arm.caseTypes().size() != 1) {
             return admitting(match, arm, symbols);
         }
-        TermPath scrutinee = pathOf(match.scrutinee(), symbols).found();
+        // What the arm narrows is a position of the input, and a scrutinee that is not one narrows
+        // nothing — whether because it stands nowhere or because this reading did not follow it.
+        TermPath scrutinee = switch (pathOf(match.scrutinee(), symbols)) {
+            case PathResolution.At(var at) -> at;
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+        };
         if (scrutinee == null) {
             return admitting(match, arm, symbols);
         }
@@ -338,9 +343,14 @@ public record InputReads(Map<BindingId, TermPath> roots,
      */
     private ReadMeaning meaningOf(Core.Read read, Symbols symbols,
                                   java.util.Set<BindingId> met) {
-        TermPath path = pathOf(read, symbols).found();
-        if (path != null) {
-            return new ReadMeaning.Position(path);
+        // A name is what it stands at where it stands at one. The two other answers are alike here:
+        // a name this reading did not follow to a position is one whose meaning the answers below
+        // are asked for, as a name that stands at none is.
+        switch (pathOf(read, symbols)) {
+            case PathResolution.At(var at) -> {
+                return new ReadMeaning.Position(at);
+            }
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
         }
         java.util.List<Denotation> narrowed = alternatives.get(read.binding());
         if (narrowed != null) {

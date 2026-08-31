@@ -14,16 +14,13 @@ package souther.compiler.inputs;
  * written from that absence said of somebody's model what was true of this compiler. There is no
  * spelling of "no path" that carries the difference, so it is carried by which answer this is.
  *
- * <p>A caller for which the last two are one answer says so by asking for {@link #found()}, and one
- * that reports on what it found reads the arms. What no caller can do is take the first for the
- * third without having written down that it is.
+ * <p><b>No way to collapse them but writing it out.</b> A caller for which the last two are one
+ * answer says so where it asks, arm by arm, and there is nothing here to say it with — a method
+ * that answered "the position, or nothing" would be that decision made once for every caller, and
+ * an answer added later would arrive at all of them as nothing without one of them being asked.
+ * What the arms cost a reader is the same fourteen decisions being visible, which is what they are.
  */
 public sealed interface PathResolution {
-
-    /** The position, or null where this reading reached none — whichever of the two that was. */
-    default TermPath found() {
-        return this instanceof At at ? at.path() : null;
-    }
 
     /** Where the expression stands. */
     record At(TermPath path) implements PathResolution {}

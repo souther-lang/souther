@@ -12,6 +12,7 @@ import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
@@ -123,7 +124,12 @@ final class CoverageNaming implements Naming<Outcome> {
         if (claim == null) {
             return null;
         }
-        TermPath at = reads.pathOf(match.scrutinee(), symbols).found();
+        // What a fork is named by is the position it is on, and a scrutinee at none names nothing —
+        // which is also what a scrutinee this reading did not follow leaves to name it with.
+        TermPath at = switch (reads.pathOf(match.scrutinee(), symbols)) {
+            case PathResolution.At(var stands) -> stands;
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+        };
         if (at == null) {
             Condition fork = forkOf(match, part);
             return fork == null ? null : one(new Decision(fork, claim));
@@ -150,7 +156,10 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         if (fork instanceof Core.If iff) {
-            TermPath read = reads.pathOf(iff.cond(), symbols).found();
+            TermPath read = switch (reads.pathOf(iff.cond(), symbols)) {
+                case PathResolution.At(var stands) -> stands;
+                case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            };
             Condition what = read == null ? forkOf(fork, part)
                     : new Condition.Case(read, part == 0 ? "true" : "false");
             return what == null ? null : one(new Decision(what, claim));

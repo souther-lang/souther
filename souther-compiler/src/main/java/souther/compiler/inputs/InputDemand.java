@@ -84,9 +84,11 @@ public record InputDemand(List<TermPath> paths) {
     }
 
     private static void walk(Core e, InputReads names, Symbols symbols, Set<TermPath> found) {
-        TermPath at = names.pathOf(e, symbols).found();
-        if (at != null) {
-            found.add(at);
+        // What is demanded are the positions named. One that stands nowhere and one this reading
+        // did not follow are alike in demanding none: what a walk cannot name, nothing asks for.
+        switch (names.pathOf(e, symbols)) {
+            case PathResolution.At(var at) -> found.add(at);
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
         }
         switch (e) {
             // The body of a `let` is where the name stands for what was bound to it.

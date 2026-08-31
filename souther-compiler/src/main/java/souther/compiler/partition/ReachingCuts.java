@@ -8,6 +8,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -147,7 +148,13 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
         if (arm.caseTypes().size() != 1) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
-        TermPath scrutinee = reads.pathOf(match.scrutinee(), symbols).found();
+        // The arm is declined for either answer: a search composes against a position read as one
+        // of its cases, and there is no position to narrow whether the scrutinee stands at none or
+        // this reading did not follow it to one.
+        TermPath scrutinee = switch (reads.pathOf(match.scrutinee(), symbols)) {
+            case PathResolution.At(var stands) -> stands;
+            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+        };
         // The position that is narrowed, and not the narrowed one. A case declaring no field has
         // nothing under it and this reading holds no position there, which is what it is for; what
         // has to exist is the position the case is a case of, since that is what a row writes a
