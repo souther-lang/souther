@@ -628,14 +628,14 @@ final class Coverages {
      * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
      * can never take one away, whenever it is run and however many points it is run over.
      */
-    static LineReadings searched(LineReadings measured, BehaviorInputs where,
-                                 Probe probe, souther.compiler.inputs.Quantities rules,
-                                 ReachingCuts reaching) {
+    static LineReadings searched(LineReadings measured,
+                                 souther.compiler.partition.MeasuredInput input,
+                                 Probe probe, ReachingCuts reaching) {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
         for (BorderAssessment border : measured.each()) {
-            OneSearchOfABorder search = searching(border.border(), where, probe, realizer,
-                    wayTo(border.border(), reaching), rules);
+            OneSearchOfABorder search = searching(border.border(), input, probe, realizer,
+                    wayTo(border.border(), reaching));
             java.util.EnumMap<PointRole, ItemAssessment> items =
                     new java.util.EnumMap<>(PointRole.class);
             for (PointRole role : PointRole.values()) {
@@ -789,10 +789,12 @@ final class Coverages {
      * other: what the rows already established is read whatever anybody asked for, and building a
      * value is work somebody asked for and pays for.
      */
-    private static OneSearchOfABorder searching(Border border, BehaviorInputs where, Probe probe,
-                                                LevelRealizer realizer,
-                                                souther.compiler.partition.WayToTheBorder within,
-                                                souther.compiler.inputs.Quantities rules) {
+    private static OneSearchOfABorder searching(Border border,
+                                                souther.compiler.partition.MeasuredInput input,
+                                                Probe probe, LevelRealizer realizer,
+                                                souther.compiler.partition.WayToTheBorder within) {
+        BehaviorInputs where = input.inputs();
+        souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = border.cut().of();
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
                 border.origin().comparisonAt();
