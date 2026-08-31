@@ -1430,11 +1430,15 @@ public final class Adequacy {
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy);
+            // Read once for both of them. What it comes to is read off every parameter's
+            // declarations, and a second one here would be the same reading built twice and handed
+            // to two readers of one search.
+            souther.compiler.inputs.Quantities quantities = domain.quantities(symbols);
             return Answer.of(Coverages.merged(Coverages.searched(measured, inputs,
                     probing(spec.name(), divided, sig, symbols, policy, parameters,
                             constructing(db, name), runningRowsOf(trialling(db, name), behavior, sig),
-                            domain),
-                    domain.quantities(symbols), divided.reaching())));
+                            domain, quantities),
+                    quantities, divided.reaching())));
         }
 
         /**
@@ -1450,13 +1454,13 @@ public final class Adequacy {
                 souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
                 Symbols symbols, souther.compiler.check.ReadingPolicy policy,
                 List<String> parameters, BoundaryValues building, Generator.Trial trial,
-                InputDomain domain) {
+                InputDomain domain, souther.compiler.inputs.Quantities quantities) {
             if (building == null) {
                 return null;
             }
             Generator.Subject subject = new Generator.Subject(behavior,
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy), domain.quantities(symbols), partitioning.axes(),
+                            symbols, policy), quantities, partitioning.axes(),
                     souther.compiler.partition.HeldCounts.of(domain));
             Generator.CandidateCheck check =
                     (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));

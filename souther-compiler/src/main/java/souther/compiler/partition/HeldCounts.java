@@ -65,8 +65,12 @@ public record HeldCounts(Map<TermPath, NumericTerm> sizes) {
      * <p>{@code counts} is the reading these positions were found in. Held here instead, a caller
      * with a reading of its own could ask what one reading's positions come to under another's
      * rules, and the answer would be about neither.
+     *
+     * <p>Not visible outside this package, because the pairing is what a subject holds
+     * ({@link Generator.Subject#mostHeldAt}) and a caller free to reach this is a caller free to
+     * pair it with a reading of its own.
      */
-    public int most(TermPath at, Quantities counts) {
+    int most(TermPath at, Quantities counts) {
         NumericTerm term = sizes.get(at);
         if (term == null) {
             return Integer.MAX_VALUE;

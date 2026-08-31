@@ -7,7 +7,12 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * What the rules leave a quantity taken over several of a behavior's input positions.
+ * What the rules leave a quantity taken over several of a behavior's input positions, and what
+ * order each of its terms is measured on.
+ *
+ * <p>The second because it is the same reading asked about one term rather than a form of them: what
+ * a quantity runs between is read on the orders its terms are on, and a caller that took the orders
+ * from somewhere else would be adding up numbers this reading counts differently.
  *
  * <p><b>The relational half of {@link InputDomain}.</b> A {@link Position} answers about itself, and
  * a rule can be about no position in particular: {@code x + y <= 5} relates two of them and divides
@@ -74,12 +79,12 @@ public sealed interface Quantities permits ReadQuantities {
      * Both orders of {@code term} as this reading has it: the one a value at its position is read
      * on, and the one the number it names is answered on.
      *
-     * <p><b>The one public answer to it.</b> Which order a term is measured on follows from what
-     * stands where its number comes from, and where that is is settled once by the reading that
-     * made this. A caller working it out from a type it holds is answering with whatever walk put
-     * that type in its hand — a walk that follows a written value stops where a value is built, and
-     * a shared name of a sum is a position a number is taken at and not a place a value is composed
-     * for.
+     * <p><b>The answer for a term of this input, and the only thing that resolves where the term
+     * sits.</b> Which order a term is measured on follows from what stands where its number comes
+     * from, and where that is is settled once by the reading that made this. A caller working it
+     * out from a type it holds is answering with whatever walk put that type in its hand — a walk
+     * that follows a written value stops where a value is built, and a shared name of a sum is a
+     * position a number is taken at and not a place a value is composed for.
      *
      * <p>Both ends together, because a term that is what an operation answered has two orders and a
      * caller handed one of them has whichever end the caller before it meant. The day the two part
