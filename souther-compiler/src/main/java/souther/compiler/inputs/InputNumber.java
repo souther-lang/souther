@@ -38,7 +38,7 @@ public final class InputNumber {
     public static NumericTerm of(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
-            TermPath of = reads.pathOf(measured.of(), symbols);
+            TermPath of = reads.pathOf(measured.of(), symbols).found();
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of,
                         inputs.typeAt(of, symbols), symbols);
@@ -48,7 +48,7 @@ public final class InputNumber {
             // those values are read from a place.
             return overARun(measured, inputs, reads, symbols);
         }
-        TermPath path = reads.pathOf(e, symbols);
+        TermPath path = reads.pathOf(e, symbols).found();
         return path == null ? null : new NumericTerm.ValueOf(path);
     }
 
@@ -104,7 +104,7 @@ public final class InputNumber {
             return null;
         }
         ElementProjection answered = where.elements().projectionAt(element);
-        TermPath at = where.elementAt(element, symbols);
+        TermPath at = where.elementAt(element, symbols).found();
         if (answered == null || at == null) {
             return null;
         }

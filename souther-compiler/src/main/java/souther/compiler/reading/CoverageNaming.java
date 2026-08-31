@@ -123,7 +123,7 @@ final class CoverageNaming implements Naming<Outcome> {
         if (claim == null) {
             return null;
         }
-        TermPath at = reads.pathOf(match.scrutinee(), symbols);
+        TermPath at = reads.pathOf(match.scrutinee(), symbols).found();
         if (at == null) {
             Condition fork = forkOf(match, part);
             return fork == null ? null : one(new Decision(fork, claim));
@@ -150,7 +150,7 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         if (fork instanceof Core.If iff) {
-            TermPath read = reads.pathOf(iff.cond(), symbols);
+            TermPath read = reads.pathOf(iff.cond(), symbols).found();
             Condition what = read == null ? forkOf(fork, part)
                     : new Condition.Case(read, part == 0 ? "true" : "false");
             return what == null ? null : one(new Decision(what, claim));

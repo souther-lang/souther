@@ -147,7 +147,7 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
         if (arm.caseTypes().size() != 1) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
-        TermPath scrutinee = reads.pathOf(match.scrutinee(), symbols);
+        TermPath scrutinee = reads.pathOf(match.scrutinee(), symbols).found();
         // The position that is narrowed, and not the narrowed one. A case declaring no field has
         // nothing under it and this reading holds no position there, which is what it is for; what
         // has to exist is the position the case is a case of, since that is what a row writes a

@@ -247,7 +247,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
             @Override
             public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
-                return at.pathOf(fa.target(), symbols) == null
+                return at.pathOf(fa.target(), symbols).found() == null
                         && !Location.isStep(fa.target().type(), fa.field(), symbols);
             }
         };

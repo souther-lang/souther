@@ -179,7 +179,7 @@ public final class GuardThresholds {
     static void cameFrom(Core.Binary comparison, InputReads reads, Symbols symbols,
                                  List<TermPath> out) {
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            TermPath at = reads.cameFrom(side, symbols);
+            TermPath at = reads.cameFrom(side, symbols).found();
             if (at != null && !out.contains(at)) {
                 out.add(at);
             }
@@ -238,12 +238,13 @@ public final class GuardThresholds {
                 }
                 // A call the language defines the meaning of stands for what it answers and not for
                 // a location, however the reading spells the two apart.
-                return here instanceof Core.PreservedCall ? null : at.pathOf(here, symbols);
+                return here instanceof Core.PreservedCall ? null
+                        : at.pathOf(here, symbols).found();
             }
 
             @Override
             public TermPath madeFrom(Core here, InputReads at) {
-                return at.cameFrom(here, symbols);
+                return at.cameFrom(here, symbols).found();
             }
 
             /**

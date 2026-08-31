@@ -554,10 +554,10 @@ public final class PathReachability {
 
     /** Where a side of a comparison sits, reading through a newtype's own value. */
     private TermPath pathUnder(Core side, InputReads reads) {
-        TermPath here = reads.pathOf(side, symbols);
+        TermPath here = reads.pathOf(side, symbols).found();
         return here != null ? here
-                : side instanceof Core.FieldAccess field ? reads.pathOf(field.target(), symbols)
-                        : null;
+                : side instanceof Core.FieldAccess field
+                        ? reads.pathOf(field.target(), symbols).found() : null;
     }
 
     /** What the rules leave {@code position}, where they leave it numbers at all. */
@@ -649,7 +649,7 @@ public final class PathReachability {
         if (arms == null) {
             return;
         }
-        TermPath path = reads.pathOf(match.scrutinee(), symbols);
+        TermPath path = reads.pathOf(match.scrutinee(), symbols).found();
         if (path == null) {
             return;   // not a position of this input: nothing here has rules about it
         }

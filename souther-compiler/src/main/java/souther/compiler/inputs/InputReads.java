@@ -60,12 +60,42 @@ public record InputReads(Map<BindingId, TermPath> roots,
                          Map<BindingId, Core> bound,
                          souther.compiler.check.ElementBindings elements,
                          Map<BindingId, java.util.List<Denotation>> alternatives,
-                         boolean callsStand) {
+                         boolean callsStand) implements BindingEnvironment {
 
     public InputReads {
         roots = Map.copyOf(roots);
         bound = Map.copyOf(bound);
         alternatives = Map.copyOf(alternatives);
+    }
+
+    @Override
+    public TermPath rootOf(BindingId binding) {
+        return roots.get(binding);
+    }
+
+    @Override
+    public Core boundValueOf(BindingId binding) {
+        return bound.get(binding);
+    }
+
+    @Override
+    public Core heldAnywhereBy(BindingId binding) {
+        return bound.containsKey(binding) ? bound.get(binding) : elements.boundTo(binding);
+    }
+
+    @Override
+    public Core containerOf(BindingId binding) {
+        return elements.containerOf(binding);
+    }
+
+    @Override
+    public BindingId sameElementsAs(BindingId binding) {
+        return elements.provenance().sameElementsAs(binding);
+    }
+
+    @Override
+    public BindingId madeFrom(BindingId binding) {
+        return elements.provenance().madeFrom(binding);
     }
 
     /**
@@ -150,7 +180,7 @@ public record InputReads(Map<BindingId, TermPath> roots,
         if (arm.caseTypes().size() != 1) {
             return admitting(match, arm, symbols);
         }
-        TermPath scrutinee = pathOf(match.scrutinee(), symbols);
+        TermPath scrutinee = pathOf(match.scrutinee(), symbols).found();
         if (scrutinee == null) {
             return admitting(match, arm, symbols);
         }
@@ -267,9 +297,9 @@ public record InputReads(Map<BindingId, TermPath> roots,
         return new InputReads(roots, wider, elements, alternatives, callsStand);
     }
 
-    /** The position {@code e} names here, or null where it names none. */
-    public TermPath pathOf(Core e, Symbols symbols) {
-        return InputPath.of(e, roots, bound, elements, symbols, callsStand);
+    /** Where {@code e} stands, read here ({@link PathResolution}). */
+    public PathResolution pathOf(Core e, Symbols symbols) {
+        return InputPath.of(e, this, symbols);
     }
 
     /**
@@ -308,7 +338,7 @@ public record InputReads(Map<BindingId, TermPath> roots,
      */
     private ReadMeaning meaningOf(Core.Read read, Symbols symbols,
                                   java.util.Set<BindingId> met) {
-        TermPath path = pathOf(read, symbols);
+        TermPath path = pathOf(read, symbols).found();
         if (path != null) {
             return new ReadMeaning.Position(path);
         }
@@ -405,15 +435,14 @@ public record InputReads(Map<BindingId, TermPath> roots,
         }
     }
 
-    /** The position an element handed to {@code binding} stands at, or null where it stands at
-     *  none ({@link InputPath#elementAt}). */
-    public TermPath elementAt(BindingId binding, Symbols symbols) {
-        return InputPath.elementAt(binding, roots, bound, elements, symbols, callsStand);
+    /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}). */
+    public PathResolution elementAt(BindingId binding, Symbols symbols) {
+        return InputPath.elementAt(binding, this, symbols);
     }
 
-    /** The position {@code e}'s value came from, or null where it came from none. Not where it is:
-     *  a value made from a position is not that position ({@link InputPath#cameFrom}). */
-    public TermPath cameFrom(Core e, Symbols symbols) {
-        return InputPath.cameFrom(e, roots, bound, elements, symbols, callsStand);
+    /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
+     *  position ({@link InputPath#cameFrom}). */
+    public PathResolution cameFrom(Core e, Symbols symbols) {
+        return InputPath.cameFrom(e, this, symbols);
     }
 }

@@ -84,7 +84,7 @@ public record InputDemand(List<TermPath> paths) {
     }
 
     private static void walk(Core e, InputReads names, Symbols symbols, Set<TermPath> found) {
-        TermPath at = names.pathOf(e, symbols);
+        TermPath at = names.pathOf(e, symbols).found();
         if (at != null) {
             found.add(at);
         }

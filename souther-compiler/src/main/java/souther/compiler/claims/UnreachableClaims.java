@@ -111,7 +111,7 @@ public final class UnreachableClaims {
     private static void claimedIn(Core.Match match, InputReads reads, Symbols symbols,
                                   souther.compiler.coverage.CoverageSites.Plan plan,
                                   NormalReturn answering, List<Claim> found) {
-        TermPath path = reads.pathOf(match.scrutinee(), symbols);
+        TermPath path = reads.pathOf(match.scrutinee(), symbols).found();
         if (path == null) {
             return;
         }
