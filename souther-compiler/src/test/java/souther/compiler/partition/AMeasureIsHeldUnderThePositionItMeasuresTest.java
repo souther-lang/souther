@@ -2,8 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
@@ -13,6 +16,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -95,7 +99,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
         PositionMeasurements note = at("slot.note");
 
         assertEquals(List.of(), note.axes());
-        assertFalse(note.measured());
+        assertFalse(note.hasMeasures());
         assertTrue(divided().undivided().stream()
                         .anyMatch(each -> each.at().toString().equals("slot.note")),
                 "and what a report says about it comes from the position");
@@ -108,7 +112,45 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
 
         assertEquals(List.of("gate/slot.n"),
                 n.axes().stream().map(each -> each.id().toString()).toList());
-        assertTrue(n.measured());
+        assertTrue(n.hasMeasures());
+    }
+
+    /**
+     * Three questions about one location, and no two of them are the same question.
+     *
+     * <p>Whether anything measures it, whether a measure of it asks a row for anything, and which
+     * of its measures divide their number into classes. A measure that parts a number where the
+     * location holds no value answers the first and neither of the others, which is the one value
+     * that tells the three apart — and every one of them has a reader that the other two would
+     * answer wrongly. The location is measured, so nothing is pending at it and a report says
+     * nothing about it being undivided; there is nothing at the parting to ask an author for, so no
+     * line is assembled along it; and it divides the number into no classes, so no partition counts
+     * it.
+     */
+    @Test
+    void aMeasureThatOnlyPartsANumberIsAMeasureAndAsksForNoRow() {
+        PositionMeasurements n = at("slot.n");
+        Axis reading = n.axes().get(0);
+        Carrier whole = new Carrier.Whole();
+        Axis partsOnly = new Axis(reading.id(), reading.term(), reading.type(), List.of(),
+                List.of(),
+                List.of(Parting.by(
+                        Seam.of(LevelSpace.onACarrier(whole),
+                                new Level.OnACarrier(whole, Count.of(java.math.BigDecimal.TEN)),
+                                Towards.BELOW),
+                        WhatTheRulesTogetherLeaveAQuantityTest.aLine(1))),
+                souther.compiler.check.NarrowedBounds.NOTHING);
+        PositionMeasurements parting =
+                new PositionMeasurements(n.position(), List.of(partsOnly), READ_TO_THE_END);
+
+        assertTrue(parting.hasMeasures(), "the rules part the number, which is a measure of it");
+        assertFalse(partsOnly.asksForARow(),
+                "and the location holds no value at the parting, so nothing is owed a row");
+        assertEquals(List.of(), parting.partitionAxes(),
+                "and it divides the number into no classes");
+        assertNull(PendingPosition.of(parting.position(), parting.hasMeasures()),
+                "so the location is answered for, and a report says nothing about it being"
+                        + " undivided");
     }
 
     /**

@@ -85,17 +85,16 @@ public record PositionMeasurements(PositionAccount position, List<Axis> axes,
     }
 
     /**
-     * Whether anything here has something to divide the location by — a class to cover, or a line
-     * to reach.
+     * Whether anything measures this location.
      *
-     * <p>Asked of the measures the location has, which is where the answer is. Not whether it has
-     * any: a measure that only parts the number where the location holds no value has nothing at it
-     * for a row to be written against, and a report telling an author what was measured here would
-     * be naming work nobody can do. A location with no measure at all and one measured at a parting
-     * nothing stands at come to the same thing for every reader of this.
+     * <p>Which is whether it has a measure, and nothing more. What one of them asks a row for is
+     * that measure's answer ({@link Axis#asksForARow}) and what divides the number into classes is
+     * another ({@link #partitionAxes}) — three questions about one location, and every one of them
+     * has a reader that would be given the wrong answer by either of the others. A location the
+     * rules part where it holds no value is measured, and asks an author for nothing.
      */
-    public boolean measured() {
-        return axes.stream().anyMatch(Axis::asksForARow);
+    public boolean hasMeasures() {
+        return !axes.isEmpty();
     }
 
     /** The measures of this location that divide their number into classes. */

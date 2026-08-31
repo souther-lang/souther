@@ -154,7 +154,7 @@ public final class Partitions {
         public List<UndividedPosition> undivided() {
             List<UndividedPosition> out = new ArrayList<>();
             for (PositionMeasurements at : measurements) {
-                PendingPosition pending = PendingPosition.of(at.position(), at.measured());
+                PendingPosition pending = PendingPosition.of(at.position(), at.hasMeasures());
                 if (pending != null) {
                     out.add(pending.complete(at.inspection()));
                 }
@@ -173,7 +173,7 @@ public final class Partitions {
         public List<souther.compiler.inputs.PositionReadingBlocked> blocked() {
             List<souther.compiler.inputs.PositionReadingBlocked> out = new ArrayList<>();
             for (PositionMeasurements at : measurements) {
-                PendingPosition pending = PendingPosition.of(at.position(), at.measured());
+                PendingPosition pending = PendingPosition.of(at.position(), at.hasMeasures());
                 souther.compiler.inputs.PositionReadingBlocked stopped =
                         pending == null ? null : pending.reportable();
                 if (stopped != null && !out.contains(stopped)) {
@@ -440,7 +440,7 @@ public final class Partitions {
         // A position the declarations already divide keeps the measures they gave it. What a body
         // says about another number of such a position is not taken up as a second measure, and
         // this is where that is said: an account with no entry could not tell a policy from a loss.
-        if (at.measured()) {
+        if (at.hasMeasures()) {
             List<NumericTerm.FromOnePosition> declared =
                     at.axes().stream().map(Axis::term).toList();
             here.stream().filter(each -> !declared.contains(each.at()))

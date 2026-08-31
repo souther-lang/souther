@@ -71,7 +71,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
 
     /** What is still to be answered for at this position. */
     private static PendingPosition of(PositionMeasurements at) {
-        return PendingPosition.of(at.position(), at.measured());
+        return PendingPosition.of(at.position(), at.hasMeasures());
     }
 
     private static PositionMeasurements pending(StructuralInspection.Continuation found) {
