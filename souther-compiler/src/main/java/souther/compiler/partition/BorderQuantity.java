@@ -817,7 +817,9 @@ public sealed interface BorderQuantity {
                     throw new IllegalArgumentException(
                             "a reading nothing could be made of says what stopped it");
                 }
-                why = Set.copyOf(why);
+                // In the order they were met, because a report prints them and a report that
+                // changes between runs cannot be compared between runs.
+                why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
             }
         }
 

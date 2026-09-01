@@ -35,6 +35,7 @@ import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
@@ -1707,7 +1708,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<String> said = new ArrayList<>();
         for (ObligationDisposition.Uncertainty each : it.because()) {
             said.add(switch (each) {
-                case COVERAGE -> "undecided whether a row is at the " + point;
+                // And what the rows went without, which is what makes it undecided rather than
+                // missed. The reading carried whether a value was stopped or never arrived all the
+                // way here, and a sentence that stopped at "undecided" would be the last step of
+                // the carrying dropping it.
+                case COVERAGE -> "undecided whether a row is at the " + point
+                        + whatTheRowsWentWithout(owed);
                 // Named for what happened and not for the limit's number. Which budget it was is
                 // the observation's own word, and what an author is told is that the row this
                 // compiler composed is not evidence of anything until it can be read back.
@@ -1716,6 +1722,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             });
         }
         return said;
+    }
+
+    /**
+     * What the readings of a point went without at the border, said after the verdict.
+     *
+     * <p>Empty where they went without nothing there — a point left undecided by a row that never
+     * ran has its reason said elsewhere, and repeating it here would be one gap wearing two
+     * sentences.
+     */
+    private static String whatTheRowsWentWithout(ObligationAssessment owed) {
+        List<String> said = new ArrayList<>();
+        for (Weakening each : owed.weakening().causes()) {
+            if (each instanceof Weakening.BorderValueUnreadable it) {
+                said.add(atTheBorder(it.why()));
+            }
+        }
+        return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
+    }
+
+    /** What one reading met at a border instead of a number, in the reading's own words. */
+    private static String atTheBorder(ReadingGap why) {
+        return switch (why) {
+            case ReadingGap.Observation(Incompleteness.Code code) -> whatStopped(code);
+            // Nothing was observed here, so nothing about an observation is said. What a reader is
+            // owed is that no value arrived at all, which no budget would have changed.
+            case ReadingGap.NoValue _ -> "the walk reached no value there to read";
+        };
     }
 
     /** Why nothing could confirm the row a search composed, in the observation's own words. */
@@ -3250,7 +3283,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     throw new IllegalArgumentException("an observation writes its own code");
             case Weakening.OutputCasesUnreadable _ -> WeakeningWord.OUTPUT_CASES_UNREADABLE;
             case Weakening.InputCasesUnreadable _ -> WeakeningWord.INPUT_CASES_UNREADABLE;
-            case Weakening.BorderValueUnreadable _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
+            // Read through to what the reading met. Both of these leave a point undecided and a
+            // reader acts on them differently, so a projection that answered one word for the pair
+            // would take the difference back out one step after the reading carried it here.
+            case Weakening.BorderValueUnreadable it -> switch (it.why()) {
+                case ReadingGap.Observation _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
+                case ReadingGap.NoValue _ -> WeakeningWord.BORDER_VALUE_ABSENT;
+            };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case souther.compiler.partition.ClosureGap.RuleUnread _ ->
                         WeakeningWord.RULE_UNREAD;

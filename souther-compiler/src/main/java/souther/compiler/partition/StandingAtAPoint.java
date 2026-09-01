@@ -74,7 +74,8 @@ public final class StandingAtAPoint {
                     throw new IllegalArgumentException(
                             "a point nothing could be told about says what stopped the telling");
                 }
-                why = Set.copyOf(why);
+                // In the order they were met, for the reason a report keeps any order.
+                why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
             }
         }
 
