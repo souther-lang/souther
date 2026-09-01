@@ -20,6 +20,7 @@ import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.EnsuresEnforcement;
@@ -141,7 +142,7 @@ public final class Output {
             Answer<Map<ValueName.Behavior, souther.compiler.core.Composition>> compositions =
                     db.ask(new Compositions.Of(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             // The same answer the check read. The backend replays the composition walk and emits
             // the codecs a signature says are needed, so building its own would be the boundary's
             // question answered a third time.
@@ -229,7 +230,7 @@ public final class Output {
             // How this module writes a type down, which is what a computed signature is published
             // in. Asked of the module rather than taken off the type: what a declaration is and
             // what this module calls it are two things, and only the second may be published.
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (written == null || !sigs.present() || implementations == null
                     || !resolved.present() || !scope.present()) {
                 return;
@@ -571,7 +572,7 @@ public final class Output {
         @Override
         public Answer<Boolean> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -624,7 +625,7 @@ public final class Output {
                 DataChecker.ConstCheck check) {
             Answer<souther.compiler.check.Prepared> declaring =
                     db.ask(new Shapes.Prepared(check.type().module()));
-            Answer<Symbols> scope = Names.derivedSymbols(db, check.type().module());
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, check.type().module());
             if (!declaring.present() || !scope.present()) {
                 return List.of();
             }

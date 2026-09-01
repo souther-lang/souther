@@ -3,47 +3,53 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.diag.CompileException;
-import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 /**
- * A {@link Scope} and a {@link Declarations} together, for the readers that have both to hand.
+ * What a name written in a module means, and what an identity is a declaration of, for a reader that
+ * does not care which stage the declarations have reached.
  *
- * <p>Not a thing of its own. It answers nothing itself except the one question that genuinely needs
- * both — {@link #reachable} takes the identities a bare name reaches here and asks what each is —
- * and hands over its two parts otherwise. The two answer different questions and fail in different ways:
- * a spelling nothing here writes is not a declaration that did not come out, and while one object
- * answered both, which of them a reader was holding was something it worked out for itself.
+ * <p>Two carriers implement it and they are the two declaration worlds: {@link ResolvedSymbols}
+ * reads declarations as resolution left them, {@link DerivedSymbols} as the derivation answered for
+ * them. Which one a reader is holding is which type it named, so a reader that has to be at a stage
+ * says so in its signature and one that does not takes this.
+ *
+ * <p>What may be answered here is fixed by that, and it is narrow on purpose: <b>one declaration at
+ * a time, and only what resolution settled about it</b>. {@link #declaredNode} is the whole of the
+ * reach — a declaration's fields, what it includes, whether it is a newtype, all of which mean the
+ * same thing whichever world handed it over. There is deliberately no {@code declarations()} and no
+ * table of nodes here. Either would let a reader take one stage's answers and read them back as
+ * declarations nothing established, which is the thing the two worlds exist to stop; the derived
+ * world's table is reached by naming {@link DerivedSymbols} and nowhere else.
  */
-public final class Symbols implements NameSense {
+public sealed interface Symbols extends NameSense permits ResolvedSymbols, DerivedSymbols {
 
-    private final TypeScope scope;
-    private final Declarations<Hir.Def> declarations;
-    /** The library this module is compiled against. Held so that a reader already holding the
-     *  symbol table has it — what a library operation is declared to be is part of what names mean
-     *  here, and a reader that fetched its own could be reading a different library from the one
-     *  this module's names were resolved against. */
-    private final Stdlib stdlib;
+    /**
+     * The declaration {@code name} is, as resolution left it, or null where nothing declares one.
+     *
+     * <p>One declaration, and what it says about itself. A reader wanting what a later stage worked
+     * out for it — a product's boundary representation — asks the world that has it.
+     */
+    Hir.Def declaredNode(TypeSymbol name);
 
-    private Symbols(String module, Registry<Hir.Def> registry, Denoting names, Stdlib stdlib) {
-        this.scope = new TypeScope(module, names, registry,
-                stdlib.names().languageTypes());
-        this.declarations = new Declarations<>(registry, Declarations.Vocabulary.of(stdlib));
-        this.stdlib = stdlib;
-    }
+    /** The same, of an address. */
+    Hir.Def declaredNode(TypeKey address);
 
-    /** No module at all — for signatures written over primitives and type variables only. The
-     *  library still arrives, because a signature over primitives may still name a library
-     *  operation, and a caller with none of its own has one to hand. */
-    public static Symbols none(Stdlib stdlib) {
-        return new Symbols("", Registry.empty(), Denoting.NONE, stdlib);
-    }
+    /** Whether {@code name} is declared by a module of this compilation — as opposed to a
+     * declaration the language gives, which resolves and types like any other but belongs to no
+     * module here. */
+    boolean declaredByCompilation(TypeSymbol name);
+
+    /** The same, of an address. */
+    boolean declaredByCompilation(TypeKey address);
+
+    /** The module being compiled. */
+    String module();
+
+    /** The library this module is compiled against. */
+    Stdlib library();
 
     /**
      * The one walk the library publishes, which an output lowers as a loop rather than as a call.
@@ -53,9 +59,7 @@ public final class Symbols implements NameSense {
      * where reaching {@link #library()} would be an output that could put any question to the
      * library, which {@code TheBackendEmitsAgainstTheLanguageItWasHanded} keeps closed.
      */
-    public ValueName.Stdlib.Operation theWalk() {
-        return stdlib.theWalk();
-    }
+    ValueName.Stdlib.Operation theWalk();
 
     /**
      * The one operation the library publishes that states elements are distinct, which an invariant
@@ -63,9 +67,7 @@ public final class Symbols implements NameSense {
      *
      * <p>Handed on for the reason {@link #theWalk} is.
      */
-    public ValueName.Stdlib.Operation theDistinctnessPredicate() {
-        return stdlib.theDistinctnessPredicate();
-    }
+    ValueName.Stdlib.Operation theDistinctnessPredicate();
 
     /**
      * Which kernel {@code operation} is declared to be, or null where it is not a kernel.
@@ -76,104 +78,22 @@ public final class Symbols implements NameSense {
      * {@link #library()} so that a reader holding these symbols has it — a {@code Kernel} is
      * {@code core}'s, so an output asking this is not naming the library.
      */
-    public Kernel kernelOf(ValueName.Stdlib.Operation operation) {
-        Stdlib.Intrinsic intrinsic = stdlib.intrinsicOf(operation);
-        return intrinsic == null ? null : intrinsic.kernel();
-    }
+    Kernel kernelOf(ValueName.Stdlib.Operation operation);
 
-    /** The library this module is compiled against. */
-    public Stdlib library() {
-        return stdlib;
+    /** No module at all — for signatures written over primitives and type variables only. The
+     *  library still arrives, because a signature over primitives may still name a library
+     *  operation, and a caller with none of its own has one to hand. */
+    static ResolvedSymbols none(Stdlib stdlib) {
+        return ResolvedSymbols.none(stdlib);
     }
 
     /**
      * A lone module, compiled with nothing else in sight: bare names are its own definitions.
      *
-     * <p>Indexed here, so that what comes back is a symbol table over declarations this module has,
-     * and refused here where it may not have one. Refused as the report and not as a fault: a module
-     * of this compilation reaches this stage carrying a declaration it may not have, because
-     * {@code Names} reports that one and goes on with the rest, and resolution resolves the module
-     * as it was written. So the author holds the file, and what to do about it is the same thing
-     * {@link SyntaxSymbols#of(souther.compiler.ast.Ast.Module)} says one representation earlier.
+     * <p>Resolved, because nothing has run over it: a caller holding a module and a library has the
+     * declarations as resolution left them and no derivation to name.
      */
-    public static Symbols of(Hir.Module m, Stdlib stdlib) {
-        DeclaredNames.Index<Hir.Def> declared = Registry.indexed(m);
-        if (!declared.refusals().isEmpty()) {
-            throw CompileException.of(
-                    DeclarationRefusals.reportedAsResolved(declared.refusals().get(0)));
-        }
-        Map<String, Denotation> names = new HashMap<>();
-        for (Hir.Def def : declared.declarations().values()) {
-            names.put(def.name(), new Denotation.Denotes(def.declares()));
-        }
-        return new Symbols(m.name(),
-                Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
-                        declared.declarations(), Registry.baseNames(m.exposing())))),
-                Denoting.of(names, Map.of()), stdlib);
-    }
-
-    /** A module compiled over a registry that reads its declarations
-     * however it likes — the form a query-backed compilation uses, where a module's definitions are
-     * asked for one at a time rather than held in a map.
-     *
-     * <p>What names mean here arrives as a {@link Denoting} rather than as the table itself, for
-     * the reason that interface gives: a reader that fetched the table to build this would have
-     * depended on every name in the module before reading one of them. The three that are one
-     * assembly — the module, its meanings and its aliases — still arrive together, because a caller
-     * free to pair them itself could pair parts of two. */
-    public static Symbols of(String module, Registry<Hir.Def> registry, Denoting names,
-                             Stdlib stdlib) {
-        return new Symbols(module, registry, names, stdlib);
-    }
-
-    /** What a name written here means. */
-    @Override
-    public TypeScope scope() {
-        return scope;
-    }
-
-    /** What an identity is a declaration of. */
-    public Declarations<Hir.Def> declarations() {
-        return declarations;
-    }
-
-    @Override
-    public boolean declares(TypeKey address) {
-        return declarations.contains(address);
-    }
-
-    @Override
-    public java.util.Set<String> declaredNamesIn(String module) {
-        return declarations.declaredIn(module).keySet();
-    }
-
-    /** The module being compiled. */
-    public String module() {
-        return scope.module();
-    }
-
-    /**
-     * Every bare spelling that reaches a definition here, and the definition it reaches — this
-     * module\'s own plus the imported ones.
-     *
-     * <p>The one question that is both. What is reachable is the scope\'s to say and what each of
-     * them is a declaration of is not, so this is written where both are to hand rather than in
-     * either of them.
-     *
-     * <p>The pair and not either half. Which declaration a bare name denotes is what resolving it
-     * answers, and a reader given only the declarations has to pair each back with a spelling of its
-     * own — the same guess about which module declares what, made outside the only place that knows.
-     * A spelling that reaches nothing is absent here and present in
-     * {@code scope().namesInScope()}, those being two questions.
-     */
-    public Map<String, Hir.Def> reachable() {
-        Map<String, Hir.Def> reached = new LinkedHashMap<>();
-        scope.denotedNames().forEach((spelling, name) -> {
-            Hir.Def def = declarations.declaration(name);
-            if (def != null) {
-                reached.put(spelling, def);
-            }
-        });
-        return reached;
+    static ResolvedSymbols of(Hir.Module m, Stdlib stdlib) {
+        return ResolvedSymbols.of(m, stdlib);
     }
 }

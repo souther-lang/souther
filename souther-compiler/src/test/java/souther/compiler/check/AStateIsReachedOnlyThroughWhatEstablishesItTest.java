@@ -172,7 +172,12 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(Set.of("settle(Expandable, Symbols, Map)"), waysInto(InvariantSettled.class));
         assertEquals(Set.of(), waysInto(InvariantSettled.Def.class),
                 "a settled declaration is projected from the module it is one of");
-        assertEquals(Set.of("derive(Def, Symbols)"), waysInto(Derived.Def.class));
+        assertEquals(Set.of("derive(Def, ResolvedSymbols)", "ofLanguage(Def)"),
+                waysInto(Derived.Def.class),
+                "the second is for what the language declares, where there is nothing to derive: a "
+                        + "sum and a unit write no clause to expand and carry no boundary "
+                        + "representation, so the propositions hold of the node as it stands. It "
+                        + "refuses a product, which would need deriving like any other");
         assertEquals(Set.of("assemble(InvariantSettled, Map)"), waysInto(Derived.Module.class));
         assertEquals(Set.of("desugar(FnDef, Symbols)", "reestablish(FnDef, Symbols)"),
                 waysInto(Desugared.Fn.class),
@@ -213,7 +218,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                     constructs Amount
                 let go (n) = Amount(n)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
+        ResolvedSymbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         Hir.FnDef written = resolved.fns().stream()
                 .filter(f -> f.name().equals("go")).findFirst().orElseThrow();
 
@@ -531,7 +536,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 let go (n) = wrap(n)
                 let wrap (n) = Wrapped(n)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
+        ResolvedSymbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         Hir.FnDef unsettled = resolved.fns().stream()
                 .filter(f -> f.name().equals("wrap")).findFirst().orElseThrow();
 
@@ -593,7 +598,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
                 let isOk (n: Int) : Bool = Wrapped(n) == Wrapped(0)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
+        ResolvedSymbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         InvariantSettled settled =
                 InvariantSettled.settle(Expandable.check(resolved, Map.of(), DefaultStdlib.get()), scope, Map.of());
         InvariantSettled.Def amount = settled.defs().stream()
@@ -817,10 +822,10 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      */
     @Test
     void anAssemblyRefusesAnAnswerForAnotherModulesDeclaration() {
-        Symbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
+        ResolvedSymbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         InvariantSettled a = InvariantSettled.settle(
                 Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of());
-        Symbols scopeB = TypeChecker.symbols(resolvedB(), DefaultStdlib.get());
+        ResolvedSymbols scopeB = TypeChecker.symbols(resolvedB(), DefaultStdlib.get());
         InvariantSettled b = InvariantSettled.settle(
                 Expandable.check(resolvedB(), Map.of(), DefaultStdlib.get()), scopeB, Map.of());
 
@@ -839,7 +844,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      *  shape — so the key tells them apart even less there. */
     @Test
     void anAssemblyRefusesAnAnswerForAnotherModulesDefinition() {
-        Symbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
+        ResolvedSymbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         Derived.Module a = Derived.Module.assemble(
                 InvariantSettled.settle(Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()),
                 Map.of("Amount", Derived.Def.derive(defNamed(InvariantSettled.settle(

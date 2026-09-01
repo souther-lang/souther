@@ -162,7 +162,7 @@ public final class DeclaredThresholds {
         // further down than the position it is at.
         for (souther.compiler.types.TypeSymbol.AtModule declaration
                 : List.of(clause.rule().clause().id().declaredOn(), clause.readUnder())) {
-            if (!(symbols.declarations().declaration(declaration) instanceof Hir.Data data)) {
+            if (!(symbols.declaredNode(declaration) instanceof Hir.Data data)) {
                 continue;
             }
             Type of = Type.ref(declaration);

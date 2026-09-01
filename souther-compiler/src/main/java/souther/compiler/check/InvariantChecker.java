@@ -2485,7 +2485,7 @@ public final class InvariantChecker {
      * what it builds and what each of its fields is given came with it.
      */
     private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
-        if (!(symbols.declarations().declaration(made.typeName()) instanceof Hir.Data type)) {
+        if (!(symbols.declaredNode(made.typeName()) instanceof Hir.Data type)) {
             return null;
         }
         Judgment judged = verdictOf(made, type, k, at);

@@ -9,7 +9,8 @@ import souther.compiler.check.ExecutableInvariants;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.Unanswerable;
 import souther.compiler.check.InvariantChecker;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingOwner;
@@ -68,7 +69,7 @@ public final class Shapes {
             if (!expandable.present()) {
                 return Answer.absent();
             }
-            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!scope.present()) {
                 return Answer.absent();
             }
@@ -187,7 +188,7 @@ public final class Shapes {
         @Override
         public Answer<Map<String, souther.compiler.check.Derived.Def>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -279,7 +280,7 @@ public final class Shapes {
         @Override
         public Answer<Map<String, souther.compiler.check.Desugared.Fn>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -319,7 +320,7 @@ public final class Shapes {
         @Override
         public Answer<souther.compiler.check.Prepared> compute(Db db) {
             Answer<souther.compiler.check.Desugared.Module> desugared = db.ask(new Desugared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             // What each behavior takes and answers with, from the one place that settles it: a
             // composition's shape is worked out there and nowhere else, and a dependency another
@@ -360,7 +361,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol, List<ClauseDischarge>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
-            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -419,7 +420,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
-            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -461,7 +462,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol.AtModule, ValueShape>> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, souther.compiler.types.Type>> helpers =
                     db.ask(new Bodies.RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!settled.present() || !scope.present() || !helpers.present()) {

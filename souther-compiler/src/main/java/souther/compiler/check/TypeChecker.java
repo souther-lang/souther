@@ -551,7 +551,7 @@ public final class TypeChecker {
     }
 
     /** The symbol table of a module compiled on its own: bare names are its own definitions. */
-    public static Symbols symbols(Hir.Module module, Stdlib stdlib) {
+    public static ResolvedSymbols symbols(Hir.Module module, Stdlib stdlib) {
         return Symbols.of(module, stdlib);
     }
 

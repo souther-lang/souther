@@ -825,8 +825,34 @@ public interface Hir {
         }
     }
 
+    /**
+     * Something a declaration can be read off, whatever stage is holding it.
+     *
+     * <p>What a stage below resolution carries a declaration in is that stage's, and this is the one
+     * thing every such carrier answers: the declaration as resolution left it. A reader taking this
+     * is saying it reads what a declaration says about itself — its fields, what it includes,
+     * whether it is a newtype — and nothing a later stage worked out.
+     *
+     * <p>One member and it stays one member. Lifting a declaration's own accessors up here would
+     * make this a second declaration interface that every stage's carrier implements, and which
+     * stage a reader is at would stop being visible in what it holds.
+     */
+    interface Declared {
+
+        /** The declaration, as resolution left it. */
+        Def declared();
+    }
+
     /** A top-level data definition: product, sum, or unit. */
-    sealed interface Def extends Hir permits Data, SumData, UnitData {
+    sealed interface Def extends Hir, Declared permits Data, SumData, UnitData {
+
+        /** Itself: a node is the declaration it is, and reading one through {@link Declared} is what
+         * a reader does that does not care which stage handed it over. */
+        @Override
+        default Def declared() {
+            return this;
+        }
+
 
         /**
          * The name this declares, and the occurrence of it that declares it.

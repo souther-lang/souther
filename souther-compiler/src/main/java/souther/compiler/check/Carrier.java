@@ -231,7 +231,7 @@ public sealed interface Carrier {
     /** The cases in the order they are declared, which is the order itself and not a set. The
      *  declaration is read for that list alone: whether this is an enumeration is already answered. */
     private static Carrier ordinalOf(Ordering.Places places, Symbols symbols) {
-        if (!(symbols.declarations().declaration(places.enumeration()) instanceof Hir.SumData sum)) {
+        if (!(symbols.declaredNode(places.enumeration()) instanceof Hir.SumData sum)) {
             return null;
         }
         List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);

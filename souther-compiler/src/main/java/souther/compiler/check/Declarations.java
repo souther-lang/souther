@@ -8,6 +8,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -77,6 +78,43 @@ public final class Declarations<D> {
                 @Override
                 public Map<String, Hir.Def> declaredIn(String moduleName) {
                     return stdlib.languageDeclarationsIn(moduleName);
+                }
+            };
+        }
+
+        /**
+         * The same vocabulary as the stage below the derivation reads it.
+         *
+         * <p>The library's declarations do not go through the derivation and do not need to: what it
+         * declares is a sum and the units under it, and there is nothing deriving one would
+         * establish ({@link Derived.Def#ofLanguage}). So the witness is built here, once, and the
+         * two sources a reader below the derivation is answered from are at the same rung — which is
+         * what lets that reader be handed a table of derived declarations rather than of nodes.
+         *
+         * @throws IllegalStateException where the library declares a product, which would need
+         *     deriving and has not been derived
+         */
+        static Vocabulary<Derived.Def> ofDerived(Stdlib stdlib) {
+            Map<TypeKey, Derived.Def> byAddress = new LinkedHashMap<>();
+            Map<String, Map<String, Derived.Def>> byModule = new LinkedHashMap<>();
+            stdlib.languageDeclarations().forEach((address, def) -> {
+                Derived.Def derived = Derived.Def.ofLanguage(def);
+                byAddress.put(address, derived);
+                byModule.computeIfAbsent(address.module(), _ -> new LinkedHashMap<>())
+                        .put(address.name(), derived);
+            });
+            byModule.replaceAll((_, defs) -> Map.copyOf(defs));
+            Map<String, Map<String, Derived.Def>> grouped = Map.copyOf(byModule);
+            Map<TypeKey, Derived.Def> declared = Map.copyOf(byAddress);
+            return new Vocabulary<>() {
+                @Override
+                public Derived.Def declaration(TypeKey address) {
+                    return declared.get(address);
+                }
+
+                @Override
+                public Map<String, Derived.Def> declaredIn(String moduleName) {
+                    return grouped.getOrDefault(moduleName, Map.of());
                 }
             };
         }
@@ -168,3 +206,4 @@ public final class Declarations<D> {
                 ? language.declaredIn(moduleName) : registry.declaredIn(moduleName);
     }
 }
+

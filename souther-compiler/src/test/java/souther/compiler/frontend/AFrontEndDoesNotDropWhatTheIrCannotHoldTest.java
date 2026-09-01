@@ -155,7 +155,7 @@ class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
             return new Read(said, false);
         }
         return new Read(said, holdsAClause(
-                symbols.declarations().declaration(new TypeKey(module, "T"))));
+                symbols.declaredNode(new TypeKey(module, "T"))));
     }
 
     /**

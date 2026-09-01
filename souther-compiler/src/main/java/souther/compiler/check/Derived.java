@@ -44,18 +44,47 @@ public final class Derived {
      * declaration can be, so what a later stage adds to one of them has somewhere to go that the
      * others do not reach.
      */
-    public sealed interface Def permits Data, Sum, Unit {
+    public sealed interface Def extends Hir.Declared permits Data, Sum, Unit {
 
         /**
          * {@code settled} with its constructions written as constructions.
          *
          * @throws CompileException where what the declaration says cannot be read that way
          */
-        static Def derive(InvariantSettled.Def settled, Symbols scope) {
+        static Def derive(InvariantSettled.Def settled, ResolvedSymbols scope) {
             return switch (NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope)) {
                 case Hir.Data d -> new Data(d);
                 case Hir.SumData s -> new Sum(s);
                 case Hir.UnitData u -> new Unit(u);
+            };
+        }
+
+        /**
+         * What the language itself declares, for which there is nothing to derive.
+         *
+         * <p>A second way in, and it is one because the propositions this state carries are empty of
+         * a sum and of a unit. What deriving establishes is that the newtype constructions in a
+         * declaration's clauses are constructions — a sum and a unit write no clause — and, of a
+         * product, the boundary representation read off its shape; a sum's is worked out where it is
+         * read ({@code check.Boundary}) and a unit has none to carry. So the two cases hold of the
+         * node as it stands, and there is nothing for a pass to have done to it.
+         *
+         * <p>Which is why a product is refused rather than admitted the same way. The library
+         * declares none today, and one written tomorrow would need its codec derived like any other
+         * — admitted here it would be a declaration this state says came out and nothing derived,
+         * and every reader below would be told otherwise by the type it holds. The refusal is a
+         * fault in the compiler, because the library is this compiler's own source.
+         *
+         * @throws IllegalStateException where the language declares a product
+         */
+        static Def ofLanguage(Hir.Def declared) {
+            return switch (declared) {
+                case Hir.SumData s -> new Sum(s);
+                case Hir.UnitData u -> new Unit(u);
+                case Hir.Data d -> throw new IllegalStateException(
+                        "the standard library declares the product `" + d.declaredKey()
+                                + "`, which needs its boundary representation derived before a"
+                                + " reader below the derivation can be given it");
             };
         }
 

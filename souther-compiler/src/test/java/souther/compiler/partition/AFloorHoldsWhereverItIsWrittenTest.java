@@ -32,7 +32,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
 
         FieldDomains domainsOf(String type) {
             TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-            Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
+            Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
             assertNotNull(data, "no `" + type + "`");
             return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         }

@@ -55,7 +55,7 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
         // Where the declaration is, read here with what it draws. A caller that asked one thing for
         // the name and another for the place would have two ways of finding one declaration, and a
         // policy of its own for the one that came back empty.
-        if (!(symbols.declarations().declaration(declaredOn) instanceof souther.compiler.ast.Hir.Data
+        if (!(symbols.declaredNode(declaredOn) instanceof souther.compiler.ast.Hir.Data
                 data)) {
             throw new IllegalArgumentException(
                     "there is no declaration of " + declaredOn.name() + " to read");

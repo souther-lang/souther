@@ -548,9 +548,17 @@ final class AnswerClosure {
                     part("souther.compiler.check.Scoping$Scoped", "values"),
                     part("souther.compiler.check.Resolve$Values", "elsewhere")), A_STORE,
                     Traversal.Why.NOTHING_CLOSES_IT),
-            generationReader("souther.compiler.check.Symbols",
+            // The way of asking is declared as the reader that does not name a stage, so the two
+            // worlds under it are two places rather than one. Both for the same reason: what is
+            // held is how to go on asking, not an answer that has to compare as one.
+            generationReader("souther.compiler.check.ResolvedSymbols",
                     part("souther.compiler.partition.MeasuredInput", "written"),
-                    part("souther.compiler.partition.BehaviorInputs", "symbols")),
+                    part("souther.compiler.partition.BehaviorInputs", "symbols"),
+                    arm("souther.compiler.check.ResolvedSymbols")),
+            generationReader("souther.compiler.check.DerivedSymbols",
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "symbols"),
+                    arm("souther.compiler.check.DerivedSymbols")),
             generationReader("souther.compiler.inputs.ReadQuantities",
                     part("souther.compiler.partition.MeasuredInput", "quantities"),
                     arm("souther.compiler.inputs.ReadQuantities")),

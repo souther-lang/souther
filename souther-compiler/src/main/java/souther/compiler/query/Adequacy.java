@@ -15,6 +15,7 @@ import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Sig;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Disposition;
@@ -651,7 +652,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, InputDomain>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
             if (!prepared.present() || !scope.present() || !sigs.present() || !settled.present()) {
@@ -810,7 +811,7 @@ public final class Adequacy {
             Db db, String module, Hir.SpecBehavior spec) {
         souther.compiler.partition.Partitions.Partitioning divided =
                 db.ask(new Divided(module, spec.name())).value();
-        Answer<Symbols> scope = Names.derivedSymbols(db, module);
+        Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
         Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(module));
         if (divided == null || !scope.present() || !sigs.present()) {
             return null;
@@ -859,7 +860,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, souther.compiler.check.PathReachability.Answers>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -1207,7 +1208,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, SignatureEvidence>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
@@ -1268,7 +1269,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, PartitionEvidence>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
@@ -1395,7 +1396,7 @@ public final class Adequacy {
         @Override
         public Answer<souther.compiler.partition.Partitions.Partitioning> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
@@ -1485,7 +1486,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             souther.compiler.partition.Partitions.Partitioning divided =
                     db.ask(new Divided(name, behavior)).value();
@@ -2693,7 +2694,7 @@ public final class Adequacy {
         @Override
         public Answer<Filling> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             // What a row is offered for is what the coverage found, so a coverage that did not
             // answer leaves this nothing to offer from. Absence and not `PartitionEvidence.NONE`:
