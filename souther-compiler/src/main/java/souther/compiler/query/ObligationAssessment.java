@@ -17,17 +17,22 @@ import souther.compiler.partition.Criterion;
  *
  * @param projection what reading the rules reaching the value this point sits in established about a
  *                   value being there
- * @param attempt    what building a value here came to, or null where nobody asked for one
+ * @param searches   what building a value here came to under each reading of the line, and empty
+ *                   where nobody asked for one. Every one of them and not the strongest: what a
+ *                   search of one reading came to is a fact about this point, two readings can have
+ *                   come to two different things, and neither takes the other back. Kept as one, the
+ *                   fact a reader was given was whichever the readings were walked in front of
  */
 public record ObligationAssessment(Criterion criterion, ObligationCoverage coverage,
                                    ItemAssessment.WritabilityProjection projection,
-                                   ItemAssessment.Attempt attempt) {
+                                   SearchOutcomes searches) {
 
     public ObligationAssessment {
-        if (criterion == null || coverage == null || projection == null) {
+        if (criterion == null || coverage == null || projection == null || searches == null) {
             throw new IllegalArgumentException(
-                    "an obligation is a criterion, what the readings came to, and what the rules"
-                            + " prove: " + criterion + " " + coverage + " " + projection);
+                    "an obligation is a criterion, what the readings came to, what the rules prove"
+                            + " and what was searched for: " + criterion + " " + coverage + " "
+                            + projection + " " + searches);
         }
     }
 
@@ -52,13 +57,10 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
         };
     }
 
-    /** The same point, with what a search of it came to. */
+    /** The same point, with what one more search of it came to. */
     public ObligationAssessment settledBy(ItemAssessment.Attempt searched) {
-        if (attempt != null) {
-            throw new IllegalStateException(
-                    "a point searched twice: " + criterion + " already has " + attempt);
-        }
-        return new ObligationAssessment(criterion, coverage, projection, searched);
+        return new ObligationAssessment(criterion, coverage, projection,
+                searches.plus(SearchOutcomes.of(searched)));
     }
 
     /**
@@ -68,8 +70,11 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
      * record already carries, and a set kept beside them would be the same facts written twice.
      */
     public ItemAssessment.WritabilityEvidence writabilityEvidence() {
+        // Any one of them. A value read back where it was built for is grounds that a row can be
+        // written at the point whichever reading of the line composed it — the readings owe the one
+        // row between them, so what one of them showed the point, they all showed it.
         return ItemAssessment.WritabilityEvidence.of(projection, hasRowWitness(),
-                attempt instanceof ItemAssessment.Attempt.Certified);
+                searches.certified());
     }
 
     /**
@@ -78,9 +83,13 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
      * <p>What an account reads. The grounds alone answer one question and leave two situations
      * looking alike — nothing has shown a row can be written, and the showing of it was stopped —
      * and an account acts on those differently.
+     *
+     * <p>Over every search of the point, so that what stopped any of them is said. Two readings
+     * stopped by two figures are two pieces of work, and a reader told about one of them would be
+     * told about whichever the readings happened to be walked in front of.
      */
     public WritabilityKnowledge writabilityKnowledge() {
-        return WritabilityKnowledge.of(writabilityEvidence(), attempt);
+        return WritabilityKnowledge.of(writabilityEvidence(), searches);
     }
 
     /** What the readings behind this went without. */

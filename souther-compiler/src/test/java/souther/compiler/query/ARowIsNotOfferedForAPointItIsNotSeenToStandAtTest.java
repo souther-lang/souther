@@ -78,7 +78,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         for (ItemAssessment item : owed) {
             ItemAssessment.Attempt.Unresolved no = assertInstanceOf(
                     ItemAssessment.Attempt.Unresolved.class,
-                    ((ItemAssessment.Owed) item).attempt(),
+                    ((ItemAssessment.Owed) item).searches().only(),
                     "nothing composed a row that reaches this point, so none is offered");
             assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                     no.why().reason(),
@@ -93,7 +93,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         for (ItemAssessment item : pointsOfTheInnerLine()) {
             ItemAssessment.Attempt.Unresolved no = assertInstanceOf(
                     ItemAssessment.Attempt.Unresolved.class,
-                    ((ItemAssessment.Owed) item).attempt());
+                    ((ItemAssessment.Owed) item).searches().only());
             assertFalse(no.way().declined().isEmpty(),
                     "a disjunction states one of two things and this reading says so: "
                             + no.way().onTheWay());

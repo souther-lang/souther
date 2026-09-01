@@ -124,7 +124,7 @@ class ARowBuiltAtAPointIsNotUnbuiltByWhatTheObservationKeptTest {
     }
 
     private static ItemAssessment.Attempt attemptAt(int length, PointRole role) {
-        return line(length).owedAt(role).attempt();
+        return line(length).owedAt(role).searches().only();
     }
 
     private static BorderAssessment line(int length) {

@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -141,7 +142,7 @@ class ARowIsComposedForAPointOnATotalTest {
                 // the one a line is drawn at owes no point off it, which is the order's answer and
                 // was the order's answer before any of this.
                 if (item instanceof ItemAssessment.Owed one
-                        && !(one.attempt() instanceof ItemAssessment.Attempt.Built)) {
+                        && one.searches().rowToOffer().isEmpty()) {
                     owed.add(point);
                 }
             });
@@ -292,20 +293,25 @@ class ARowIsComposedForAPointOnATotalTest {
     @Test
     void whereNoShapeOfferedIsARowTheSearchSaysItStopped() {
         List<String> said = new ArrayList<>();
+        List<Object> budgets = new ArrayList<>();
         for (BorderAssessment border : lines(MODEL, "noShapeOfferedReachesIt")) {
             if (!border.label().contains("List.sum")) {
                 continue;
             }
             ItemAssessment at = border.at(PointRole.ON);
             if (at instanceof ItemAssessment.Owed owed
-                    && owed.attempt() instanceof ItemAssessment.Attempt.Unresolved why) {
+                    && owed.searches().only() instanceof ItemAssessment.Attempt.Stopped why) {
                 said.add(why.why().reason().toString());
+                budgets.add(why.stoppedBy().budgets());
             }
         }
 
         assertEquals(List.of("SEARCH_LIMIT"), said,
                 "two of the decompositions were made and the rest were not, so what a reader is"
                         + " told is that this stopped");
+        assertEquals(List.of(Set.of(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED)), budgets,
+                "and which figure of this compiler's decided it, which is the half of the answer"
+                        + " that says what would have to give for the point to be settled");
         assertEquals(List.of(), otherThanTheAnswer(MODEL + "\nexample noShapeOfferedReachesIt\n"
                         + "    | (Two { xs = [Awkward(2), Awkward(5)] }) -> " + WHATEVER + "\n"),
                 "and the row an author writes for it is one the model holds, which is why the other"
@@ -332,7 +338,7 @@ class ARowIsComposedForAPointOnATotalTest {
         for (String behavior : ON_A_TOTAL) {
             forEachPoint(behavior, (point, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
-                        && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
+                        && owed.searches().only() instanceof ItemAssessment.Attempt.Built built) {
                     held.check(behavior, point, written(built.row()));
                 }
             });

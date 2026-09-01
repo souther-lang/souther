@@ -157,4 +157,49 @@ public sealed interface ObligationCoverage {
         return missed ? new Missed()
                 : new NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS);
     }
+
+    /**
+     * What two searches of one reading of one line saw, as one reading's measurement.
+     *
+     * <p>For the one place two of those meet: a line read once and searched twice, which is a
+     * helper called from two arms. They are not two readings — the authored line and the target are
+     * the same, and what differs is the region a row for it was composed in — so what a debt is
+     * gathered from has to be one measurement, and this is how the two become it.
+     *
+     * <p><b>Written in terms of {@link #acrossTheReadings} and not beside it.</b> What a set of
+     * measurements comes to is that one's answer, and a second reading of the same question here
+     * would be a second coverage semantics free to part from it. So the pair is put through it and
+     * the answer is written back as the measurement that says the same thing, which makes
+     * {@code acrossTheReadings(a, b)} and {@code acrossTheReadings(across(a, b))} the same answer by
+     * construction rather than by two pieces of code being kept in step.
+     */
+    static Measurement<ItemAssessment.Coverage> acrossOneReadingsSearches(
+            Measurement<ItemAssessment.Coverage> a, Measurement<ItemAssessment.Coverage> b) {
+        return switch (acrossTheReadings(List.of(a, b))) {
+            // A row was seen, and what the searches behind it went without is what both of them
+            // went without. Kept as whichever of the two saw it, the answer turned on which was
+            // walked first — the one that saw a row and read everything, and the one that saw a row
+            // and could not, are one reading here, and what it could not read is a fact of its own.
+            case Witnessed _ -> {
+                WeakeningSet went = wentWithout(a).union(wentWithout(b));
+                yield went.isEmpty()
+                        ? new Measurement.Complete<>(new ItemAssessment.Coverage.Hit())
+                        : new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(), went);
+            }
+            case Undecided it -> new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
+                    it.weakening());
+            case Missed _ -> new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit());
+            case NotMeasured it -> new Measurement.NotMeasured<>(it.why());
+        };
+    }
+
+    /** What one search of a reading could not read, and none where it read everything. */
+    private static WeakeningSet wentWithout(Measurement<ItemAssessment.Coverage> made) {
+        return switch (made) {
+            case Measurement.Partial<ItemAssessment.Coverage> it -> it.by();
+            case Measurement.FailedToMeasure<ItemAssessment.Coverage> it -> it.by();
+            case Measurement.Complete<ItemAssessment.Coverage> _,
+                 Measurement.NotMeasured<ItemAssessment.Coverage> _ -> WeakeningSet.none();
+        };
+    }
 }

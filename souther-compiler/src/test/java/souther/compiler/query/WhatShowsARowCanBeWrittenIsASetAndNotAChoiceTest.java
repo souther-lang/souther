@@ -98,9 +98,11 @@ class WhatShowsARowCanBeWrittenIsASetAndNotAChoiceTest {
                             + " came to nothing and the reading nobody made leave it out");
             assertEquals(owed.hasRowWitness(), evidence.has(Ground.A_ROW_IS_AT_IT),
                     "the row ground is a row this compilation read standing at the point");
-            assertEquals(owed.attempt() instanceof ItemAssessment.Attempt.Built,
+            assertEquals(owed.searches().each().stream()
+                            .anyMatch(each -> each instanceof ItemAssessment.Attempt.Certified),
                     evidence.has(Ground.A_VALUE_WAS_BUILT),
-                    "and the construction ground is the attempt having built one");
+                    "and the construction ground is a search having built one and read it back"
+                            + " — any of them, since the searches are of the one point");
             assertEquals(!evidence.grounds().isEmpty(), evidence.known(),
                     "known is having a ground, and empty is the whole of what unknown was");
         }

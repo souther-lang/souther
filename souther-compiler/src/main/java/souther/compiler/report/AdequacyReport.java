@@ -20,6 +20,7 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
+import souther.compiler.query.SearchOutcomes;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.observe.MeasurementStatus;
@@ -526,7 +527,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("      · not known to be writable: the %s point %s (%s)%n",
                     each.debt().role(), each.said(), each.debt().describe(names, null)));
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
-                    at.owedAt(each.debt().at()).attempt(), names, null));
+                    at.owedAt(each.debt().at()).searches(), names, null));
         }
         Map<String, List<Adequacy.Finding>> byDeclaration = new java.util.LinkedHashMap<>();
         for (Adequacy.Finding each : module.declarations()) {
@@ -1312,7 +1313,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // reader looking at two models that differ here is looking at what the compiler could
             // establish — and without this the difference reads as the tool being arbitrary.
             readings(out, p, _ -> true, at -> whatWasTried(
-                    at.owedAt(p.at()).attempt(), names, declaredIn));
+                    at.owedAt(p.at()).searches(), names, declaredIn));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
@@ -1726,11 +1727,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // the carrying dropping it.
                 case COVERAGE -> "undecided whether a row is at the " + point
                         + whatTheRowsWentWithout(owed);
-                // Named for what happened and not for the limit's number. Which budget it was is
-                // the observation's own word, and what an author is told is that the row this
-                // compiler composed is not evidence of anything until it can be read back.
-                case WRITABILITY -> "a row was built for the " + point
-                        + ", and " + why(owed.writabilityKnowledge());
+                // Named for what happened, which is not one thing. A reading that did not come
+                // back is of a row this compiler composed; a composing that stopped never had one
+                // — and an opening written for the first says a row was built at a point where
+                // none was. So the sentence is the gap's, and the gaps say which they are.
+                case WRITABILITY ->
+                        "nothing could show a row can be written at the " + point
+                                + " — " + why(owed.writabilityKnowledge());
             });
         }
         return said;
@@ -1763,19 +1766,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    /** Why nothing could confirm the row a search composed, in the observation's own words. */
+    /**
+     * Why nothing could show a row can be written at a point, in the words of what was stopped.
+     *
+     * <p>Every one of them and not the first. A point may have been stopped in more than one way —
+     * a reading of one value that did not come back, a composing for another that never started —
+     * and what a reader wants is everything that would have to give for the point to be settled.
+     */
     private static String why(WritabilityKnowledge knowledge) {
-        if (!(knowledge instanceof WritabilityKnowledge.Prevented(EstablishmentGap by))) {
+        if (!(knowledge instanceof WritabilityKnowledge.Prevented(Set<EstablishmentGap> by))) {
             // Only a point whose showing was stopped is written this way, and what stopped it is
             // what this exists to say.
             throw new IllegalStateException("a point undecided about being writable was not "
                     + "stopped from being shown so: " + knowledge);
         }
-        return switch (by) {
-            case EstablishmentGap.Observation(Set<Incompleteness.Code> causes) -> causes.stream()
-                    .map(AdequacyReport::whatStopped)
-                    .collect(Collectors.joining(", and "));
-        };
+        List<String> out = new ArrayList<>();
+        for (EstablishmentGap each : by) {
+            out.add(switch (each) {
+                case EstablishmentGap.Observation(Set<Incompleteness.Code> causes) ->
+                        "a row was built for it, and " + causes.stream()
+                                .map(AdequacyReport::whatStopped)
+                                .collect(Collectors.joining(", and "));
+                // What this compiler declined to build, and which figure decided it. An author does
+                // nothing about this; what it says is that the point is open because of a policy
+                // here, which is what keeps it out of the work they are told they owe.
+                case EstablishmentGap.Composition(var budgets) ->
+                        "nothing was composed for it: this compiler stopped at " + said(budgets);
+            });
+        }
+        return String.join(", and ", out);
     }
 
     /** What one observation gap cost, said as what it stopped rather than as its code. */
@@ -1856,19 +1875,43 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** What the search for a value at an edge came to, where it ran and found none. */
+    private static String whatWasTried(SearchOutcomes outcomes, SourceNameResolver names,
+                                       SourceId declaredIn) {
+        // Which searches are worth a sentence is the outcomes' answer, not this one's. Told apart
+        // here, two of them would be one piece of news whenever the words for them happened to
+        // match — a report deciding what happened from what it was about to write.
+        List<String> said = new ArrayList<>();
+        for (ItemAssessment.Attempt each : outcomes.worthSaying()) {
+            said.add(whatWasTried(each, names, declaredIn));
+        }
+        // One sentence per search, with the readings' own separator between them. Run together,
+        // two searches of one reading read as one clause that says two things.
+        return String.join(";", said);
+    }
+
+    /** The same, of one search of the point. */
     private static String whatWasTried(ItemAssessment.Attempt attempt, SourceNameResolver names,
                                        SourceId declaredIn) {
-        if (!(attempt instanceof ItemAssessment.Attempt.Unresolved left)) {
+        // One opening per outcome, and not one for everything that came back without a row. A
+        // search this compiler stopped and a search that had everything and reached nothing are
+        // different news, and a proof is not a failure at all — read under one opening, an author
+        // is sent looking for a row nothing can write, or told nothing was composed for a point
+        // where the composing never started.
+        if (attempt == null) {
             return "";   // nothing ran, and what a run would have said is not this line's to guess
         }
-        // A proof is not a failure, and the sentence in front of the reason may not say it is.
-        // Every other word here is this compiler saying what it did not manage; one of them is the
-        // model settling the point, and reading them under one opening sends an author looking for
-        // a row nothing can write. Asked of the reason, which is where that decision is written.
-        String opening = left.why().reason().provesInfeasible()
-                ? " — " : " — nothing composed one: ";
-        return opening + left.why().said().orElseGet(() -> whyUnresolved(left.why()))
-                + whatTheRegionLeftOut(left.unaccountedFor(), names, declaredIn);
+        return switch (attempt) {
+            case ItemAssessment.Attempt.Certified _, ItemAssessment.Attempt.Unverified _,
+                 ItemAssessment.Attempt.Unavailable _ -> "";
+            case ItemAssessment.Attempt.Stopped it ->
+                    " — this compiler stopped at " + said(it.stoppedBy().budgets()) + ": "
+                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+            case ItemAssessment.Attempt.Unresolved it ->
+                    (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
+                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+        };
     }
 
     /**
@@ -1923,8 +1966,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                 .TwoNumbersAtOneLocation _ ->
                                 "a condition on another number taken where this row is already"
                                         + " being written for one";
+                        // What stopped the looking, and not that nothing was found. An author does
+                        // nothing about the first and may do something about the second.
+                        case souther.compiler.partition.ReachabilityGap.Why
+                                .TheWalkForItsPositionsWasStopped(var by) ->
+                                "a condition on positions this compiler stopped looking at ("
+                                        + said(by) + ")";
                     };
         };
+    }
+
+    /**
+     * What a budget of this compiler's is called where a reader meets one.
+     *
+     * <p>Its own words and not the constant's name. What the compiler calls a figure is a name for
+     * the code that reads it; what a reader wants is what this compiler declined to do, in a phrase
+     * they can act on — and a budget added arrives here as a compile error rather than as a name
+     * nobody wrote a sentence for.
+     */
+    private static String said(java.util.Set<souther.compiler.partition.CompositionBudget> budgets) {
+        List<String> out = new ArrayList<>();
+        for (souther.compiler.partition.CompositionBudget each : budgets) {
+            out.add(switch (each) {
+                case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
+                case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
+                case PAIRINGS_BUILT_AT_ONCE -> "how many of a map's pairings are built at once";
+                case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
+                        "how many elements a total is spread over";
+                case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
+                case DECOMPOSITIONS_OF_A_TOTAL_OFFERED ->
+                        "how many ways a total is decomposed";
+                case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
+                case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
+                case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
+                case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
+                        "how many values of an unbounded progression are tried";
+                case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
+                case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
+                case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
+                        "how many values a position on the way is tried at";
+                case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
+            });
+        }
+        return String.join(", ", out);
     }
 
     /**

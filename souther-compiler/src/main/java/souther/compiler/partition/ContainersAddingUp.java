@@ -54,29 +54,22 @@ import java.util.List;
  */
 final class ContainersAddingUp {
 
-    /**
-     * How many elements a container this composes is worth carrying.
-     *
-     * <p>Its own figure and not {@link Witnesses}'s, though they agree: what bounds a container
-     * built to hold a count is how many a row is worth reading, and what bounds one built to reach a
-     * total is the same thing said of the same reader. Held as one constant, a change made for one
-     * of them would move the other for no reason anybody could state.
-     */
-    private static final int MOST_ELEMENTS_A_ROW_CARRIES = 64;
+    /** What this stops at, named where every budget of this compiler's is named. */
+    private static final int MOST_ELEMENTS_A_ROW_CARRIES =
+            CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER.maximum();
+
+    private static final int HOW_MANY_SHAPES_ARE_OFFERED =
+            CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED.maximum();
 
     /**
-     * How many containers are offered for one total.
+     * How many ways a difference is spread over the elements, which is how many this walk has.
      *
-     * <p>More than one, because the containers that reach a total are not alike to the rules the
-     * elements are under: a container of ten is refused by a rule about how many it holds while one
-     * of eleven is not, and one that put the whole difference on a single element is refused by a
-     * rule that takes that value out of the run while one that shared it is not. The search that
-     * puts them through the decoder has nothing else to try.
-     *
-     * <p>Small all the same. They are alike to the total, so what a fifth buys is another row
-     * reading like the last, and what is not made is said rather than made up for.
+     * <p>Read off {@link Spread} rather than written down beside it. A third way of spreading is a
+     * budget raised, and a figure of its own here would be a second declaration that stayed at two.
      */
-    private static final int HOW_MANY_SHAPES_ARE_OFFERED = 4;
+    static int decompositionsOffered() {
+        return Spread.values().length;
+    }
 
     /**
      * Containers whose occurrences of {@code target}'s path come to {@code answer}, or why there are
@@ -117,11 +110,14 @@ final class ContainersAddingUp {
         List<TermPath.Step> under = stepsInsideAnElement(target);
         List<FixtureTemplate> built = new ArrayList<>();
         int cap = Math.min(howMany.most(), MOST_ELEMENTS_A_ROW_CARRIES);
-        // What this walk did not do, recorded as it decides not to do it. Worked out afterwards from
-        // the ends, the two ways of leaving something unmade — a count never tried, and a count
-        // whose other decompositions were never made — cannot both be seen, and a container offered
-        // and refused was reported as every container having been refused.
-        boolean left = cap < howMany.most();
+        // What this walk did not do, recorded as it decides not to do it, and as which budget of
+        // this compiler's decided it. Held as one flag, the three ways of leaving something unmade
+        // were one fact and a reader was told a search stopped without being told what would let it
+        // go further — and worked out afterwards from the ends, they cannot all be seen at once.
+        java.util.Set<CompositionBudget> left = java.util.EnumSet.noneOf(CompositionBudget.class);
+        if (cap < howMany.most()) {
+            left.add(CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER);
+        }
         // Asked where a container is added and nowhere else. What the budget counts is containers,
         // and a walk that asked at the top of the counts was asking about containers in a place that
         // steps by counts — so a count offering two of them stepped past the figure by one, and how
@@ -131,7 +127,9 @@ final class ContainersAddingUp {
             // More than one element is more than one decomposition, whether or not this made a
             // second: what is offered is two shapes of the many, and the many are what a rule taking
             // a value out of the middle of a run tells apart.
-            left |= many > 1;
+            if (many > 1) {
+                left.add(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED);
+            }
             for (Spread how : Spread.values()) {
                 List<BigDecimal> split = splitting(total.at(), many, ends, how, elements);
                 FixtureTemplate one = split == null ? null
@@ -140,18 +138,21 @@ final class ContainersAddingUp {
                     continue;
                 }
                 if (built.size() == HOW_MANY_SHAPES_ARE_OFFERED) {
-                    left = true;
+                    left.add(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED);
                     break offering;
                 }
                 built.add(one);
             }
         }
-        Generator.UnresolvedCombination.Reason held =
-                left ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null;
-        return built.isEmpty()
-                ? none(held == null
-                        ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : held)
-                : new TermRealizations.Realization.Built(built, held);
+        if (!built.isEmpty()) {
+            return new TermRealizations.Realization.Built(built, left);
+        }
+        // Nothing was composed, so what the budgets stopped is the composing itself and not the rest
+        // of an offer. Where none of them ran out, this is a total nothing here writes a container
+        // for, which is a different thing to tell anybody.
+        return left.isEmpty()
+                ? none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                : new TermRealizations.Realization.Stopped(left);
     }
 
     /**
@@ -398,7 +399,7 @@ final class ContainersAddingUp {
 
     private static TermRealizations.Realization none(
             Generator.UnresolvedCombination.Reason why) {
-        return new TermRealizations.Realization.BuiltNone(why);
+        return new TermRealizations.Realization.None(why);
     }
 
     private ContainersAddingUp() {}

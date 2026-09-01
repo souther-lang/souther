@@ -207,7 +207,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
             String model, String border, PointRole role) {
         BorderAssessment at = bordersOf(model).get(border);
         assertNotNull(at, bordersOf(model).keySet().toString());
-        return at.owedAt(role).attempt();
+        return at.owedAt(role).searches().only();
     }
 
     /** The row offered at one point, as a reader would paste it, or null where none was. */

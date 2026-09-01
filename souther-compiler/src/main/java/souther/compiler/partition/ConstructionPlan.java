@@ -66,7 +66,8 @@ final class ConstructionPlan {
      *  the declarations it opens ({@link souther.compiler.inputs.ExpansionTrace}), which answers a
      *  different question: a value has to be built at a position whether or not a report divides
      *  it. */
-    private static final int MAX_DEPTH = 8;
+    private static final int MAX_DEPTH =
+            CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS.maximum();
 
     /**
      * One position of the value being built.

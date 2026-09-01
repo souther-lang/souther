@@ -244,7 +244,7 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
         for (BorderAssessment border : lines) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
-                        && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
+                        && owed.searches().only() instanceof ItemAssessment.Attempt.Built built) {
                     rows.put(border.label() + " " + border.border().named(role),
                             as.apply(built.row()));
                 }

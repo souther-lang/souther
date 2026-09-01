@@ -21,11 +21,10 @@ import java.util.Set;
  * by files that stop for nothing like each other. So a producer that stops hands this over, and one
  * that has nothing to hand over says so by there being no gap rather than by a gap nobody made.
  *
- * <p>One case today. A candidate this compiler declined to compose leaves the same question open
- * for the same kind of reason, and it is not here: what stops that composing is a different budget
- * in a different stage, and the value that would have been read back was never built. A case for it
- * arrives beside this one, and every reader that has to tell them apart is a reader an exhaustive
- * switch already stops.
+ * <p>Two cases, and what tells them apart is how far this compiler had got when it stopped. An
+ * observation is of a value that exists and did not come back whole; a composing is of a value that
+ * was never built. They leave the same question open and they are different work to close: one
+ * takes keeping more of what is built, the other takes building more of what the rules leave.
  */
 public sealed interface EstablishmentGap {
 
@@ -44,6 +43,35 @@ public sealed interface EstablishmentGap {
                         "an observation that stopped something says what stopped it");
             }
             causes = Collections.unmodifiableSet(EnumSet.copyOf(causes));
+        }
+    }
+
+    /**
+     * A budget of this compiler's ran out before any value was composed for the point.
+     *
+     * <p>Made where the composing stopped and carried out, never worked out afterwards. What a
+     * search comes back with is a word, and two of this compiler's budgets come back with the same
+     * word while one of them is written wherever a walk stops for any reason at all — so a reader
+     * recovering a budget from that word would be recovering one that may never have been reached.
+     *
+     * <p><b>Only where nothing was composed.</b> A budget that cut an offering short after a value
+     * was built took nothing away from the point: the value is there, and what was lost is the rest
+     * of an offer. Such a budget travels on what was built and not here, because a gap here is read
+     * as the showing having been stopped.
+     *
+     * <p>A set, because a search meets as many figures as it meets and no two of them are the same
+     * piece of work. Ranked, the one a reader was told about would be whichever the walk hit first.
+     */
+    record Composition(Set<souther.compiler.partition.CompositionBudget> budgets)
+            implements EstablishmentGap {
+
+        public Composition {
+            if (budgets == null || budgets.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a composing this compiler stopped says which budget stopped it");
+            }
+            budgets = Collections.unmodifiableSet(
+                    EnumSet.copyOf(budgets));
         }
     }
 }
