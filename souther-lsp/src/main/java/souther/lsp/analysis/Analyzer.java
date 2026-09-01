@@ -11,6 +11,8 @@ import souther.compiler.check.Resolve;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmSummary;
+import souther.compiler.query.Measurement;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
@@ -656,8 +658,7 @@ public final class Analyzer {
         // qualifies them; one line in an editor cannot, so it holds to Complete. What both take from
         // the value is how the numbers are worked out (issue #997).
         if (branch != null
-                && branch.measured() instanceof souther.compiler.query.Measurement.Complete<
-                        souther.compiler.query.ArmSummary> whole) {
+                && branch.measured() instanceof Measurement.Complete<ArmSummary> whole) {
             parts.add("branch " + whole.value().covered() + "/" + whole.value().counted());
         }
         return String.join(" · ", parts);

@@ -9,13 +9,20 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.coverage.DecidedBy;
+import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmDisposition;
+import souther.compiler.query.ArmExclusion;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.CoverageConstruct;
+import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.RuleOrigin;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -236,17 +243,15 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("branch.obligations[].disposition",
                     List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "disposition"),
-                    List.of(souther.compiler.query.ArmDisposition.class), armDispositionWords(),
-                    Set.of()),
+                    List.of(ArmDisposition.class), armDispositionWords(), Set.of()),
             new Vocabulary("branch.obligations[].notCountedBecause",
                     List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "notCountedBecause"),
-                    List.of(souther.compiler.query.ArmExclusion.class), armExclusionWords(),
-                    Set.of()),
+                    List.of(ArmExclusion.class), armExclusionWords(), Set.of()),
             // What settles which rule a fork decides by, which is part of what one arm is.
             new Vocabulary("armObligationId.decidedBy",
                     List.of("$defs", "armObligationId", "properties", "decidedBy"),
-                    List.of(souther.compiler.coverage.DecidedBy.class), decidedByWords(), Set.of()),
+                    List.of(DecidedBy.class), decidedByWords(), Set.of()),
             // What a rule of the model raises. Only the questions this compiler issues today: a
             // word arrives here in the same change that starts raising it, so the enum and the
             // schema move together or the compile stops.
@@ -487,7 +492,7 @@ class EverySchemaWordIsAccountedForTest {
 
     /** Where the arm account puts an arm, spelled by the one writer of the field. */
     private static Set<String> armDispositionWords() {
-        return Arrays.stream(souther.compiler.query.ArmDisposition.values())
+        return Arrays.stream(ArmDisposition.values())
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
@@ -500,22 +505,19 @@ class EverySchemaWordIsAccountedForTest {
      * word for rather than as a word this test forgot.
      */
     private static Set<String> armExclusionWords() {
-        souther.compiler.types.CoverageOrigin fork = souther.compiler.types.CoverageOrigin.written(
-                "m", 0, souther.compiler.types.CoverageConstruct.IF);
+        CoverageOrigin fork = CoverageOrigin.written("m", 0, CoverageConstruct.IF);
         return java.util.stream.Stream
-                .<souther.compiler.query.ArmExclusion>of(
-                        new souther.compiler.query.ArmExclusion.OccurrencesNotToldApart(fork))
+                .<ArmExclusion>of(new ArmExclusion.OccurrencesNotToldApart(fork))
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
     /** What settles which rule a fork decides by, spelled by the writer for the same reason. */
     private static Set<String> decidedByWords() {
-        return java.util.stream.Stream.of(souther.compiler.coverage.DecidedBy.THE_DECLARATION,
-                        new souther.compiler.coverage.DecidedBy.BySupplied(List.of(
-                                new souther.compiler.coverage.SuppliedRules.RuleIdentity.Written(
-                                        souther.compiler.types.RuleOrigin.written("m", 0)))),
-                        souther.compiler.coverage.DecidedBy.NOT_SAID)
+        return java.util.stream.Stream.of(DecidedBy.THE_DECLARATION,
+                        new DecidedBy.BySupplied(List.of(new SuppliedRules.RuleIdentity.Written(
+                                RuleOrigin.written("m", 0)))),
+                        DecidedBy.NOT_SAID)
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }

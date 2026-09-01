@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.ArmVocabulary;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -58,7 +59,7 @@ class CompileExampleCoverageTest {
 
     private static List<String> unreached(Adequacy.BranchEvidence branch) {
         return branch.arms().unmet().stream()
-                .map(arm -> souther.compiler.report.ArmVocabulary.label(arm.display())).toList();
+                .map(arm -> ArmVocabulary.label(arm.display())).toList();
     }
 
     /** One row through the guard leaves the other arm with nothing going through it. */
@@ -180,8 +181,7 @@ class CompileExampleCoverageTest {
 
         assertEquals(List.of("case Off"),
                 branch.arms().all().stream()
-                        .map(arm -> souther.compiler.report.ArmVocabulary.label(arm.display()))
-                        .toList());
+                        .map(arm -> ArmVocabulary.label(arm.display())).toList());
         assertEquals(List.of(), unreached(branch), "the row went through the arm that is left");
     }
 

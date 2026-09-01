@@ -21,10 +21,15 @@ import java.util.Set;
  * measurement, and every surface deciding for itself which of them bears on what — an arm nothing
  * reaches stopped being reported because a helper elsewhere in the body could not be told apart, and
  * a reading that stopped in one row was printed as a word over every arm of the behavior.
+ *
+ * <p>Not public, and that is the boundary rather than a habit. This is where the measurement's own
+ * weakening comes from, and a consumer that could reach it could work an arm's state out of the
+ * reasons a second time. What leaves this package is {@link ArmSummary}, which has the groups and
+ * the census and no way to the provenance.
  */
-public record ArmAccount(List<ArmObligation> obligations, ArmCensus census) {
+record ArmAccount(List<ArmObligation> obligations, ArmCensus census) {
 
-    public ArmAccount {
+    ArmAccount {
         obligations = List.copyOf(obligations);
         java.util.Objects.requireNonNull(census, "an account says whether its denominator stands");
     }
@@ -44,8 +49,8 @@ public record ArmAccount(List<ArmObligation> obligations, ArmCensus census) {
      * @param rowsUnread what the reading of this behavior's rows went without
      * @param census     whether anything has shown {@code owed} to be short of an arm
      */
-    public static ArmAccount of(List<CoverageSites.Site> owed, Set<Integer> covered,
-                                WeakeningSet rowsUnread, ArmCensus census) {
+    static ArmAccount of(List<CoverageSites.Site> owed, Set<Integer> covered,
+                         WeakeningSet rowsUnread, ArmCensus census) {
         java.util.SequencedMap<CoverageSites.Obligation, List<CoverageSites.Site>> byObligation =
                 new LinkedHashMap<>();
         for (CoverageSites.Site site : owed) {
@@ -71,7 +76,7 @@ public record ArmAccount(List<ArmObligation> obligations, ArmCensus census) {
      * through nothing else; added over the top, they would weaken an account with nothing open in
      * it.
      */
-    public WeakeningSet weakening() {
+    WeakeningSet weakening() {
         WeakeningSet out = census.weakening();
         for (ArmObligation arm : obligations) {
             out = switch (arm) {
@@ -84,7 +89,7 @@ public record ArmAccount(List<ArmObligation> obligations, ArmCensus census) {
     }
 
     /** What a consumer reads, which is the groups and the qualification and nothing else. */
-    public ArmSummary summary() {
+    ArmSummary summary() {
         return new ArmSummary(obligations, census);
     }
 }

@@ -10,8 +10,10 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmCensus;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Weakening;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -397,9 +399,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
         // there are is what the proofs decided, so a proof shown wrong leaves that set in doubt;
         // where each arm stands is what the rows said, and a row through an arm went through it
         // however wrong a proof about the arm beside it turned out to be.
-        assertEquals(new souther.compiler.query.ArmCensus.Undecided(
-                        WeakeningSet.of(new souther.compiler.query.Weakening.ProofContradicted(
-                                "b", UNREACHED))),
+        assertEquals(new ArmCensus.Undecided(
+                        WeakeningSet.of(new Weakening.ProofContradicted("b", UNREACHED))),
                 measured.arms().census(),
                 "the arm nothing reaches was proven unreachable and a row went through it");
         assertEquals(List.of(UNREACHED, TAKEN), probesOf(measured),
@@ -408,8 +409,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
         assertEquals(MeasurementStatus.PARTIAL,
                 AdequacyReport.statusOf(measured.measured()),
                 "and no number here is given as though nothing had happened");
-        assertEquals(WeakeningSet.of(new souther.compiler.query.Weakening.ProofContradicted(
-                        "b", UNREACHED)),
+        assertEquals(WeakeningSet.of(new Weakening.ProofContradicted("b", UNREACHED)),
                 measured.measured().weakening(),
                 "and the measurement says which proof a row went against");
     }

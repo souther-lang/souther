@@ -9,6 +9,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -794,10 +795,12 @@ class CompilePartialAdequacyTest {
      * to the arms refuses over it — the second holds nothing open, because what a build refuses over
      * is what a measure established and not how far the measure beside it got.
      *
-     * <p>What made this go the other way was the finding carrying the whole branch measurement's
-     * reasons rather than the reading that settled its own arm. The two arms here are in two
-     * behaviors, so it takes two measures to see it; the same thing happened within one, where a
-     * fork nobody could tell apart left every arm beside it unrefused.
+     * <p>What this holds is the gate staying where it belongs. Each behavior's arms are answered for
+     * by its own reading, so a reading that stopped in one behavior settles nothing about the
+     * behavior next to it — raised to the module, a run with one unfinished row anywhere would let
+     * every gap in it through. What settles an arm within one behavior is held where an arm and the
+     * measure over it can come apart, which no model reaches
+     * ({@code AGapIsRefusedOverByWhatSettledItTest}).
      */
     @Test
     void aGapIsRefusedOverBesideAnArmNobodyCouldDecide() {
@@ -836,7 +839,7 @@ class CompilePartialAdequacyTest {
                 Adequacy.Asked.fullReport()));
 
         List<String> refused = report.adequacyGaps().stream()
-                .filter(f -> f.about() instanceof souther.compiler.query.About.AnArmNoRowGoesThrough)
+                .filter(f -> f.about() instanceof About.AnArmNoRowGoesThrough)
                 .map(f -> f.subject().toString()).toList();
         assertEquals(1, refused.size(),
                 () -> "the arm of the behavior every row of was read: " + refused);

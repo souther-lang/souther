@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SourceOutcome;
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.source.SourceId;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 
@@ -40,8 +43,7 @@ class AGapIsRefusedOverByWhatSettledItTest {
     private static CoverageSites.Site arm(CoverageOrigin fork, int index, DecidedBy decided) {
         return new CoverageSites.Site("b",
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()),
-                souther.compiler.diag.Citation.of(new souther.compiler.diag.SourcePos(1, 1,
-                        new souther.compiler.source.SourceId("0"))),
+                Citation.of(new SourcePos(1, 1, new SourceId("0"))),
                 index, index, new CoverageSites.Obligation("b", fork, index, decided));
     }
 

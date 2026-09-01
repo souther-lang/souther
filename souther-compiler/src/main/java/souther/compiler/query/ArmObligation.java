@@ -110,6 +110,9 @@ public sealed interface ArmObligation {
      *
      * @param occurrences every copy of the arm, in the order the body holds them
      * @param covered     the probes some row went through
+     * <p>Not public. What an arm came to is read off what was observed, and this is where that
+     * reading happens; a caller outside deciding it would be a second answer about one arm.
+     *
      * @param rowsUnread  what the reading of this behavior's rows went without, which is empty
      *                    where it read them all
      */

@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmObligation;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.ArmVocabulary;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
@@ -236,9 +238,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
             Adequacy.BranchEvidence branch = compilation.db()
                     .ask(new Adequacy.BranchCoverage(module)).value().get("take");
             if (branch.measured().made().isPresent()) {
-                for (souther.compiler.query.ArmObligation.Counted arm : branch.arms().unmet()) {
-                    wrong.add("branch: " + souther.compiler.report.ArmVocabulary.label(
-                            arm.display()) + " unreached");
+                for (ArmObligation.Counted arm : branch.arms().unmet()) {
+                    wrong.add("branch: " + ArmVocabulary.label(arm.display()) + " unreached");
                 }
             }
 

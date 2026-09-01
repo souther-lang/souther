@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DoesNotComeBack;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.About;
@@ -325,8 +326,8 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         out.add(new Reported("example.unread", AdequacyReport.of(unread),
                 SourceNameResolver.identity()));
         Compilation stopped = Compilation.ofSource(A_ROW_THAT_DOES_NOT_COME_BACK, "Main");
-        stopped.withJvmExampleDeadlines(souther.compiler.DoesNotComeBack.overrunningOn(
-                souther.compiler.DoesNotComeBack.everythingAboutRowsOf("go")));
+        stopped.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
+                DoesNotComeBack.everythingAboutRowsOf("go")));
         stopped.measure(Adequacy.Asked.fullReport());
         stopped.answerEverything();
         out.add(new Reported("example.loop", AdequacyReport.of(stopped),

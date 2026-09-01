@@ -2928,7 +2928,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * place would be the same field written in five, and a sixth kind would have been written the way
      * the five were.
      *
-     * <p>Nothing here is a second reading of what is above it. {@code branch.unreached} and
+     * <p>Nothing here is a second reading of what is above it. {@code branch.obligations} and
      * {@code boundaries} keep saying what they say, in their own words and about their own measure;
      * this says which findings there are and what a build does about each, which is neither
      * measure's question and was nobody's.
@@ -3115,8 +3115,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>An arm's, and no other's. A behavior with two {@code guard}s writes two arms labelled
      * {@code else}, and the label is what a finding's subject is — so two findings of one behavior
      * came out identical in every field, and which of them a reader was being told about could not be
-     * worked out from the document at all. The place is what {@code branch.unreached} already tells
-     * them apart by, and it is written here in the same shape, so the two join.
+     * worked out from the document at all. The place is what {@code branch.obligations} already
+     * tells them apart by, and it is written here in the same shape, so the two join.
      *
      * <p>The other eight are cited at the declaration the entry sits under. Writing that coordinate
      * would say where the behavior is, under a finding about a line the model draws or a class of an
@@ -3149,7 +3149,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the sentence is reworded, and says nothing about which of the fields is the subject.
      *
      * <p>Written to join what is already in the document: a class name and its position are one of
-     * an axis's {@code classes} under that axis, an arm's label is one in {@code branch.unreached},
+     * an axis's {@code classes} under that axis, an arm's label is one in
+     * {@code branch.obligations},
      * and an axis and a value name a {@code boundaries} entry. An input's case carries its position
      * with it, because two parameters of one type give two findings a class name alone cannot tell
      * apart — and a class of a position carries its position for exactly that reason, which this
@@ -3157,7 +3158,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String subject(Adequacy.Finding finding, DocumentSources sources) {
         return switch (finding.about()) {
-            // The label and not the arm, and the same label `branch.unreached` writes: this field
+            // The label and not the arm, and the same label `branch.obligations` writes: this field
             // exists to join to that entry, and a value spelled a second way here would join to
             // nothing.
             case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);

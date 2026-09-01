@@ -24,13 +24,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a report may name about the arms turns on what was observed, not on what the numbers came to.
+ * What a report may name about the arms turns on what was observed of each arm, not on what the
+ * measure over all of them came to.
  *
- * <p>Two questions and two answers. Whether every row could be read says whether an arm nothing was
- * seen to reach may still be reached; whether the numbers are a whole measure falls for that and for
- * a fork whose rule could not be worked out as well. Read as one, a build whose rows all ran is told
- * a row was not read, and every arm it certainly does not reach goes unsaid — which is the defect
- * the two were split apart over, arriving one layer later.
+ * <p>The measure here is short of something and every arm of it is answered for: the rows were all
+ * read, so the arm no row goes through is a gap and is named, and the fork whose rule could not be
+ * worked out takes its own arms out of the count and is said under it. Read as one word, a build
+ * whose rows all ran was told a row was not read, and every arm it certainly does not reach went
+ * unsaid.
  */
 class WhatWasObservedDecidesWhatAReportMayNameTest {
 
