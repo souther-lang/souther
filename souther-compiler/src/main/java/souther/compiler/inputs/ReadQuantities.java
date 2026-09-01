@@ -1108,9 +1108,15 @@ final class ReadQuantities implements Quantities {
     /**
      * Where one term runs, as bounds rather than as something to add up.
      *
-     * <p>Beside {@link #atOneTerm} and about the same three things. What it does not do is turn them
-     * into numbers: a position ordered by its own values has ends that are values — a string stops
-     * at {@code "A"} — and the arithmetic that adds terms together has no word for one.
+     * <p>Three things and they are not one thing. A value the caller fixed it at is where it stands
+     * whether or not any clause ever named that coordinate; where the values it is answered from
+     * leave it is where its values stop, on whatever order it is measured ({@link
+     * #whereItsValuesAre}); and what the term guarantees of itself is true of every term of its
+     * kind, which is how a count is never negative without a clause saying so.
+     *
+     * <p>What this does not do is turn them into numbers: a position ordered by its own values has
+     * ends that are values — a string stops at {@code "A"} — and the arithmetic that adds terms
+     * together has no word for one.
      */
     private NumericDomain.Bounds whereOneTermRuns(NumericTerm term) {
         NumericDomain.Bounds runs = meeting(whereItsValuesAre(term), term.intrinsicBounds());
@@ -1168,20 +1174,8 @@ final class ReadQuantities implements Quantities {
         };
     }
 
-    /**
-     * Where one term runs, from everything about that term and nothing about what it stands beside.
-     *
-     * <p>Three things and they are not one thing. A value the caller fixed it at is where it stands
-     * whether or not any clause ever named that coordinate; what its own position was read to hold
-     * is where its values stop, on whatever order it is measured — a text position has a floor and
-     * no number for the arithmetic to relate; and what the term guarantees of itself is true of
-     * every term of its kind, which is how a count is never negative without a clause saying so.
-     *
-     * <p>The position's answer only where the position is measured at this term. Which number a
-     * position is measured at is settled by the reading that made it, and a count taken of a
-     * position the reading measured by its own value is a different quantity — answered with the
-     * position's, a body measuring the length of a string would be told where the string stops.
-     */
+    /** An end as a number the arithmetic can cut at, or null where it stops at a value there is no
+     *  number for — a text position has a floor and nothing for the arithmetic to relate. */
     private static RationalCut asCut(Endpoint end) {
         return end == null || !(end.at() instanceof Count at) ? null
                 : new RationalCut(Rational.of(at.at()), end.inclusive());

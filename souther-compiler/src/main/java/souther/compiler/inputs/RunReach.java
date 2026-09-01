@@ -84,8 +84,13 @@ final class RunReach {
      * <p>Null wherever a part is missing rather than an open range, so a caller meets this against
      * what else it knows and a missing part leaves that alone.
      *
-     * @param orders the term's own orders, which say how the number it answers is spaced. A range
-     *               may not be asserted about a number whose spacing is guessed
+     * @param orders the term's own orders. The two numbers the step is applied to stand on the two
+     *               of them — a value at the run's path is decoded on what it is observed on, and
+     *               what the walk carries is measured on what the term answers — and a range may
+     *               not be asserted about a number whose spacing is guessed. The pair is kept apart
+     *               here for the reason it is a pair: the operations that reach this answer what
+     *               they walk, so the two orders agree today, and a reader collapsing them holds
+     *               whichever one it happened to mean on the day one of them does not
      * @param typeAt what stands where a path names
      */
     static NumericDomain.Bounds of(NumericTerm.TakenOver over, TermOrders orders,
@@ -94,8 +99,9 @@ final class RunReach {
         orders.areOf(over);
         Accumulation walk = OperationFacts.accumulation(over.operation());
         NumericDomain.Bounds element = ofTheValuesWalked(over.source(), typeAt, symbols, policy);
-        Granularity spacing = orders.answered() == null ? null : orders.answered().spacing();
-        if (walk == null || element == null || spacing == null) {
+        Granularity answeredOn = spacingOf(orders.answered());
+        Granularity observedOn = spacingOf(orders.observed());
+        if (walk == null || element == null || answeredOn == null || observedOn == null) {
             return null;
         }
         NumericDomain.Bounds seed = startedFrom(walk.identity());
@@ -103,10 +109,11 @@ final class RunReach {
         if (seed == null || step == null) {
             return null;
         }
-        Map<Atom, Granularity> kinds = Map.of(Atom.ACCUMULATOR, spacing, Atom.ELEMENT, spacing);
-        return Induction.proves(element, walked -> new Walked(
-                NumericDomain.<Atom>top().assuming(Atom.ELEMENT, walked, kinds),
-                walked, seed, step, kinds));
+        Map<Atom, Granularity> kinds =
+                Map.of(Atom.ACCUMULATOR, answeredOn, Atom.ELEMENT, observedOn);
+        return Induction.proves(element, guaranteed -> new Walked(
+                NumericDomain.<Atom>top().assuming(Atom.ELEMENT, guaranteed, kinds),
+                guaranteed, seed, step, kinds));
     }
 
     /**
@@ -123,6 +130,12 @@ final class RunReach {
      * ({@code TermPath.ruleKeyUnder}) which hands its answer to the readers chosen for it. What is
      * lost by not asking is sharpness and never soundness — a bound this does not have is a bound
      * nothing is claimed from.
+     *
+     * <p>What comes back is a range out of a numeric domain, so both its ends are numbers. That is
+     * what lets it be asserted about an atom as it stands: a range whose end is a value the
+     * arithmetic has no number for — a text position stopping at {@code "A"} — is refused where one
+     * is asked for, and a reader wiring some other source of element bounds in here owes that
+     * filter.
      */
     private static NumericDomain.Bounds ofTheValuesWalked(RunSource source,
                                                           Function<TermPath, Type> typeAt,
@@ -141,6 +154,11 @@ final class RunReach {
             case ONE -> at(BigDecimal.ONE);
             case EMPTY -> null;
         };
+    }
+
+    /** How the values on one order are spaced, or null where nothing orders them. */
+    private static Granularity spacingOf(souther.compiler.check.Carrier on) {
+        return on == null ? null : on.spacing();
     }
 
     private static NumericDomain.Bounds at(BigDecimal value) {

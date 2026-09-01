@@ -37,7 +37,7 @@ public final class Induction {
     private Induction() {}
 
     /** The range with no ends, which every walk's answer is in and which proves nothing. */
-    public static final NumericDomain.Bounds ANYTHING = new NumericDomain.Bounds(null, null);
+    private static final NumericDomain.Bounds ANYTHING = new NumericDomain.Bounds(null, null);
 
     /**
      * A caller's own reading of a walk, waiting to take in what the container guarantees.
