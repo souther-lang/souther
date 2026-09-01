@@ -5,7 +5,9 @@ import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.BinOp;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -299,14 +301,41 @@ class WhatAnOperatorPlacesIsOneAnswerTest {
      * Without it two claims could state one relation — an order and the equality at its edge, say —
      * and a reading composing a comparison from that relation would place a partition the rules
      * never proved while every relation still read back as itself.
+     *
+     * <p>Asked of every claim and not of the ones some operator states. The crossing this law is
+     * about has no operator in it, so a claim reachable from no operator would fall outside a law
+     * enumerated from {@link BinOp} while the two directions still looked closed. Which claims there
+     * are is what the two shapes are made of, and there are two because the type is sealed to them.
      */
     @Test
     void aClaimTakenBackFromWhatItStatesIsItself() {
-        for (BinOp op : STATED.keySet()) {
-            ComparisonClaim placed = claim(op);
+        for (ComparisonClaim placed : everyClaim()) {
             assertEquals(placed, ComparisonClaim.stating(placed.statedRelation()),
-                    () -> op + " read for what it places, and placed again from what it states");
+                    () -> placed + " read for what it states, and placed again from it");
         }
+    }
+
+    /** Every claim there is: a value singled out or everything else, and an order by which class
+     *  the value it names is in and whether the comparison holds there. */
+    private static List<ComparisonClaim> everyClaim() {
+        List<ComparisonClaim> all = new ArrayList<>();
+        for (boolean holdsAtTheValue : List.of(true, false)) {
+            all.add(new ComparisonClaim.Singled(holdsAtTheValue));
+            for (Towards valueBelongs : Towards.values()) {
+                all.add(new ComparisonClaim.Cut(valueBelongs, holdsAtTheValue));
+            }
+        }
+        return all;
+    }
+
+    /** And the two enumerations are the same size, which with the two directions above is what says
+     *  the crossing is one to one. A claim shape added without a relation to state, or a relation
+     *  added with no claim, lands here. */
+    @Test
+    void thereAreAsManyClaimsAsThereAreRelations() {
+        assertEquals(Rel.values().length, everyClaim().size(),
+                "every relation places a claim and every claim states a relation, so a claim"
+                        + " reachable from no relation is one the way back cannot answer for");
     }
 
     /**

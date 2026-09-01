@@ -845,17 +845,24 @@ final class Predicates {
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         Core cond = Conditions.asSizeComparison(rawCond);
-        // A connective composing both halves under the polarity in force gives each of them under
-        // that polarity.
-        if (cond instanceof Core.Binary b
-                && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
-                        == ConditionJoin.BOTH) {
-            Assumed left = assumeCond(b.left(), k, at, positive);
-            // Either side taken in is the condition taken in. A conjunction one half of which reads
-            // is not one nothing was read of, and calling it that would name this compiler's limit
-            // where the limit was reached on one operand only.
-            return assumeCond(b.right(), left.known(), at, positive)
-                    .alsoRead(left.taken(), left.shapeRead());
+        if (cond instanceof Core.Binary b) {
+            // Recognised once, and both of what a connective can compose read off the answer. A
+            // connective composing both halves under the polarity in force gives each of them under
+            // that polarity; one composing either of them gives neither, and what is left of it is
+            // that the author named the two.
+            ConditionJoin join =
+                    ConditionJoin.of(b.op()).map(each -> each.under(positive)).orElse(null);
+            if (join == ConditionJoin.BOTH) {
+                Assumed left = assumeCond(b.left(), k, at, positive);
+                // Either side taken in is the condition taken in. A conjunction one half of which
+                // reads is not one nothing was read of, and calling it that would name this
+                // compiler's limit where the limit was reached on one operand only.
+                return assumeCond(b.right(), left.known(), at, positive)
+                        .alsoRead(left.taken(), left.shapeRead());
+            }
+            if (join == ConditionJoin.EITHER) {
+                return taking(cond, List.of(b.left(), b.right()), k, at, positive);
+            }
         }
         Core under = Conditions.negated(cond);
         if (under != null) {
@@ -864,7 +871,7 @@ final class Predicates {
         List<StatedComparison> readings =
                 Conditions.comparisonsStatedBy(terms, cond, at).inReadingOrder();
         if (readings.isEmpty()) {
-            return taking(cond, k, at, positive);
+            return taking(cond, List.of(), k, at, positive);
         }
         // Every reading, because each of them holds of the same values: the order a call decides,
         // and the bound on the sign that decides it. Which one a clause is read against is settled
@@ -883,9 +890,20 @@ final class Predicates {
      * <p>What it can still say is what the value it names carries, what a quantifier over it states
      * of a container's elements, and that the condition itself holds — the last keyed on the
      * condition as written, which is what a guard settles a predicate by.
+     *
+     * <p>{@code mentioned} is what the author named here that nothing else on this path will
+     * record: the two halves of a connective this reading states neither of. Neither half is read,
+     * so without this a value one of them computes is one nothing has ever spoken of, and a clause
+     * over it is left to the run-time check rather than asked of the author who did write about it.
+     *
+     * <p>Two halves and no further. What a condition names is the wider question — a call naming
+     * three arguments names them as plainly, and none of them arrives here — and this is the
+     * shape's answer to it, not the question's. Widening it widens what a clause may be owed for
+     * and what a report may point at, which is its own change and not this reading's to make.
      */
-    private Assumed taking(Core cond, Known k, Denotations at, boolean positive) {
-        Known out = k;
+    private Assumed taking(Core cond, List<Core> mentioned, Known k, Denotations at,
+                           boolean positive) {
+        Known out = spokenIn(k, mentioned, at);
         // What the values this condition names carry, whichever way the condition itself is read.
         // Read off the atoms the condition was named into and not by walking it again: naming an
         // expression is what files what its values carry, so the reading that named it has them
@@ -947,6 +965,17 @@ final class Predicates {
         named.addAll(spokenOf(stated.right(), at, ra));
         out = out.speaking(named);
         return settling(out, Conditions.polar(stated, positive), at, taken, shapeRead);
+    }
+
+    /** {@code k} with each of {@code mentioned} recorded as one this condition named. No form is
+     * read of them: what a connective stands between is a condition and not a number, so what is
+     * recorded is that it was written and nothing about what it computes. */
+    private Known spokenIn(Known k, List<Core> mentioned, Denotations at) {
+        Set<FactSubject> named = new HashSet<>();
+        for (Core each : mentioned) {
+            named.addAll(spokenOf(each, at, null));
+        }
+        return k.speaking(named);
     }
 
     /** {@code k} holding what those values carry. A size is never negative whether or not the

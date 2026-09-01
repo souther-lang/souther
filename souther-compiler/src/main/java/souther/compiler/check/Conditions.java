@@ -359,8 +359,10 @@ final class Conditions {
             return new Polar(canonical(BinOp.LT, left, right), true);
         }
 
-        /** Written over nothing the source holds: unwritten, so no coverage site is named by it, and
-         *  positioned where its left side is, which is the only place a statement can point at. */
+        /** Written over nothing the source holds. The three the node needs besides its operator
+         *  and sides decide nothing any reader of this asks, so they are filled with what says so:
+         *  unwritten, so no coverage site is named by it, the type a comparison answers, and a
+         *  position taken from a side because the constructor takes one. */
         private static Core.Binary canonical(BinOp op, Core left, Core right) {
             return new Core.Binary(op, left, right, CoverageOrigin.unwritten(), Type.BOOL,
                     left.pos());

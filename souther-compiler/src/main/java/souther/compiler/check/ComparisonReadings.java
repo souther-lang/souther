@@ -18,9 +18,10 @@ import java.util.List;
  * Which one a reader takes is its own, and each of them says so in one line — a clause takes the
  * first it can read, a guard takes every one.
  *
- * <p>Nothing here says which of them the source wrote. Nobody asks: a report about a clause anchors
- * on the expression the caller was handed, and a reader that wanted the distinction would be asking
- * about how the readings were made rather than about what they state.
+ * <p>The order is the whole of what is kept of how they were made. There is no field telling the
+ * one the source wrote from the ones this compiler composed, because nobody asks: a report about a
+ * clause anchors on the expression the caller was handed, and a reader wanting that distinction
+ * would be asking how a reading was arrived at rather than what it states.
  */
 record ComparisonReadings(List<StatedComparison> inReadingOrder) {
 

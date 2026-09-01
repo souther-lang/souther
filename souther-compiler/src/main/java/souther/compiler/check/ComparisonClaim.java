@@ -11,9 +11,16 @@ import java.util.Objects;
  * <p>One classification, asked wherever a rule compares a position to something: a clause of an
  * invariant, a comparison in a body, a clause of an {@code ensures}. A rule is read the same way
  * wherever it is written (spec §boundary-coordinates), and this is the reading that says what it
- * placed. Answered once, and carried from wherever a comparison was recognised: a second answer to
- * it drifts from this one, and an equality places a line under one of them and nothing under the
- * other while both go on being called what a rule placed.
+ * placed. Answered once and carried: a second answer to it drifts from this one, and an equality
+ * places a line under one of them and nothing under the other while both go on being called what a
+ * rule placed.
+ *
+ * <p><b>Two ways in and no more.</b> A comparison the source wrote is answered where it is
+ * recognised ({@link Comparison}), from the operator it was written with. A comparison this compiler
+ * composed out of what the rules proved never had an operator, and is answered from the relation the
+ * reasoning arrived at ({@link #stating}). Whichever door it came through, no reader below holds an
+ * operator or goes back to one — that is what the two doors are for, and it is why there is no third
+ * that reads a claim off something else again.
  *
  * <p><b>Two cases, because an operator that placed nothing is no comparison.</b> That an operator
  * compares is settled where a comparison is recognised ({@link Comparison}), and this is what such
