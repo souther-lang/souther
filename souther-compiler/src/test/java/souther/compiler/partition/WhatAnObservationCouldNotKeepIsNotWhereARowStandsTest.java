@@ -14,7 +14,6 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ValueName;
 
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,8 +71,8 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
      */
     @Test
     void aRunHoldingAValueALimitStoppedIsUnreadableAndSaysSo() {
-        assertEquals(new BorderQuantity.Stands.Unreadable(
-                        EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
+        assertEquals(BorderQuantity.Stands.couldNotTell(
+                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
                 form().standsAt(AT_A_HUNDRED,
                         run(new ObservedValue.Integer(40), new ObservedValue.Truncated())),
                 "a total over a value the limits stopped is not a total that missed the line");
@@ -82,8 +81,8 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     /** And one holding a value nothing could decode says that instead, which is the other word. */
     @Test
     void aRunHoldingAValueNothingCouldDecodeSaysThatInstead() {
-        assertEquals(new BorderQuantity.Stands.Unreadable(
-                        EnumSet.of(Incompleteness.Code.VALUE_UNREADABLE)),
+        assertEquals(BorderQuantity.Stands.couldNotTell(
+                        ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE)),
                 form().standsAt(AT_A_HUNDRED,
                         run(new ObservedValue.Integer(40), new ObservedValue.Unknown("no"))),
                 "what a limit shortened and what nothing could read are two things to tell a"
@@ -137,9 +136,9 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                     }
                 });
 
-        assertEquals(Set.of(Incompleteness.Code.VALUE_TRUNCATED,
-                        Incompleteness.Code.VALUE_UNREADABLE),
-                assertInstanceOf(BorderQuantity.Stands.Unreadable.class, stands).causes(),
+        assertEquals(Set.of(ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED),
+                        ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE)),
+                assertInstanceOf(BorderQuantity.Stands.CouldNotTell.class, stands).why(),
                 "a reading stopped in two ways is stopped in both of them");
     }
 
@@ -167,8 +166,35 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                     }
                 });
 
-        assertEquals(BorderQuantity.Stands.NOTHING_TO_READ, stands,
+        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.NO_VALUE), stands,
                 "nothing arrived, which is not a value an observation could not keep");
+    }
+
+    /**
+     * And a run the walk never reached says the same, rather than that the row does not stand.
+     *
+     * <p>The other way nothing arrives. A caller that could not walk to the run hands over no list
+     * at all, and answering "this is no number of that" would make a place this compiler could not
+     * reach into the model putting the row somewhere else — {@code Stands.No}, and a point missed.
+     */
+    @Test
+    void aRunTheWalkNeverReachedIsNotARunThatMissedTheLine() {
+        BorderQuantity.Stands stands = form().standsAt(AT_A_HUNDRED,
+                new BorderQuantity.Observation() {
+
+                    @Override
+                    public ObservedValue at(TermPath path) {
+                        return null;
+                    }
+
+                    @Override
+                    public List<ObservedValue> everyValueAt(TermPath path) {
+                        return null;
+                    }
+                });
+
+        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.NO_VALUE), stands,
+                "the walk did not reach the run, which says nothing about where the row stands");
     }
 
     private static BorderQuantity.OverAForm form() {

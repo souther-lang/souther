@@ -2,12 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,34 +62,23 @@ public final class StandingAtAPoint {
         /**
          * There was nothing at the point to compare, and this is what stopped there being one.
          *
-         * <p>Carries the causes rather than the fact of there being some. What a limit met is about
-         * this compiler's observation, and a reader handed the case alone can say only that
-         * something went unread — which is the distinction {@code Observed} from
-         * {@code TruncatedByLimit} from {@code Absent} being lost one layer before anybody needs it.
+         * <p>Carries every reason rather than the fact of there being some, and never one of them
+         * over another. A reader handed the case alone can say only that something went unread —
+         * which is {@code Observed} from {@code TruncatedByLimit} from {@code Absent} being lost one
+         * layer before anybody needs it; handed the strongest, it is lost wherever a point met both.
          */
-        record CouldNotTell(Set<Incompleteness.Code> causes) implements Met {
+        record CouldNotTell(Set<ReadingGap> why) implements Met {
 
             public CouldNotTell {
-                if (causes == null || causes.isEmpty()) {
+                if (why == null || why.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a point nothing could be told about says what stopped the telling");
                 }
-                causes = Collections.unmodifiableSet(EnumSet.copyOf(causes));
+                why = Set.copyOf(why);
             }
         }
 
-        /**
-         * The walk reached no value to compare, which is not an observation of one.
-         *
-         * <p>Apart from {@link CouldNotTell} because the two leave different work. A value a budget
-         * shortened is one a wider budget keeps; a place this compiler could not get a value out of
-         * is not, and reporting it as the first sends a reader after a limit that never fired.
-         */
-        record NothingToRead() implements Met {}
-
         Met REACHED = new Reached();
-
-        Met NOTHING_TO_READ = new NothingToRead();
 
         Met NOT_WATCHED = new NotWatched();
 
@@ -108,8 +94,7 @@ public final class StandingAtAPoint {
      */
     public static Met met(BorderQuantity quantity, BehaviorInputs where, List<ObservedInputs> rows,
                           Criterion criterion, Optional<ComparisonOccurrence> site) {
-        Set<Incompleteness.Code> unreadable = EnumSet.noneOf(Incompleteness.Code.class);
-        boolean nowhereToLook = false;
+        Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
         boolean unwatched = false;
         for (ObservedInputs row : rows) {
             // A row has more than one value at a position inside a sequence, and standing at a point
@@ -121,26 +106,16 @@ public final class StandingAtAPoint {
             Map<TermPath, Integer> held = new LinkedHashMap<>();
             OneReadingOfARow first = new OneReadingOfARow(where, row, Map.of(), held);
             boolean stands = false;
-            boolean walkedToNothing = false;
-            Set<Incompleteness.Code> stopped = EnumSet.noneOf(Incompleteness.Code.class);
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             for (OneReadingOfARow reading : readings(where, row, quantity, criterion, first, held)) {
                 switch (quantity.standsAt(criterion, reading)) {
                     // A reading that could not look, unless what it could not find was an element
                     // the row wrote none of — that is a row that was read and does not stand, and
                     // said of the reading it happened in rather than of the row, since another
                     // reading of the same row may reach the point.
-                    case BorderQuantity.Stands.Unreadable it -> {
+                    case BorderQuantity.Stands.CouldNotTell it -> {
                         if (!reading.wroteNothing()) {
-                            stopped.addAll(it.causes());
-                        }
-                    }
-                    // The walk reached no value under this reading. Which is not an observation of
-                    // one, so nothing here is recorded as a limit having stopped anything: another
-                    // reading of the same row may reach the point, and where none does the row is
-                    // one this could not read a value off rather than one a budget shortened.
-                    case BorderQuantity.Stands.NothingToRead _ -> {
-                        if (!reading.wroteNothing()) {
-                            walkedToNothing = true;
+                            stopped.addAll(it.why());
                         }
                     }
                     case BorderQuantity.Stands.No _ -> { }
@@ -167,16 +142,12 @@ public final class StandingAtAPoint {
                 }
             }
             unreadable.addAll(stopped);
-            nowhereToLook |= walkedToNothing;
         }
-        // An observation that stopped outranks a walk that reached nothing, the way it does at one
-        // reading: the first names something a wider budget would have kept, and the second names
-        // a place this compiler could not get a value out of at all.
+        // Every reason any row met, the way one reading collects every reason its terms met. A
+        // point tried against several rows is one this could not tell about for whatever stopped
+        // any of them, and taking the strongest would say which row this walk began with.
         if (!unreadable.isEmpty()) {
             return new Met.CouldNotTell(unreadable);
-        }
-        if (nowhereToLook) {
-            return Met.NOTHING_TO_READ;
         }
         return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
     }

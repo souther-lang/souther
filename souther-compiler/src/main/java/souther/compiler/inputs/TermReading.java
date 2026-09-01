@@ -82,10 +82,11 @@ final class TermReading {
      */
     static Reading over(TermOrders on, java.util.List<ObservedValue> values) {
         NumericTerm.TakenOver term = (NumericTerm.TakenOver) on.term();
-        // Nothing to read, which a caller that could not walk to the run answers with. Said as
-        // "this is no number of that" rather than as a total over the values it did find.
+        // Nothing to read, which a caller that could not walk to the run answers with. The absence
+        // a walk answers with and not the values being no number of this term: said as the second,
+        // a run this compiler could not reach comes out as the model putting the row elsewhere.
         if (values == null) {
-            return new Reading.NotNumber();
+            return new Reading.NoValue();
         }
         for (ObservedValue each : values) {
             // An element the walk arrived at nothing for, which is not an observation of one. Said

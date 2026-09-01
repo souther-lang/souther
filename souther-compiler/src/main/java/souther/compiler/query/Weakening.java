@@ -68,37 +68,16 @@ public sealed interface Weakening {
      * A row's value at one border could not be read, so what is not found at that border is
      * undecided rather than absent.
      *
-     * <p>With what stopped the reading, since a value a limit shortened and one nothing could
-     * decode leave the same hole and are not the same news: the first is what this compiler chose
-     * not to keep and the second is a value it met and could make nothing of. One of these per
-     * cause, so that a border stopped in two ways says both — which a set does for free, and a
-     * record holding the causes would leave to whoever wrote the sentence.
+     * <p>With what stopped the reading, one of these per reason, so that a border stopped in two
+     * ways says both — which a set does for free, and a record holding the reasons would leave to
+     * whoever wrote the sentence. The reasons are the reading's own ({@link
+     * souther.compiler.partition.ReadingGap}) and are carried rather than folded: a value a limit
+     * shortened, a value nothing could decode and a place the walk never reached leave the same
+     * hole and are three different pieces of news.
      */
-    record BorderValueUnreadable(souther.compiler.partition.Border border, WhyNoValue why)
+    record BorderValueUnreadable(souther.compiler.partition.Border border,
+                                 souther.compiler.partition.ReadingGap why)
             implements Weakening {}
-
-    /**
-     * Why there was no value at a border to read.
-     *
-     * <p>Two, and only one of them is an observation. A value this compiler chose not to keep is a
-     * value that is there, named by the code an observation writes; a walk that arrived at no value
-     * met none, and has no such code — so it does not borrow one. Held as a code either way, the
-     * second wears the first's word, and a reader that says what an observation did says it of a
-     * walk that made none ({@link EstablishmentGap}).
-     *
-     * <p>What a report calls this is one word for both, because what a reader does about them is
-     * the same: the point is undecided and no row of theirs settles it. The two are apart so that
-     * the next reader to want more than that word cannot take the wrong half of it.
-     */
-    sealed interface WhyNoValue {
-
-        /** An observation of the value did not come back whole. */
-        record AnObservationStopped(souther.compiler.observe.Incompleteness.Code code)
-                implements WhyNoValue {}
-
-        /** The walk arrived at no value, so there was none to observe. */
-        record TheWalkReachedNoValue() implements WhyNoValue {}
-    }
 
     /** The reading of the model that a measure depends on did not run out. */
     record ModelReadingIncomplete(ClosureGap cause) implements Weakening {}

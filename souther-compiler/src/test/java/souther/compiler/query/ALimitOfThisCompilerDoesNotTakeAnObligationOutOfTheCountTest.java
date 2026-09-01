@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.ReadingGap;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -88,8 +89,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
         ObligationDisposition disposition = ObligationDisposition.of(
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,
-                                new Weakening.WhyNoValue.AnObservationStopped(
-                                        Incompleteness.Code.VALUE_TRUNCATED)))),
+                                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                 prevented());
 
         assertEquals(new ObligationDisposition.Undecided(EnumSet.of(
@@ -182,8 +182,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 new ObligationCoverage.Missed(),
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,
-                                new Weakening.WhyNoValue.AnObservationStopped(
-                                        Incompleteness.Code.VALUE_TRUNCATED)))),
+                                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                 new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS));
     }
 

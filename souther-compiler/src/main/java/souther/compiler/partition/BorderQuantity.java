@@ -7,11 +7,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.Place;
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
-import java.util.Collections;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -95,8 +92,9 @@ public sealed interface BorderQuantity {
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
             return switch (of.read(row.at(term.position()))) {
-                case NumericTerm.Reading.Missing missing -> Stands.unreadable(missing.code());
-                case NumericTerm.Reading.NoValue _ -> Stands.NOTHING_TO_READ;
+                case NumericTerm.Reading.Missing missing ->
+                        Stands.couldNotTell(ReadingGap.of(missing.code()));
+                case NumericTerm.Reading.NoValue _ -> Stands.couldNotTell(ReadingGap.NO_VALUE);
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
                         where.holds(new Level.OnACarrier(of.answered(), number.value()))
@@ -311,15 +309,16 @@ public sealed interface BorderQuantity {
             // Both sides, and not the first of them. The pair is unreadable for whatever stopped
             // either, and a reader told about one end is being told which end this happened to
             // look at first.
-            Set<Incompleteness.Code> stopped = EnumSet.noneOf(Incompleteness.Code.class);
-            boolean nothing = false;
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             for (NumericTerm.Reading end : List.of(here, there)) {
                 if (end instanceof NumericTerm.Reading.Missing missing) {
-                    stopped.add(missing.code());
+                    stopped.add(ReadingGap.of(missing.code()));
                 }
-                nothing |= end instanceof NumericTerm.Reading.NoValue;
+                if (end instanceof NumericTerm.Reading.NoValue) {
+                    stopped.add(ReadingGap.NO_VALUE);
+                }
             }
-            Stands unread = Stands.unreadable(stopped, nothing);
+            Stands unread = Stands.couldNotTell(stopped);
             if (unread != null) {
                 return unread;
             }
@@ -544,9 +543,8 @@ public sealed interface BorderQuantity {
             // until then for the same reason — a form with one of each is one nothing could read,
             // and answering that it does not stand would be this compiler's own gap said as the
             // model's answer.
-            Set<Incompleteness.Code> stopped = EnumSet.noneOf(Incompleteness.Code.class);
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             boolean noNumber = false;
-            boolean nothing = false;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
                 // Each on its own order. Read on one order for the whole form, a position written
                 // back differently from its neighbour was read as a value it does not hold.
@@ -561,11 +559,11 @@ public sealed interface BorderQuantity {
                             orders.readOver(row.everyValueAt(over.subjectPath()));
                 };
                 if (read instanceof NumericTerm.Reading.Missing missing) {
-                    stopped.add(missing.code());
+                    stopped.add(ReadingGap.of(missing.code()));
                     continue;
                 }
                 if (read instanceof NumericTerm.Reading.NoValue) {
-                    nothing = true;
+                    stopped.add(ReadingGap.NO_VALUE);
                     continue;
                 }
                 if (!(read instanceof NumericTerm.Reading.Number number)) {
@@ -574,7 +572,7 @@ public sealed interface BorderQuantity {
                 }
                 at = at.add(Count.number(number.value()).at().multiply(each.getValue()));
             }
-            Stands unread = Stands.unreadable(stopped, nothing);
+            Stands unread = Stands.couldNotTell(stopped);
             if (unread != null) {
                 return unread;
             }
@@ -804,57 +802,37 @@ public sealed interface BorderQuantity {
         record No() implements Stands {}
 
         /**
-         * There was no number to compare, and this is what there was instead.
+         * There was no number to compare, and this is every reason there was none.
          *
          * <p>More than one where the quantity reads more than one term: a rule relating two
-         * positions and a form over several are each unreadable for whatever stopped any of them,
-         * and naming one would be picking which of them a reader is told about.
+         * positions and a form over several come to nothing for whatever stopped any of them, and
+         * naming one would be picking which of them a reader is told about. Which is as true of the
+         * two kinds of reason as it is of two observations, so both kinds are in the set and
+         * neither is chosen over the other ({@link ReadingGap}).
          */
-        record Unreadable(Set<Incompleteness.Code> causes) implements Stands {
+        record CouldNotTell(Set<ReadingGap> why) implements Stands {
 
-            public Unreadable {
-                if (causes == null || causes.isEmpty()) {
+            public CouldNotTell {
+                if (why == null || why.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a reading nothing could be made of says what stopped it");
                 }
-                causes = Collections.unmodifiableSet(EnumSet.copyOf(causes));
+                why = Set.copyOf(why);
             }
         }
-
-        /**
-         * The walk arrived at no value, so there was nothing for an observation to be of.
-         *
-         * <p>Beside {@link Unreadable} and not among its causes. A value the observation shortened
-         * exists and a wider budget would have kept it; a walk that reached nothing has met no
-         * value, and no number of nodes changes that. Held as one case, the second borrows the
-         * first's word and every reader that says what an observation did says it of a walk that
-         * made no observation.
-         */
-        record NothingToRead() implements Stands {}
 
         Stands YES = new Yes();
 
         Stands NO = new No();
 
-        Stands NOTHING_TO_READ = new NothingToRead();
-
-        /** Unreadable for one reason, which is what a quantity reading one term has. */
-        static Stands unreadable(Incompleteness.Code code) {
-            return new Unreadable(EnumSet.of(code));
+        /** Come to nothing for one reason, which is what a quantity reading one term has. */
+        static Stands couldNotTell(ReadingGap why) {
+            return new CouldNotTell(Set.of(why));
         }
 
-        /**
-         * What a quantity over several terms came to, given what each of them did.
-         *
-         * <p>An observation that stopped outranks a walk that reached nothing: the first names
-         * something a wider budget would have kept and is the more specific news, and a form
-         * stopped in both ways is stopped in the way somebody can do something about.
-         */
-        static Stands unreadable(Set<Incompleteness.Code> causes, boolean nothingToRead) {
-            if (!causes.isEmpty()) {
-                return new Unreadable(causes);
-            }
-            return nothingToRead ? NOTHING_TO_READ : null;
+        /** The same over several terms, or null where nothing stopped any of them. */
+        static Stands couldNotTell(Set<ReadingGap> why) {
+            return why.isEmpty() ? null : new CouldNotTell(why);
         }
     }
 

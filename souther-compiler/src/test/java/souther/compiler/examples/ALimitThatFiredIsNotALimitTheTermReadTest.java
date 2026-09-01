@@ -20,10 +20,10 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Level;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
@@ -74,8 +74,8 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
     void aRunTheNodeBudgetStoppedInsideReadsAsStopped() {
         ObservedValue observed = observed(FOUR_NODES, longs(6));
 
-        assertEquals(new BorderQuantity.Stands.Unreadable(
-                        EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
+        assertEquals(BorderQuantity.Stands.couldNotTell(
+                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
                 form().standsAt(atTheLevel(15), run(observed)),
                 "the elements the walk stopped at are the ones the total is over");
     }

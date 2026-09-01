@@ -73,12 +73,7 @@ public sealed interface ItemAssessment {
                 // Read to the end and no row at it, or read as far as it got and no row at it: both
                 // are points where a candidate tells somebody something.
                 case Measurement.Complete<Coverage> it -> it.value() instanceof Coverage.NoHit;
-                // A measurement short of something is not work to hand to anybody. Nobody can say
-                // whether a row is at such a point, so no finding is made of it and an author is
-                // not behind on it; a candidate built there answers a question the measurement did
-                // not ask, and building one costs a composed row run and read back at every point
-                // of every line the reading fell short at.
-                case Measurement.Partial<Coverage> _ -> false;
+                case Measurement.Partial<Coverage> it -> it.value() instanceof Coverage.NoHit;
                 // No rows to look at is a point worth building one for. The other reasons nobody
                 // measured are not: a question this compilation was not put is not work to hand to
                 // an author.
