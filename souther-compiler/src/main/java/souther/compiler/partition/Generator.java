@@ -421,6 +421,46 @@ public final class Generator {
                          NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> false;
                 };
             }
+
+            /**
+             * The word a search these budgets stopped comes back with.
+             *
+             * <p>One way only. Which budget stopped a search is what the search hands over, and this
+             * is the word readers of the word have always had — read the other way round, a reader
+             * would be recovering a budget from something that never held one: two of these come
+             * back with the same word and one of them comes back with it without any budget having
+             * been reached at all.
+             *
+             * <p>The words are what each of these has always said, kept rather than tidied. A budget
+             * carries what stopped a search; what a report and a document say of it is a separate
+             * decision from this one, and moving a word here would move it for them.
+             *
+             * <p>Budgets that come back with different words are not one stop. Nothing composes such
+             * a set — a stop is one place — and this says so rather than choosing between them,
+             * which would be a precedence over causes at the one layer that has none.
+             */
+            public static Reason wordFor(java.util.Set<CompositionBudget> budgets) {
+                Reason word = null;
+                for (CompositionBudget each : budgets) {
+                    Reason here = switch (each) {
+                        case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS,
+                             PLACES_A_PAIR_IS_TRIED_AT -> NOTHING_COMPOSES_ONE;
+                        case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
+                             SHAPES_OF_A_TOTAL_OFFERED, DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
+                             STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES -> SEARCH_LIMIT;
+                    };
+                    if (word != null && word != here) {
+                        throw new IllegalStateException("one search stopped by budgets that come"
+                                + " back with two words: " + budgets);
+                    }
+                    word = here;
+                }
+                if (word == null) {
+                    throw new IllegalArgumentException(
+                            "a search nothing stopped has no word to read off what stopped it");
+                }
+                return word;
+            }
         }
 
         public UnresolvedCombination {
@@ -3380,14 +3420,14 @@ public final class Generator {
         // and not something this fell short of — the same answer the class search gives when two
         // classes select different refinements of one position.
         if (planned instanceof ConstructionPlan.Result.Conflict against) {
-            return new Outcome(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+            return Outcome.none(UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
                     "`" + against.at() + "` would have to be both " + against.one().spelled()
                             + " and " + against.other().spelled());
         }
         ConstructionPlan plan = ((ConstructionPlan.Result.Planned) planned).plan();
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
-            return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+            return Outcome.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     choices.missingAt());
         }
         Outcome product = walk(subject, p, choices, check);
@@ -3406,16 +3446,26 @@ public final class Generator {
         // reported as though it had: `ALL_CANDIDATES_REJECTED` is what a reader is told nothing else
         // can be written at, and a search still holding assignments it never composed has not
         // established that.
-        if (product.reason() == UnresolvedCombination.Reason.SEARCH_LIMIT
-                || conditioned.reason() == UnresolvedCombination.Reason.SEARCH_LIMIT) {
-            return new Outcome(null, UnresolvedCombination.Reason.SEARCH_LIMIT, null);
+        if (!product.stoppedBy().isEmpty() || !conditioned.stoppedBy().isEmpty()) {
+            // Both passes' budgets and not one of them. Neither pass outranks the other here: each
+            // stopped where it stopped, and a reader wanting to know what would let this go further
+            // is owed every budget that would.
+            java.util.Set<CompositionBudget> both =
+                    java.util.EnumSet.noneOf(CompositionBudget.class);
+            both.addAll(product.stoppedBy());
+            both.addAll(conditioned.stoppedBy());
+            return Outcome.stoppedBy(both);
         }
         // Every value that was offered was refused, which is only the whole story where every value
         // the rules allow was offered. A position that read a count past what a row is built to carry,
         // or that has more pairings than are built at once, held something back, and saying so is the
         // difference between a fact about the model and a fact about this.
-        UnresolvedCombination.Reason held = heldBack(subject, p, plan, settled);
-        return held == null ? product : new Outcome(null, held, null);
+        return switch (heldBack(subject, p, plan, settled)) {
+            case HeldBack.Nothing _ -> product;
+            case HeldBack.NoRoomForOne _ -> Outcome.none(
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null);
+            case HeldBack.ByABudget(var budgets) -> Outcome.stoppedBy(budgets);
+        };
     }
 
     /**
@@ -3470,37 +3520,52 @@ public final class Generator {
      * without them answers about a rule this row is no longer under — and would say "every value
      * tried was refused" of a position whose values were never built.
      */
-    private static UnresolvedCombination.Reason heldBack(MeasuredInput subject, int p,
-                                                         ConstructionPlan plan,
-                                                         Map<TermPath, Place> settled) {
+    private static HeldBack heldBack(MeasuredInput subject, int p, ConstructionPlan plan,
+                                     Map<TermPath, Place> settled) {
         TermPath root = TermPath.of(subject.parameters().get(p));
         Type declared = subject.types().get(p);
         FieldDomains rules = rulesOf(declared, subject.symbols(), subject.inputs().policy(),
                 under(root, settled));
-        UnresolvedCombination.Reason held = null;
         // A collection asked to hold a value in a class, whose rules say it holds fewer than that.
         // Nothing composes one: what the search would offer is a collection the rules refuse, and
         // saying every candidate was refused sends an author looking for a value where the rule
         // says there is no room for one.
         for (ConstructionPlan.Held each : plan.held()) {
             if (mostHeld(rules, each.at(), each.type(), subject.symbols()) < each.least()) {
-                return UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+                return new HeldBack.NoRoomForOne();
             }
         }
+        // Every budget that held a position back, and not the first or the strongest. Two positions
+        // stopped by two budgets are two things this compiler declined to do, and a reader asking
+        // what would let the search go further is owed both — read as one, whichever the walk met
+        // last was the whole answer.
+        java.util.Set<CompositionBudget> budgets =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
         for (ConstructionPlan.Slot each : plan.slots()) {
             RuleKey field = fieldUnder(each.at());
-            UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols(),
-                    subject.inputs().policy(), field == null ? null : rules.heldAt(field));
-            // Nothing of the shape having been built outranks some of it having been: the first says
-            // the search never had what the rule asks for, and a reader owed one sentence is owed that.
-            if (here == UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE) {
-                return here;
-            }
-            if (here != null) {
-                held = here;
+            budgets.addAll(Partitions.notBuilt(each.type(), subject.symbols(),
+                    subject.inputs().policy(), field == null ? null : rules.heldAt(field)));
+        }
+        return budgets.isEmpty() ? new HeldBack.Nothing() : new HeldBack.ByABudget(budgets);
+    }
+
+    /** Why a position of a parameter offered less than its rules allow. */
+    private sealed interface HeldBack {
+
+        /** Every position offered what its rules allow. */
+        record Nothing() implements HeldBack {}
+
+        /** A collection is asked to hold more than its rules leave room for, which is the model
+         *  settling it and not a budget of this compiler's. */
+        record NoRoomForOne() implements HeldBack {}
+
+        /** Budgets of this compiler's stopped positions offering the rest of what they had. */
+        record ByABudget(java.util.Set<CompositionBudget> budgets) implements HeldBack {
+
+            public ByABudget {
+                budgets = java.util.Set.copyOf(budgets);
             }
         }
-        return held;
     }
 
     /**
@@ -3531,11 +3596,12 @@ public final class Generator {
         FixtureTemplate built = descend(subject, p, plan, positions, 0, new LinkedHashMap<>(),
                 new LinkedHashMap<>(settled), decided, check, budget);
         if (built != null) {
-            return new Outcome(built, null, null);
+            return Outcome.built(built);
         }
-        return new Outcome(null, budget.cutShort
-                ? UnresolvedCombination.Reason.SEARCH_LIMIT
-                : UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+        return budget.cutShort
+                ? Outcome.stoppedBy(
+                        java.util.Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES))
+                : Outcome.none(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
     }
 
     /**
@@ -3898,7 +3964,28 @@ public final class Generator {
 
     /** What came of trying the assignments for one parameter: its value, or why there is none. */
     private record Outcome(FixtureTemplate value, UnresolvedCombination.Reason reason,
-                           String detail) {}
+                           String detail, java.util.Set<CompositionBudget> stoppedBy) {
+
+        Outcome {
+            stoppedBy = java.util.Set.copyOf(stoppedBy);
+        }
+
+        /** A value was composed. */
+        static Outcome built(FixtureTemplate value) {
+            return new Outcome(value, null, null, java.util.Set.of());
+        }
+
+        /** None was, and no budget of this compiler's is why. */
+        static Outcome none(UnresolvedCombination.Reason why, String detail) {
+            return new Outcome(null, why, detail, java.util.Set.of());
+        }
+
+        /** None was, and these budgets of this compiler's are why. The word is read off them so
+         *  that the two cannot part; which budget it was is what the word does not hold. */
+        static Outcome stoppedBy(java.util.Set<CompositionBudget> budgets) {
+            return new Outcome(null, UnresolvedCombination.Reason.wordFor(budgets), null, budgets);
+        }
+    }
 
     /**
      * The assignments, nearest first, until one builds.
@@ -3939,7 +4026,15 @@ public final class Generator {
         seen.add(Arrays.toString(first));
 
         int tried = 0;
-        while (!next.isEmpty() && tried < MAX_TUPLES) {
+        // Recorded where the bound is reached rather than read afterwards off what was left behind.
+        // A walk that stopped and a walk that ran out are told apart by the queue today and would go
+        // on being told apart by it until the day a second thing empties it.
+        boolean stopped = false;
+        while (!next.isEmpty()) {
+            if (tried == MAX_TUPLES) {
+                stopped = true;
+                break;
+            }
             int[] assignment = next.poll();
             tried++;
             Map<TermPath, FixtureTemplate> chosen = new LinkedHashMap<>();
@@ -3948,7 +4043,7 @@ public final class Generator {
             }
             FixtureTemplate built = compose(plan.root(), chosen, subject.symbols(), subject.inputs().policy());
             if (built != null && check.refuse(p, built).isEmpty()) {
-                return new Outcome(built, null, null);
+                return Outcome.built(built);
             }
             for (int i = 0; i < positions; i++) {
                 if (assignment[i] + 1 >= values.get(i).size()) {
@@ -3961,13 +4056,14 @@ public final class Generator {
                 }
             }
         }
-        // Nothing left to try is every assignment refused; something left is the search having stopped,
-        // and the difference is what the reader is owed. Neither carries a detail: what these are
-        // about is the combination, and a detail is read as the position that is the fact behind
-        // several of them.
-        return next.isEmpty()
-                ? new Outcome(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null)
-                : new Outcome(null, UnresolvedCombination.Reason.SEARCH_LIMIT, null);
+        // Nothing left to try is every assignment refused; a bound reached is the search having
+        // stopped, and the difference is what the reader is owed. Neither carries a detail: what
+        // these are about is the combination, and a detail is read as the position that is the fact
+        // behind several of them.
+        return stopped
+                ? Outcome.stoppedBy(
+                        java.util.Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES))
+                : Outcome.none(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
     }
 
     /**
@@ -4111,15 +4207,37 @@ public final class Generator {
      * same question building it asked, and the reading is what answers it both times — kept here,
      * an answer would travel from the one to the other and the two would be free to part.
      */
-    private record Edge(List<FixtureTemplate> values, UnresolvedCombination.Reason reason,
-                        Place settledAt, UnresolvedCombination.Reason heldBack) {
-
-        Edge {
-            values = List.copyOf(values);
-        }
+    private record Edge(TermRealizations.Realization came, Place settledAt) {
 
         static Edge none(UnresolvedCombination.Reason why) {
-            return new Edge(List.of(), why, null, null);
+            return new Edge(new TermRealizations.Realization.None(why), null);
+        }
+
+        List<FixtureTemplate> values() {
+            return came instanceof TermRealizations.Realization.Built built
+                    ? built.values() : List.of();
+        }
+
+        /** Which budgets of this compiler's stopped this edge offering more than it did, and empty
+         *  where none did. The same set whether or not anything was offered: what a budget is, is
+         *  what this compiler declined to do, and that does not turn on what came of the rest. */
+        java.util.Set<CompositionBudget> stoppedBy() {
+            return switch (came) {
+                case TermRealizations.Realization.Built built -> built.heldBack();
+                case TermRealizations.Realization.Stopped stopped -> stopped.by();
+                case TermRealizations.Realization.None _ -> java.util.Set.of();
+            };
+        }
+
+        /** What to report where no value was offered here at all. */
+        UnresolvedCombination.Reason reason() {
+            return switch (came) {
+                case TermRealizations.Realization.None none -> none.why();
+                case TermRealizations.Realization.Stopped stopped ->
+                        UnresolvedCombination.Reason.wordFor(stopped.by());
+                case TermRealizations.Realization.Built _ -> throw new IllegalStateException(
+                        "an edge that offered values asked why it offered none");
+            };
         }
 
         /**
@@ -4130,7 +4248,8 @@ public final class Generator {
          * would act on: another value of this edge may be the one that builds.
          */
         UnresolvedCombination.Reason refused() {
-            return heldBack == null ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED : heldBack;
+            return stoppedBy().isEmpty() ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
+                    : UnresolvedCombination.Reason.wordFor(stoppedBy());
         }
     }
 
@@ -4151,11 +4270,7 @@ public final class Generator {
             // position standing at three, and a hundred is not what the list adding up to it holds.
             case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;
         };
-        return switch (made) {
-            case TermRealizations.Realization.BuiltNone none -> Edge.none(none.why());
-            case TermRealizations.Realization.Built built ->
-                    new Edge(built.values(), null, settled, built.heldBack());
-        };
+        return new Edge(made, settled);
     }
 
     private Generator() {}

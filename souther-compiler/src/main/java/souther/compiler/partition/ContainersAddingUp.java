@@ -110,11 +110,14 @@ final class ContainersAddingUp {
         List<TermPath.Step> under = stepsInsideAnElement(target);
         List<FixtureTemplate> built = new ArrayList<>();
         int cap = Math.min(howMany.most(), MOST_ELEMENTS_A_ROW_CARRIES);
-        // What this walk did not do, recorded as it decides not to do it. Worked out afterwards from
-        // the ends, the two ways of leaving something unmade — a count never tried, and a count
-        // whose other decompositions were never made — cannot both be seen, and a container offered
-        // and refused was reported as every container having been refused.
-        boolean left = cap < howMany.most();
+        // What this walk did not do, recorded as it decides not to do it, and as which budget of
+        // this compiler's decided it. Held as one flag, the three ways of leaving something unmade
+        // were one fact and a reader was told a search stopped without being told what would let it
+        // go further — and worked out afterwards from the ends, they cannot all be seen at once.
+        java.util.Set<CompositionBudget> left = java.util.EnumSet.noneOf(CompositionBudget.class);
+        if (cap < howMany.most()) {
+            left.add(CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER);
+        }
         // Asked where a container is added and nowhere else. What the budget counts is containers,
         // and a walk that asked at the top of the counts was asking about containers in a place that
         // steps by counts — so a count offering two of them stepped past the figure by one, and how
@@ -124,7 +127,9 @@ final class ContainersAddingUp {
             // More than one element is more than one decomposition, whether or not this made a
             // second: what is offered is two shapes of the many, and the many are what a rule taking
             // a value out of the middle of a run tells apart.
-            left |= many > 1;
+            if (many > 1) {
+                left.add(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED);
+            }
             for (Spread how : Spread.values()) {
                 List<BigDecimal> split = splitting(total.at(), many, ends, how, elements);
                 FixtureTemplate one = split == null ? null
@@ -133,18 +138,21 @@ final class ContainersAddingUp {
                     continue;
                 }
                 if (built.size() == HOW_MANY_SHAPES_ARE_OFFERED) {
-                    left = true;
+                    left.add(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED);
                     break offering;
                 }
                 built.add(one);
             }
         }
-        Generator.UnresolvedCombination.Reason held =
-                left ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null;
-        return built.isEmpty()
-                ? none(held == null
-                        ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : held)
-                : new TermRealizations.Realization.Built(built, held);
+        if (!built.isEmpty()) {
+            return new TermRealizations.Realization.Built(built, left);
+        }
+        // Nothing was composed, so what the budgets stopped is the composing itself and not the rest
+        // of an offer. Where none of them ran out, this is a total nothing here writes a container
+        // for, which is a different thing to tell anybody.
+        return left.isEmpty()
+                ? none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                : new TermRealizations.Realization.Stopped(left);
     }
 
     /**
@@ -391,7 +399,7 @@ final class ContainersAddingUp {
 
     private static TermRealizations.Realization none(
             Generator.UnresolvedCombination.Reason why) {
-        return new TermRealizations.Realization.BuiltNone(why);
+        return new TermRealizations.Realization.None(why);
     }
 
     private ContainersAddingUp() {}

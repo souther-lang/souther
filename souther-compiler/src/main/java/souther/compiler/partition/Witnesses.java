@@ -68,14 +68,15 @@ final class Witnesses {
      * some were never built, which is a different thing to tell an author and a different thing for a
      * measure to record.
      */
-    record Sized(List<FixtureTemplate> values, Generator.UnresolvedCombination.Reason heldBack) {
+    record Sized(List<FixtureTemplate> values, Set<CompositionBudget> heldBack) {
 
         Sized {
             values = List.copyOf(values);
+            heldBack = Set.copyOf(heldBack);
         }
 
         static Sized all(List<FixtureTemplate> values) {
-            return new Sized(values, null);
+            return new Sized(values, Set.of());
         }
     }
 
@@ -116,6 +117,10 @@ final class Witnesses {
      * built and why are one answer given twice rather than two answers that may disagree. Whenever
      * that one offers nothing this names a reason: a caller left to supply its own default for the
      * silence would be deciding again what this is here to answer.
+     *
+     * <p>The word and not which budget it was. A budget that stopped this is the build's own answer
+     * ({@link Sized#heldBack()}) and travels as itself; what is here is the word a search comes back
+     * with, for readers that have only ever wanted that.
      */
     static Generator.UnresolvedCombination.Reason reasonForSize(Type carrier, int size,
                                                                 ReadingPolicy policy,
@@ -124,8 +129,9 @@ final class Witnesses {
         if (!made.values().isEmpty()) {
             return null;
         }
-        return made.heldBack() == null
-                ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : made.heldBack();
+        return made.heldBack().isEmpty()
+                ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE
+                : Generator.UnresolvedCombination.Reason.wordFor(made.heldBack());
     }
 
     /**
@@ -155,7 +161,8 @@ final class Witnesses {
     }
 
     /**
-     * Why a value of {@code carrier} holding {@code least} was not built in full, or null where it was.
+     * Which budgets of this compiler's stopped a value of {@code carrier} holding {@code least} from
+     * being built in full, and empty where none did.
      *
      * <p>The same decision {@link #holding} reads, asked for its other half. Written once because the
      * two have to agree: a reader was told a search stopped short of pairings nothing had asked to
@@ -165,10 +172,10 @@ final class Witnesses {
      * floor nothing was built for is a position offering what it ordinarily offers, and naming a
      * reason there would put "nothing composes one" under every position that has no floor at all.
      */
-    static Generator.UnresolvedCombination.Reason heldBackFor(Type carrier, int least,
-                                                              Symbols symbols,
-                                                              ReadingPolicy policy) {
-        return least <= 0 ? null : sized(carrier, least, symbols, policy, Set.of()).heldBack();
+    static Set<CompositionBudget> heldBackFor(Type carrier, int least, Symbols symbols,
+                                              ReadingPolicy policy) {
+        return least <= 0 ? Set.of()
+                : sized(carrier, least, symbols, policy, Set.of()).heldBack();
     }
 
     /**
@@ -181,15 +188,18 @@ final class Witnesses {
      */
     private record Made(FixtureTemplate value, int count) {}
 
-    /** What a value of {@code carrier} counting {@code size} comes to: what was built, and what was
-     * not. */
-    private record Built(List<Made> proposals,
-                         Generator.UnresolvedCombination.Reason heldBack) {
+    /** What a value of {@code carrier} counting {@code size} comes to: what was built, and which
+     * budgets of this compiler's stopped the rest of it being built. */
+    private record Built(List<Made> proposals, Set<CompositionBudget> heldBack) {
 
-        static final Built NONE = new Built(List.of(), null);
+        static final Built NONE = new Built(List.of(), Set.of());
 
         static Built of(List<Made> proposals) {
-            return new Built(List.copyOf(proposals), null);
+            return new Built(List.copyOf(proposals), Set.of());
+        }
+
+        static Built stoppedBy(CompositionBudget budget) {
+            return new Built(List.of(), Set.of(budget));
         }
 
         /** Those holding exactly {@code size}, which is what a line drawn at a count is met by. */
@@ -215,7 +225,7 @@ final class Witnesses {
         // put beside this one by the caller.
         if (carrier == Type.STRING) {
             return least > MOST_CHARACTERS
-                    ? new Built(List.of(), Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    ? Built.stoppedBy(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS)
                     : Built.of(List.of(new Made(FixtureTemplate.string("x".repeat(least)), least)));
         }
         if (!(carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
@@ -223,8 +233,7 @@ final class Witnesses {
             return Built.NONE;
         }
         if (least > MOST_ELEMENTS) {
-            return new Built(List.of(),
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            return Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS);
         }
         // A list may hold the same element as many times as it needs to.
         if (carrier instanceof Type.ListOf list) {
@@ -261,10 +270,19 @@ final class Witnesses {
         // a value's first — and taking them in step would offer only the pairs whose two proposals
         // happen to have been read in the same order. Nearest first is what makes the bound below cost
         // the least: what it drops is the pairs furthest from what either side proposed first.
-        for (int apart = 0;
-                apart <= keys.size() + values.size() - 2 && out.size() < MOST_PAIRINGS; apart++) {
+        // Recorded where the budget is reached and not worked out afterwards from how many were
+        // built. How many pairs there are and how many were made differ whenever this stops, and
+        // they are the same two numbers whether or not it was this that stopped it — so a reader
+        // asking which budget ran out would be reading it off a subtraction that does not know.
+        boolean stopped = false;
+        pairing:
+        for (int apart = 0; apart <= keys.size() + values.size() - 2; apart++) {
             for (int i = Math.max(0, apart - values.size() + 1);
-                    i <= Math.min(apart, keys.size() - 1) && out.size() < MOST_PAIRINGS; i++) {
+                    i <= Math.min(apart, keys.size() - 1); i++) {
+                if (out.size() == MOST_PAIRINGS) {
+                    stopped = true;
+                    break pairing;
+                }
                 FixtureTemplate value = values.get(apart - i);
                 List<FixtureTemplate> entries = new ArrayList<>();
                 for (FixtureTemplate key
@@ -274,8 +292,8 @@ final class Witnesses {
                 out.add(new Made(FixtureTemplate.collection(entries), entries.size()));
             }
         }
-        return new Built(out, keys.size() * values.size() > out.size()
-                ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null);
+        return new Built(out,
+                stopped ? Set.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE) : Set.of());
     }
 
     /**
