@@ -89,6 +89,34 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
         }
     }
 
+    /**
+     * A wait is spent by waiting, however a wait on a condition reports what is left of one.
+     *
+     * <p>{@link java.util.concurrent.locks.Condition#awaitNanos} answers an estimate of what is left
+     * of what it was asked for, and one that timed out answers none or fewer than none. So the
+     * arithmetic has three cases and one of them is a length going past zero, which is the case a
+     * wait long enough to be waited out in pieces reaches — and the only one that cannot be reached
+     * by waiting for it, the shortest wait that gets there being some centuries.
+     */
+    @Test
+    void aWaitIsSpentWhateverTheWaitReportsIsLeftOfIt() {
+        Duration hour = Duration.ofHours(1);
+
+        assertEquals(Duration.ofHours(1).minusNanos(400),
+                Handoff.leftOf(hour, 1_000, 600), "some of the wait was left");
+        assertEquals(Duration.ofHours(1).minusNanos(1_000),
+                Handoff.leftOf(hour, 1_000, 0), "none of it was");
+        assertEquals(Duration.ofHours(1).minusNanos(1_001),
+                Handoff.leftOf(hour, 1_000, -1), "and it went past the end of it");
+
+        // The piece a wait past what a `long` of nanoseconds holds is waited out in, reported as
+        // having gone past its end. Taken as one number, what it spent is what does not fit.
+        Duration past = Duration.ofNanos(Long.MAX_VALUE).plusSeconds(1);
+        assertEquals(Duration.ofNanos(Long.MAX_VALUE).plusSeconds(1).minusNanos(Long.MAX_VALUE).minusNanos(1),
+                Handoff.leftOf(past, Long.MAX_VALUE, -1),
+                "a wait waited out in pieces is spent by every one of them");
+    }
+
     /** And every one of them is written down as the wait it was, rather than as none or not at
      *  all. */
     @Test

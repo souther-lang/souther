@@ -297,8 +297,25 @@ final class Handoff {
      */
     private Duration waitedOut(Duration remaining) throws InterruptedException {
         long asked = remaining.compareTo(LONGEST_AWAIT) > 0 ? Long.MAX_VALUE : remaining.toNanos();
-        long left = moved.awaitNanos(asked);
-        return remaining.minusNanos(asked - left);
+        return leftOf(remaining, asked, moved.awaitNanos(asked));
+    }
+
+    /**
+     * What is left of {@code remaining} after a wait of {@code asked} nanoseconds that reported
+     * {@code left} of them to go.
+     *
+     * <p>A wait on a condition answers an estimate of what is left of what it was asked for, and one
+     * that timed out answers none or fewer than none. Fewer than none is time spent like any other:
+     * the wait went past its end, and what went past it is the compiler's own time as much as the
+     * rest.
+     *
+     * <p>Taken from the length rather than worked out beside it. The two nanosecond counts are
+     * whatever the machine reports, and one piece of a long wait is as much of it as a
+     * {@code long} holds — so a single subtraction of the two is a number that need not fit in one,
+     * and a wait would come back longer than it went in.
+     */
+    static Duration leftOf(Duration remaining, long asked, long left) {
+        return remaining.minusNanos(asked).plusNanos(left);
     }
 
     /**
