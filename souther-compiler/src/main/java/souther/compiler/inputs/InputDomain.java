@@ -763,7 +763,7 @@ public final class InputDomain {
         // resolution of it — worked out again from the positions this hands over, a rule about a
         // name every case of a sum spreads would be read as naming nothing.
         return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, cases,
-                path -> typeAt(path, symbols), symbols);
+                path -> typeAt(path, symbols), symbols, policy);
     }
 
     /**
