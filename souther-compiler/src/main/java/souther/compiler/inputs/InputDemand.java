@@ -88,7 +88,7 @@ public record InputDemand(List<TermPath> paths) {
         // did not follow are alike in demanding none: what a walk cannot name, nothing asks for.
         switch (names.pathOf(e, symbols)) {
             case PathResolution.At(var at) -> found.add(at);
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
+            case PathResolution.NotAPosition _ -> { }
         }
         switch (e) {
             // The body of a `let` is where the name stands for what was bound to it.

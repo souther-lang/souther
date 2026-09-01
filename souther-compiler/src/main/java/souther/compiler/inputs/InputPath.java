@@ -155,7 +155,34 @@ final class InputPath {
                 }
                 yield new PathResolution.NotAPosition();
             }
-            case null, default -> new PathResolution.NotAPosition();
+            // And every other shape names no position, said one at a time. A shape swallowed by a
+            // default would come back as a model that states nothing, which is what a reader acts
+            // on — so a shape added to the language is one this does not compile without.
+            //
+            // A value written out. The input holds it nowhere; it is what a body put beside what the
+            // input holds.
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                 Core.UnitValue _, Core.ListLit _, Core.Tuple _, Core.OptionSome _,
+                 Core.OptionNone _, Core.Construct _ -> new PathResolution.NotAPosition();
+            // A value made from others. What arithmetic and what an operation answered came from
+            // positions and are not positions, which is a reading of its own
+            // ({@link #cameFrom}).
+            case Core.Neg _, Core.Binary _, Core.Call _, Core.Apply _ ->
+                    new PathResolution.NotAPosition();
+            // A choice between values, which stands at no one place.
+            case Core.If _, Core.IfConstructed _, Core.Match _ -> new PathResolution.NotAPosition();
+            // A place inside a tuple, which is no position of an input: what a path is made of is a
+            // field, an element of a sequence and a case ({@link TermPath.Step}), and a tuple's
+            // places are none of the three. This is what the model says and not what this walk
+            // declined to follow — there is nothing here to name.
+            case Core.TupleGet _ -> new PathResolution.NotAPosition();
+            // A closure is a value the language hands an operation, and what it answers about an
+            // element is read where the operation stood ({@link ElementProjection}).
+            case Core.Block _ -> new PathResolution.NotAPosition();
+            // A place no row arrives at holds no value to be about.
+            case Core.Unreachable _ -> new PathResolution.NotAPosition();
+            // Nothing at all, which a caller may hand over where a body has no expression there.
+            case null -> new PathResolution.NotAPosition();
         };
     }
 
@@ -187,38 +214,13 @@ final class InputPath {
      * from a line their model states.
      */
     private PathResolution containerPath(Core e, BindingEnvironment names) {
-        PathResolution named = named(e, names);
-        if (named instanceof PathResolution.At) {
-            return named;
-        }
         // And where the expression names no position, its elements may still be at one, so the ways
         // an operation's answer holds them are tried beside it.
-        return either(named, elementsOf(e, names));
-    }
-
-    /**
-     * The answer of two readings of one expression.
-     *
-     * <p>A position wherever either reached one, since each is a way to the same place and neither
-     * is asked unless the other came back without it. Where neither did, what this compiler did not
-     * read stands over what the model does not hold: one of the two says the answer is not known
-     * here, and an absence that has that in it is not an absence.
-     *
-     * <p>The one place the three are ordered. Written at each meeting of two readings instead, the
-     * orderings drift apart, and the one that forgets turns a reading that stopped into a model
-     * that states nothing — which is the whole of what this type is for.
-     */
-    private static PathResolution either(PathResolution one, PathResolution other) {
-        return switch (one) {
-            case PathResolution.At _ -> one;
-            case PathResolution.Unread _ -> switch (other) {
-                case PathResolution.At _ -> other;
-                case PathResolution.NotAPosition _, PathResolution.Unread _ -> one;
-            };
-            case PathResolution.NotAPosition _ -> switch (other) {
-                case PathResolution.At _, PathResolution.NotAPosition _,
-                     PathResolution.Unread _ -> other;
-            };
+        return switch (named(e, names)) {
+            case PathResolution.At at -> at;
+            // Each is a way to the same place, and neither is asked unless the other came back
+            // without it, so whichever reached a position is the answer.
+            case PathResolution.NotAPosition _ -> elementsOf(e, names);
         };
     }
 

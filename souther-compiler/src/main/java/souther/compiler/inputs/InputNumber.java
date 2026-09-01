@@ -42,7 +42,7 @@ public final class InputNumber {
             // take it of — whether the argument stands nowhere or was not read to the end.
             TermPath of = switch (reads.pathOf(measured.of(), symbols)) {
                 case PathResolution.At(var at) -> at;
-                case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+                case PathResolution.NotAPosition _ -> null;
             };
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of,
@@ -58,7 +58,7 @@ public final class InputNumber {
         // reading did not follow.
         return switch (reads.pathOf(e, symbols)) {
             case PathResolution.At(var at) -> new NumericTerm.ValueOf(at);
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            case PathResolution.NotAPosition _ -> null;
         };
     }
 
@@ -118,7 +118,7 @@ public final class InputNumber {
         // at a position, so a container this reading could not place leaves no run to take.
         TermPath at = switch (where.elementAt(element, symbols)) {
             case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            case PathResolution.NotAPosition _ -> null;
         };
         if (answered == null || at == null) {
             return null;

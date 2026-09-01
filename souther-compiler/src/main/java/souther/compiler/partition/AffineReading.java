@@ -252,7 +252,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 // reading did not follow — neither is a place a row writes at.
                 boolean stands = switch (at.pathOf(fa.target(), symbols)) {
                     case PathResolution.At _ -> true;
-                    case PathResolution.NotAPosition _, PathResolution.Unread _ -> false;
+                    case PathResolution.NotAPosition _ -> false;
                 };
                 return !stands && !Location.isStep(fa.target().type(), fa.field(), symbols);
             }

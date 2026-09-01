@@ -116,7 +116,7 @@ public final class UnreachableClaims {
         // reading did not follow carries none it could name either.
         TermPath path = switch (reads.pathOf(match.scrutinee(), symbols)) {
             case PathResolution.At(var at) -> at;
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            case PathResolution.NotAPosition _ -> null;
         };
         if (path == null) {
             return;

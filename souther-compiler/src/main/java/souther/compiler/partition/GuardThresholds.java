@@ -189,7 +189,7 @@ public final class GuardThresholds {
                         out.add(at);
                     }
                 }
-                case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
+                case PathResolution.NotAPosition _ -> { }
             }
         }
     }
@@ -254,7 +254,7 @@ public final class GuardThresholds {
                 // did not follow is one it has nothing to read through with either.
                 return switch (at.pathOf(here, symbols)) {
                     case PathResolution.At(var stands) -> stands;
-                    case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+                    case PathResolution.NotAPosition _ -> null;
                 };
             }
 
@@ -262,7 +262,7 @@ public final class GuardThresholds {
             public TermPath madeFrom(Core here, InputReads at) {
                 return switch (at.cameFrom(here, symbols)) {
                     case PathResolution.At(var from) -> from;
-                    case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+                    case PathResolution.NotAPosition _ -> null;
                 };
             }
 

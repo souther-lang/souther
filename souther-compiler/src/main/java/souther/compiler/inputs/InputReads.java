@@ -159,7 +159,7 @@ public final class InputReads {
         // nothing — whether because it stands nowhere or because this reading did not follow it.
         TermPath scrutinee = switch (pathOf(match.scrutinee(), symbols)) {
             case PathResolution.At(var at) -> at;
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            case PathResolution.NotAPosition _ -> null;
         };
         if (scrutinee == null) {
             return admitting(match, arm, symbols);
@@ -344,7 +344,7 @@ public final class InputReads {
             case PathResolution.At(var at) -> {
                 return new ReadMeaning.Position(at);
             }
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
+            case PathResolution.NotAPosition _ -> { }
         }
         java.util.List<Denotation> narrowed = alternatives.get(read.binding());
         if (narrowed != null) {
