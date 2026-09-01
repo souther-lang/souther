@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.types.BinOp;
+import souther.compiler.semantics.ConditionJoin;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -55,18 +55,17 @@ sealed interface ClauseExpr {
         }
     }
 
-    /** Both of them holding. */
-    record Both(List<Core> spelled, ClauseExpr left, ClauseExpr right) implements ClauseExpr {
+    /**
+     * Two parts and what holding this one says of them.
+     *
+     * @param how what the connective composes, with the denial the tree was read under already
+     *            applied: what is left holds no {@code not}, so a reader below asks this and never
+     *            the operator the clause was written with
+     */
+    record Joined(List<Core> spelled, ConditionJoin how, ClauseExpr left, ClauseExpr right)
+            implements ClauseExpr {
 
-        public Both {
-            spelled = named(spelled);
-        }
-    }
-
-    /** Either of them holding. */
-    record Either(List<Core> spelled, ClauseExpr left, ClauseExpr right) implements ClauseExpr {
-
-        public Either {
+        public Joined {
             spelled = named(spelled);
         }
     }
@@ -96,14 +95,16 @@ sealed interface ClauseExpr {
         if (under != null) {
             return of(under, !positive, spelled);
         }
-        if (clause instanceof Core.Binary bin && bin.op().joinsTwoConditions()) {
+        if (clause instanceof Core.Binary bin) {
             // Stated, a conjunction gives both sides; denied, it gives the choice between their
             // denials. And the same the other way round, which is the whole of what a denial does
-            // to a connective.
-            ClauseExpr left = of(bin.left(), positive, List.of());
-            ClauseExpr right = of(bin.right(), positive, List.of());
-            return (bin.op() == BinOp.AND) == positive
-                    ? new Both(spelled, left, right) : new Either(spelled, left, right);
+            // to a connective, and is why the denial is applied to what the connective composes.
+            ConditionJoin joined = ConditionJoin.of(bin.op()).map(one -> one.under(positive))
+                    .orElse(null);
+            if (joined != null) {
+                return new Joined(spelled, joined, of(bin.left(), positive, List.of()),
+                        of(bin.right(), positive, List.of()));
+            }
         }
         return new Leaf(spelled, positive);
     }

@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
@@ -170,7 +170,8 @@ public final class ClauseHelpers {
     /** The conjuncts of a clause, flattened, in the order they are written — what a reader sees as
      * separate clauses. */
     public static List<Hir.Expr> conjunctsOf(Hir.Expr e) {
-        if (e instanceof Hir.Binary b && b.op() == BinOp.AND) {
+        if (e instanceof Hir.Binary b
+                && ConditionJoin.of(b.op()).orElse(null) == ConditionJoin.BOTH) {
             List<Hir.Expr> out = new ArrayList<>(conjunctsOf(b.left()));
             out.addAll(conjunctsOf(b.right()));
             return out;

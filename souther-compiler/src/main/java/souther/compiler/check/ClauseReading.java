@@ -82,8 +82,10 @@ interface ClauseReading<S> {
     private S over(ClauseExpr shape, java.util.function.BiConsumer<Core, S> per) {
         S out = switch (shape) {
             case ClauseExpr.Leaf it -> leaf(it.of(), it.positive());
-            case ClauseExpr.Both it -> both(over(it.left(), per), over(it.right(), per));
-            case ClauseExpr.Either it -> either(over(it.left(), per), over(it.right(), per));
+            case ClauseExpr.Joined it -> switch (it.how()) {
+                case BOTH -> both(over(it.left(), per), over(it.right(), per));
+                case EITHER -> either(over(it.left(), per), over(it.right(), per));
+            };
         };
         // Every node that was written as this shape, so a reader asking about the node it is
         // holding finds what this made of it — the denial as well as what is under it, since the
