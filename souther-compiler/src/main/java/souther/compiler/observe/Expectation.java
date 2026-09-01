@@ -11,7 +11,7 @@ import souther.compiler.types.TypeSymbol;
  * evidence and still evidence.
  *
  * <p>What it states and nothing more. Whether an answer keeps it is asked of what is bound to the
- * declarations the row was read against ({@code CheckedRow.Reproducible#holds}), and not of this:
+ * declarations the row was read against ({@code CheckedRow.SelfContained#holds}), and not of this:
  * a comparison reachable from a statement is one a reader can make with declarations of its own,
  * and two readings of one row would then answer differently about one answer — which is the whole
  * of what asking the language rather than the reader means.

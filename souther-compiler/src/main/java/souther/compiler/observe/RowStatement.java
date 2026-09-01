@@ -1,5 +1,6 @@
 package souther.compiler.observe;
 
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -14,10 +15,10 @@ import java.util.List;
  *
  * <p>Three arms, and the second is three. A row hands over values or it does not, which is the one
  * thing a reader has to know before it can do anything with the row; why it does not is the second
- * question, and each answer to it has a different owner — what the behavior requires, what a limit
- * keeps, and what read the row. A row that cannot be handed over must not arrive as no row all the
- * same: a reader given nothing for it would count a row it never saw among the ones it walked and
- * found nothing wrong with.
+ * question, and each answer to it names which of the row's values could not be handed over — one a
+ * stand-in states, one the row states itself — or says that nothing read the row at all. A row that
+ * cannot be handed over must not arrive as no row all the same: a reader given nothing for it would
+ * count a row it never saw among the ones it walked and found nothing wrong with.
  *
  * <p>The third is not one of those. {@link StoppedBeforeItsValues} is how far an evaluation got and
  * not something about the row, and it is beside {@link NotStated} rather than among its arms
@@ -31,17 +32,18 @@ import java.util.List;
 public sealed interface RowStatement {
 
     /**
-     * The inputs the row hands over and what it states of the answer.
+     * What the row hands over: what stands in for each dependency, the inputs, and what it states of
+     * the answer.
      *
-     * <p>Every value here is whole and is one these limits keep. Made by {@link #of}, which is what
-     * decides that: a value read whole is not always one a snapshot may carry, and the two
-     * questions answered in two places would be a {@code Stated} that means one thing where it was
-     * built and another where it was read.
+     * <p>Every value here is whole and is one these limits keep. Made by {@link RowStatements#read},
+     * which is what decides that: a value read whole is not always one a snapshot may carry, and the
+     * two questions answered in two places would be a {@code Stated} that means one thing where it
+     * was built and another where it was read.
      *
      * <p>A class and not a record, so that the one rule about what these hold cannot be gone round.
      * A record's canonical constructor is as public as the record, and a value larger than what is
      * kept would be written straight past the reading that decides what a row states; made only by
-     * {@link #of}, it is that reading whichever side makes one.
+     * {@link RowStatements#read}, it is that reading whichever side makes one.
      *
      * <p>A value all the same, and it says so itself. What a query stops work on is whether an
      * answer equals the one before it, and this rides inside one — so a statement that answered
@@ -50,12 +52,33 @@ public sealed interface RowStatement {
      */
     final class Stated implements RowStatement {
 
+        private final List<StoodIn> standIns;
         private final List<ObservedValue> inputs;
         private final Expectation expects;
 
-        private Stated(List<ObservedValue> inputs, Expectation expects) {
+        private Stated(List<StoodIn> standIns, List<ObservedValue> inputs, Expectation expects) {
+            this.standIns = List.copyOf(standIns);
             this.inputs = List.copyOf(inputs);
             this.expects = expects;
+        }
+
+        /** For the reading that decides what a row states, having decided it. */
+        static Stated of(List<StoodIn> standIns, List<ObservedValue> inputs, Expectation expects) {
+            return new Stated(standIns, inputs, expects);
+        }
+
+        /**
+         * What stands in for each of the behavior's dependencies, in the order it requires them.
+         *
+         * <p>Empty for a behavior that depends on nothing, which is a behavior with nothing to stand
+         * in for rather than a row that left something out.
+         *
+         * <p>Beside the inputs and not among them. A dependency is not an argument: the inputs are
+         * what the row hands the behavior, and these are what answers the behavior while it runs
+         * with them.
+         */
+        public List<StoodIn> standIns() {
+            return standIns;
         }
 
         /** What the row hands the behavior, in the order it takes them. */
@@ -70,18 +93,18 @@ public sealed interface RowStatement {
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Stated it && inputs.equals(it.inputs)
-                    && expects.equals(it.expects);
+            return other instanceof Stated it && standIns.equals(it.standIns)
+                    && inputs.equals(it.inputs) && expects.equals(it.expects);
         }
 
         @Override
         public int hashCode() {
-            return inputs.hashCode() * 31 + expects.hashCode();
+            return (standIns.hashCode() * 31 + inputs.hashCode()) * 31 + expects.hashCode();
         }
 
         @Override
         public String toString() {
-            return inputs + " -> " + expects;
+            return (standIns.isEmpty() ? "" : standIns + " | ") + inputs + " -> " + expects;
         }
     }
 
@@ -94,25 +117,72 @@ public sealed interface RowStatement {
     sealed interface NotStated extends RowStatement {}
 
     /**
-     * The behavior takes something injected, so the row states more than values.
+     * What stands in for a dependency the behavior takes could not be handed over, and why.
      *
      * <p>A row runs against a bound implementation, and where the behavior depends on something
-     * injected, what stands in for that dependency is the rest of what makes the row runnable.
-     * Handing over the inputs and the expectation alone would not be handing over the row: a reader
-     * whose dependency is an import has nothing to answer that import with, and one that applied the
-     * behavior anyway would be reporting what a run that cannot happen answered.
+     * injected, what stands in for that dependency is the rest of what makes the row runnable. What
+     * a stand-in states is written down — a value on the row, or a table beside it — so it crosses
+     * the way the row's own values cross, and a stand-in holding a value that could not be is a row
+     * that hands over nothing: a reader given the inputs alone would apply the behavior with nothing
+     * to answer its dependency with.
      *
-     * <p>So the row crosses as itself and says what is missing. Which dependencies those are is what
-     * the behavior requires, in the order it takes them.
+     * <p>The first such stand-in in the order the row is read: what stands in, in the order the
+     * behavior requires it, then the inputs, then the expectation. So this says what stopped the
+     * statement being made and not everything that is wrong with the row.
+     *
+     * <p>{@code at} is where a reader is sent, and which place that is follows from {@link #why}.
+     * A value that could not be carried is quoted where that value is written — a table states one
+     * on each of its rows and one more where it answers what it does not list, and naming the table
+     * would leave a reader to find which of them nothing could be made of. A place rather than a
+     * {@link Side}, because what a stand-in states is not a list a place in it can be counted along.
      */
-    record RequiresStandIns(List<ValueName.Behavior> dependencies) implements NotStated {
+    record StandInUnavailable(ValueName.Behavior dependency, SourcePos at,
+                              Why why) implements NotStated {
 
-        public RequiresStandIns {
-            dependencies = List.copyOf(dependencies);
-            if (dependencies.isEmpty()) {
-                throw new IllegalArgumentException("a row that needs nothing stood in for states"
-                        + " its values");
+        public StandInUnavailable {
+            if (dependency == null || at == null || why == null) {
+                throw new IllegalArgumentException("a stand-in that could not be handed over is one"
+                        + " dependency's, is quoted somewhere, and says why");
             }
+        }
+
+        /**
+         * Why what stands in for the dependency could not be handed over.
+         *
+         * <p>Two, and they are not one fact said twice. A value that was read and cannot be carried
+         * is a fact about that value; nothing having been read is a fact about the compile, and
+         * there is no value in it for anything to be said about. One reason covering both would
+         * have a reader that wants to quote the value ask first whether there is one.
+         */
+        public sealed interface Why {
+
+            /**
+             * It states a value that could not be carried: larger than what is kept, or not one
+             * that could be read.
+             *
+             * <p>The same two a row's own values are refused for, said with the same codes. What a
+             * reader may be given is one question, and a stand-in's values are values.
+             */
+            record AValueOfIt(Incompleteness.Code code) implements Why {
+
+                public AValueOfIt {
+                    if (code != Incompleteness.Code.VALUE_TRUNCATED
+                            && code != Incompleteness.Code.VALUE_UNREADABLE) {
+                        throw new IllegalArgumentException(
+                                code + " is not something that happens to a value");
+                    }
+                }
+            }
+
+            /**
+             * Nothing this compile read states what the dependency answers.
+             *
+             * <p>Nothing stands in for it, or what does would not build. Either is said where the
+             * row is written the moment anything runs the row, so a program the language accepted
+             * holds this only for a row nothing was going to run — and a reader of one is told that
+             * the row states no stand-in, rather than being handed an empty one to run against.
+             */
+            record NothingWasRead() implements Why {}
         }
     }
 
@@ -198,46 +268,4 @@ public sealed interface RowStatement {
         record TheExpectation() implements Side {}
     }
 
-    /**
-     * What a row with these values states.
-     *
-     * <p>The one place a statement is made of values, so that what {@link Stated} means is decided
-     * once. A value that is not there in full, and one larger than what is kept, are both values a
-     * reader cannot be given — the first because nothing here has it, the second because carrying
-     * it would carry a value nobody wrote — and both come back as {@link Incomplete} saying which
-     * and why.
-     *
-     * <p>Held to {@link Limits#DEFAULT} and not to limits a caller chooses. What a row's inputs are
-     * observed under is that one, so a row's two halves are held to one size; and a type whose
-     * meaning came from an argument would mean one thing where it was made and another where it was
-     * read, which is what a reader of a {@link Stated} would then have to ask about before it could
-     * do anything with the values. How much is kept is a thing to change, in the one place it is
-     * written; whose choice it is, is not.
-     */
-    static RowStatement of(List<ObservedValue> inputs, Expectation expects) {
-        return under(inputs, expects, Limits.DEFAULT);
-    }
-
-    private static RowStatement under(List<ObservedValue> inputs, Expectation expects,
-                                      Limits kept) {
-        if (expects == null) {
-            throw new IllegalArgumentException("a row states something of the answer");
-        }
-        for (int i = 0; i < inputs.size(); i++) {
-            Incompleteness.Code stopped = kept.stoppedBy(inputs.get(i));
-            if (stopped != null) {
-                return new Incomplete(new Side.AnInput(i), stopped);
-            }
-        }
-        // What the row states of the answer is read whole, so that a comparison is made against what
-        // was written; whether it may be carried is asked of the same limits an input is held to, so
-        // that one row's two halves are held to one size.
-        Incompleteness.Code stopped = switch (expects) {
-            case Expectation.TheValue(Asserted value) -> kept.stoppedBy(value);
-            // A case is a name. Nothing about it can be too large or fail to be read.
-            case Expectation.TheCase _ -> null;
-        };
-        return stopped != null ? new Incomplete(new Side.TheExpectation(), stopped)
-                : new Stated(inputs, expects);
-    }
 }

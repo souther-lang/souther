@@ -128,7 +128,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     private static souther.compiler.observe.RowStatement statingTheSame(RowOutcome row,
                                                                         List<ObservedValue> inputs) {
         return row.statement() instanceof souther.compiler.observe.RowStatement.Stated stated
-                ? souther.compiler.observe.RowStatement.of(inputs, stated.expects())
+                ? souther.compiler.observe.RowStatements.read(List.of(), inputs, stated.expects())
                 : row.statement();
     }
 
