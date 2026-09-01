@@ -115,7 +115,22 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " reading of a guard now takes from what was placed, kept here in the"
                             + " operator's own words"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared#op",
-                    "the operator an outcome was written with, which is what a report shows"));
+                    "the operator an outcome was written with, which is what a report shows"),
+
+            // And what puts each of those where it is: a value is handed its operator when it is
+            // made, which is the one call that decides what it will hold for as long as it lives.
+            new Held("souther.compiler.ast.Hir.Binary.<init>",
+                    "makes the node the resolved tree holds"),
+            new Held("souther.compiler.core.Core.Binary.<init>",
+                    "makes the node a check produces"),
+            new Held("souther.compiler.check.NumericMeaning.Operator.<init>",
+                    "makes the arithmetic meaning keyed by an operator"),
+            new Held("souther.compiler.coverage.SourceOutcome.Compared.<init>",
+                    "makes the outcome a report shows an operator for"),
+            new Held("souther.compiler.semantics.Arithmetic.TheOperator.<init>",
+                    "makes the fact that a library operation computes what an operator computes"),
+            new Held("souther.compiler.semantics.NumericResult.TheOtherCaseWhen.<init>",
+                    "makes the fact stating an operation's other case as a comparison"));
 
     /** What fetches an operator: answered by a call, read out of a field, or named as a constant. */
     private static final List<Held> FETCHED = List.of(
@@ -329,15 +344,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                 // What it is given, and not what it answers: a method answering an operator got one
                 // from somewhere, which is the other list.
                 if (method.methodTypeSymbol().parameterList().stream()
-                        .anyMatch(each -> each.descriptorString().equals(BIN_OP))
-                        && !generated(name)) {
+                        .anyMatch(each -> each.descriptorString().equals(BIN_OP))) {
                     out.add(owner + "." + name);
                 }
             }
             for (FieldModel field : model.fields()) {
-                String name = field.fieldName().stringValue();
-                if (field.fieldType().stringValue().contains(BIN_OP) && !generated(name)) {
-                    out.add(owner + "#" + name);
+                if (field.fieldType().stringValue().contains(BIN_OP)) {
+                    out.add(owner + "#" + field.fieldName().stringValue());
                 }
             }
         });
@@ -361,7 +374,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     if (element instanceof InvokeInstruction call) {
                         fetches |= names(call.typeSymbol().returnType().descriptorString());
                     }
-                    if (element instanceof FieldInstruction field) {
+                    // Read out of a field and not written into one: what is stored came from
+                    // somewhere else in the same method, and that is where it arrived.
+                    if (element instanceof FieldInstruction field
+                            && (field.opcode() == Opcode.GETFIELD
+                                    || field.opcode() == Opcode.GETSTATIC)) {
                         fetches |= names(field.typeSymbol().descriptorString());
                     }
                     // What a collection or anything else generic hands back is an Object until it
@@ -373,7 +390,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                                 || names(cast.type().asInternalName());
                     }
                 }
-                if (fetches && !generated(method.methodName().stringValue())) {
+                if (fetches) {
                     out.add(owner + "." + method.methodName().stringValue());
                 }
             }
@@ -385,13 +402,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
      *  hands back is an array, and an operator taken out of one arrived with it. */
     private static boolean names(String descriptor) {
         return descriptor.contains(BIN_OP) || descriptor.equals("souther/compiler/types/BinOp");
-    }
-
-    /** A constructor, a class's own setting up, and what the compiler writes for an enum: none of
-     *  them anybody holding an operator. */
-    private static boolean generated(String name) {
-        return name.startsWith("<") || name.startsWith("$")
-                || name.equals("values") || name.equals("valueOf");
     }
 
     private static Map<String, String> declared(List<Held> held) {
@@ -427,6 +437,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                         .replace('/', '.').replace('$', '.');
                 if (owner.equals("souther.compiler.types.BinOp")) {
                     // The operator itself, whose own members are what an enum is made of.
+                    continue;
+                }
+                if (model.flags().has(java.lang.reflect.AccessFlag.SYNTHETIC)) {
+                    // A class the compiler wrote, not a place anybody reads an operator: what
+                    // javac emits to switch over an enum holds one, on behalf of the method that
+                    // does the switching — and that method is in the list under its own name. An
+                    // anonymous class is not one of these; it holds what somebody wrote.
                     continue;
                 }
                 read++;
