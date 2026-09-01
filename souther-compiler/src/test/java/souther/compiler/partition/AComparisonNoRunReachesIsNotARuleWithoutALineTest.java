@@ -106,7 +106,7 @@ class AComparisonNoRunReachesIsNotARuleWithoutALineTest {
         assertTrue(human.contains("`Off` is declared unreachable on every path"), human);
         // The position the refused comparison names is one the model draws no line through, which
         // is what is true of it, said in the words for that and not in a reading's.
-        assertTrue(human.contains("not derivable: n"), human);
+        assertTrue(human.contains("divided no way: n"), human);
         assertTrue(human.contains("border      not applicable"), human);
     }
 

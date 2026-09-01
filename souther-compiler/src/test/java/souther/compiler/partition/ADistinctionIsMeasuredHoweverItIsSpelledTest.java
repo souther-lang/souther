@@ -148,7 +148,7 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 "classify").undivided();
 
         assertEquals(1, undivided.size(), undivided.toString());
-        assertFalse(undivided.get(0).isAbsent(),
+        assertFalse(undivided.get(0).why() instanceof UndividedPosition.Why.Absent,
                 "the model states a rule about this position, so nothing here may say it states none");
     }
 
@@ -171,6 +171,6 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 """, "classify").undivided();
 
         assertEquals(1, undivided.size(), undivided.toString());
-        assertTrue(undivided.get(0).isAbsent());
+        assertTrue(undivided.get(0).why() instanceof UndividedPosition.Why.Absent);
     }
 }

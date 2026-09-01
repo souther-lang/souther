@@ -1398,7 +1398,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                   SourceNameResolver names, SourceId declaredIn) {
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionNoLineDivides(var position)) {
-                out.append(String.format("      %s not derivable: %s%n", mark(f), position.at()));
+                // What was found and not what was missed. This line is written from
+                // {@code Why.Absent}, which is every reading having run to the end and none of them
+                // dividing the position — a conclusion about the model. It said `not derivable`,
+                // which is the word for a derivation this compiler could not make, so the sentence
+                // said the opposite of the value it was written from (issue #1249).
+                out.append(String.format("      %s divided no way: %s%n", mark(f), position.at()));
             }
         }
         // Said apart from the line above it, which is the whole of what this pair is for: one names
@@ -1477,6 +1482,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case RULE_ABOUT_A_RUN ->
                     "it is about what the values here come to rather than about any one of them,"
                             + " so it draws its line and divides none of them";
+            // The one sentence here that is about this compiler's measure rather than about the
+            // rule. Said as a division that has no line, because that is what it is: an author
+            // reading "this compiler does not read it" would go and rewrite a rule that was read.
+            case PARTITION_NOT_REPRESENTABLE ->
+                    "it divides this position into values this measure draws no line between";
             case RULE_ABOUT_A_DERIVED_VALUE ->
                     "it is about a value made from this one, and what it says about the values here"
                             + " is not worked out";
@@ -2872,9 +2882,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // schema is written against.
         ArrayNode undivided = out.putArray("notDerivable");
         ArrayNode unread = out.putArray("notRead");
+        // Only the positions the model divides no way. The list is what a consumer reads for that
+        // claim, and the other two answers are about a reading that stopped and about a rule this
+        // measure has no line for — neither of which is the model saying nothing.
         partition.notDerivable().forEach(each -> {
-            if (each.isAbsent()) {
-                undivided.add(each.at().toString());
+            switch (each.why()) {
+                case souther.compiler.partition.UndividedPosition.Why.Absent _ ->
+                        undivided.add(each.at().toString());
+                case souther.compiler.partition.UndividedPosition.Why.CannotDerive _,
+                     souther.compiler.partition.UndividedPosition.Why.StatedWithoutALine _ -> { }
             }
         });
         // The position and what stopped it, kept as the product they are. Which limit a position is

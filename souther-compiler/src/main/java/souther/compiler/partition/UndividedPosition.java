@@ -220,6 +220,25 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_ABOUT_A_RUN,
         /**
+         * The rule divides this position, and the division is not one this measure has a line for.
+         *
+         * <p>A format states which strings stand here, which is two classes and no order: the
+         * strings it accepts and the rest. What this measure carries is intervals on an order, so
+         * there is no line and no point either side of one — and the position is divided all the
+         * same.
+         *
+         * <p><b>The one word here that is about this measure and not about the rule.</b> The others
+         * say something the rule does or does not do; this says the rule did divide the position
+         * and the measure has no representation for what it divided it into. Which is why a
+         * position carrying only such a rule is not one the model divides no way — it was reported
+         * as one, and every reader downstream took the silence for a conclusion (issue #1249).
+         *
+         * <p>Named for the representation and not for what reached it first. A congruence divides a
+         * position the same way and no interval says it, so the day that is read this is its word
+         * too.
+         */
+        PARTITION_NOT_REPRESENTABLE,
+        /**
          * The input returns here to a declaration it has already been through, and what is under
          * this position was not read again.
          *
@@ -307,7 +326,4 @@ public record UndividedPosition(TermPath at, Why why) {
         return new UndividedPosition(at, new Why.CannotDerive());
     }
 
-    public boolean isAbsent() {
-        return why instanceof Why.Absent;
-    }
 }

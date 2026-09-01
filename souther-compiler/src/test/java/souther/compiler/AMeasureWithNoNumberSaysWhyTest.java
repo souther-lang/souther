@@ -199,13 +199,13 @@ class AMeasureWithNoNumberSaysWhyTest {
                   widen                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not derivable: w.v
+                      · divided no way: w.v
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
                   narrow                   implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not derivable: m.v
+                      · divided no way: m.v
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
                   both                     implemented   rows 1    pending 0

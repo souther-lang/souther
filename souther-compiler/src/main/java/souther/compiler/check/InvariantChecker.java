@@ -1380,6 +1380,20 @@ public final class InvariantChecker {
         // of one clause would disagree about which line is which.
         int part = conjunct[0]++;
         if (!(clause instanceof Core.Binary bin)) {
+            // A rule that divides the position by something no order carries, said as that. The
+            // reading took it in — which strings stand here is an answer, and this walk is the one
+            // that would have drawn a line from it — so what is absent is a line and not a reading.
+            // Passed over in silence, the position came back with no classes and nothing saying
+            // why, and every reader downstream took the silence for the model dividing it no way
+            // at all (issue #1249).
+            Coordinate divided = dividedOutsideAnOrder(clause, at, byName);
+            if (divided != null) {
+                FieldDomains.NoLine said = new FieldDomains.NoLine(divided.at(), from, clause, part,
+                        new BlockReason.RuleDividingOutsideAnOrder());
+                if (!noLines.contains(said)) {
+                    noLines.add(said);
+                }
+            }
             settle(clause, from, states(clause, at, byName, null),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
@@ -1718,6 +1732,29 @@ public final class InvariantChecker {
      */
     private static RuleAt<RuleKey> ruleAt(Coordinate where, Places left, Places right) {
         return UnreadComparison.subjectAt(where.path(), left.origin(), right.origin());
+    }
+
+    /**
+     * The position a clause divides by something that is not an order, or null where it is no such
+     * clause.
+     *
+     * <p>Which calls those are is {@link StringPredicates}' and is asked rather than spelled: the
+     * same table says what such a call means about the strings at a position, and a second list of
+     * spellings here would be a second answer to which rules this compiler reads (issue #1249).
+     *
+     * <p>Only where the position is one this reading names. A predicate about something deeper than
+     * the coordinates in hand states nothing this walk can file, and filing it against the position
+     * above would put a rule's name on a division of something else.
+     */
+    private Coordinate dividedOutsideAnOrder(Core clause, Denotations at,
+                                             Map<FactSubject, Coordinate> byName) {
+        if (!(clause instanceof Core.PreservedCall call)
+                || !(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
+            return null;
+        }
+        StringPredicates predicate = StringPredicates.of(symbols.kernelOf(operation));
+        return predicate == null || call.args().size() != predicate.arity() ? null
+                : byName.get(nameOf(call.args().get(predicate.subject()), at));
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */

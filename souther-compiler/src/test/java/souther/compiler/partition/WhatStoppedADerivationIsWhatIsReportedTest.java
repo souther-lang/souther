@@ -67,7 +67,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
     /** And that the verdict says the model divides the position no way. */
     private static boolean absent(PartitionEvidence evidence, String position) {
         return evidence.notDerivable().stream()
-                .anyMatch(each -> each.at().toString().equals(position) && each.isAbsent());
+                .anyMatch(each -> each.at().toString().equals(position) && each.why() instanceof UndividedPosition.Why.Absent);
     }
 
     /** And that the verdict says a rule states something here that came to no line. */
