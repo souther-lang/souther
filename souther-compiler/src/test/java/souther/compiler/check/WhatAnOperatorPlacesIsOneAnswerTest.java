@@ -279,29 +279,33 @@ class WhatAnOperatorPlacesIsOneAnswerTest {
      * A relation written down is a comparison stating it, and every relation can be written down.
      *
      * <p>The way back, and the whole of it. A reading that composes a comparison out of what the
-     * rules proved says it in an operator, and what is written is read as a comparison by
-     * everything downstream — so an operator stating something else is a rule nobody wrote arriving
-     * with the source's own position on it. Asked of every relation rather than of the ones some
-     * operator happens to state: what is composed comes from the numeric reasoning, which has all
-     * six whether or not an author wrote them.
+     * rules proved has a relation and needs what such a comparison places. Asked of every relation
+     * rather than of the ones some operator happens to state: what is composed comes from the
+     * numeric reasoning, which has all six whether or not an author wrote them.
      */
     @Test
-    void everyRelationIsWrittenAsAComparisonStatingIt() {
+    void everyRelationIsPlacedByAClaimStatingIt() {
         for (Rel rel : Rel.values()) {
-            BinOp written = ComparisonWriting.operatorStating(rel);
-            assertEquals(rel, claim(written).statedRelation(),
-                    () -> rel + " written down, and read back for what it states");
+            assertEquals(rel, ComparisonClaim.stating(rel).statedRelation(),
+                    () -> rel + " taken as what it places, and read back for what it states");
         }
     }
 
-    /** And an operator read for what it places and written back from that is the operator it was,
-     *  which is the two crossings between how a comparison is written and what it means holding
-     *  each other in place. */
+    /**
+     * And a claim read for what it states and taken back from that is the claim it was, which is
+     * what makes the way back an answer at all.
+     *
+     * <p>The other direction says the relation survives the crossing; this one says the claim does.
+     * Without it two claims could state one relation — an order and the equality at its edge, say —
+     * and a reading composing a comparison from that relation would place a partition the rules
+     * never proved while every relation still read back as itself.
+     */
     @Test
-    void anOperatorWrittenBackFromWhatItPlacedIsItself() {
+    void aClaimTakenBackFromWhatItStatesIsItself() {
         for (BinOp op : STATED.keySet()) {
-            assertEquals(op, ComparisonWriting.operatorStating(claim(op).statedRelation()),
-                    () -> op + " read for what it places and written back");
+            ComparisonClaim placed = claim(op);
+            assertEquals(placed, ComparisonClaim.stating(placed.statedRelation()),
+                    () -> op + " read for what it places, and placed again from what it states");
         }
     }
 

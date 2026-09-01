@@ -48,8 +48,6 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
 
     private static final String PLACEMENT = "souther/compiler/check/ComparisonPlacement";
 
-    private static final String WRITING = "souther/compiler/check/ComparisonWriting";
-
     /** A method that may read an operator for what it places, how many times it does, and why. */
     private record Licence(String who, int calls, String why) { }
 
@@ -63,29 +61,6 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
             new Licence("souther.compiler.inputs.ComparedNumber.of", 1,
                     "reads any binary a walk met, so an operator that places nothing arrives here"
                             + " and is answered rather than excluded"));
-
-    private static final List<Licence> MAY_WRITE = List.of(
-            new Licence("souther.compiler.check.Conditions.asOrderComparison", 1,
-                    "the one comparison this compiler composes: what an operation answering an"
-                            + " order proves about its two arguments, which no author wrote and"
-                            + " everything below reads as though they had"));
-
-    /**
-     * And who writes one, which is the way back and is one place for the same reason.
-     *
-     * <p>A reading that composes a comparison out of what the rules proved has to say it in an
-     * operator. Everything downstream reads what is written as a comparison, so the composing and
-     * the recognising are the two crossings between how a comparison is written and what it means —
-     * and a second way across is a second table of six that agrees with these only for as long as
-     * somebody keeps it so.
-     */
-    @Test
-    void onlyAComposedComparisonIsWrittenAsAnOperator() throws IOException {
-        assertEquals(declared(MAY_WRITE), callsTo(WRITING, "operatorStating"),
-                "a relation written as an operator anywhere else is a second way from what a rule"
-                        + " means to how one is written. What each of these writes one for: "
-                        + why(MAY_WRITE));
-    }
 
     @Test
     void onlyARecognitionReadsAnOperatorForWhatItPlaces() throws IOException {

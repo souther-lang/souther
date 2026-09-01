@@ -105,7 +105,7 @@ class OnlyAClaimSaysWhatAComparisonStatesTest {
                             + " names — which is the same fact read the other way round"));
 
     private static final List<Licence> MAY_ASK = List.of(
-            new Licence("souther.compiler.check.Conditions.canonical",
+            new Licence("souther.compiler.check.Conditions.polar",
                     "keys a fact by the comparison a condition states, which is written as a node"
                             + " with what is asserted of it carried beside"),
             new Licence("souther.compiler.check.Terms.lambda$binary$0",

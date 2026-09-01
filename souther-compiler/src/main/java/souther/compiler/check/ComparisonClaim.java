@@ -32,6 +32,35 @@ public sealed interface ComparisonClaim
         extends ComparisonPlacement permits ComparisonClaim.Cut, ComparisonClaim.Singled {
 
     /**
+     * What a comparison stating {@code rel} of its two sides placed on them.
+     *
+     * <p>{@link #statedRelation} the other way round, and the whole of the way back. The six
+     * relations and the six claims stand one to one — an order is a side and whether the value it
+     * names is on it, which is four, and an equality is the value singled out or everything else,
+     * which is two — so this loses nothing and neither does the way out.
+     *
+     * <p>Here, and one place, because it is the crossing between the two vocabularies read
+     * backwards. A reading that composes a comparison out of what the rules proved has a relation
+     * and needs what such a comparison places; written as the operator the language spells that
+     * relation with, and recognised again from the operator, the way back would be a second table
+     * of six for the recognition to agree with.
+     *
+     * <p>An order is asked for by the side it is satisfied on ({@link Cut#satisfiedOn}), so which
+     * class the value it names is in is worked out where a cut's two facts are already paired
+     * rather than restated here.
+     */
+    static ComparisonClaim stating(Rel rel) {
+        return switch (rel) {
+            case EQ -> new Singled(true);
+            case NE -> new Singled(false);
+            case LE -> Cut.satisfiedOn(Towards.BELOW, true);
+            case LT -> Cut.satisfiedOn(Towards.BELOW, false);
+            case GE -> Cut.satisfiedOn(Towards.ABOVE, true);
+            case GT -> Cut.satisfiedOn(Towards.ABOVE, false);
+        };
+    }
+
+    /**
      * Whether the comparison is true at the value it names.
      *
      * <p>Asked of either shape, because either answers it: {@code x <= c} and {@code x > c} agree
