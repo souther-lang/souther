@@ -429,11 +429,11 @@ public final class InputReads {
      *
      * <p><b>Which names those are is {@link #meaningOf}'s answer and is not read off the bindings
      * here.</b> A name is a position, or one of several values, or an element, before it is what it
-     * was bound to, and reading {@code bound} would be this walk deciding that order for itself —
-     * beside the one place that decides it, and free to differ. No model here comes out differently
-     * for it: what would tell them apart is a binding that both holds a value and is what an
-     * operation handed an element on, which is a shape a fused pair of walks can leave
-     * ({@link InputPath}) and which none of these tests writes.
+     * was bound to, and there is no way to read a binding's value here without that order having
+     * been applied: the environment answers what a name is ({@link BindingRole}) and hands out
+     * nothing to put in a different order. What would have told a second order apart is a binding
+     * that both holds a value and is what an operation handed an element on, which is the shape
+     * joining two walks leaves.
      *
      * <p>By the bindings met, which is what makes it stop. Each tells itself from every other, so a
      * name that came round to itself is one already answered for.

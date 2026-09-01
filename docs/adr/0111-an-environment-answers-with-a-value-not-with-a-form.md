@@ -120,11 +120,27 @@ A rule an author wrote is now reported where it used to be silent. The conforman
 is a rule about both of them that this does not model — two `partition_not_read` findings where there
 were none. No line is drawn that was not drawn before.
 
-Which of a position and an element wins where a name is both is not a decision this makes. `InputPath`
-already settles whether an element binding stands at a position, and the input reading asks what a
-binding holds only for names it declined; the order they are written in follows from that rather than
-adding to it. Four models were measured with the two swapped and none of them changed, so there is no
-control to write for it and none is claimed.
+Which of a position and an element wins where a name is both is one place's, and the decision above
+says which place: a reader answers from what a name **is**. For a named-position reading an element
+binding is interpreted through its container before any value the lowering happens to bind to the
+same binding, and that route failing is a semantic "no position" rather than permission to read the
+binding through what it holds.
+
+Four models were measured here with the two swapped and none of them changed, and that was read as
+there being no control to write. The measurement was right and the reading of it was wrong: none of
+the four held a binding that was at once an element an operation handed out and bound to a value, so
+none of them could tell the two orders apart. Joining two walks into one produces exactly that
+binding — the second walk's element is bound to what the first walk's closure made — and a model
+holding one distinguishes the orders. What was missing was not a control but a model with the
+discriminating shape in it.
+
+`InputPath` had not applied the decision. It read the facts itself and raced them, taking what the
+binding holds first and falling back to what it is an element of, and on such a binding the race is
+won by the value the rewrite left under the name. What kept the wrong road shut was the shape at the
+top of it: a `let` came back as something the reading did not follow, and a fused closure body is a
+`let` — as is every binding a helper expansion writes, which is why a claim written through a helper
+was about a position that reading could not name. Both are gone: the environment answers what a
+binding is and hands out nothing to re-order, and an expression that binds a name is read under it.
 
 This settles the reading of a name in the affine walk. Every other reader that meets a name is a
 place to apply the decision rather than restate it, and where it has not been applied the reader in
@@ -136,4 +152,5 @@ question still owns an account of its own.
 - ADR-0106 — a binder's meaning belongs to the environment (what this specialises)
 - Issue #836 — a body that binds its input before comparing it compares its input
 - Issue #867 — an expansion binding a value the arithmetic cannot read is one atom
+- Issue #1211 — the model that tells the two orders apart, and the reader that had not applied this
 - `[#invariant-discharge-terms]`, `[#boundary-coordinates]`
