@@ -606,18 +606,27 @@ final class CheckedProgramAssembler {
             Map<ValueName.Behavior, Composition> compositions) {
         String name = declared.name();
         BehaviorImplementation state = implementations.get(name);
-        if (state == null || state == BehaviorImplementation.UNIMPLEMENTED) {
-            return new CheckedImplementation.Unwritten();
+        if (state == null) {
+            // The module was taken as checked and this compile has no reading of where one of its
+            // behaviors gets its body. Read as unwritten it would be a behavior the author is owed
+            // a body for, which is a program of its own — and nothing would say the reading was
+            // missing rather than the body.
+            throw new IllegalStateException("`" + named + "` was taken as checked and this compile"
+                    + " has nothing to say about where its implementation comes from");
         }
-        if (state == BehaviorImplementation.INJECTION_TARGET) {
-            return new CheckedImplementation.Injected();
-        }
-        Composition composed = compositions.get(named);
-        if (composed != null) {
-            return new CheckedImplementation.Composed(composed);
-        }
-        return new CheckedImplementation.Body(inputBindersOf(named, declared, lowered),
-                checked.behaviorBodies().get(name));
+        return switch (state) {
+            case UNIMPLEMENTED -> new CheckedImplementation.Unwritten();
+            case INJECTION_TARGET -> new CheckedImplementation.Injected();
+            // A composition is what the behavior is declared as, so what says it is one is that the
+            // check settled stages for it and not the absence of a body.
+            case IMPLEMENTED -> {
+                Composition composed = compositions.get(named);
+                yield composed != null
+                        ? new CheckedImplementation.Composed(composed)
+                        : new CheckedImplementation.Body(inputBindersOf(named, declared, lowered),
+                                checked.behaviorBodies().get(name));
+            }
+        };
     }
 
     /**
