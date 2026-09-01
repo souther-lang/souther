@@ -15,7 +15,6 @@ import java.lang.classfile.Signature;
 import java.lang.classfile.attribute.RecordAttribute;
 import java.lang.classfile.attribute.RecordComponentInfo;
 import java.lang.constant.ClassDesc;
-import java.lang.constant.ConstantDescs;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -89,15 +88,13 @@ class OnlyARowIsCalledARowTest {
     /**
      * What a plurality of rows is held in.
      *
-     * <p>A closed list, so that a shape nobody has decided about arrives here as a failure rather
-     * than as a pass. A map from something to rows is not on it: what its keys are is a second
-     * thing the value says, and a name that does not say it leaves the reader to find out.
+     * <p>What this compiler holds them in, and nothing else. A closed list is the point — a shape
+     * nobody has decided about arrives as a failure rather than as a pass — so a shape nobody has
+     * written yet is not admitted in advance either. A map from something to rows is the case that
+     * made this worth closing: what its keys are is a second thing the value says, and a name that
+     * does not say it leaves the reader to find out.
      */
-    private static final Set<String> CONTAINERS = Set.of(
-            "java/util/Collection",
-            "java/util/List",
-            "java/util/SequencedCollection",
-            "java/util/Set");
+    private static final Set<String> CONTAINERS = Set.of("java/util/List");
 
     private static final Set<String> RESERVED_MEMBERS = Set.of("row", "rows");
 
@@ -139,8 +136,13 @@ class OnlyARowIsCalledARowTest {
     @Test
     void bothOfThoseAreOverSomething() throws IOException, URISyntaxException {
         List<ClassModel> compiled = compiled();
-        assertTrue(compiled.size() > 100,
-                "the walk reads this module's classes, and read " + compiled.size());
+        // Named, rather than counted against a floor somebody chose: a walk that reached the
+        // classes the rule is written about is what this is asking, and a number would be met by
+        // any hundred of them.
+        List<String> internal = compiled.stream().map(OnlyARowIsCalledARowTest::internal).toList();
+        for (String each : ROWS) {
+            assertTrue(internal.contains(each), () -> "the walk did not reach " + each);
+        }
         List<String> allowed = new ArrayList<>();
         for (ClassModel each : compiled) {
             for (MethodModel method : each.methods()) {
@@ -159,6 +161,11 @@ class OnlyARowIsCalledARowTest {
      * <p>One name of one class is one finding. A record component, the field it writes and the
      * accessor that answers it are one thing the author wrote, and so are a field and the accessor
      * beside it; naming each of them would say the same finding three times over.
+     *
+     * <p>So a record whose component takes the reserved name and may hold it covers a second
+     * declaration of that name in the same record — a static field, which is the only way to write
+     * one. Nothing in this compiler does, and closing it would mean telling a component's own field
+     * and accessor from a member that merely shares its name, which a class file does not say.
      */
     private static List<String> membersOf(ClassModel of) {
         List<String> wrong = new ArrayList<>();
@@ -201,17 +208,17 @@ class OnlyARowIsCalledARowTest {
             case Signature.ArrayTypeSig array -> answersARow(array.componentSignature());
             case Signature.ClassTypeSig cls -> ROWS.contains(named(cls))
                     || CONTAINERS.contains(named(cls)) && cls.typeArgs().size() == 1
-                    && answersARow(argument(cls.typeArgs().getFirst()));
+                    && holdsARow(cls.typeArgs().getFirst());
             default -> false;
         };
     }
 
-    /** What a type argument stands for, or the type variable that stands for nothing here. */
-    private static Signature argument(Signature.TypeArg arg) {
-        return switch (arg) {
-            case Signature.TypeArg.Bounded bounded -> bounded.boundType();
-            case Signature.TypeArg.Unbounded _ -> Signature.of(ConstantDescs.CD_Object);
-        };
+    /** Whether a container's one type argument names a row. A wildcard does not: what a list of
+     *  something unsaid holds is not something this was told. */
+    private static boolean holdsARow(Signature.TypeArg arg) {
+        return arg instanceof Signature.TypeArg.Bounded bounded
+                && bounded.wildcardIndicator() == Signature.TypeArg.Bounded.WildcardIndicator.NONE
+                && answersARow(bounded.boundType());
     }
 
     private static String named(Signature.ClassTypeSig of) {
@@ -247,7 +254,19 @@ class OnlyARowIsCalledARowTest {
             case Signature.TypeVarSig var -> var.identifier();
             case Signature.ClassTypeSig cls -> cls.typeArgs().isEmpty() ? named(cls)
                     : named(cls) + "<" + String.join(", ",
-                            cls.typeArgs().stream().map(it -> shown(argument(it))).toList()) + ">";
+                            cls.typeArgs().stream().map(OnlyARowIsCalledARowTest::shown).toList())
+                            + ">";
+        };
+    }
+
+    private static String shown(Signature.TypeArg arg) {
+        return switch (arg) {
+            case Signature.TypeArg.Unbounded _ -> "?";
+            case Signature.TypeArg.Bounded bounded -> switch (bounded.wildcardIndicator()) {
+                case NONE -> shown(bounded.boundType());
+                case EXTENDS -> "? extends " + shown(bounded.boundType());
+                case SUPER -> "? super " + shown(bounded.boundType());
+            };
         };
     }
 

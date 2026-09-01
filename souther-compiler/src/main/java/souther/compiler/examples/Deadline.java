@@ -40,8 +40,8 @@ public interface Deadline {
         SourcePos pos();
 
         /** A row of an {@code example}, evaluated whole: its fixtures built, the behavior applied,
-         * the result compared. What {@link Fixtures} is the first third of, and named for the
-         * difference. {@code identity} is what the row names itself. */
+         * the result compared. Named against {@link Fixtures}, which is the reading of the same
+         * row that stops before the behavior. {@code identity} is what the row names itself. */
         record WholeRow(String target, SourcePos pos, RowIdentity identity) implements Work {}
 
         /** The statements a row is read from, with no behavior applied. */
