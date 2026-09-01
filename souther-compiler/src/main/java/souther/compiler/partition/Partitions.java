@@ -493,7 +493,7 @@ public final class Partitions {
             // everything else. Ranges here would ask the rows for a distinction between the two
             // sides of a value the behavior treats alike.
             mine.forEach(each -> account.measured(each, id));
-            return made(out, at, behavior, term, type,
+            return made(out, at, behavior, term,
                     classesOf(axis, () -> singledClasses(points, term, type, orders, domain,
                             symbols)),
                     mergedPoints(cutsOf(axis), points, carrier),
@@ -537,7 +537,7 @@ public final class Partitions {
         // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
         // written about the position rather than everything that came to nothing.
         NumericDomain.Bounds within = domain;
-        return made(out, at, behavior, term, type,
+        return made(out, at, behavior, term,
                 classesOf(axis, () -> Intervals.classesOf(
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
@@ -561,7 +561,7 @@ public final class Partitions {
      * the measures — which is what a measure of nothing was.
      */
     private static BodyCutInspection made(List<Axis> out, PositionMeasurements at, String behavior,
-                                          NumericTerm.FromOnePosition term, Type type,
+                                          NumericTerm.FromOnePosition term,
                                           List<PartitionClass> classes, List<Cut> cuts,
                                           List<Parting> parted, NarrowedBounds narrowed,
                                           BodyCutInspection drew, List<RuleWithoutALine> rules) {

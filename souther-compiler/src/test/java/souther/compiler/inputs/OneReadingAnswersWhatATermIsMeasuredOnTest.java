@@ -2,16 +2,22 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.test.RepositoryLayout;
-
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.CodeModel;
+import java.lang.classfile.instruction.InvokeInstruction;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -33,28 +39,58 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class OneReadingAnswersWhatATermIsMeasuredOnTest {
 
-    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
-
     /** Where both orders of a term are worked out from a type. */
-    private static final String DERIVED = "TermOrdering.of(";
+    private static final String DERIVES = "souther.compiler.inputs.TermOrdering";
 
+    /**
+     * Read off what was compiled rather than off the sources.
+     *
+     * <p>A check on the spelling reads what a call looks like, and a call can look like anything: a
+     * static import drops the class name, and a lambda that derives puts the call in a class of its
+     * own. What the class files carry is the call, whatever it was written as.
+     */
     @Test
     void oneProductionPlaceDerivesATermsOrders() throws IOException {
-        List<Path> sources = REPOSITORY.mainJavaSources();
-        assertTrue(sources.size() > 20,
-                () -> "the scan found only " + sources.size() + " sources, which is not the tree");
-
-        List<String> derives = new ArrayList<>();
-        for (Path source : sources) {
-            String text = code(Files.readString(source, StandardCharsets.UTF_8));
-            if (text.contains(DERIVED) && !source.getFileName().toString().equals("TermOrdering.java")) {
-                derives.add(source.getParent().getFileName() + "/" + source.getFileName());
+        Set<String> derives = new TreeSet<>();
+        for (Path each : classes()) {
+            ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
+            String from = nestOf(model.thisClass().asInternalName().replace('/', '.'));
+            if (from.equals(DERIVES)) {
+                continue;   // what the derivation does with itself is its own business
+            }
+            for (var method : model.methods()) {
+                CodeModel code = method.code().orElse(null);
+                if (code == null) {
+                    continue;
+                }
+                for (var element : code) {
+                    if (element instanceof InvokeInstruction call
+                            && call.owner().asInternalName().replace('/', '.').equals(DERIVES)) {
+                        derives.add(from);
+                    }
+                }
             }
         }
 
-        assertEquals(List.of("inputs/ReadQuantities.java"), derives,
+        assertFalse(derives.isEmpty(),
+                "nothing works a term's orders out at all; this check is reading no calls");
+        assertEquals(Set.of("souther.compiler.inputs.ReadQuantities"), derives,
                 "a term's orders are worked out where the reading that resolved its subject is,"
                         + " and a second place is a reader answering for a reading of its own");
+    }
+
+    /** The nest a class belongs to: a lambda written inside a reader is that reader. */
+    private static String nestOf(String binaryName) {
+        int nested = binaryName.indexOf('$');
+        return nested < 0 ? binaryName : binaryName.substring(0, nested);
+    }
+
+    private static List<Path> classes() throws IOException {
+        Path root = Path.of("target", "classes").toAbsolutePath();
+        try (Stream<Path> walk = Files.walk(root)) {
+            return new ArrayList<>(new LinkedHashSet<>(
+                    walk.filter(each -> each.toString().endsWith(".class")).toList()));
+        }
     }
 
     /**
@@ -77,11 +113,5 @@ class OneReadingAnswersWhatATermIsMeasuredOnTest {
                         .noneMatch(each ->
                                 java.lang.reflect.Modifier.isPublic(each.getModifiers())),
                 "and no factory beside it is open either");
-    }
-
-    /** {@code source} with its comments taken out, which is what this reads: a file may say what
-     *  the rule is without being a place that does it. */
-    private static String code(String source) {
-        return source.replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("//[^\n]*", " ");
     }
 }
