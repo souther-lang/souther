@@ -12,6 +12,7 @@ import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.RationalCut;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -188,21 +189,39 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The number of what stands at {@code at} that is how many it holds, or null where this reading
-     * measures it at something else.
+     * The number that is how many the value at {@code at} holds, or null where nothing takes one
+     * there.
      *
-     * <p>Which number a position is measured at is settled where the position was read, and this is
-     * the one question about it that names an arm — it names it because it is about that arm. Asked
-     * in two places, a reader deciding how many a container may hold and a reader deciding whether
-     * it may hold none would each spell out what a count is, and the second one written would be
-     * the one that forgot that a count taken of a string is a different quantity.
+     * <p>Asked of the rules of the value it sits in, which is what knows. Which number a position is
+     * <em>measured</em> at is a reading's choice about that position, and it is not this question: a
+     * clause can hold the length of a list against a field beside it while the position itself is
+     * read by its own value, and a caller taking the measured number for the count is told there is
+     * no count wherever that is so.
+     *
+     * <p>One owner, because it is asked twice — how many a container may hold, and whether it may
+     * hold none — and the second reader written would be the one that answered from whichever of
+     * the two facts was nearer to hand.
+     *
+     * <p>Counts of containers and nothing else. What this feeds bounds how many elements stand
+     * somewhere, so an operation whose number is not how many the value holds has no business here:
+     * {@code Time.hour(t)} is a number the rules take at a place and is not a count of it.
      */
     private NumericTerm howManyItHolds(TermPath at) {
-        Position position = byPath.get(at);
-        return position != null
-                && position.term() instanceof NumericTerm.TakenOf taken
-                && taken.takenAs() instanceof TakenAs.HowManyItHolds
-                ? position.term() : null;
+        UnderARoot root = rootOf(at);
+        if (root == null) {
+            return null;
+        }
+        FieldDomains.Coordinate counted =
+                byRoot.get(root.root()).rules().bounds().countedAt(root.named());
+        if (counted == null
+                || !(counted.kind()
+                        instanceof FieldDomains.CoordinateKind.OfWhatAnOperationAnswers taken)
+                || !(taken.operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        NumericTerm.TakenOf term =
+                NumericTerm.TakenOf.of(operation, at, typeAt.apply(at), symbols);
+        return term != null && term.takenAs() instanceof TakenAs.HowManyItHolds ? term : null;
     }
 
     /**
@@ -334,6 +353,13 @@ final class ReadQuantities implements Quantities {
         for (FieldDomains.Carried<InputAtom> each : conditioned(under).values()) {
             made = made.meet(each.constraints().under(sets));
         }
+        // And what the context itself says about the values, which is as much a part of what the
+        // question is asked against as any clause. A row this question is about is one the
+        // prerequisites hold of, so where the rules have a word for one of them it is said here
+        // rather than left as a fact about whose rules to read.
+        for (StructuralContext.Assumption each : under.assumptions()) {
+            made = alsoStating(made, each, under);
+        }
         // And what the caller took in, onto the same rules rather than met against the answer
         // afterwards. A condition relating two positions says nothing about either of them alone,
         // so met afterwards it would be gone.
@@ -361,6 +387,47 @@ final class ReadQuantities implements Quantities {
         }
         answered.put(under, made);
         return made;
+    }
+
+    /**
+     * The same rules, with what one prerequisite of the context says about the values taken in.
+     *
+     * <p>Exhaustive over {@link StructuralContext.Assumption}, with no {@code default}, and this is
+     * the one place a context is turned into what it means. A prerequisite of a kind added later
+     * stops this compiling rather than joining the ones the rules were never told about — which is
+     * how a container came to say whose rules were read without saying that it holds something.
+     *
+     * <p>That a value turned out to be a case says nothing here, and that is not it going unread:
+     * the rules of that case are in this state and the names its value shares are spelled as the
+     * numbers they stand at, which is the whole of what the narrowing means. There is no number in
+     * it left over to state.
+     *
+     * <p>That a sequence holds something is a number, and one no clause writes: it is what the
+     * question assumed by naming a position inside it. Said only where this reading measures the
+     * container by how many it holds — where it does not, there is no subject to say it of, and what
+     * the rules leave is wider rather than wrong.
+     */
+    private ConstraintState<InputAtom> alsoStating(ConstraintState<InputAtom> rules,
+                                                   StructuralContext.Assumption said,
+                                                   StructuralContext under) {
+        switch (said) {
+            case StructuralContext.Assumption.TheCaseAt _ -> {
+                return rules;
+            }
+            case StructuralContext.Assumption.HoldingSomething it -> {
+                NumericTerm counted = howManyItHolds(it.sequence());
+                if (counted == null) {
+                    return rules;
+                }
+                InputAtom.Named atom = called(counted, under);
+                souther.compiler.numeric.Granularity spaced =
+                        spacingOf(rules.numbers(), counted, atom);
+                return spaced == null ? rules : rules.taking(
+                        NumericDomain.LinearForm.<InputAtom>atom(atom)
+                                .minus(NumericDomain.LinearForm.constant(BigDecimal.ONE)),
+                        NumericDomain.Rel.GE, Map.of(atom, spaced));
+            }
+        }
     }
 
     /**
@@ -798,11 +865,10 @@ final class ReadQuantities implements Quantities {
      * input is empty only where every alternative of some sum is impossible.
      *
      * <p>Depth first, and it stops at the first alternative that may stand: what is being asked is
-     * whether any assignment of cases leaves anything, so one that does is the whole answer. Two
-     * sums are settled one after another rather than apart, because a rule written above a
-     * narrowing reaches the numbers under it — a clause relating a shared name of one sum to a
-     * shared name of another is contradictory under some pairs of cases and not others, and each
-     * pair is a context of its own.
+     * whether any assignment of cases leaves anything, so one that does is the whole answer. Each
+     * sum is walked where it stands and its alternatives are asked about what is under them, so
+     * what this walks is the choices one structure offers and never the product of two — see
+     * {@link #inside}, which says what that gives up.
      *
      * <p><b>The structures a value has at once are a conjunction, and the cases of one of them are a
      * choice.</b> So what is folded here is {@link Viability#with} and what is folded across the

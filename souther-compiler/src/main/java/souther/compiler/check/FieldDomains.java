@@ -1028,6 +1028,22 @@ public final class FieldDomains {
     }
 
     /**
+     * Which number of {@code path} the rules take as a count of what it holds, or null where they
+     * take none.
+     *
+     * <p><b>The owner of which number that is.</b> A caller holding a place and wanting the count
+     * there has two things it could ask: what a reading of the input decided to measure the position
+     * at, and what the rules of the value it sits in are about. Those are not the same — a rule can
+     * relate the length of a list to a field beside it while the position itself is read by its own
+     * value — and a caller asking the first for the second is told there is no count wherever the
+     * clause that mentions it is written about something else as well.
+     */
+    public Coordinate countedAt(RuleKey path) {
+        Counted counted = countAt.get(path);
+        return counted == null ? null : Coordinate.takenBy(path, counted.by());
+    }
+
+    /**
      * Which values may stand at {@code path}, and how much of its rules was read.
      *
      * <p>{@link ValueSet#ANY} where the rules leave it open, which is also what a name nothing

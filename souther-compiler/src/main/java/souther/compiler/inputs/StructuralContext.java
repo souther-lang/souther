@@ -1,6 +1,8 @@
 package souther.compiler.inputs;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,6 +33,40 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
 
     /** A question that assumes nothing: the parameters, and whatever stands under no condition. */
     static final StructuralContext NONE = new StructuralContext(Requirements.NONE, Set.of());
+
+    /**
+     * One thing a question assumes about the row it is asked of.
+     *
+     * <p><b>Written down as a kind so that every reading of a context is over all of them.</b> A
+     * context is read twice — for which readings of declarations stand in it, and for what it says
+     * about the values themselves — and the two are asked in different places by different callers.
+     * Held as fields to be remembered one at a time, a kind of prerequisite is read by whichever of
+     * them its author happened to touch: which is how the containers came to decide whose rules were
+     * read without ever saying that they hold something.
+     */
+    sealed interface Assumption {
+
+        /** The value at {@code at} turned out to be this case. */
+        record TheCaseAt(TermPath at, Refinement is) implements Assumption {}
+
+        /** The sequence at {@code sequence} holds an element, or the position named inside it
+         *  stands nowhere. */
+        record HoldingSomething(TermPath sequence) implements Assumption {}
+    }
+
+    /**
+     * Everything this context assumes, in a settled order.
+     *
+     * <p>The narrowings in the order they were reached and the containers in the order they were
+     * needed, which is the order a reason about them reads in. What a reader does with each of them
+     * is its own; that it has to answer for every kind of them is this.
+     */
+    List<Assumption> assumptions() {
+        List<Assumption> out = new ArrayList<>();
+        refinements.refinements().forEach((at, is) -> out.add(new Assumption.TheCaseAt(at, is)));
+        nonEmptySequences.forEach(each -> out.add(new Assumption.HoldingSomething(each)));
+        return List.copyOf(out);
+    }
 
     StructuralContext {
         nonEmptySequences = Set.copyOf(nonEmptySequences);
@@ -141,9 +177,10 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
     boolean holds(RootOpening opening) {
         return switch (opening) {
             case RootOpening.Taken _ -> true;
-            case RootOpening.Refined it ->
-                    it.crossing().branch().equals(refinements.at(it.crossing().sum()));
-            case RootOpening.Inside it -> nonEmptySequences.contains(it.sequence());
+            case RootOpening.Refined it -> assumptions().contains(
+                    new Assumption.TheCaseAt(it.crossing().sum(), it.crossing().branch()));
+            case RootOpening.Inside it ->
+                    assumptions().contains(new Assumption.HoldingSomething(it.sequence()));
         };
     }
 }
