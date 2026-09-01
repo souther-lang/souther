@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputReading;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
@@ -189,56 +188,33 @@ public final class MeasuredInput {
     }
 
     /**
-     * This measurement's reading of one of its lines.
+     * This measurement's reading of the line it read where {@code asked} is.
      *
-     * <p>Where a border becomes something a row can be looked for at. What the line cuts is a
-     * number, and whether this input has that number is what makes the line one of this
-     * measurement's — so the terms are put to the reading here, exactly as an axis's are when the
-     * subject is made.
+     * <p>Where a border becomes something a row can be looked for at. Which lines there are was
+     * settled when this input was measured, so what makes one this measurement's is that this
+     * measurement drew it — not that its behavior, its numbers, the position it is on and the
+     * orders it is measured on each agree with this one. Those are the attributes of a value that
+     * already has an identity, and comparing them one at a time is a derivation with no end: every
+     * one that goes unchecked is a line read against a measurement that never drew it.
+     *
+     * <p><b>The line this measurement holds comes back, and not the one handed in.</b> What a
+     * reader of a line goes on to ask — what it demands of a row, where the run below it stops — is
+     * answered off the value it holds, so a caller's copy would be read instead of the reading's
+     * own. Told apart by {@link Border#sameReadingAs}: the same border met in the same place owing
+     * the same things is this line, whatever was written beside it where the caller got it.
      *
      * <p><b>A quantity a transformation produced comes back through here.</b> Moving a quantity to
      * another number ({@link BorderQuantity#movedTo}) is done on the quantity alone and carries
      * nothing of where it was measured, so what comes out is geometry again rather than a reading
-     * of it. Asked for here, it is checked like any other.
+     * of it — and a line this measurement never drew is not one it can read a row at.
      */
-    public BorderReading at(Border border) {
-        BorderQuantity quantity = border.cut().of();
-        // Whose input the line cuts, which the quantity says of itself. A line of another behavior
-        // is not one of this measurement's however its numbers are spelled — two behaviors taking
-        // a parameter spelled the same way have a line apiece at the same term.
-        if (!quantity.behavior().equals(behavior)) {
-            throw new IllegalArgumentException("a line of " + quantity.behavior()
-                    + " in the measurement of " + behavior);
+    public BorderReading at(Border asked) {
+        Border held = divided.held(asked);
+        if (held == null) {
+            throw new IllegalArgumentException("the measurement of " + behavior
+                    + " read no line where this one is: " + asked.cut());
         }
-        // And a number this reading takes nothing of, which is what a line drawn at another
-        // reading of a behavior of this name comes to. The reading refuses such a term, so asking
-        // it is the check.
-        for (NumericTerm term : quantity.terms()) {
-            quantities.ordersOf(term);
-        }
-        // A line on one position's own number is a line on a position this measurement divides.
-        // The two questions above are about the reading; this one is about what was measured
-        // against it, and a term the reading answers for is not by itself a place the model
-        // measures — a position the rules part nowhere and bound nowhere has no measure at all.
-        //
-        // Asked of every measure and not of the ones that divide their number into classes: a
-        // measure may be a bound and no partition, and a line is exactly what such a one has.
-        AxisId cuts = quantity.onAPosition();
-        if (cuts != null && !measures(cuts)) {
-            throw new IllegalArgumentException("a line at " + cuts
-                    + ", which is no position this measurement measures: " + behavior);
-        }
-        return new BorderReading(this, border);
-    }
-
-    /** Whether some measure of this input is of that position's number. */
-    private boolean measures(AxisId at) {
-        for (Axis axis : divided.axes()) {
-            if (axis.id().equals(at)) {
-                return true;
-            }
-        }
-        return false;
+        return new BorderReading(this, held);
     }
 
     /**

@@ -30,6 +30,15 @@ public final class AxesATestWrote {
 
     private AxesATestWrote() {}
 
+    /** The same, with the lines it read along one of those measures. */
+    public static Partitions.Partitioning asAMeasurement(String behavior, List<Axis> axes,
+                                                         AxisId along, List<Border> lines) {
+        Partitions.Partitioning over = asAMeasurement(behavior, axes);
+        return new Partitions.Partitioning(over.measurements(), List.of(), Set.of(), List.of(),
+                List.of(), List.of(), Map.of(along, List.copyOf(lines)), ReachingCuts.NONE,
+                over.partitionClosure(), over.borderClosure(), null);
+    }
+
     /** A measurement of {@code behavior} that divides its positions by exactly {@code axes}. */
     public static Partitions.Partitioning asAMeasurement(String behavior, List<Axis> axes) {
         List<PositionMeasurements> measurements = new ArrayList<>(axes.size());

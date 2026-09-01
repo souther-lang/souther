@@ -26,22 +26,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A line a measurement reads is a line on a position that measurement measures.
+ * A line a measurement reads is a line that measurement drew.
  *
- * <p>Two questions and not one. That the reading answers for the number the line cuts is what says
- * the line was drawn at this input rather than at another behavior's spelled the same way; that the
- * measurement has a measure there is what says the model divides or bounds the place at all. A
- * reading answers for every position it read, and the model measures only some of them — so a term
- * the reading knows is not by itself a place a line can be read at.
+ * <p>Which lines there are was settled when the input was measured. So what makes a border one of
+ * this measurement's is not that its behavior, its numbers, the position it is on and the orders it
+ * is measured on each agree with this one — those are the attributes of a value that already has an
+ * identity, and comparing them one at a time is a derivation that is never finished. It is that
+ * this measurement drew it.
  *
- * <p>Held apart because they break apart. A line brought in from another reading fails the first;
- * a line on a position this behavior has and nothing measures fails the second, and its number is
- * one this reading answers for perfectly well.
+ * <p>And what comes back is the line the measurement holds rather than the one handed in. A reader
+ * of a line asks it what it demands of a row and where the run below it stops, and answers off the
+ * value it was given — so a caller's copy would be read in place of the reading's own, whatever it
+ * carried where the caller got it.
  */
 class ALineIsOfAPositionTheMeasurementMeasuresTest {
 
@@ -88,52 +91,61 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
                 Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }
 
-    /** The line the measurement's own measure was cut on is read. */
+    /** A measurement that bounds {@code days} and read the line at that bound. */
+    private static MeasuredInput measuring(String... parameters) {
+        Axis bounded = bounding("fee", "days");
+        return MeasuredInput.of("fee", readingOf(parameters),
+                AxesATestWrote.asAMeasurement("fee", List.of(bounded),
+                        bounded.id(), List.of(lineOn("fee", "days"))));
+    }
+
+    /** The line the measurement drew is read. */
     @Test
-    void aLineWhereTheMeasurementMeasuresIsRead() {
-        MeasuredInput subject = MeasuredInput.of("fee", readingOf("days"),
-                AxesATestWrote.asAMeasurement("fee", List.of(bounding("fee", "days"))));
+    void aLineTheMeasurementDrewIsRead() {
+        MeasuredInput subject = measuring("days");
 
         assertNotNull(subject.at(lineOn("fee", "days")),
-                "the reading answers for the number and the model measures the position");
+                "the measurement read a line where this one is");
     }
 
     /**
-     * And a line on a position the reading knows and nothing measures is not.
+     * And a line on a position the reading knows and the measurement never drew at is not.
      *
-     * <p>The number is one this input has and one this reading answers for, so the term half of the
-     * question passes. What it has no measure at is the position, and a reading of the line there
-     * would be a reading of a place this measurement never went.
+     * <p>The number is one this input has and one this reading answers for, so nothing about the
+     * term says no. What the measurement has no line at is the place, and reading a row there would
+     * be reading it at a line this measurement never drew.
      */
     @Test
-    void aLineWhereNothingMeasuresIsRefused() {
-        MeasuredInput subject = MeasuredInput.of("fee", readingOf("days", "cap"),
-                AxesATestWrote.asAMeasurement("fee", List.of(bounding("fee", "days"))));
+    void aLineTheMeasurementNeverDrewIsRefused() {
+        MeasuredInput subject = measuring("days", "cap");
 
         assertNotNull(subject.quantities().ordersOf(number("cap")),
                 "the reading answers for the number the refused line is on");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> subject.at(lineOn("fee", "cap")));
-        assertEquals("a line at fee/cap, which is no position this measurement measures: fee",
+        assertTrue(refused.getMessage().startsWith(
+                        "the measurement of fee read no line where this one is:"),
                 refused.getMessage());
     }
 
     /**
-     * The name a coordinate is under is the number it cuts, so the two cannot disagree.
+     * What comes back is the measurement's own line and not the one asked with.
      *
-     * <p>Which is why the question above is worth asking at all. Given the name beside the number,
-     * a line could be filed under one position while cutting another, and asking whether the
-     * measurement measures the name would answer about a place the line is not on.
+     * <p>Asked with a border carrying what a caller had beside it — here the answers a later
+     * reading of the same line filled in — the reading gives back the value it holds. Anything
+     * else and a row would be read at the caller's copy: what a line demands and where the run
+     * below it stops are read off whatever value the reader was handed.
      */
     @Test
-    void aCoordinateIsNamedAfterTheNumberItCuts() {
-        NumericTerm.ValueOf number = number("days");
-        BorderQuantity.OfACoordinate cut = new BorderQuantity.OfACoordinate("fee", number,
-                TermOrdersFixtures.itself(number, WHOLE));
+    void theMeasurementsOwnLineComesBack() {
+        MeasuredInput subject = measuring("days");
+        Border mine = subject.partitioning().along(bounding("fee", "days")).get(0);
 
-        assertEquals(AxisId.of("fee", number), cut.axis());
-        assertEquals(cut.axis(), cut.onAPosition(),
-                "which is the position a reader asks the quantity for");
+        Border asked = new Border(mine.cut(), mine.origin(), mine.answers());
+        assertNotSame(mine, asked, "a border put together again, equal to the one it stands for");
+
+        assertSame(mine, subject.at(asked).border(),
+                "and what comes back is the one the measurement drew");
     }
 }

@@ -70,12 +70,6 @@ public sealed interface BorderQuantity {
             return AxisId.of(behavior, term);
         }
 
-        /** Its own position's, which is what a coordinate is. */
-        @Override
-        public AxisId onAPosition() {
-            return axis();
-        }
-
         @Override
         public LevelSpace levels() {
             return LevelSpace.onACarrier(of.answered());
@@ -394,12 +388,6 @@ public sealed interface BorderQuantity {
                     levels(), where);
         }
 
-        /** None. How far two positions stand apart is a number neither of them has a value at. */
-        @Override
-        public AxisId onAPosition() {
-            return null;
-        }
-
         @Override
         public String named() {
             return new AxisId(behavior, onTerm().toString()).toString();
@@ -608,13 +596,6 @@ public sealed interface BorderQuantity {
             return new Standing.OfAForm(form, answeredOn(on), levels(), where);
         }
 
-        /** None. What an arithmetic form over several positions comes to is a number none of them
-         *  holds. */
-        @Override
-        public AxisId onAPosition() {
-            return null;
-        }
-
         @Override
         public String named() {
             return new AxisId(behavior, left()).toString();
@@ -761,18 +742,6 @@ public sealed interface BorderQuantity {
      * agrees with it.
      */
     String behavior();
-
-    /**
-     * The position whose own number this cuts, or null where what it cuts is no one position's.
-     *
-     * <p>Asked of the quantity because only it knows: a coordinate is a position's own values and
-     * a line on it is a line on that position, while a distance between two of them and a form
-     * over several are cut nowhere any position has a value. A reader working it out by asking
-     * which of the three it holds is a reader deciding for itself what the variants are, and the
-     * one that needed this — whether a measurement measures the place a line is on — is not the
-     * quantity's question to answer.
-     */
-    AxisId onAPosition();
 
     /** The left of the {@code left = right} a report names a border on this by, qualified by the
      *  behavior it is an input of ({@link #behavior}). */
