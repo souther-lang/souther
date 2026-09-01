@@ -1334,9 +1334,11 @@ public interface Ast {
      * <p>A name a spread holds is a child like any other, so a pass that asks what an expression
      * names reaches one without knowing that spreads exist.
      *
-     * <p>This is the one place that says which children a node has, and all it does is read them:
-     * an expression of the parsed tree is what the frontend answered with, and nothing rewrites one
-     * into another. Being exhaustive over {@code Expr} with no {@code default}, a node kind added
+     * <p>This is the one place that says which children a node has, and all it does is read them.
+     * No pass below the frontend rewrites an expression of the parsed tree into another, so there
+     * is no walk here that rebuilds one: what the frontend itself reduces as it reads — the
+     * parentheses {@link #withRegion} takes off — it reduces where it reads it. Being exhaustive
+     * over {@code Expr} with no {@code default}, a node kind added
      * later stops the build here, which is the one place it has to be accounted for — and a leaf
      * says it is one by having an arm with nothing to visit rather than by falling through.
      */
