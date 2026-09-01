@@ -84,8 +84,9 @@ class AClauseIsAddressedWhereItWasWrittenTest {
                 .ask(new Shapes.Prepared(compilation.modules().get(0))).value();
         assertNotNull(prepared);
         for (Derived.Def def : prepared.defs()) {
-            if (def.read() instanceof Hir.Data data && data.declares().equals(even(compilation))) {
-                return data.invariants();
+            if (def instanceof Derived.Data derived
+                    && derived.declared().declares().equals(even(compilation))) {
+                return derived.declared().invariants();
             }
         }
         throw new AssertionError("the module is supposed to declare `Even`");

@@ -146,7 +146,7 @@ public final class Names {
             public Hir.Def declaration(TypeKey address) {
                 Answer<souther.compiler.check.Derived.Def> def =
                         db.ask(new Shapes.DerivedDef(address));
-                return def.present() ? def.value().read() : null;
+                return def.present() ? def.value().declared() : null;
             }
 
             @Override
@@ -157,7 +157,7 @@ public final class Names {
                     return Map.of();
                 }
                 Map<String, Hir.Def> out = new LinkedHashMap<>();
-                defs.value().forEach((name, def) -> out.put(name, def.read()));
+                defs.value().forEach((name, def) -> out.put(name, def.declared()));
                 return Map.copyOf(out);
             }
 

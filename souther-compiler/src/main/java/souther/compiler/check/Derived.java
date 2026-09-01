@@ -38,56 +38,122 @@ public final class Derived {
      * <p>That the settling is worked out for a whole module is a fact about the computation and not
      * about this. What one of these depends on is the settled declaration; where that came from is
      * the query graph's business, and it may go on answering for a module at a time.
+     *
+     * <p>Which kind of declaration it is, is what the three cases say, and a reader that has to tell
+     * them apart switches over them rather than over the node inside. The kinds are the ones a
+     * declaration can be, so what a later stage adds to one of them has somewhere to go that the
+     * others do not reach.
      */
-    public static final class Def {
-
-        private final Hir.Def def;
-
-        private Def(Hir.Def def) {
-            this.def = def;
-        }
+    public sealed interface Def permits Data, Sum, Unit {
 
         /**
          * {@code settled} with its constructions written as constructions.
          *
          * @throws CompileException where what the declaration says cannot be read that way
          */
-        public static Def derive(InvariantSettled.Def settled, Symbols scope) {
-            return new Def(NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope));
-        }
-
-        /** The name it is declared under. */
-        public String name() {
-            return def.name();
-        }
-
-        /** Which declaration it is — the module that wrote it and the name it was written under. */
-        public TypeKey declaredKey() {
-            return def.declaredKey();
+        static Def derive(InvariantSettled.Def settled, Symbols scope) {
+            return switch (NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope)) {
+                case Hir.Data d -> new Data(d);
+                case Hir.SumData s -> new Sum(s);
+                case Hir.UnitData u -> new Unit(u);
+            };
         }
 
         /**
-         * The node.
+         * The declaration this was derived from, as resolution left it.
          *
-         * <p>What a registry hands over, and what settles that is the second source it is read
-         * beside. {@link Declarations} answers an identity from the compilation's registry and from
-         * the language's own vocabulary, and the prelude's declarations are loaded resolved and kept
-         * out of derivation — so a vocabulary of these could only be made by claiming of a
-         * declaration nothing derived what deriving it would have established. The representation
-         * both sources can be in is the node, and this is where the compilation's side reaches it.
+         * <p>One declaration at a time and never a table. What is read through this is what a
+         * declaration says about itself whatever stage is reading — its fields, what it includes,
+         * whether it is a newtype — and a reader wanting any of that is asking about the resolution
+         * and not about this stage. A table of these, turned back into a table of nodes, is the
+         * other thing entirely: it hands every reader below the stage a declaration with nothing
+         * left saying it reached it.
          */
-        public Hir.Def read() {
-            return def;
+        Hir.Def declared();
+
+        /** The name it is declared under. */
+        default String name() {
+            return declared().name();
+        }
+
+        /** Which declaration it is — the module that wrote it and the name it was written under. */
+        default TypeKey declaredKey() {
+            return declared().declaredKey();
+        }
+    }
+
+    /** A product declaration that came out. */
+    public static final class Data implements Def {
+
+        private final Hir.Data declared;
+
+        private Data(Hir.Data declared) {
+            this.declared = declared;
+        }
+
+        @Override
+        public Hir.Data declared() {
+            return declared;
         }
 
         @Override
         public boolean equals(Object o) {
-            return o instanceof Def other && def.equals(other.def);
+            return o instanceof Data other && declared.equals(other.declared);
         }
 
         @Override
         public int hashCode() {
-            return def.hashCode();
+            return declared.hashCode();
+        }
+    }
+
+    /** A sum declaration that came out. */
+    public static final class Sum implements Def {
+
+        private final Hir.SumData declared;
+
+        private Sum(Hir.SumData declared) {
+            this.declared = declared;
+        }
+
+        @Override
+        public Hir.SumData declared() {
+            return declared;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Sum other && declared.equals(other.declared);
+        }
+
+        @Override
+        public int hashCode() {
+            return declared.hashCode();
+        }
+    }
+
+    /** A unit declaration that came out. */
+    public static final class Unit implements Def {
+
+        private final Hir.UnitData declared;
+
+        private Unit(Hir.UnitData declared) {
+            this.declared = declared;
+        }
+
+        @Override
+        public Hir.UnitData declared() {
+            return declared;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Unit other && declared.equals(other.declared);
+        }
+
+        @Override
+        public int hashCode() {
+            return declared.hashCode();
         }
     }
 
@@ -180,7 +246,7 @@ public final class Derived {
             if (built == null) {
                 List<Hir.Def> nodes = new ArrayList<>();
                 for (Def def : defs) {
-                    nodes.add(def.def);
+                    nodes.add(def.declared());
                 }
                 projected = built = settled.module().withDefs(nodes);
             }

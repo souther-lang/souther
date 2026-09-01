@@ -95,11 +95,30 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         return List.copyOf(found);
     }
 
-    /** Arrived at rather than built: a final class of this package with no way in from outside but
-     *  the operations these propositions are about. */
+    /**
+     * Arrived at rather than built: a type of this package with no way in from outside but the
+     * operations these propositions are about.
+     *
+     * <p>Two shapes qualify, and for one reason. A final class with no public constructor is one,
+     * and so is a sealed interface every case of which is — a state that says which kind of thing it
+     * is has to be several classes, and closing the set is what makes "no way in but the operation"
+     * true of all of them at once. Read as a conjunction over the cases rather than asserted of the
+     * interface: a case that could be built from outside would be a way into the state, and the
+     * interface being sealed would not say so.
+     */
     private static boolean isState(Class<?> c) {
-        return c != null && Modifier.isFinal(c.getModifiers())
-                && "souther.compiler.check".equals(c.getPackageName())
+        if (c == null || !"souther.compiler.check".equals(c.getPackageName())) {
+            return false;
+        }
+        if (c.isSealed() && c.isInterface()) {
+            for (Class<?> permitted : c.getPermittedSubclasses()) {
+                if (!isState(permitted)) {
+                    return false;
+                }
+            }
+            return c.getPermittedSubclasses().length > 0;
+        }
+        return Modifier.isFinal(c.getModifiers())
                 && c.getConstructors().length == 0
                 && !Modifier.isAbstract(c.getModifiers());
     }
@@ -582,7 +601,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
         assertEquals(2, applications(clauseOf(List.of(amount.def()), "Amount")),
                 "the constructions are written as applications until this rewrites them");
-        assertEquals(0, applications(clauseOf(List.of(Derived.Def.derive(amount, scope).read()),
+        assertEquals(0, applications(clauseOf(List.of(Derived.Def.derive(amount, scope).declared()),
                         "Amount")),
                 "and none is left as one afterwards");
     }
