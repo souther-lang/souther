@@ -184,10 +184,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " the answer is a newtype"),
             new Held("souther.compiler.check.Terms.asWrittenValue",
                     "writes it back into the syntax a value is rendered as"),
-            new Held("souther.compiler.check.Resolve.binOp",
-                    "says which operator the parsed tree's own denotes, the one place the two are"
-                            + " held together: both sides written out, so an operator added to what"
-                            + " may be written stops the compile until somebody decides"),
             new Held("souther.compiler.check.Resolve.expr",
                     "writes what that answered into the node the resolved tree holds"),
 
@@ -317,6 +313,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "reads the operator a library operation is declared to compute"),
 
             // Naming a constant, which is the other way to come by one.
+            new Held("souther.compiler.check.Resolve.binOp",
+                    "names the constant the parsed tree's own operator denotes, which is the one"
+                            + " place the two vocabularies are held together: both sides written"
+                            + " out, so an operator added to what may be written stops the compile"
+                            + " until somebody says what it means here"),
             new Held("souther.compiler.check.ComparisonWriting.operatorStating",
                     "names the constant a relation is written as, which is the one place a"
                             + " composed comparison is said in the language's own operators"),

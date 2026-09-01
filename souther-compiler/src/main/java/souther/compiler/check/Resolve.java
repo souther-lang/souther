@@ -1112,9 +1112,9 @@ public final class Resolve {
      *
      * <p>The parsed tree and what this pass answers hold the kinds as separate types, so crossing
      * between them is a decision and this is where it is made. Written out on both sides rather
-     * than taken from a spelling: a kind added to what the parser can write then has no translation
-     * until one says which kind below it means, and a name shared by the two enums is no answer to
-     * that.
+     * than taken from a spelling: a kind added to what the parsed tree may hold then has no
+     * translation until one says which kind below it means, and a name shared by the two enums is
+     * no answer to that.
      *
      * <p>The switch is an expression and has no {@code default} for that reason. A {@code default}
      * would answer for a kind nobody had decided about, which is the whole of what this stops.
