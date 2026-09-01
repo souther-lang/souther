@@ -1,9 +1,9 @@
 package souther.compiler.program;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
-import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Derived;
 import souther.compiler.check.Lower;
@@ -84,12 +84,123 @@ final class CheckedProgramAssembler {
         }
         ValueTypes types =
                 ValueTypes.over(FieldTypes.over(DeclaredFields.over(everyDeclaration)));
+        // Made before the modules, because a module cannot be made without them: a row of one
+        // states what it stood in for a dependency with, and where that dependency's arguments
+        // stand is read off the dependency's own boundary — which is a behavior of another module
+        // as often as one of this.
+        Map<ValueName.Behavior, BehaviorTarget> targets = new LinkedHashMap<>();
+        for (ModuleReading module : read) {
+            fileWhatIsChecked(targets, module);
+        }
+        fileWhatIsOnThePath(targets, db);
         List<CheckedModule> modules = new ArrayList<>();
         for (ModuleReading module : read) {
-            modules.add(moduleOf(module, types));
+            modules.add(moduleOf(module, types, targets));
         }
-        return new CheckedProgram(modules, language, onThePath,
+        return new CheckedProgram(modules, language, onThePath, targets,
                 libraryOf(db).kernelSignatures());
+    }
+
+    /**
+     * Files the call boundary of every behavior {@code module} declares.
+     *
+     * <p>Walked over what the module declares, and the two answers a boundary is made of are read
+     * under each name it declares. A walk of the signatures instead would let a behavior whose
+     * signature this compile failed to answer for leave the program without anything having missed
+     * it: what a module declares would be whatever the answer happened to hold.
+     */
+    private static void fileWhatIsChecked(Map<ValueName.Behavior, BehaviorTarget> targets,
+                                          ModuleReading module) {
+        for (Hir.BehaviorDef declared : module.bodies().behaviors()) {
+            ValueName.Behavior named = new ValueName.Behavior(module.name(), declared.name());
+            Sig signature = module.signatures().get(declared.name());
+            if (signature == null) {
+                // The module was taken as checked and one of the behaviors it declares has no
+                // signature. A caller reaches it, so letting it through hands an output a call it
+                // cannot emit and says nothing about why.
+                throw new IllegalStateException("`" + named + "` was taken as checked and this"
+                        + " compile has nothing to say about what it takes");
+            }
+            file(targets, named, new BehaviorTarget(signatureOf(signature),
+                    implementationOf(named, declared, module.bodies(), module.implementations(),
+                            module.checked(), module.compositions())));
+        }
+    }
+
+    /**
+     * Files the call boundary of every behavior every module this compile read off the path
+     * declares.
+     *
+     * <p>The whole of what each declares, and not the part something here calls. Which behaviors a
+     * body reaches is a walk, and a snapshot carrying only what one walk found would be right about
+     * the calls that walk thought to visit — and an output emitting those bodies would be the
+     * second place that decided what belongs.
+     *
+     * <p>What the module declares says which behaviors there are, and the answers this compile
+     * worked out say what each of them is. Three readings and not one: a module read off the path
+     * is available here because a module of this compile was checked against it, so a name it
+     * declares that this compile has no signature or no implementation state for is this
+     * compilation's two readings of that artifact having come apart, and is refused rather than
+     * quietly left out of the program.
+     */
+    private static void fileWhatIsOnThePath(Map<ValueName.Behavior, BehaviorTarget> targets,
+                                            Db db) {
+        Front.FromPath.Of read = db.ask(new Front.FromPath()).value();
+        if (read == null) {
+            return;
+        }
+        for (String module : read.modules().keySet()) {
+            Ast.Module declares = db.ask(new Front.Available(module)).value();
+            Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
+            Map<String, BehaviorImplementation> implementations =
+                    db.ask(new Bodies.Implementation(module)).value();
+            if (declares == null || signatures == null || implementations == null) {
+                throw new IllegalStateException("`" + module + "` was read off the path and this"
+                        + " compile has nothing to say about the behaviors it declares");
+            }
+            for (Ast.BehaviorDef declared : declares.behaviors()) {
+                ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
+                Sig signature = signatures.get(declared.name());
+                BehaviorImplementation state = implementations.get(declared.name());
+                if (signature == null || state == null) {
+                    throw new IllegalStateException("`" + named + "` is declared by a module this"
+                            + " compile read off the path and this compile has no reading of it");
+                }
+                file(targets, named,
+                        new BehaviorTarget(signatureOf(signature), publishedAs(state)));
+            }
+        }
+    }
+
+    /**
+     * Where the implementation of a behavior another compile published comes from.
+     *
+     * <p>Its three states are the three a behavior is in anywhere. What a call reaches differs in
+     * one of them: an implementation this program does not hold, because the build that published
+     * the module emitted it. The other two are what they are wherever the behavior was declared —
+     * an injected behavior's implementation comes from outside Souther on either side of a path,
+     * and an unwritten one is nowhere at all.
+     */
+    private static CheckedImplementation publishedAs(BehaviorImplementation state) {
+        return switch (state) {
+            case IMPLEMENTED -> new CheckedImplementation.ImplementedElsewhere();
+            case INJECTION_TARGET -> new CheckedImplementation.Injected();
+            case UNIMPLEMENTED -> new CheckedImplementation.Unwritten();
+        };
+    }
+
+    /**
+     * Files one call boundary, and refuses a second under the same identity.
+     *
+     * <p>An identity belongs to one declaration. A module of this compile takes the name over one
+     * of the same name on the path, so the two worlds never meet here — and one that did would be
+     * called through whichever was filed last with nothing saying the other had been there.
+     */
+    private static void file(Map<ValueName.Behavior, BehaviorTarget> targets,
+                             ValueName.Behavior named, BehaviorTarget target) {
+        if (targets.put(named, target) != null) {
+            throw new IllegalStateException("`" + named + "` is declared twice");
+        }
     }
 
     /** The library this compilation was checked against. Asked for here rather than fetched: what a
@@ -189,7 +300,6 @@ final class CheckedProgramAssembler {
      */
     private record ModuleReading(String name, Hir.Module bodies, Bodies.Elaborated checked,
                                  Map<String, Sig> signatures,
-                                 Map<ValueName.Behavior, Sig> reachable,
                                  Map<String, BehaviorImplementation> implementations,
                                  Map<ValueName.Behavior, Composition> compositions,
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
@@ -223,12 +333,6 @@ final class CheckedProgramAssembler {
         Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
         Lower.Lowered lowering = db.ask(new Bodies.Lowering(module)).value();
         Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
-        // What every behavior this module can name declares — its own and the ones it borrows, each
-        // under the declaration it belongs to. The same answer the run that read this module's rows
-        // was given, so what a stand-in's arguments were built and compared against and what a
-        // reader compares them at are one reading; and a dependency another compile declared is
-        // among them, which is what this module names it by.
-        Map<ValueName.Behavior, Sig> reachable = db.ask(new Bodies.Reachable(module)).value();
         Map<String, BehaviorImplementation> implementations =
                 db.ask(new Bodies.Implementation(module)).value();
         Map<ValueName.Behavior, Composition> compositions =
@@ -247,7 +351,7 @@ final class CheckedProgramAssembler {
         // read here and dropped here, and nothing it was reached through is carried into what is
         // made.
         Symbols symbols = Names.derivedSymbols(db, module).value();
-        if (checked == null || lowering == null || signatures == null || reachable == null
+        if (checked == null || lowering == null || signatures == null
                 || implementations == null
                 || compositions == null || symbols == null || shapes == null || checks == null) {
             // Not a report: the failure above is what a caller is told, and reaching here past it
@@ -261,7 +365,7 @@ final class CheckedProgramAssembler {
         // agree with the checker only for as long as lowering left declarations alone.
         Hir.Module declarations = lowering.settled();
         Hir.Module bodies = lowering.lowered();
-        return new ModuleReading(module, bodies, checked, signatures, reachable, implementations,
+        return new ModuleReading(module, bodies, checked, signatures, implementations,
                 compositions, checks, dataOf(declarations, symbols, shapes), rowsOf(db, module));
     }
 
@@ -272,17 +376,22 @@ final class CheckedProgramAssembler {
      * program's rather than this module's: a row written here may state a value of a data declared
      * elsewhere.
      */
-    private static CheckedModule moduleOf(ModuleReading read, ValueTypes types) {
+    private static CheckedModule moduleOf(ModuleReading read, ValueTypes types,
+                                          Map<ValueName.Behavior, BehaviorTarget> targets) {
         List<CheckedBehavior> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef declared : read.bodies().behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(read.name(), declared.name());
-            CheckedSignature signature = signatureOf(read.signatures().get(declared.name()));
-            behaviors.add(new CheckedBehavior(named, signature,
-                    implementationOf(named, declared, read.bodies(), read.implementations(),
-                            read.checked(), read.compositions()),
+            BehaviorTarget target = targets.get(named);
+            if (target == null) {
+                // Every behavior this module declares was filed before any module was made, off
+                // this same walk. Reaching here is that walk and this one having come apart.
+                throw new IllegalStateException("`" + named + "` is declared by a module of this"
+                        + " compile and has no call boundary");
+            }
+            behaviors.add(new CheckedBehavior(named, target,
                     EnsuresEnforcement.in(read.checks(), read.name(), named),
-                    rowsOf(read.rows().getOrDefault(declared.name(), List.of()), types, signature,
-                            read.reachable())));
+                    rowsOf(read.rows().getOrDefault(declared.name(), List.of()), types,
+                            target.signature(), targets)));
         }
         return new CheckedModule(read.name(), behaviors,
                 helpersOf(read.name(), read.bodies(), read.checked()), read.data());
@@ -300,11 +409,11 @@ final class CheckedProgramAssembler {
      */
     private static List<CheckedRow> rowsOf(List<Output.RowsRead.ReadRow> read, ValueTypes types,
                                            CheckedSignature signature,
-                                           Map<ValueName.Behavior, Sig> reachable) {
+                                           Map<ValueName.Behavior, BehaviorTarget> targets) {
         List<CheckedRow> rows = new ArrayList<>();
         for (Output.RowsRead.ReadRow row : read) {
             rows.add(new CheckedRow(row.identity(), row.at(),
-                    statementOf(row, types, signature, reachable)));
+                    statementOf(row, types, signature, targets)));
         }
         return rows;
     }
@@ -323,7 +432,7 @@ final class CheckedProgramAssembler {
      */
     private static CheckedRow.Statement statementOf(Output.RowsRead.ReadRow row, ValueTypes types,
                                                     CheckedSignature signature,
-                                                    Map<ValueName.Behavior, Sig> reachable) {
+                                                    Map<ValueName.Behavior, BehaviorTarget> targets) {
         // A switch over both sums, so a row nothing came back for is written down here rather than
         // being whatever falls out of reading a list of the ones that did — which is a row an output
         // would never hear of, and a behavior reading as having said nothing about an input someone
@@ -335,7 +444,7 @@ final class CheckedProgramAssembler {
                                 Position.at(signature.answers()))
                         : new CheckedRow.WithStandIns(stated, types,
                                 Position.at(signature.answers()),
-                                whereArgumentsStand(stated, reachable));
+                                whereArgumentsStand(stated, targets));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
                 // What acceptance guarantees, asserted where the guarantee is relied on. A row an
                 // evaluation stopped before the values of is one the language refuses the program
@@ -355,29 +464,30 @@ final class CheckedProgramAssembler {
     /**
      * Where the arguments of each dependency the row stood in for stand.
      *
-     * <p>Off what this module can name, which is the answer the run that read the row was given —
-     * so what a stand-in's entries were built against and what a reader compares an argument at are
-     * one reading of one declaration, rather than the same declaration written down twice and held
-     * to itself by a law.
+     * <p>Off the dependency's own call boundary, which is the one thing this snapshot says about
+     * what that behavior takes — so what a stand-in's entries were built against and what a reader
+     * compares an argument at are one reading of one declaration, rather than the same declaration
+     * written down twice and held to itself by a law.
      *
      * <p>It is what says how a comparison is made as well as how many are: whether an argument that
      * is a sequence is the same one written in another order is what the type reading it says.
      */
     private static Map<ValueName.Behavior, List<Position>> whereArgumentsStand(
-            RowStatement.Stated stated, Map<ValueName.Behavior, Sig> reachable) {
+            RowStatement.Stated stated, Map<ValueName.Behavior, BehaviorTarget> targets) {
         Map<ValueName.Behavior, List<Position>> stands = new LinkedHashMap<>();
         for (StoodIn stoodIn : stated.standIns()) {
-            Sig declared = reachable.get(stoodIn.dependency());
+            BehaviorTarget declared = targets.get(stoodIn.dependency());
             if (declared == null) {
-                // The row stood in for it, so this compile read the clause that required it against
-                // this module's own reading of what it can name. Reaching here is that reading and
-                // this one having come apart.
+                // A row stood in for a behavior no module this compile checked or read declares.
+                // Whether the module the row is written in may name that behavior is settled where
+                // the names are resolved and is not asked again here; what is asked is whether the
+                // program the row is being written into declares it at all.
                 throw new IllegalStateException("`" + stoodIn.dependency() + "` was stood in for by"
-                        + " a row of a module that cannot name it");
+                        + " a row and no module this compile read declares it");
             }
             List<Position> arguments = new ArrayList<>();
-            for (BoundaryInput takes : declared.ins()) {
-                arguments.add(Position.at(takes.type()));
+            for (Type takes : declared.signature().takes()) {
+                arguments.add(Position.at(takes));
             }
             stands.put(stoodIn.dependency(), arguments);
         }

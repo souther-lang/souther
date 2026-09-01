@@ -5,6 +5,7 @@ import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,8 +50,15 @@ import java.util.Objects;
  * with stops being named by the thing that asks.
  *
  * <p>Only the modules this compile checked are here. A checked body may name a behavior a module
- * read off the path declares, and that module is not among {@link #modules()}: what the body
- * carries is the identity resolution gave it, and a call carries no signature and no body.
+ * read off the path declares, and that module is not among {@link #modules()}: nothing of it is
+ * emitted by an output emitting this program, because the build that published it emitted it
+ * already.
+ *
+ * <p>What a call to such a behavior reaches is another question, and {@link #behavior} answers it.
+ * A call carries the identity resolution gave it and nothing else, and what an output emitting the
+ * call needs — what the behavior takes, what it answers, and where its implementation comes from —
+ * is asked with that identity. This compile read those declarations to check the body that names
+ * one, so what is handed over is the reading the checker itself used.
  *
  * <p>What a name is a declaration of is another question, and it is asked with the identity rather
  * than through whoever declared it. {@link #declaration} answers what a value of that data is made
@@ -59,11 +67,13 @@ import java.util.Objects;
  * that names them, and an output laying such a value out needs exactly what the checker read. Who
  * declared it comes with the answer and decides who emits it.
  *
- * <p>{@link #modules()} enumerates and {@link #declaration} resolves, and those are two questions.
- * What a module declares is what an output emitting that module has to emit; what an identity is a
- * declaration of is what an output laying out a value has to know. A reader made to pick the owner
- * before it could ask the second would be restating what its identity already carries — and where
- * the declaration is the language's there is no module of the compilation to pick at all.
+ * <p>{@link #modules()} enumerates and {@link #declaration} and {@link #behavior} resolve, and
+ * those are two questions. What a module declares and what its behaviors are is what an output
+ * emitting that module has to emit; what an identity is a declaration of, and what a call to one
+ * reaches, is what an output laying out a value or emitting a call has to know. A reader made to
+ * pick the owner before it could ask the second would be restating what its identity already
+ * carries — and where what it names was declared elsewhere there is no module of the compilation to
+ * pick at all.
  */
 public final class CheckedProgram {
 
@@ -80,6 +90,22 @@ public final class CheckedProgram {
      */
     private final Map<TypeSymbol.AtModule, Declared> declarations;
     /**
+     * The call boundary of every behavior this compile read the declaration of, by the identity a
+     * call to it carries.
+     *
+     * <p>Handed in rather than built here, which the index above is not. A target is made before
+     * the behavior that holds it: a row of a checked module states what it stood in for a
+     * dependency with, and where that dependency's arguments stand is read off the dependency's own
+     * target — so the targets are in hand before a module can be made at all. Built here from the
+     * modules instead, it would be a second reading of what a behavior takes, and the reading a row
+     * was written against would be the other one.
+     *
+     * <p>What holds the two together is that they are the same values. Every behavior of every
+     * module here is filed under its identity, and it is the target that behavior holds and not a
+     * copy of it.
+     */
+    private final Map<ValueName.Behavior, BehaviorTarget> behaviors;
+    /**
      * What each kernel of the language was declared to take and answer.
      *
      * <p>Held once for the program and not on the calls that reach one. Which operation a call
@@ -91,7 +117,8 @@ public final class CheckedProgram {
     private final KernelSignatures kernels;
 
     CheckedProgram(List<CheckedModule> modules, List<CheckedData> languageDeclarations,
-                   List<CheckedData> declaredOnThePath, KernelSignatures kernels) {
+                   List<CheckedData> declaredOnThePath,
+                   Map<ValueName.Behavior, BehaviorTarget> behaviors, KernelSignatures kernels) {
         this.modules = List.copyOf(modules);
         Map<String, CheckedModule> named = new LinkedHashMap<>();
         for (CheckedModule module : this.modules) {
@@ -117,6 +144,23 @@ public final class CheckedProgram {
         // data in an order and a reader listing them is shown one. A map that kept none would show
         // an order nothing decided, which can differ between two runs of one compiler.
         this.declarations = Collections.unmodifiableMap(index);
+        // No order is answered for: nothing here lists the behaviors of a program, and where one
+        // stands among the others is how the modules were given rather than something the language
+        // decided. What a reader does ask for is a behavior of a module, and a module answers that
+        // in the order it declared them.
+        this.behaviors = Map.copyOf(behaviors);
+        for (CheckedModule module : this.modules) {
+            for (CheckedBehavior behavior : module.behaviors()) {
+                // One fact, reached two ways. A behavior of a checked module is emitted through its
+                // module and called through its identity, and the two routes reaching different
+                // values is the state this whole index exists to make unwritable — so it is refused
+                // here rather than left to a reader to find the day the two disagree.
+                if (this.behaviors.get(behavior.name()) != behavior.target()) {
+                    throw new IllegalStateException("`" + behavior.name() + "` is called with a"
+                            + " boundary that is not the one its module holds");
+                }
+            }
+        }
         this.kernels = Objects.requireNonNull(kernels,
                 "a checked program is what the language it was checked with declares of its kernels");
     }
@@ -203,6 +247,40 @@ public final class CheckedProgram {
                     "nothing this compile read declares `" + name + "`");
         }
         return declared;
+    }
+
+    /**
+     * What a call to the behavior {@code name} reaches: what it takes, what it answers, and where
+     * its implementation comes from.
+     *
+     * <p>Asked with the identity a call carries ({@link souther.compiler.core.Core.Reaches.ABehavior}),
+     * which is what an output emitting that call holds. Whether the behavior is one of this
+     * compile's own or one a module it read off the path declares is answered here rather than
+     * decided by the reader: a call to either is emitted from the same three facts, and which of
+     * them the caller has to emit an implementation for is {@link CheckedImplementation}'s answer.
+     *
+     * <p>Never a null and never an absence to interpret. Every behavior declared by a module this
+     * compile checked or read off the path is here, whether or not anything in this program names
+     * it — a snapshot holding what one walk of the bodies reached would be right about the calls
+     * that walk thought to visit, and an output walking the same bodies again would be the second
+     * place that decided what belongs.
+     *
+     * <p>What this is total over is those declarations, and not every value the Java type admits.
+     * {@link ValueName.Behavior} is public, so an address nothing declares can be assembled; it is
+     * a mistake at the reader, refused here for the reason {@link #declaration} refuses one.
+     *
+     * @throws IllegalArgumentException where no module this compile read declares {@code name}
+     */
+    public BehaviorTarget behavior(ValueName.Behavior name) {
+        if (name == null) {
+            throw new IllegalArgumentException("a behavior is asked for by its identity");
+        }
+        BehaviorTarget target = behaviors.get(name);
+        if (target == null) {
+            throw new IllegalArgumentException(
+                    "no module this compile read declares the behavior `" + name + "`");
+        }
+        return target;
     }
 
     /**

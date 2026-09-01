@@ -179,11 +179,14 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     }
 
     /**
-     * The four states an implementation is in, told apart by asking rather than by finding nothing
-     * where a body would be.
+     * The states an implementation is in, told apart by asking rather than by finding nothing where
+     * a body would be.
      *
      * <p>The switch has no {@code default}: a state added later stops this compiling, which is what
-     * a consumer outside the compiler wants from a set it is meant to handle all of.
+     * a consumer outside the compiler wants from a set it is meant to handle all of. The behaviors
+     * asked here are this compile's own, and one implemented by another compile is a behavior of a
+     * module this program does not emit —
+     * {@code ACallReachesTheBehaviorItsProgramDeclaresTest} asks that one.
      */
     @Test
     void whereAnImplementationComesFromIsAskedAndNotInferredFromAnAbsence() {
@@ -206,6 +209,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             }
             case CheckedImplementation.Injected ignored -> "injected";
             case CheckedImplementation.Unwritten ignored -> "unwritten";
+            case CheckedImplementation.ImplementedElsewhere ignored -> "elsewhere";
         };
     }
 

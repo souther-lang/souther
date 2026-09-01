@@ -57,9 +57,32 @@ public final class CheckedModule {
         return behaviors;
     }
 
-    /** The behavior {@code name} reaches, or null where it is not one of this module's. */
+    /**
+     * The whole of what this module's behavior {@code name} was checked to be.
+     *
+     * <p>Never a null and never an absence to interpret. Which behaviors this module declares is
+     * decided before this is made, so a name it has nothing for is a reader asking this module
+     * about a behavior of somewhere else — a mistake at the reader rather than a state of the
+     * program, and answering it with an absence reads as "no such behavior" for a behavior that
+     * exists and is declared elsewhere.
+     *
+     * <p>What a call to a behavior reaches, wherever it is declared, is
+     * {@link CheckedProgram#behavior}. This is for a reader that is emitting this module and wants
+     * what only its own compile knows: what the behavior declares of its answer, and what its
+     * examples said.
+     *
+     * @throws IllegalArgumentException where this module declares no behavior {@code name}
+     */
     public CheckedBehavior behavior(ValueName.Behavior name) {
-        return behaviourByName.get(name);
+        if (name == null) {
+            throw new IllegalArgumentException("a behavior is asked for by its identity");
+        }
+        CheckedBehavior behavior = behaviourByName.get(name);
+        if (behavior == null) {
+            throw new IllegalArgumentException("`" + this.name + "` declares no behavior `" + name
+                    + "`; the behaviors it declares are " + behaviors);
+        }
+        return behavior;
     }
 
     /** The helpers this module emits as definitions of their own. */
