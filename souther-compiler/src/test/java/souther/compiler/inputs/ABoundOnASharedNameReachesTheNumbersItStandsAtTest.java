@@ -88,6 +88,27 @@ class ABoundOnASharedNameReachesTheNumbersItStandsAtTest {
         }
     }
 
+    /**
+     * And the two readings of that end are one answer.
+     *
+     * <p>What a rule of the value above leaves a position is read twice: once per name, as the
+     * reading of the position is made, and once as a rule said in the words of the case, where the
+     * relations are. Both are readings of one crossing, and the day they part is the day a caller's
+     * answer depends on which of them it happened to ask.
+     */
+    @Test
+    void andThePositionAndTheQuantityAgreeAboutIt() {
+        for (String at : List.of("h.q@A.limit", "h.q@B.limit")) {
+            InputDomain read = reading(SHARED, "read");
+            NumericDomain.Bounds position = read.positions().stream()
+                    .filter(each -> each.path().toString().equals(at))
+                    .map(Position::numericDomain).findFirst().orElseThrow();
+
+            assertEquals(position, runsAt(SHARED, at),
+                    at + " stops where it stops, whichever reading is asked");
+        }
+    }
+
     private static NumericDomain.Bounds runsAt(String source, String spelled) {
         InputDomain read = reading(source, "read");
         return read.quantities(symbolsOf(source))
