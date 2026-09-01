@@ -268,8 +268,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.BinaryElaborator.elaborateBinary",
                     "what the operator makes of its operands' types"),
             new Held("souther.compiler.check.BinaryElaborator.operand",
-                    "the same asked of one operand: a scale takes the base a newtype wraps, and a"
-                            + " conjunction takes truths"),
+                    "asks whether the operator joins two conditions, which is the one thing an"
+                            + " operand can be held to before the one beside it has been read"),
             new Held("souther.compiler.check.ConstEval.binary",
                     "what the operator computes of two constants, and which operand it needs to"
                             + " compute it"),

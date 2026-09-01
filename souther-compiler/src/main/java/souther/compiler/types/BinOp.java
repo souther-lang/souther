@@ -99,9 +99,9 @@ public enum BinOp {
      * other would be reading a decision nobody made.
      *
      * <p>The polarity and not the membership, because the membership follows from it and the
-     * polarity does not follow from anything. Read as "which operators stop early", every reader
-     * still had to work out which way, and every one of them wrote {@code == AND} — which is right
-     * while {@code ||} is the only other one and reads {@code ||}'s answer for a third.
+     * polarity does not follow from anything. Answered as "which operators stop early", a reader is
+     * left to work out which way for itself, and the answer it arrives at — the right side is
+     * reached having held — is right only while {@code ||} is the only other one.
      */
     public Boolean rightRunsWhenLeftIs() {
         return switch (this) {

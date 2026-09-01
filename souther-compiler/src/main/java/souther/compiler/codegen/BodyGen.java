@@ -1761,6 +1761,10 @@ final class BodyGen {
                     yield null;
                 }
                 case EQ, NE, LT, LE, GT, GE -> {
+                    // These six are the six a placement answers a claim for, so the recognition is
+                    // here whenever this arm is. Asked for rather than assumed: what holds it is
+                    // two lists in two files agreeing, and the day they do not this says so rather
+                    // than emitting against a claim nobody made.
                     Comparison comparison = Comparison.of(bin).orElseThrow(
                             () -> new IllegalStateException(
                                     "an operator that compares placed nothing: " + bin.op()));
