@@ -392,9 +392,10 @@ public final class Compilation {
      *     at all would report every behavior as one that does not terminate.
      */
     public Compilation withExampleBudget(java.time.Duration budget) {
-        if (budget.toMillis() <= 0) {
-            throw new IllegalArgumentException("an example budget has to be positive: " + budget);
-        }
+        // Refused by the terms rather than here. What a positive wait is is the policy's to say —
+        // it takes any positive length, down to below a millisecond — and a second reading of it
+        // here was a stricter one: a wait of a few hundred microseconds is a wait, and this said it
+        // was none at all.
         db.set(new Front.Policy(), Output.policyOf(db).withCompilerTimeout(budget));
         return this;
     }
@@ -409,12 +410,12 @@ public final class Compilation {
      * it is offered as the implementation's seam rather than as an input of this compilation's, and
      * it is reached the way {@link #jvmProgramImages} is.
      *
-     * <p>Two callers say one. A Java binding runs a row on a worker and hands what the row reaches
-     * outside back to the thread that asked, because that is the world a supplied implementation
-     * answers out of. A test asking what the compiler says about work that did not come back says an
-     * arrangement under which the work it picks out does not come back — otherwise it has to write a
-     * model that does not terminate and race a clock to see it reported, and a loaded host loses that
-     * race in the direction that matters.
+     * <p>One caller says one. A test asking what the compiler says about work that did not come back
+     * says an arrangement under which the work it picks out does not come back — otherwise it has to
+     * write a model that does not terminate and race a clock to see it reported, and a loaded host
+     * loses that race in the direction that matters. Nothing this compiler ships says one: a row
+     * driven from Java runs under the machine a build runs under, differing in that what it hands
+     * outside is serviced rather than never arriving.
      *
      * <p>Said before any row is run, for the reason {@link Db#running} takes what runs a
      * compilation's programs once: what runs one is beside the memos rather than in them, so a row

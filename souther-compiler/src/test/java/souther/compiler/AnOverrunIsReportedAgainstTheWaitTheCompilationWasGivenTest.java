@@ -50,6 +50,21 @@ class AnOverrunIsReportedAgainstTheWaitTheCompilationWasGivenTest {
                 reportedFor(Duration.ofMillis(8_765)));
     }
 
+    /**
+     * A wait shorter than a millisecond is quoted as the wait it was.
+     *
+     * <p>The policy takes any positive length, so this is a wait a compilation can be given, and the
+     * whole way from what it was told to what a reader sees is one length. Written as a number of
+     * milliseconds anywhere along it, this arrives as none — and a run given no time at all is a
+     * different thing, and one the policy refuses outright.
+     */
+    @Test
+    void aWaitShorterThanAMillisecondIsNotQuotedAsNone() {
+        String said = reportedFor(Duration.ofNanos(1_500));
+
+        assertEquals(List.of("0.0015ms"), millisecondsIn(said), said);
+    }
+
     /** And nothing else is: a number from the arrangement would still be in the line beside it. */
     @Test
     void andNoOtherWaitIsInTheLine() {
@@ -75,7 +90,7 @@ class AnOverrunIsReportedAgainstTheWaitTheCompilationWasGivenTest {
     private static List<String> millisecondsIn(String rendered) {
         List<String> said = new ArrayList<>();
         java.util.regex.Matcher matched =
-                java.util.regex.Pattern.compile("\\d+ms").matcher(rendered);
+                java.util.regex.Pattern.compile("\\d+(\\.\\d+)?ms").matcher(rendered);
         while (matched.find()) {
             said.add(matched.group());
         }

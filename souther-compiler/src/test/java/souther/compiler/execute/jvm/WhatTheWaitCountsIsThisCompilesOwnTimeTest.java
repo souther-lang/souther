@@ -29,6 +29,40 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
             new Deadline.Work.WholeRow("findTodo", new SourcePos(1, 1), new RowIdentity.Unnamed(1));
 
     /**
+     * A row spends the wait from the moment it can spend anything.
+     *
+     * <p>The wait is read where the hand-off is serviced, so what the row does before anything is
+     * servicing it is time nothing is counting. A row may not have it: a worker started and then
+     * left to itself would run for as long as it liked and be found finished, and every arrangement
+     * this compiler ships starts a worker before it starts servicing.
+     *
+     * <p>Said here rather than through an arrangement because it is the interleaving that is being
+     * held, and an arrangement services immediately. This waits before it services, which is what a
+     * host that descheduled the servicing thread does.
+     */
+    @Test
+    void aRowSpendsNothingOfItsOwnBeforeAnythingIsCountingIt() throws Exception {
+        Handoff handoff = new Handoff();
+        Thread worker = new Thread(() -> {
+            try {
+                handoff.installedFor(() -> {
+                    Thread.sleep(300);
+                    return "the row's own work";
+                });
+            } catch (Exception _) {
+                // The row was given up on, which is not what this is about.
+            }
+        });
+        worker.setDaemon(true);
+        worker.start();
+        Thread.sleep(600);
+
+        assertEquals(Handoff.Serviced.WAIT_SPENT,
+                handoff.serviceUntilDone(Duration.ofMillis(100).toNanos()),
+                "the row's own work is the compile's time whenever it was run");
+    }
+
+    /**
      * The wait an arrangement is handed is the wait it holds.
      *
      * <p>A length, kept as one. Handed on as a number of milliseconds it would be rounded before

@@ -6,8 +6,8 @@ import java.time.Duration;
  * What a compile holds one row's evaluation to, whoever runs it.
  *
  * <p>Terms and not a way of meeting them. Each of the three is a condition on the answer — how much
- * the evaluated code may spend, how deep it may go, and how long the caller may be made to wait —
- * and none of them says how an execution arranges to keep it. That is why they are here rather than
+ * the evaluated code may spend, how deep it may go, and how long the compiler may go on working
+ * without answering — and none of them says how an execution arranges to keep it. That is why they are here rather than
  * beside the JVM's arrangement: an execution that is not this one honours the same three by its own
  * means, and reads them without naming the subsystem that happens to run them today.
  *
@@ -17,10 +17,11 @@ import java.time.Duration;
  * neither is a measure of time. Two compiles of the same model under the same policy therefore say
  * the same thing about it, however fast the host is and however loaded.
  *
- * <p>{@code compilerTimeout} is not about the model at all. It exists for what a counter cannot
- * reach — a call into code this compile did not generate, so has no counted points in. Losing to it
- * is the compiler failing to answer, not the model failing to terminate, and the two are reported as
- * the different things they are.
+ * <p>{@code compilerTimeout} is not about the model at all. It exists for work that is the
+ * compiler's own and that the counters do not reach — what it does around the points it places, and
+ * a call it makes into classes that have none in them. Losing to it is the compiler failing to
+ * answer, not the model failing to terminate, and the two are reported as the different things they
+ * are.
  *
  * <p>What it obliges an execution to is elapsed time, and the elapsed time it obliges is the
  * compiler's own: past this, the compiler has not gone on working without answering. What decides

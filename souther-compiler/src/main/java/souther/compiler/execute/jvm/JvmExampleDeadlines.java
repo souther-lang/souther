@@ -25,10 +25,11 @@ import java.time.Duration;
  * is given — belongs to whoever built the arrangement and is settled before this is asked, so the
  * two are not offered here as though a compile said both.
  *
- * <p>This is what a caller replaces to run a compile's rows some other way, and the caller is not
- * only a test: the Java binding runs a row on a worker and hands what the row reaches outside back
- * to the thread that asked. It is named for the machine it is of, and reached through
- * {@code Compilation} — which is where the implementation that uses one is named.
+ * <p>This is what a test replaces to run a compile's rows some other way, and a test is what
+ * replaces it: what a run of this compiler's is held to, and what keeps it, is one machine, and a
+ * run driven from Java reaches it the same way a build does. It is named for the machine it is of,
+ * and reached through {@code Compilation} — which is where the implementation that uses one is
+ * named.
  */
 public interface JvmExampleDeadlines {
 

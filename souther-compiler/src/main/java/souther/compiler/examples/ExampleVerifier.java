@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.Observations;
+import souther.compiler.observe.WaitShown;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.AtomSpace;
@@ -546,15 +547,9 @@ public final class ExampleVerifier {
                 fixtures.shown(observed, sig.outputType()));
     }
 
-    /**
-     * The wait, as the reports here quote it.
-     *
-     * <p>Milliseconds, because that is what the sentences a reader sees are written in. What the
-     * deadline holds is a length; which unit it is said in is the report's answer and is given here
-     * once rather than at each of the places that says one.
-     */
-    private static long within(Deadline deadline) {
-        return deadline.timeout().toMillis();
+    /** The wait, as every report of this compiler's writes one ({@link WaitShown}). */
+    private static String within(Deadline deadline) {
+        return WaitShown.of(deadline.timeout());
     }
 
     /**
@@ -1363,13 +1358,13 @@ public final class ExampleVerifier {
                 Reached reached = evaluation.state.reached;
                 abandon.run();
                 // Not E1910. What did not come back was not shown to go round more than an example
-                // may — it was not counted at all, which is what an evaluation reaching code this
-                // compile did not generate looks like. Saying the model does not terminate here would
+                // may — it was not counted at all, which is what the compiler's own work around the
+                // counted points looks like. Saying the model does not terminate here would
                 // put a diagnostic on a model that may be right, and send its author to make
                 // something structural that already is.
                 out.add(Diagnostic.at(row.pos())
                         .say(new ExampleMessage.TheEvaluationDidNotAnswer(
-                                Long.toString(within(deadline))))
+                                within(deadline)))
                         .hint(new ExampleMessage.NotAnsweringIsNotNotTerminating()).build());
                 // No spend is read: the worker is still writing to its state, and a count taken
                 // while it runs would be some of what it spent rather than what it spent. That is

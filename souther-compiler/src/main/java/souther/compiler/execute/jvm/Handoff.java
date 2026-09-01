@@ -54,6 +54,16 @@ final class Handoff {
      */
     private sealed interface Phase {
 
+        /**
+         * The row has a worker and may not use it yet.
+         *
+         * <p>What the row spends is the compile's time, and the compile's time is counted by the
+         * thread servicing the hand-off. A row that could run before that thread began would spend
+         * time nothing was counting, so it may not: the phase it starts in is one it cannot work
+         * in, and the servicing thread is what leaves it.
+         */
+        record Starting() implements Phase {}
+
         /** The row is on its worker and nothing is handed over. */
         record Running() implements Phase {}
 
@@ -75,7 +85,7 @@ final class Handoff {
     /** Told to whoever is waiting for the other side to move. */
     private final Condition moved = lock.newCondition();
 
-    private Phase phase = new Phase.Running();
+    private Phase phase = new Phase.Starting();
 
     /**
      * The caller's world, reached from whichever worker is running the row.
@@ -103,8 +113,28 @@ final class Handoff {
         return ON_THIS_THREAD.get() != null;
     }
 
-    /** Makes this the hand-off of the thread that calls it, for as long as {@code body} runs. */
+    /**
+     * Makes this the hand-off of the thread that calls it, for as long as {@code body} runs.
+     *
+     * <p>Not before the wait is being counted. What the row spends is the compile's time and the
+     * clock over it is the servicing thread's, so a row that ran ahead of that thread would spend
+     * time nothing counted — and a worker is started before servicing begins, so the moment exists
+     * on every run rather than only under a host that deschedules one of the two.
+     *
+     * @throws CancellationException where the row was given up on before it began
+     */
     <T> T installedFor(Callable<T> body) throws Exception {
+        lock.lock();
+        try {
+            while (phase instanceof Phase.Starting) {
+                moved.await();
+            }
+            if (phase instanceof Phase.Abandoned) {
+                throw givenUpOn();
+            }
+        } finally {
+            lock.unlock();
+        }
         ON_THIS_THREAD.set(this);
         try {
             return body.call();
@@ -144,8 +174,11 @@ final class Handoff {
             if (!(phase instanceof Phase.Answered(Object value, Throwable threw))) {
                 throw givenUpOn();
             }
+            // Taken up without telling the thread servicing this. It is inside the wait that counts
+            // what the row is about to spend, there is nothing for it to do about the row resuming,
+            // and told it would leave the wait and come back to it — with the row working in
+            // between, which is the one interval the wait must not have.
             phase = new Phase.Running();
-            moved.signalAll();
             switch (threw) {
                 case null -> {
                     return value;
@@ -185,11 +218,19 @@ final class Handoff {
      * code, it may take as long as the caller's world takes, and holding a lock the row needs
      * across it would make the row wait for the caller's database.
      *
-     * <p>That is also what makes the wait measurable here and nowhere else. This thread is idle
-     * exactly while the other side is the one working — a row on its worker, or a worker taking up
-     * the answer it was given — and it is awake and working exactly while the application is. So the
-     * wait is what {@link Condition#awaitNanos} spends and nothing else: what the caller's own code
-     * takes is never inside one, and is not left out by being subtracted but by never being counted.
+     * <p>That is also what makes the wait measurable here and nowhere else, and what decides the
+     * shape of this loop. The wait is what {@link Condition#awaitNanos} spends, so the row may work
+     * only while this thread is inside one — which is a thing the lock can say, because awaiting is
+     * the one way it lets the lock go. The row is let out of {@link Phase.Starting} on the way into
+     * the first wait and answered on the way into the next, and the lock is held from one to the
+     * other. So there is no moment where the row could be working and the clock stopped: the only
+     * interval this thread spends outside a wait and outside the lock is the one it spends applying
+     * the application, and the row is waiting for its answer throughout it.
+     *
+     * <p>What the caller's own code takes is therefore not left out by being subtracted but by never
+     * being inside a wait. And the row taking up its answer does not tell this thread, because there
+     * is nothing for it to do about it: told, it would leave the wait and re-enter it, and the row
+     * would be working in between.
      *
      * <p>A hand-off that arrived is taken up whatever the clock says. The wait is spent only where
      * nothing was handed over, so an application that reached the crossing before the wait ran out
@@ -197,43 +238,47 @@ final class Handoff {
      */
     Serviced serviceUntilDone(long waitNanos) throws InterruptedException {
         long remaining = waitNanos;
-        while (true) {
-            CallerApplication.Application application;
-            lock.lock();
-            try {
+        lock.lock();
+        try {
+            while (true) {
+                if (phase instanceof Phase.Starting) {
+                    // Let out here and nowhere else: the next thing this thread does is wait, and
+                    // waiting is what lets the lock go, so the row cannot begin before the clock.
+                    phase = new Phase.Running();
+                    moved.signalAll();
+                }
                 while (phase instanceof Phase.Running || phase instanceof Phase.Answered) {
                     if (remaining <= 0) {
                         return Serviced.WAIT_SPENT;
                     }
                     remaining = moved.awaitNanos(remaining);
                 }
-                if (!(phase instanceof Phase.Asked(CallerApplication.Application asked))) {
+                if (!(phase instanceof Phase.Asked(CallerApplication.Application application))) {
                     return Serviced.ROW_LEFT;   // the row left, or was given up on
                 }
-                application = asked;
-            } finally {
+
+                Object value = null;
+                Throwable threw = null;
                 lock.unlock();
-            }
+                try {
+                    value = application.call();
+                } catch (Throwable t) {
+                    threw = t;
+                } finally {
+                    lock.lock();
+                }
 
-            Object value = null;
-            Throwable threw = null;
-            try {
-                value = application.call();
-            } catch (Throwable t) {
-                threw = t;
-            }
-
-            lock.lock();
-            try {
                 // Only where the row is still waiting for it. Given up on while its application was
                 // being applied, the row is gone and an answer put here would be read by nobody.
                 if (phase instanceof Phase.Asked) {
                     phase = new Phase.Answered(value, threw);
                     moved.signalAll();
                 }
-            } finally {
-                lock.unlock();
+                // And back to the wait with the lock still held, so the row takes its answer up
+                // inside the clock rather than beside it.
             }
+        } finally {
+            lock.unlock();
         }
     }
 
