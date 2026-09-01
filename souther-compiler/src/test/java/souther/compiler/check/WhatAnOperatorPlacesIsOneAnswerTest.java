@@ -276,6 +276,36 @@ class WhatAnOperatorPlacesIsOneAnswerTest {
     }
 
     /**
+     * A relation written down is a comparison stating it, and every relation can be written down.
+     *
+     * <p>The way back, and the whole of it. A reading that composes a comparison out of what the
+     * rules proved says it in an operator, and what is written is read as a comparison by
+     * everything downstream — so an operator stating something else is a rule nobody wrote arriving
+     * with the source's own position on it. Asked of every relation rather than of the ones some
+     * operator happens to state: what is composed comes from the numeric reasoning, which has all
+     * six whether or not an author wrote them.
+     */
+    @Test
+    void everyRelationIsWrittenAsAComparisonStatingIt() {
+        for (Rel rel : Rel.values()) {
+            BinOp written = ComparisonWriting.operatorStating(rel);
+            assertEquals(rel, claim(written).statedRelation(),
+                    () -> rel + " written down, and read back for what it states");
+        }
+    }
+
+    /** And an operator read for what it places and written back from that is the operator it was,
+     *  which is the two crossings between how a comparison is written and what it means holding
+     *  each other in place. */
+    @Test
+    void anOperatorWrittenBackFromWhatItPlacedIsItself() {
+        for (BinOp op : STATED.keySet()) {
+            assertEquals(op, ComparisonWriting.operatorStating(claim(op).statedRelation()),
+                    () -> op + " read for what it places and written back");
+        }
+    }
+
+    /**
      * A cut has a side or is not built.
      *
      * <p>The side is one of two answers, and a reference can hold neither. Every reader here asks

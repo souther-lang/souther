@@ -647,8 +647,11 @@ final class Predicates {
         Fold fold = folded == null ? Fold.NOT_DECIDED : Fold.FAILS;
         NumericConstraint numeric = null;
         Piecewise piecewise = null;
-        if (inv instanceof Core.Binary b && Conditions.relOf(b.op()) != null) {
-            Rel eff = positive ? Conditions.relOf(b.op()) : Conditions.negateRel(Conditions.relOf(b.op()));
+        if (inv instanceof Core.Binary b) {
+            ComparisonClaim states = Comparison.of(b).map(Comparison::claim).orElse(null);
+            // Read under a denial it is what holds where the clause does not.
+            Rel eff = states == null ? null
+                    : (positive ? states : states.denied()).statedRelation();
             LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
             LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
             // Asked of the relation, not of its two sides. An atom on both sides cancels, and one
@@ -702,7 +705,10 @@ final class Predicates {
      */
     private Set<FactSubject> atomsNamedBy(Core cond, Denotations at) {
         Set<FactSubject> out = new LinkedHashSet<>();
-        if (cond instanceof Core.Binary b && Conditions.relOf(b.op()) != null) {
+        // Which of the two shapes this is, asked of the operator's membership and no more: both
+        // sides of a comparison are named here whatever it states, and a condition that is not one
+        // is the single value it names.
+        if (cond instanceof Core.Binary b && b.op().compares()) {
             LinearForm<FactSubject> left = terms.affineOf(b.left(), at);
             LinearForm<FactSubject> right = terms.affineOf(b.right(), at);
             if (left != null) {
@@ -825,8 +831,9 @@ final class Predicates {
         taken |= !known.isEmpty();
         shapeRead |= !known.isEmpty();
         if (cond instanceof Core.Binary b) {
-            Rel rel = Conditions.relOf(b.op());
-            Rel eff = rel == null ? null : positive ? rel : Conditions.negateRel(rel);
+            ComparisonClaim states = Comparison.of(b).map(Comparison::claim).orElse(null);
+            Rel eff = states == null ? null
+                    : (positive ? states : states.denied()).statedRelation();
             LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
             LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
             if (la != null && ra != null) {
@@ -1003,12 +1010,16 @@ final class Predicates {
      * never builds.
      */
     private boolean noCaseSatisfies(Core cond, Known k, Denotations at, boolean positive) {
-        if (!(cond instanceof Core.Binary b) || Conditions.relOf(b.op()) == null) {
+        if (!(cond instanceof Core.Binary b)) {
             return false;
         }
-        Rel stated = positive ? Conditions.relOf(b.op()) : Conditions.negateRel(Conditions.relOf(b.op()));
-        LinearForm<FactSubject> la = stated == null ? null : terms.affineOf(b.left(), at);
-        LinearForm<FactSubject> ra = stated == null ? null : terms.affineOf(b.right(), at);
+        ComparisonClaim states = Comparison.of(b).map(Comparison::claim).orElse(null);
+        if (states == null) {
+            return false;
+        }
+        Rel stated = (positive ? states : states.denied()).statedRelation();
+        LinearForm<FactSubject> la = terms.affineOf(b.left(), at);
+        LinearForm<FactSubject> ra = terms.affineOf(b.right(), at);
         if (la == null || ra == null) {
             return false;
         }
