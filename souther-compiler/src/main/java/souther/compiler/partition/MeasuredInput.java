@@ -29,8 +29,10 @@ import java.util.function.Predicate;
  * takes the walk and some of the classes, and looking for a row at a line takes the walk and that
  * line: both are the walk beside something measured, which is exactly the pairing above. So a
  * reader asks here for {@link MeasuredAxes} or a {@link BorderReading}, and neither can be made
- * anywhere else — the classes a projection holds are this measurement's own, and the geometry a
- * border reading holds is checked against this reading before it is one.
+ * anywhere else — what a projection holds is this measurement's own geometry rather than geometry
+ * that agreed with it. Which is not the same thing: whether a value is this measurement's is
+ * whether this measurement has it, and comparing its attributes instead is a derivation of that
+ * with one more attribute to it every time somebody finds a way past.
  *
  * <p><b>The reading itself does not come through.</b> What is offered is the two questions a search
  * asks — where a value is written, and what a number there is measured on — and not a way of asking
@@ -414,8 +416,9 @@ public final class MeasuredInput {
      * line apiece at the same spelling, and read through the wrong walk one of them answers about
      * the other's rows.
      *
-     * <p>Made only by {@link MeasuredInput#at}, which is where the line's numbers are put to the
-     * reading.
+     * <p>Made only by {@link MeasuredInput#at}, which answers the line asked for with the one this
+     * measurement read where it is. So the border here is the reading's own, and not one that was
+     * handed in and let through.
      */
     public static final class BorderReading {
 
