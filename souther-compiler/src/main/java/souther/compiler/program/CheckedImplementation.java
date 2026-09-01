@@ -35,10 +35,10 @@ public sealed interface CheckedImplementation {
      *
      * <p>The binders and not the types. A type here would be a second reading of what
      * {@link CheckedSignature} already answers, and the two would agree until either moved.
-     * {@link CheckedBehavior} is where they are held to the same length, which is what makes
+     * {@link BehaviorTarget} is where they are held to the same length, which is what makes
      * reading them as one parameter safe.
      *
-     * <p>Here and not on {@link CheckedBehavior}, because a binder exists exactly where a body
+     * <p>Here and not on {@link BehaviorTarget}, because a binder exists exactly where a body
      * does. An injected behavior takes inputs and has no body to bind them in, an unwritten one has
      * none either, and a composition applies its first stage to what it was given. Answering this
      * for any of them would be answering a question that has no answer.

@@ -18,7 +18,6 @@ import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +45,7 @@ class ACallReachesTheBehaviorItsProgramDeclaresTest {
      * nothing below names.
      */
     private static final String PUBLISHED = """
-            module lib.rates exposing ( Rate, spin, rateFor, unused )
+            module lib.rates exposing ( Rate, spin, rateFor, tally, unused )
             data Rate = Int
 
             behavior spin : (of: Int) -> Rate
@@ -54,13 +53,21 @@ class ACallReachesTheBehaviorItsProgramDeclaresTest {
 
             behavior rateFor : (of: Int) -> Rate
 
+            behavior tally : (r: Rate) -> Int
+            let tally (r) = r.value
+
             behavior unused : (r: Rate) -> Int
             let unused (r) = r.value
             """;
 
+    /**
+     * And it is called from each of the two places a call to a behavior stands: a behavior's body,
+     * and the stages a composed behavior applies. A carried helper is here as well, for the check
+     * that it is not a third.
+     */
     private static final String USES = """
             module app.uses
-            import lib.rates ( Rate, spin, rateFor )
+            import lib.rates ( Rate, spin, rateFor, tally )
 
             behavior rateOf : (base: Int) -> Rate
                 depends on rateFor
@@ -68,6 +75,13 @@ class ACallReachesTheBehaviorItsProgramDeclaresTest {
 
             behavior spun : (base: Int) -> Rate
             let spun (base) = spin(base)
+
+            behavior counted = spun >-> tally
+
+            behavior looped : (base: Int) -> Rate
+            let looped (base) = spinning(base)
+
+            partial let spinning (n: Int): Rate = spinning(n)
 
             fake rateFor
                 | (1) -> Rate(10)
@@ -80,6 +94,7 @@ class ACallReachesTheBehaviorItsProgramDeclaresTest {
     private static final ValueName.Behavior SPIN = new ValueName.Behavior("lib.rates", "spin");
     private static final ValueName.Behavior RATE_FOR = new ValueName.Behavior("lib.rates",
             "rateFor");
+    private static final ValueName.Behavior TALLY = new ValueName.Behavior("lib.rates", "tally");
     private static final ValueName.Behavior UNUSED = new ValueName.Behavior("lib.rates", "unused");
     private static final Type RATE = Type.ref(TypeSymbols.declared(new TypeKey("lib.rates",
             "Rate")));
@@ -102,8 +117,31 @@ class ACallReachesTheBehaviorItsProgramDeclaresTest {
             assertInstanceOf(BehaviorTarget.class, program.behavior(called),
                     () -> "a body calls `" + called + "` and the program answers nothing for it");
         }
-        assertEquals(Set.of(SPIN, RATE_FOR), reached,
-                "and the calls the walk found are the ones these modules write");
+        assertEquals(Set.of(SPIN, RATE_FOR, TALLY, new ValueName.Behavior("app.uses", "spun")),
+                reached, "and the calls the walk found are the ones these modules write: a body's,"
+                        + " and a composition's stages");
+    }
+
+    /**
+     * And a carried helper reaches no behavior, which is why the walk above does not go through
+     * one.
+     *
+     * <p>The language refuses a call to a behavior from a helper's {@code let} (E1818), so the
+     * places a call to a behavior stands are a behavior's own body and a composition's stages. Said
+     * here as a check rather than left as a walk of the helpers that can only ever find nothing:
+     * such a walk answers the same whether the rule holds or the module has no helper, and the day
+     * the rule moved it would be a walk nobody had noticed had started mattering.
+     */
+    @Test
+    void aCarriedHelperReachesNoBehavior() {
+        CheckedModule uses = compiled().module("app.uses");
+
+        assertFalse(uses.helpers().isEmpty(), "the module carries a helper to ask about");
+        for (CheckedHelper helper : uses.helpers()) {
+            Set<ValueName.Behavior> reached = new LinkedHashSet<>();
+            collectCalled(helper.body(), reached);
+            assertEquals(Set.of(), reached, () -> "`" + helper + "` calls a behavior");
+        }
     }
 
     /**
@@ -209,19 +247,24 @@ class ACallReachesTheBehaviorItsProgramDeclaresTest {
     }
 
     /**
-     * Every behavior a call in this program reaches: from the bodies of its behaviors, from the
-     * helpers those bodies call, and from the stages a composed behavior applies.
+     * Every behavior a call in this program reaches: from the bodies of its behaviors, and from the
+     * stages a composed behavior applies.
      *
-     * <p>Each of the three is a place a callee is named, and a walk that visited two of them would
-     * answer that everything it found was answered for.
+     * <p>Both are a place a callee is named, and a walk that visited one of them would answer that
+     * everything it found was answered for. A carried helper is not a third: the language refuses a
+     * call to a behavior from a helper's {@code let} (E1818), which
+     * {@link #aCarriedHelperReachesNoBehavior} is what says here rather than a walk that goes
+     * looking and can find nothing.
+     *
+     * <p>The switch has no {@code default}, so a state an implementation is in that this has
+     * nothing to say about stops this compiling rather than being walked past.
      */
     private static Set<ValueName.Behavior> everyBehaviorCalledIn(CheckedProgram program) {
         Set<ValueName.Behavior> reached = new LinkedHashSet<>();
         for (CheckedModule module : program.modules()) {
-            List<Core> bodies = new ArrayList<>();
             for (CheckedBehavior behavior : module.behaviors()) {
                 switch (behavior.implementation()) {
-                    case CheckedImplementation.Body body -> bodies.add(body.body());
+                    case CheckedImplementation.Body body -> collectCalled(body.body(), reached);
                     case CheckedImplementation.Composed(Composition composition) -> {
                         for (Composition.Stage stage : composition.stages()) {
                             reached.add(stage.behavior());
@@ -231,12 +274,6 @@ class ACallReachesTheBehaviorItsProgramDeclaresTest {
                     case CheckedImplementation.Unwritten ignored -> { }
                     case CheckedImplementation.ImplementedElsewhere ignored -> { }
                 }
-            }
-            for (CheckedHelper helper : module.helpers()) {
-                bodies.add(helper.body());
-            }
-            for (Core body : bodies) {
-                collectCalled(body, reached);
             }
         }
         return reached;

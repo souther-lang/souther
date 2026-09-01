@@ -7,6 +7,7 @@ import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -48,6 +49,26 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
     @Test
     void andSoIsOneTheIndexSaysNothingAbout() {
         assertThrows(IllegalStateException.class, () -> program(target(), Map.of()));
+    }
+
+    /**
+     * And so is the same disagreement the other way round: a behavior of a module of this compile
+     * that the module does not declare.
+     *
+     * <p>Which is what says the two name the same behaviors. Held in one direction, an index could
+     * answer for a behavior of a module this program emits that the module has nothing for, and a
+     * reader emitting that module would emit a program with a call to a behavior it never wrote.
+     */
+    @Test
+    void andSoIsOneTheModuleThatDeclaresItDoesNotDeclare() {
+        BehaviorTarget held = target();
+        Map<ValueName.Behavior, BehaviorTarget> index = new LinkedHashMap<>();
+        index.put(NAMED, held);
+        index.put(new ValueName.Behavior("demo", "nobodyWroteThis"), target());
+
+        assertEquals("this program is callable at 2 behaviors of the modules it emits, which"
+                        + " declare 1",
+                assertThrows(IllegalStateException.class, () -> program(held, index)).getMessage());
     }
 
     /** And the program a correct assembler makes is one this admits. */

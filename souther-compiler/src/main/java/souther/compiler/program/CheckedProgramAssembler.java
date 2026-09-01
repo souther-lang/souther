@@ -118,10 +118,16 @@ final class CheckedProgramAssembler {
     /**
      * Files the call boundary of every behavior {@code module} declares.
      *
-     * <p>Walked over what the module declares, and the two answers a boundary is made of are read
-     * under each name it declares. A walk of the signatures instead would let a behavior whose
-     * signature this compile failed to answer for leave the program without anything having missed
-     * it: what a module declares would be whatever the answer happened to hold.
+     * <p>What the module declares says which behaviors there are, and the answers this compile
+     * worked out say what each of them is — the same three readings a module on the path is read in
+     * ({@link #fileWhatIsOnThePath}), and read the same way here. A walk of the signatures instead
+     * would let a behavior whose signature this compile failed to answer for leave the program
+     * without anything having missed it: what a module declares would be whatever the answer
+     * happened to hold.
+     *
+     * <p>Both answers are read here, beside the name they belong to, and a missing one is refused
+     * here. Read further in, at the place that decides what an implementation is made of, a missing
+     * answer arrives where a state is being chosen — and it is chosen as one of them.
      */
     private static ModuleBoundaries fileWhatIsChecked(
             Map<ValueName.Behavior, BehaviorTarget> targets, ModuleReading module) {
@@ -129,16 +135,18 @@ final class CheckedProgramAssembler {
         for (Hir.BehaviorDef declared : module.bodies().behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(module.name(), declared.name());
             Sig signature = module.signatures().get(declared.name());
-            if (signature == null) {
+            BehaviorImplementation state = module.implementations().get(declared.name());
+            if (signature == null || state == null) {
                 // The module was taken as checked and one of the behaviors it declares has no
-                // signature. A caller reaches it, so letting it through hands an output a call it
-                // cannot emit and says nothing about why.
+                // signature, or no reading of where its body comes from. A caller reaches it, so
+                // letting it through hands an output a call it cannot emit and says nothing about
+                // why.
                 throw new IllegalStateException("`" + named + "` was taken as checked and this"
-                        + " compile has nothing to say about what it takes");
+                        + " compile has no reading of it");
             }
             BehaviorTarget target = new BehaviorTarget(signatureOf(signature),
-                    implementationOf(named, declared, module.bodies(), module.implementations(),
-                            module.checked(), module.compositions()));
+                    implementedAs(state, named, declared, module.bodies(), module.checked(),
+                            module.compositions()));
             file(targets, named, target);
             declares.put(named, target);
         }
@@ -595,25 +603,20 @@ final class CheckedProgramAssembler {
      * it checked is implemented as, and a behavior published by another compile is read by
      * {@link #publishedAs}.
      *
-     * <p>Read in one place, from the state the declarations were read into and the form the check
-     * produced. A reader handed the two separately would be deciding for itself what an implemented
-     * behavior with no Core is, and it is a composition — which is a fact about the declaration and
-     * not something to infer from an absence.
+     * <p>Given the state rather than the table it is in, as {@link #publishedAs} is. What a
+     * behavior this compile has no reading of comes to is not a state to choose between here — it
+     * is a program with nothing to say about one of its own behaviors, said where a behavior's
+     * answers are read.
+     *
+     * <p>What is decided here is the form: the state says a body was written and the check says
+     * whether it settled a composition, and a reader handed the two separately would be deciding
+     * for itself what an implemented behavior with no Core is.
      */
-    private static CheckedImplementation implementationOf(
-            ValueName.Behavior named, Hir.BehaviorDef declared, Hir.Module lowered,
-            Map<String, BehaviorImplementation> implementations, Bodies.Elaborated checked,
+    private static CheckedImplementation implementedAs(
+            BehaviorImplementation state, ValueName.Behavior named, Hir.BehaviorDef declared,
+            Hir.Module lowered, Bodies.Elaborated checked,
             Map<ValueName.Behavior, Composition> compositions) {
         String name = declared.name();
-        BehaviorImplementation state = implementations.get(name);
-        if (state == null) {
-            // The module was taken as checked and this compile has no reading of where one of its
-            // behaviors gets its body. Read as unwritten it would be a behavior the author is owed
-            // a body for, which is a program of its own — and nothing would say the reading was
-            // missing rather than the body.
-            throw new IllegalStateException("`" + named + "` was taken as checked and this compile"
-                    + " has nothing to say about where its implementation comes from");
-        }
         return switch (state) {
             case UNIMPLEMENTED -> new CheckedImplementation.Unwritten();
             case INJECTION_TARGET -> new CheckedImplementation.Injected();
@@ -640,7 +643,7 @@ final class CheckedProgramAssembler {
      * a second place that knew so.
      *
      * <p>Sliced by what the behavior declares and not by how long its signature is. Sliced by the
-     * signature the two lengths would be equal by construction, and {@link CheckedBehavior}'s check
+     * signature the two lengths would be equal by construction, and {@link BehaviorTarget}'s check
      * of them would be comparing an answer with itself — the disagreement it is there to refuse
      * would arrive instead as a dependency's binder handed over as an input's.
      */

@@ -149,17 +149,33 @@ public final class CheckedProgram {
         // decided. What a reader does ask for is a behavior of a module, and a module answers that
         // in the order it declared them.
         this.behaviors = Map.copyOf(behaviors);
+        // One fact, reached two ways, and held to that in both directions. A behavior of a checked
+        // module is emitted through its module and called through its identity: the two routes
+        // reaching different values is the state this index exists to make unwritable, and one
+        // route reaching a behavior the other has never heard of is the same disagreement said the
+        // other way round. Refused here rather than left to a reader to find.
+        int declaredHere = 0;
         for (CheckedModule module : this.modules) {
             for (CheckedBehavior behavior : module.behaviors()) {
-                // One fact, reached two ways. A behavior of a checked module is emitted through its
-                // module and called through its identity, and the two routes reaching different
-                // values is the state this whole index exists to make unwritable — so it is refused
-                // here rather than left to a reader to find the day the two disagree.
                 if (this.behaviors.get(behavior.name()) != behavior.target()) {
                     throw new IllegalStateException("`" + behavior.name() + "` is called with a"
                             + " boundary that is not the one its module holds");
                 }
+                declaredHere++;
             }
+        }
+        int callableHere = 0;
+        for (ValueName.Behavior called : this.behaviors.keySet()) {
+            if (byName.containsKey(called.module())) {
+                callableHere++;
+            }
+        }
+        // Every behavior of a checked module is above, so the two can differ only by a behavior
+        // this program can be called at that its own module does not declare. Counted rather than
+        // asked of the module, which would be this same question one behavior at a time.
+        if (callableHere != declaredHere) {
+            throw new IllegalStateException("this program is callable at " + callableHere
+                    + " behaviors of the modules it emits, which declare " + declaredHere);
         }
         this.kernels = Objects.requireNonNull(kernels,
                 "a checked program is what the language it was checked with declares of its kernels");

@@ -4,17 +4,23 @@ package souther.compiler.program;
  * What a call to a behavior reaches: what it takes and answers, and where its implementation comes
  * from.
  *
- * <p>What a caller needs and no more. A call carries the identity resolution gave it, and an output
+ * <p>What a caller has to know. A call carries the identity resolution gave it, and an output
  * emitting one has to know what to hand over, what comes back, and whether what it emits is a call
  * into what it is emitting, a call into something built elsewhere, or a crossing to an
- * implementation supplied from outside Souther. None of that is the callee's body: an output
- * emitting a behavior's implementation reaches it by walking {@link CheckedProgram#modules()},
- * which is a different question with a different answer.
+ * implementation supplied from outside Souther.
  *
- * <p>So this is answered for a behavior of a module this compile read off the path as much as for
- * one of its own. That module is not among {@link CheckedProgram#modules()} — this compile did not
- * check it — but its declarations were read here, because a body naming one had to be checked
- * against them.
+ * <p>Answered for a behavior of a module this compile read off the path as much as for one of its
+ * own. That module is not among {@link CheckedProgram#modules()} — this compile did not check it —
+ * but its declarations were read here, because a body naming one had to be checked against them.
+ *
+ * <p>One value and not a reading of one. This is what a behavior of a checked module holds too
+ * ({@link CheckedBehavior#signature}, {@link CheckedBehavior#implementation}), so a behavior
+ * written here says what it takes and where its implementation comes from once, whether it is
+ * reached through the module being emitted or through the identity a call carries. What follows is
+ * that a target for a behavior written here carries the implementation itself — a
+ * {@link CheckedImplementation.Body} holds the Core the checker typed — which a caller has no use
+ * for and does not look at. Cut to what a caller reads, it would be a second value made from this
+ * one, and the two would say the same thing until either was made from something else.
  *
  * <p>Where the two readings of what a behavior takes are held to each other. A signature says the
  * inputs as types and a body says the bindings they arrive in, and lists of different lengths would
