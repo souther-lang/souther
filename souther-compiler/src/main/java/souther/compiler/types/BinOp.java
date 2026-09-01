@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import java.util.Objects;
+
 /**
  * A binary operator of the language.
  *
@@ -44,10 +46,15 @@ public enum BinOp {
     /**
      * What an operator does with the two values it stands between.
      *
-     * <p>Given where the constant is declared, so a constant cannot be written without saying which
-     * of these it is, and the memberships below cannot disagree: an operator is in exactly one
-     * family, and each question about which operators are which is that one classification read
-     * another way.
+     * <p>Each constant declaration supplies one of these, and the declarations here supply one of
+     * the four. So the memberships below cannot disagree with each other: each is that one
+     * classification read another way, and there is no second list to keep in step with this one.
+     *
+     * <p>Three things hold that between them, and no one of them holds all of it. javac requires
+     * the argument. Being private, these four are what a declaration in this file can name. And a
+     * {@code null} reaching the constructor is refused there, which is the part neither of the
+     * others sees — an operator in no family answers every membership below with "not this one",
+     * which is what an operator outside the language would answer.
      *
      * <p><b>Private, because a partition is not a vocabulary.</b> A reader asks the question it has,
      * and hands on what it established rather than the family it established it from.
@@ -67,7 +74,7 @@ public enum BinOp {
     private final Family family;
 
     BinOp(Family family) {
-        this.family = family;
+        this.family = Objects.requireNonNull(family, "the family an operator belongs to");
     }
 
     /** Whether this settles a comparison, which is what everything that has to tell one from what
