@@ -85,29 +85,33 @@ final class Outwards {
         }
         List<Place> out = new ArrayList<>();
         out.add(first);
-        // Recorded where the figure is reached rather than counted afterwards. A run holding exactly
-        // this many and a run this stopped walking come back the same length, and only one of them
-        // is a figure somebody could raise.
+        // <b>A value found and not taken, never a count that came out even.</b> A run holding
+        // exactly this many and a run this stopped walking come back the same length, so the figure
+        // being reached says nothing on its own — what says this compiler declined to go further is
+        // a value the run holds that this did not take. Read off the count instead, a run walked to
+        // its end reports a budget nobody reached, and a point nothing could stop is reported as one
+        // this stopped: the same trade this file is here to prevent, made the other way round.
         boolean stoppedShort = false;
+        outward:
         for (int step = 1; ; step++) {
-            if (out.size() == howManyValues) {
-                stoppedShort = true;
-                break;
-            }
             BigDecimal away = BigDecimal.valueOf(step);
-            Place above = carrier.onTheGrid(Count.number(first).plus(by.times(away)));
-            Place below = carrier.onTheGrid(Count.number(first).minus(by.times(away)));
+            Place[] neighbours = {
+                    carrier.onTheGrid(Count.number(first).plus(by.times(away))),
+                    carrier.onTheGrid(Count.number(first).minus(by.times(away)))};
             boolean took = false;
-            if (above != null && within.admits(above)) {
-                out.add(above);
-                took = true;
-            }
-            if (below != null && within.admits(below) && out.size() < howManyValues) {
-                out.add(below);
+            for (Place next : neighbours) {
+                if (next == null || !within.admits(next)) {
+                    continue;
+                }
+                if (out.size() == howManyValues) {
+                    stoppedShort = true;   // one the run holds and this is not taking
+                    break outward;
+                }
+                out.add(next);
                 took = true;
             }
             if (!took) {
-                break;
+                break;   // neither direction has a value left, so this walked the whole of it
             }
         }
         return new Walked(out, stoppedShort);

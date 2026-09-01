@@ -59,6 +59,16 @@ public sealed interface Realization {
 
         public Unknown {
             stoppedBy = java.util.Set.copyOf(stoppedBy);
+            // What a walk stopped by these says is the budgets' to say, so the two cannot be put
+            // here disagreeing. A pair that could is a pair somebody has to keep in step, and
+            // keeping two spellings of one answer in step by hand is what a stopped walk lost its
+            // budget to in the first place.
+            if (!stoppedBy.isEmpty()
+                    && why != Generator.UnresolvedCombination.Reason.wordFor(stoppedBy)
+                            .asAWalksAnswer()) {
+                throw new IllegalArgumentException("a walk stopped by " + stoppedBy
+                        + " does not come back with " + why);
+            }
         }
 
         /** A walk that came to nothing without any budget of this compiler's having run out. */
@@ -80,16 +90,10 @@ public sealed interface Realization {
                         "a walk this compiler stopped says which budget stopped it");
             }
             // The word each of these has always come back with, and not one word for all of them.
-            // Which of the two a stopped walk says is the budget's, and a stop that said the other
-            // would move a sentence a reader has been reading for reasons of its own.
-            Reason why = switch (Generator.UnresolvedCombination.Reason.wordFor(budgets)) {
-                case NOTHING_COMPOSES_ONE -> Reason.NOTHING_COMPOSED_ONE;
-                case SEARCH_LIMIT -> Reason.THE_SEARCH_RAN_OUT;
-                default -> throw new IllegalStateException(
-                        "a budget that stopped a walk came back with a word no walk says: "
-                                + budgets);
-            };
-            return new Unknown(why, budgets);
+            // Which of the two a stopped walk says is the budgets' to say, and a stop that said the
+            // other would move a sentence a reader has been reading for reasons of its own.
+            return new Unknown(Generator.UnresolvedCombination.Reason.wordFor(budgets)
+                    .asAWalksAnswer(), budgets);
         }
 
         public enum Reason {

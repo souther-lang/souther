@@ -470,6 +470,37 @@ public final class Generator {
                 }
                 return word;
             }
+
+            /**
+             * The same answer in the words a walk of a coverage item comes back with.
+             *
+             * <p>Two vocabularies for one distinction, and this is the whole of what relates them.
+             * A walk says one of two things and a search says one of thirteen, so the projection
+             * runs this way and never the other — read back, eleven words would have to name a
+             * walk's answer and none of them does.
+             *
+             * <p>Exhaustive, with the eleven named. A word added is a word somebody has to decide
+             * about here, and deciding is what a {@code default} would do on their behalf: it would
+             * put the new word among the ones no walk says, which is the answer for eleven of them
+             * and is nobody's to assume for the twelfth.
+             */
+            public Realization.Unknown.Reason asAWalksAnswer() {
+                return switch (this) {
+                    case NOTHING_COMPOSES_ONE -> Realization.Unknown.Reason.NOTHING_COMPOSED_ONE;
+                    case SEARCH_LIMIT -> Realization.Unknown.Reason.THE_SEARCH_RAN_OUT;
+                    // What a walk of a coverage item comes back with is what it did, and these are
+                    // what somebody else did: the model settling the point, a candidate refused, a
+                    // module with no classes, a position held back, a group never offered.
+                    case ALL_CANDIDATES_REJECTED, THE_RULES_LEAVE_NOTHING_THERE,
+                         ONE_POSITION_CANNOT_BE_BOTH, NOTHING_TO_BUILD_AGAINST,
+                         NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
+                         THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,
+                         THE_ROWS_WERE_NOT_READ, THE_WAY_IN_PLACES_AT_NO_CLASS,
+                         NO_CANDIDATE_WAS_OFFERED, NO_READING_OF_THE_LINE_COULD_BE_SEARCHED ->
+                            throw new IllegalStateException(
+                                    "no walk of a coverage item comes back with this: " + this);
+                };
+            }
         }
 
         public UnresolvedCombination {
@@ -2301,13 +2332,26 @@ public final class Generator {
                     throw new IllegalArgumentException(
                             "a search this compiler stopped says which budget stopped it");
                 }
+                // The word is the budgets' to say, so this pair cannot be put here disagreeing.
+                // Left to whoever builds one, the two are a copy of one answer kept beside it —
+                // which is what a stop lost its budget to before it travelled at all.
+                if (why.reason() != UnresolvedCombination.Reason.wordFor(by)) {
+                    throw new IllegalArgumentException("a search stopped by " + by
+                            + " does not come back with " + why.reason());
+                }
             }
 
             /** One at the label given, in the word its budgets come back with. */
             static Stopped at(String label, java.util.Set<CompositionBudget> by,
                               List<ReachabilityGap.Uncomposed> unrepresented) {
+                return at(label, null, by, unrepresented);
+            }
+
+            /** The same, of a search that has something to say about where it stopped. */
+            static Stopped at(String label, String detail, java.util.Set<CompositionBudget> by,
+                              List<ReachabilityGap.Uncomposed> unrepresented) {
                 return new Stopped(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.wordFor(by)), by, unrepresented);
+                        UnresolvedCombination.Reason.wordFor(by), detail), by, unrepresented);
             }
         }
     }
@@ -2465,9 +2509,8 @@ public final class Generator {
                         ? new BoundaryAttempt.Unresolved(
                                 new UnresolvedCombination(List.of(label), why, tried.detail()),
                                 where.unrepresented())
-                        : new BoundaryAttempt.Stopped(
-                                new UnresolvedCombination(List.of(label), why, tried.detail()),
-                                stoppedBy, where.unrepresented());
+                        : BoundaryAttempt.Stopped.at(label, tried.detail(), stoppedBy,
+                                where.unrepresented());
             }
             inputs.add(tried.value());
         }

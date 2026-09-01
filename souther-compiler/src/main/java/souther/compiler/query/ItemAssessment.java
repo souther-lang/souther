@@ -529,6 +529,14 @@ public sealed interface ItemAssessment {
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
                 Objects.requireNonNull(stoppedBy, "a search this compiler stopped says which"
                         + " budget stopped it");
+                // Carried across the boundary and checked again here, because a copy that travels
+                // is a copy that can be made to travel wrong. What the word is remains the budgets'
+                // to say at both ends, so neither end holds a pair that disagrees.
+                if (why.reason() != Generator.UnresolvedCombination.Reason
+                        .wordFor(stoppedBy.budgets())) {
+                    throw new IllegalArgumentException("a search stopped by "
+                            + stoppedBy.budgets() + " does not come back with " + why.reason());
+                }
             }
 
             @Override

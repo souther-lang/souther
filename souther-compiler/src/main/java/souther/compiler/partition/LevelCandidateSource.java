@@ -112,15 +112,12 @@ public final class LevelCandidateSource {
                                      Towards towards) {
         List<Level> out = new ArrayList<>();
         Bound past = from == null ? null : Bound.at(from, false);
-        // Recorded where the figure is reached, so that a walk this stopped and a region with
-        // nothing further in it are told apart. Counted afterwards, a region holding exactly this
-        // many is the one that cannot be told from either.
+        // <b>A level found and not offered, never a count that came out even.</b> A region holding
+        // exactly this many and a region this stopped drawing from come back the same length, so
+        // the figure being reached says nothing on its own — what says this compiler declined to
+        // offer more is a level the region has that this did not take.
         boolean stoppedShort = false;
-        for (int step = 0; ; step++) {
-            if (step == LEVELS_TRIED) {
-                stoppedShort = true;
-                break;
-            }
+        while (true) {
             Level next = null;
             for (LevelInterval part : region.parts()) {
                 LevelInterval left = towards == Towards.ABOVE
@@ -135,6 +132,10 @@ public final class LevelCandidateSource {
                 }
             }
             if (next == null) {
+                break;   // nothing further in the region, so this drew the whole of it
+            }
+            if (out.size() == LEVELS_TRIED) {
+                stoppedShort = true;   // one the region has and this is not offering
                 break;
             }
             out.add(next);
