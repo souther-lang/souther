@@ -94,13 +94,8 @@ public record InputReads(Map<BindingId, TermPath> roots,
     }
 
     @Override
-    public BindingId sameElementsAs(BindingId binding) {
-        return elements.provenance().sameElementsAs(binding);
-    }
-
-    @Override
-    public BindingId madeFrom(BindingId binding) {
-        return elements.provenance().madeFrom(binding);
+    public BindingId predecessorOf(BindingId binding, ElementQuestion question) {
+        return elements.provenance().predecessorOf(binding, question);
     }
 
     /**

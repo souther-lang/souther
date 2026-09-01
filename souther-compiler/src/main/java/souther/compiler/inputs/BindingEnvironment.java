@@ -44,11 +44,15 @@ public interface BindingEnvironment {
     /** The container an operation handed {@code binding} an element of, or null where none did. */
     Core containerOf(BindingId binding);
 
-    /** The binding whose elements {@code binding}'s are, or null where none is recorded. */
-    BindingId sameElementsAs(BindingId binding);
-
-    /** The binding {@code binding}'s elements were made from, or null where none is recorded. */
-    BindingId madeFrom(BindingId binding);
+    /**
+     * The binding a walk asking {@code question} may go on to from {@code binding}, or null where
+     * this question is not entitled to one and where nothing was recorded.
+     *
+     * <p>The edge itself does not come back. What one licenses depends on what is being asked, and a
+     * walk that held an edge would be answering that for itself beside the one place that answers it
+     * ({@link souther.compiler.check.ElementProvenance#predecessorOf}).
+     */
+    BindingId predecessorOf(BindingId binding, ElementQuestion question);
 
     /**
      * Whether an operation the language defines the meaning of is left standing in this tree.

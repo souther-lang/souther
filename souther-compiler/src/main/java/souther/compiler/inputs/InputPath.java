@@ -49,53 +49,12 @@ import souther.compiler.types.BindingId;
 public final class InputPath {
 
     private final Symbols symbols;
-    private final Lineage asked;
+    private final ElementQuestion asked;
     private final BindingTrail trail = new BindingTrail();
 
-    private InputPath(Symbols symbols, Lineage asked) {
+    private InputPath(Symbols symbols, ElementQuestion asked) {
         this.symbols = symbols;
         this.asked = asked;
-    }
-
-    /**
-     * Which question a walk is answering, which decides which steps it is entitled to take.
-     *
-     * <p>Two questions and not one flag. Where a value <em>is</em> and where a value <em>came
-     * from</em> are answered by the same steps until a binding holds what an operation made of
-     * another's elements: what is made from a position came from it and is not it, so a walk after
-     * the position an expression names stops there and a walk after provenance goes on.
-     */
-    private enum Lineage {
-
-        /** Which position an expression names, so that a rule about it is a rule about the values
-         *  a row writes there. */
-        NAMED_POSITION,
-
-        /** Which position a value came from, which is what says a rule was written at all where the
-         *  rule is about something made from those values. */
-        VALUE_ORIGIN;
-
-        /**
-         * The binding whose elements {@code binding}'s are, or null where this question is not
-         * entitled to one.
-         *
-         * <p>Answered per question and never by asking whether this is one of them. A question added
-         * here is one nobody has said what these edges mean for, and read as "not that one" it would
-         * follow whichever edges the last question happened to leave — the answer arrived at by not
-         * being asked.
-         */
-        BindingId predecessorOf(BindingId binding, BindingEnvironment names) {
-            BindingId same = names.sameElementsAs(binding);
-            if (same != null) {
-                return same;
-            }
-            return switch (this) {
-                // What is made from a position came from it and is not it, so the walk after which
-                // position an expression names stops where the elements stop being the same ones.
-                case NAMED_POSITION -> null;
-                case VALUE_ORIGIN -> names.madeFrom(binding);
-            };
-        }
     }
 
     /**
@@ -118,7 +77,7 @@ public final class InputPath {
      * nothing here can name.
      */
     public static PathResolution of(Core e, BindingEnvironment names, Symbols symbols) {
-        return new InputPath(symbols, Lineage.NAMED_POSITION).named(e, names);
+        return new InputPath(symbols, ElementQuestion.NAMED_POSITION).named(e, names);
     }
 
     /**
@@ -135,7 +94,7 @@ public final class InputPath {
      * follow.
      */
     public static PathResolution cameFrom(Core e, BindingEnvironment names, Symbols symbols) {
-        return new InputPath(symbols, Lineage.VALUE_ORIGIN).named(e, names);
+        return new InputPath(symbols, ElementQuestion.VALUE_ORIGIN).named(e, names);
     }
 
     /**
@@ -148,7 +107,7 @@ public final class InputPath {
      */
     public static PathResolution elementAt(BindingId binding, BindingEnvironment names,
                                            Symbols symbols) {
-        return new InputPath(symbols, Lineage.NAMED_POSITION).elementOf(binding, names);
+        return new InputPath(symbols, ElementQuestion.NAMED_POSITION).elementOf(binding, names);
     }
 
     private PathResolution named(Core e, BindingEnvironment names) {
@@ -273,7 +232,7 @@ public final class InputPath {
             // Through a binding an expansion wrote, where the operation it removed answered the
             // elements it was given. The operation is gone from this tree, so what says so was
             // written where it still stood.
-            BindingId same = asked.predecessorOf(r.binding(), names);
+            BindingId same = names.predecessorOf(r.binding(), asked);
             if (same != null) {
                 return trail.through(r.binding(), () -> containerPath(
                         new Core.Read(r.name(), same, r.type(), r.pos()), names));
