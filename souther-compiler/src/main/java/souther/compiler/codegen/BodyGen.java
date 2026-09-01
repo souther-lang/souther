@@ -1,6 +1,5 @@
 package souther.compiler.codegen;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
@@ -13,6 +12,7 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Ordering;
@@ -1799,9 +1799,8 @@ final class BodyGen {
          */
         private void emitComparison(Comparison comparison) {
             switch (comparison.claim()) {
-                case ComparisonClaim.Cut _ -> ordered(comparison.at());
-                case ComparisonClaim.Singled(boolean holdsAtTheValue) ->
-                        same(comparison.at(), holdsAtTheValue);
+                case ComparisonClaim.Cut cut -> ordered(comparison.at(), cut);
+                case ComparisonClaim.Singled singled -> same(comparison.at(), singled);
             }
         }
 
@@ -1812,7 +1811,7 @@ final class BodyGen {
          * {@code StageN < StageN} fall past every ordering arm into an equality test, and an order
          * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
          */
-        private void ordered(Core.Binary bin) {
+        private void ordered(Core.Binary bin, ComparisonClaim.Cut cut) {
             // Whether the two may be compared at all was settled by BinaryElaborator against the
             // types as written; this reads what they open to.
             Ordering how = Ordering.ofComparison(bin.left().type(), bin.right().type(), symbols);
@@ -1824,7 +1823,7 @@ final class BodyGen {
                 case Ordering.Longs _ -> {
                     unwrapNewtypeValue(genExpr(bin.left()));
                     unwrapNewtypeValue(genExpr(bin.right()));
-                    comparisonMaterialize(bin.op(), true);
+                    comparisonMaterialize(cut.statedRelation(), true);
                 }
                 case Ordering.Natural _ -> {
                     // These all carry as Comparable — String, BigDecimal, LocalDate, LocalTime,
@@ -1835,7 +1834,7 @@ final class BodyGen {
                     unwrapNewtypeValue(genExpr(bin.right()));
                     code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
                     code.iconst_0();
-                    comparisonMaterialize(bin.op(), false);
+                    comparisonMaterialize(cut.statedRelation(), false);
                 }
                 case Ordering.Places places -> {
                     // An enumeration compares by where its case stands in the declaration, which
@@ -1845,7 +1844,7 @@ final class BodyGen {
                     code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
                     unwrapNewtypeValue(genExpr(bin.right()));
                     code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
-                    comparisonMaterialize(bin.op(), false);
+                    comparisonMaterialize(cut.statedRelation(), false);
                 }
                 // `opened` answers for the value the operands are opened to, which is never one a
                 // name is still worn over.
@@ -1857,19 +1856,17 @@ final class BodyGen {
         /**
          * A value singled out, tested for sameness.
          *
-         * <p>{@code holdsAtTheValue} says which of the two classes the comparison selects, so a
-         * comparison met where the value is not the one named is this test inverted.
+         * <p>{@link ComparisonClaim.Singled#holdsAtTheValue} says which of the two classes the
+         * comparison selects, so a comparison met where the value is not the one named is this test
+         * inverted.
          */
-        private void same(Core.Binary bin, boolean holdsAtTheValue) {
+        private void same(Core.Binary bin, ComparisonClaim.Singled singled) {
             Type lt = unwrapNewtypeValue(genExpr(bin.left()));
             unwrapNewtypeValue(genExpr(bin.right()));
             if (lt == Type.STRING) {
                 code.invokevirtual(CD_String, "equals",
                         MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
-                if (!holdsAtTheValue) {
-                    code.iconst_1();
-                    code.ixor();
-                }
+                selecting(singled);
                 return;
             }
             if (isReference(lt)) {
@@ -1877,13 +1874,19 @@ final class BodyGen {
                 // amount ignores its scale, a collection asks that of what it holds (spec
                 // §equality). A pair of Decimals takes the overload for them.
                 emitValueEquals(code, lt == Type.DECIMAL);
-                if (!holdsAtTheValue) {
-                    code.iconst_1();
-                    code.ixor();
-                }
+                selecting(singled);
                 return;
             }
-            comparisonMaterialize(bin.op(), lt == Type.INT);
+            comparisonMaterialize(singled.statedRelation(), lt == Type.INT);
+        }
+
+        /** Turns a test of sameness into the class the comparison selects: the one it is met at is
+         *  what was emitted, and the other is its denial. */
+        private void selecting(ComparisonClaim.Singled singled) {
+            if (!singled.holdsAtTheValue()) {
+                code.iconst_1();
+                code.ixor();
+            }
         }
 
         /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise
@@ -1916,12 +1919,24 @@ final class BodyGen {
             };
         }
 
-        private void comparisonMaterialize(BinOp op, boolean isLong) {
+        /**
+         * The relation the comparison states, brought to a boolean on the stack.
+         *
+         * <p>Taken as what the comparison states rather than as the operator it was written with:
+         * the claim is what a reader holds below a recognition, and reaching back for the operator
+         * to emit it would be the last step of an emission asking the question the recognition
+         * settled.
+         *
+         * <p>The {@code default} is here though the six arms are the whole of {@link Rel} today. An
+         * enum switch statement is not held to covering its type, so a relation added later would
+         * emit no branch at all and leave the stack to the {@code iconst_0} below.
+         */
+        private void comparisonMaterialize(Rel rel, boolean isLong) {
             Label t = code.newLabel();
             Label end = code.newLabel();
             if (isLong) {
                 code.lcmp();
-                switch (op) {
+                switch (rel) {
                     case LT -> code.iflt(t);
                     case LE -> code.ifle(t);
                     case GT -> code.ifgt(t);
@@ -1931,7 +1946,7 @@ final class BodyGen {
                     default -> throw new IllegalStateException();
                 }
             } else {
-                switch (op) {
+                switch (rel) {
                     case LT -> code.if_icmplt(t);
                     case LE -> code.if_icmple(t);
                     case GT -> code.if_icmpgt(t);

@@ -114,8 +114,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ConstEval.arith",
                     "what the operator computes of two constants"),
             new Held("souther.compiler.check.ConstEval.compare", "the same for a comparison"),
-            new Held("souther.compiler.codegen.BodyGen.comparisonMaterialize",
-                    "which instructions an operator is emitted as"),
             new Held("souther.compiler.check.Conditions.comparison",
                     "builds a node from the operator it is handed"),
             new Held("souther.compiler.reading.Meetings.run",
@@ -287,10 +285,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.codegen.BodyGen.lambda$binary$0",
                     "names the operator in what it says of a comparison that placed nothing"),
             new Held("souther.compiler.codegen.BodyGen.ordered",
-                    "which instructions an order is emitted as, and which order the checker"
-                            + " admitted where it turns out there is none"),
-            new Held("souther.compiler.codegen.BodyGen.same",
-                    "which instructions a value singled out is tested with"),
+                    "names the operator in what it says of an order the checker admitted and the"
+                            + " types turn out not to have: the emission itself is off what the"
+                            + " comparison stated"),
 
             // And whether it compares at all, asked of the one place that says so.
             new Held("souther.compiler.check.InvariantChecker.arithmeticOf",
