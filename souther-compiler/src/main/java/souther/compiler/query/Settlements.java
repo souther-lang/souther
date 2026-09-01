@@ -207,7 +207,7 @@ public record Settlements(List<OfferItem> requested,
         // searches alone, such a row came back undetermined at every item, so nothing it stands at
         // could ever make another row redundant.
         Map<String, OneBehavior> reading = new LinkedHashMap<>();
-        Set<String> carriers = new LinkedHashSet<>(offering.rows().keySet());
+        Set<String> carriers = new LinkedHashSet<>(offering.rowsByBehavior().keySet());
         carriers.addAll(offering.searched().keySet());
         for (String behavior : carriers) {
             Adequacy.Filling filling = offering.searched().get(behavior);
@@ -245,7 +245,7 @@ public record Settlements(List<OfferItem> requested,
             });
         }
         List<OfferItem> items = List.copyOf(new LinkedHashSet<>(requested));
-        offering.rows().forEach((behavior, rows) -> {
+        offering.rowsByBehavior().forEach((behavior, rows) -> {
             OneBehavior read = reading.get(behavior);
             for (OfferedRow row : rows) {
                 // Read once for the row and asked of every item. What a row is — where its values
@@ -384,14 +384,14 @@ public record Settlements(List<OfferItem> requested,
                 if (filling.composed().discharge().at(each)
                         instanceof souther.compiler.partition.ClassDisposition.Built built) {
                     out.put(new OfferItem.AClass(each),
-                            RowKey.of(behavior, filling.composed().rowFor(built.row())));
+                            RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
                 }
             }
             for (Generator.ArmOwed each : arms) {
                 if (filling.composed().discharge().at(each)
                         instanceof souther.compiler.partition.ArmDisposition.Built built) {
                     out.put(new OfferItem.AnArm(each),
-                            RowKey.of(behavior, filling.composed().rowFor(built.row())));
+                            RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
                 }
             }
             return out;

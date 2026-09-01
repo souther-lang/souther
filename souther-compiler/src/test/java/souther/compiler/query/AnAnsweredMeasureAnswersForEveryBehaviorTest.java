@@ -111,10 +111,10 @@ class AnAnsweredMeasureAnswersForEveryBehaviorTest {
     void theReadingOfTheRowsAnswersForEveryBehaviorToo() {
         Compilation compilation = measured();
         Map<String, Adequacy.RowReading> rows =
-                compilation.db().ask(new Adequacy.Rows("example.shapes")).value();
+                compilation.db().ask(new Adequacy.RowReadings("example.shapes")).value();
         assertNotNull(rows, "the rows were read for or against");
         for (String behavior : declared(compilation)) {
-            assertNotNull(Adequacy.Rows.readingFor(rows, behavior),
+            assertNotNull(Adequacy.RowReadings.readingFor(rows, behavior),
                     () -> "how far the rows of " + behavior + " were read");
         }
     }

@@ -469,7 +469,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         // And the count says so rather than saying zero. `0` is a behavior whose rows were read and
         // numbered none of them, which is the other half of the pair this test is about: written
         // as a number, "nothing was read" and "nothing was written" were the same byte.
-        assertEquals(java.util.OptionalInt.empty(), reported.rows(), "nothing was read");
+        assertEquals(java.util.OptionalInt.empty(), reported.rowCount(), "nothing was read");
         assertTrue(AdequacyReport.of(compilation).modules().get(0).incompleteness().stream()
                         .anyMatch(gap -> gap.code() == Incompleteness.Code.OBSERVATION_ABSENT),
                 "and there may well have been something to read");
@@ -707,7 +707,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     private static Map<String, Adequacy.RowReading> readings() {
         Compilation compilation = compiled();
         return compilation.db()
-                .ask(new Adequacy.Rows(compilation.modules().get(0))).value();
+                .ask(new Adequacy.RowReadings(compilation.modules().get(0))).value();
     }
 
     private static Map<String, Adequacy.BranchEvidence> branches() {

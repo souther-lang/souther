@@ -46,21 +46,22 @@ public final class GeneratedRows {
      *
      * <p>Two answers because callers ask two different things of this. What to print is the text; a
      * block of notes and no rows is worth printing, and {@code souther examples --generate} prints
-     * it. Whether there is a row to write is {@link #rows}, and it is the generator's answer rather
-     * than something read off the text: an editor offering "write the rows this does not cover"
+     * it. Whether there is a row to write is {@link #rowCount}, and it is the generator's answer
+     * rather than something read off the text: an editor offering "write the rows this does not cover"
      * asked whether the block was blank, and a block that holds only the reason nothing was composed
      * is not blank — so the action appeared, a person took it, and what it wrote into their source
      * was a comment (issue #955).
      *
-     * @param rows how many rows the block offers, which is what a caller that is about to change
-     *             somebody's source has to ask
+     * @param rowCount how many rows the block offers, which is what a caller that is about to
+     *                 change somebody's source has to ask
      */
-    public record Block(String text, int rows) {
+    public record Block(String text, int rowCount) {
 
         public Block {
             java.util.Objects.requireNonNull(text, "a block is of something, even if it is empty");
-            if (rows < 0) {
-                throw new IllegalArgumentException("a block offering fewer than no rows: " + rows);
+            if (rowCount < 0) {
+                throw new IllegalArgumentException(
+                        "a block offering fewer than no rows: " + rowCount);
             }
         }
     }
@@ -97,7 +98,7 @@ public final class GeneratedRows {
             }
             Block one = of(offering, WrittenEnsures.of(compilation.db(), name), names);
             out.append(one.text());
-            rows += one.rows();
+            rows += one.rowCount();
         }
         return new Block(out.toString(), rows);
     }
@@ -356,7 +357,7 @@ public final class GeneratedRows {
      */
     private static Map<String, List<Offered>> named(Offering offering) {
         Map<String, List<Offered>> out = new LinkedHashMap<>();
-        offering.rows().forEach((behavior, rows) -> {
+        offering.rowsByBehavior().forEach((behavior, rows) -> {
             Map<Integer, String> arms = armNames(offering.searched().get(behavior));
             List<Offered> here = new ArrayList<>();
             for (souther.compiler.query.OfferedRow row : rows) {

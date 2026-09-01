@@ -200,7 +200,7 @@ public final class SoutherExamples {
         // them is this run's. A row driven from here reaches an implementation that answers out of
         // the caller's world, which the compile's own rows do not, and an arrangement is how a run
         // is run rather than what it is held to.
-        return new BoundExamples(module, asked.rows(),
+        return new BoundExamples(module, asked.forExamples(),
                 JvmExampleRuns.evaluating(compilation.jvmProgramImages(), asked,
                         new CallerCrossingDeadlines(JvmDeadlines.workerStackFromSettings())
                                 .forThisCompile(asked.policy().outerTimeout()),

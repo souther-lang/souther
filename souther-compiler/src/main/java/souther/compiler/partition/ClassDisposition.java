@@ -14,10 +14,10 @@ package souther.compiler.partition;
 public sealed interface ClassDisposition {
 
     /** A row was composed for it, which is this row. */
-    record Built(RowId row) implements ClassDisposition {
+    record Built(RowId rowId) implements ClassDisposition {
 
         public Built {
-            if (row == null) {
+            if (rowId == null) {
                 throw new IllegalArgumentException("a class a row was composed for names the row");
             }
         }

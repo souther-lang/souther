@@ -952,7 +952,7 @@ public final class Generator {
         int classesLeft = 0;
         for (int i = 0; i < owed.size(); i++) {
             int[] at = owed.get(i);
-            if (composed.size() >= budget.rows()) {
+            if (composed.size() >= budget.rowLimit()) {
                 classesLeft = owed.size() - i;
                 for (int cut = i; cut < owed.size(); cut++) {
                     Axis axis = axes.get(owed.get(cut)[0]);
@@ -1021,7 +1021,7 @@ public final class Generator {
                 continue;
             }
             for (WhereToLook place : whereToLookFor(probe, read, cells, axes)) {
-                if (composed.size() >= budget.rows()) {
+                if (composed.size() >= budget.rowLimit()) {
                     cutOff.add(probe);
                     break;
                 }

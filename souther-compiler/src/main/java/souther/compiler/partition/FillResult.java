@@ -62,12 +62,12 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
         Set<RowId> answered = new LinkedHashSet<>();
         for (ClassDisposition each : discharge.classes().values()) {
             if (each instanceof ClassDisposition.Built built) {
-                answered.add(built.row());
+                answered.add(built.rowId());
             }
         }
         for (ArmDisposition each : discharge.arms().values()) {
             if (each instanceof ArmDisposition.Built built) {
-                answered.add(built.row());
+                answered.add(built.rowId());
             }
         }
         if (!answered.equals(composed.keySet())) {
@@ -141,14 +141,14 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
         List<Generator.Purpose> purposes = new ArrayList<>();
         for (Generator.ClassOwed owed : plan.classesOwed()) {
             if (discharge.at(owed) instanceof ClassDisposition.Built built
-                    && built.row().equals(id)) {
+                    && built.rowId().equals(id)) {
                 purposes.add(new Generator.Purpose.ForAClass(owed.at(), owed.classId(),
                         Generator.labelOf(plan.subject(), owed)));
             }
         }
         for (Generator.ArmOwed owed : plan.armsOwed()) {
             if (discharge.at(owed) instanceof ArmDisposition.Built built
-                    && built.row().equals(id)) {
+                    && built.rowId().equals(id)) {
                 purposes.add(new Generator.Purpose.ForAnArm(owed.probe()));
             }
         }

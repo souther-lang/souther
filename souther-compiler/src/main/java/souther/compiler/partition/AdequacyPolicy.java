@@ -54,7 +54,7 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
     /**
      * What composing rows for one behavior may spend.
      *
-     * @param rows         how many rows one call will write. Past this the output stops being
+     * @param rowLimit     how many rows one call will write. Past this the output stops being
      *                     something a person reads and pastes, and what the search did not reach is
      *                     written down rather than left absent
      * @param cellsPerGroup how many ways of choosing an outcome from each factor a group may have
@@ -73,13 +73,13 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
      *                     group there is — a single choice — is offered, which is what a limit of
      *                     one should admit
      */
-    public record OfTheGeneration(int rows, int cellsPerGroup) {
+    public record OfTheGeneration(int rowLimit, int cellsPerGroup) {
 
         public OfTheGeneration {
-            if (rows < 1) {
+            if (rowLimit < 1) {
                 throw new IllegalArgumentException(
                         "a generation writes at least one row, so a limit below one bounds nothing: "
-                                + rows);
+                                + rowLimit);
             }
             if (cellsPerGroup < 1) {
                 throw new IllegalArgumentException(

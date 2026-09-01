@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.WhatTheRowsReached;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -110,9 +111,10 @@ class APositionUnderANameIsReachedThroughItTest {
     void aRowWrittenUnderTheNameIsReadBackThroughIt() {
         Compilation compilation = measured(FLAGS);
 
-        assertEquals(Set.of("true"), evidence(compilation, "wrapped").axes().get(0).rows().covered());
-        assertEquals(evidence(compilation, "bare").axes().get(0).rows().covered(),
-                evidence(compilation, "wrapped").axes().get(0).rows().covered(),
+        assertEquals(Set.of("true"),
+                WhatTheRowsReached.at(evidence(compilation, "wrapped").axes().get(0)).covered());
+        assertEquals(WhatTheRowsReached.at(evidence(compilation, "bare").axes().get(0)).covered(),
+                WhatTheRowsReached.at(evidence(compilation, "wrapped").axes().get(0)).covered(),
                 "a name is how a value is written, not what it is");
     }
 

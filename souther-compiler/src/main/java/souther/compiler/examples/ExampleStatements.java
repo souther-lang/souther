@@ -72,10 +72,11 @@ public final class ExampleStatements {
      * what that behavior owes, and the scope they are read in. Not its execution — the values are
      * built and compared in the reading that holds this, so nothing crosses a loader.
      */
-    public record Declaring(souther.compiler.check.Prepared.Examples rows, Symbols symbols,
-                            FieldTypes fields, Map<String, Hir.FnDef> values) {}
+    public record Declaring(souther.compiler.check.Prepared.ForExamples forExamples,
+                            Symbols symbols, FieldTypes fields,
+                            Map<String, Hir.FnDef> values) {}
 
-    private final souther.compiler.check.Prepared.Examples module;
+    private final souther.compiler.check.Prepared.ForExamples module;
     private final Symbols symbols;
     /** What a value of a declaration is made of, as the check settled it. */
     private final FieldTypes fields;
@@ -104,7 +105,7 @@ public final class ExampleStatements {
     /** The modules whose behaviors this one writes stand-ins for, by name. */
     private final Map<String, Declaring> declaring;
 
-    private ExampleStatements(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+    private ExampleStatements(souther.compiler.check.Prepared.ForExamples module, Symbols symbols,
                               FieldTypes fields,
                               Map<ValueName.Behavior, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
@@ -140,7 +141,7 @@ public final class ExampleStatements {
      * states no input, so there is no relation to hold its answer to.
      *
      * <p>{@code fk} is a table that answers for something — every caller reaches it through the one
-     * place that says which those are ({@code Prepared.Examples.tablesThatAnswer}) — so the behavior
+     * place that says which those are ({@code Prepared.ForExamples.tablesThatAnswer}) — so the behavior
      * it stands in for is there to be asked about.
      */
     static List<Diagnostic> notKept(EnsuresChecks ensures, Hir.Fake fk, BuiltTable built) {
@@ -209,7 +210,7 @@ public final class ExampleStatements {
             return this::newFixtureReader;
         }
         Declaring elsewhere = declaring.get(declaredIn);
-        return () -> new FixtureReader(elsewhere.rows(), elsewhere.symbols(),
+        return () -> new FixtureReader(elsewhere.forExamples(), elsewhere.symbols(),
                 elsewhere.fields(), elsewhere.values(), loader);
     }
 
@@ -231,7 +232,7 @@ public final class ExampleStatements {
      * itself dispatches with ({@link Standins#answering}) — the same rule, not a second reading of it — and
      * the two answers are compared as the written values they are built into.
      */
-    public static Readings disagreements(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+    public static Readings disagreements(souther.compiler.check.Prepared.ForExamples module, Symbols symbols,
                                          FieldTypes fields,
                                          Map<ValueName.Behavior, Sig> sigs,
                                          Map<String, ClassFileImage> classes,
@@ -239,7 +240,7 @@ public final class ExampleStatements {
                                          Deadline deadline, EvaluationPolicy policy,
                                          Map<ValueName.Behavior, Contract> contracts,
                                          Map<String, Declaring> declaring) {
-        if (module.rows().isEmpty() && module.fakes().isEmpty()) {
+        if (module.examples().isEmpty() && module.fakes().isEmpty()) {
             return Readings.NONE;
         }
         // Which behaviors have both a stand-in and rows of their own, read off the text. Two written
@@ -285,7 +286,7 @@ public final class ExampleStatements {
      * in.
      */
     public static List<souther.compiler.check.Prepared.FakeTable> tablesBuiltIn(
-            souther.compiler.check.Prepared.Examples module, Map<ValueName.Behavior, Sig> sigs,
+            souther.compiler.check.Prepared.ForExamples module, Map<ValueName.Behavior, Sig> sigs,
             SourceId sourceId) {
         List<souther.compiler.check.Prepared.FakeTable> building = new ArrayList<>();
         module.tablesThatAnswer().forEach((dependency, table) -> {
@@ -325,7 +326,7 @@ public final class ExampleStatements {
      * on. Which of them a fake is written in is what its own place says, so the two are never out of
      * step.
      */
-    public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+    public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.ForExamples module, Symbols symbols,
                                               FieldTypes fields,
                                               Map<ValueName.Behavior, Sig> sigs,
                                               Map<String, ClassFileImage> classes,
@@ -555,7 +556,7 @@ public final class ExampleStatements {
      * would put a table written for a borrowed dependency against the rows of a namesake here.
      */
     private static Set<ValueName.Behavior> contested(
-            souther.compiler.check.Prepared.Examples module, Map<ValueName.Behavior, Sig> sigs,
+            souther.compiler.check.Prepared.ForExamples module, Map<ValueName.Behavior, Sig> sigs,
             Map<String, Declaring> declaring) {
         Set<ValueName.Behavior> both = new LinkedHashSet<>();
         for (ValueName.Behavior each : module.standsInFor()) {
@@ -582,17 +583,17 @@ public final class ExampleStatements {
      * says so by having nothing rather than by taking silence for agreement.
      */
     private static List<Hir.Example> recordedFor(ValueName.Behavior behavior,
-                                                 souther.compiler.check.Prepared.Examples module,
+                                                 souther.compiler.check.Prepared.ForExamples module,
                                                  Map<String, Declaring> declaring) {
-        souther.compiler.check.Prepared.Examples where = behavior.module().equals(module.name())
+        souther.compiler.check.Prepared.ForExamples where = behavior.module().equals(module.name())
                 ? module
                 : declaring.containsKey(behavior.module())
-                        ? declaring.get(behavior.module()).rows() : null;
+                        ? declaring.get(behavior.module()).forExamples() : null;
         if (where == null) {
             return List.of();
         }
         List<Hir.Example> blocks = new ArrayList<>();
-        for (souther.compiler.check.Prepared.Rows block : where.rows()) {
+        for (souther.compiler.check.Prepared.Example block : where.examples()) {
             if (block.target().equals(behavior.name())) {
                 blocks.add(block.read());
             }
@@ -623,8 +624,8 @@ public final class ExampleStatements {
         // disagree with. What that second table is, is its own question.
         module.tablesThatAnswer().forEach((dependency, table) ->
                 againstFake(table.read(), recorded, found, timedOut));
-        for (int i = 0; i < module.rows().size(); i++) {
-            againstWiths(module.rows().get(i).read(), recorded, found);
+        for (int i = 0; i < module.examples().size(); i++) {
+            againstWiths(module.examples().get(i).read(), recorded, found);
         }
         return new Readings(found, timedOut);
     }

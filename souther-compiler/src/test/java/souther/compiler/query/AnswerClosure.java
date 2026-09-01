@@ -625,10 +625,14 @@ final class AnswerClosure {
                 // what the JDK ships: two caches the language fills in and opens to nobody. The
                 // walk asks, is refused, and says so — reading it as one of the JDK's own maps
                 // instead would read it for its entries and never meet what it answers with.
-                fieldOfAJdkParent("Adequacy$Rows", "", "keySet", Scenario.VALID_CORPUS),
-                fieldOfAJdkParent("Adequacy$Rows", "", "keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
-                fieldOfAJdkParent("Adequacy$Rows", "", "values", Scenario.VALID_CORPUS),
-                fieldOfAJdkParent("Adequacy$Rows", "", "values", Scenario.A_MODULE_SPOKEN_ABOUT),
+                fieldOfAJdkParent(Adequacy.RowReadings.class, "", "keySet",
+                        Scenario.VALID_CORPUS),
+                fieldOfAJdkParent(Adequacy.RowReadings.class, "", "keySet",
+                        Scenario.A_MODULE_SPOKEN_ABOUT),
+                fieldOfAJdkParent(Adequacy.RowReadings.class, "", "values",
+                        Scenario.VALID_CORPUS),
+                fieldOfAJdkParent(Adequacy.RowReadings.class, "", "values",
+                        Scenario.A_MODULE_SPOKEN_ABOUT),
                 // The correspondence between a row's operand and the method it runs as, keyed on
                 // the very nodes this answer hands out — so what it means it means inside the
                 // answer that holds it, and what the answer says it is leaves it out on purpose.
@@ -644,10 +648,15 @@ final class AnswerClosure {
                 operandMethodsOf("IdentityHashMap#table", Scenario.A_MODULE_SPOKEN_ABOUT));
     }
 
-    /** A field of what the JDK ships, under something of this compiler's own that holds it. */
-    private static String fieldOfAJdkParent(String question, String under, String named,
+    /**
+     * A field of what the JDK ships, under something of this compiler's own that holds it.
+     *
+     * <p>The question is named by its class rather than spelled, so that renaming it is a thing
+     * javac says here. Spelled, this would go on standing above a question nothing asks any more.
+     */
+    private static String fieldOfAJdkParent(Class<?> question, String under, String named,
                                             Scenario scenario) {
-        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + question + ".Answer#value" + under
+        return "A_FIELD_THAT_WOULD_NOT_OPEN " + question.getName() + ".Answer#value" + under
                 + ".AbstractMap#" + named + " in " + scenario;
     }
 

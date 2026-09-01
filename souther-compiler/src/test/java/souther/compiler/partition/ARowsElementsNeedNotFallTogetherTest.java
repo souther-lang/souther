@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.WhatTheRowsReached;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -75,7 +76,7 @@ class ARowsElementsNeedNotFallTogetherTest {
     @Test
     void aListOfOneCoversTheClassItsElementIsIn() {
         assertEquals(Set.of("people[*].age/18 <= x"),
-                elementAxis("[ Person { age = 20 } ]", "1").rows().covered());
+                WhatTheRowsReached.at(elementAxis("[ Person { age = 20 } ]", "1")).covered());
     }
 
     /**
@@ -89,8 +90,9 @@ class ARowsElementsNeedNotFallTogetherTest {
         PartitionEvidence.AxisCoverage axis =
                 elementAxis("[ Person { age = 20 }, Person { age = 10 } ]", "1");
 
-        assertEquals(Set.of("people[*].age/18 <= x", "people[*].age/x < 18"), axis.rows().covered());
-        assertEquals(0, axis.rows().unclassifiedRows(),
+        assertEquals(Set.of("people[*].age/18 <= x", "people[*].age/x < 18"),
+                WhatTheRowsReached.at(axis).covered());
+        assertEquals(0, WhatTheRowsReached.at(axis).unclassifiedRows(),
                 "and the row said where it was, at every element it wrote");
     }
 
@@ -105,10 +107,10 @@ class ARowsElementsNeedNotFallTogetherTest {
     void anEmptyListIsReadAndCoversNothing() {
         PartitionEvidence.AxisCoverage axis = elementAxis("[ ]", "0");
 
-        assertEquals(Set.of(), axis.rows().covered());
-        assertEquals(0, axis.rows().unclassifiedRows(),
+        assertEquals(Set.of(), WhatTheRowsReached.at(axis).covered());
+        assertEquals(0, WhatTheRowsReached.at(axis).unclassifiedRows(),
                 "the row was read: it wrote no element, which is not a value nothing could read");
-        assertTrue(axis.classes().size() > axis.rows().covered().size(),
+        assertTrue(axis.classes().size() > WhatTheRowsReached.at(axis).covered().size(),
                 "so the classes it did not reach are owed a row");
     }
 }

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.WhatTheRowsReached;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
@@ -187,7 +188,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
 
-        assertEquals(java.util.Set.of("Approved"), evidence.axes().get(0).rows().covered());
+        assertEquals(java.util.Set.of("Approved"),
+                WhatTheRowsReached.at(evidence.axes().get(0)).covered());
     }
 
     /** The observation of {@code value} written under {@code names}, outermost first. */

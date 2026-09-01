@@ -2,6 +2,9 @@ package souther.compiler.execute;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Prepared;
+import souther.compiler.observe.Observations;
+
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -98,9 +101,12 @@ class NothingCrossingTheExecutionBoundaryIsTheMachinesTest {
         List<String> reached = everythingCrossing(ProgramExecution.class).stream()
                 .map(each -> each.type().getName()).toList();
 
-        assertTrue(reached.contains("souther.compiler.check.Prepared$Examples"),
-                () -> "no prepared rows in " + reached);
-        assertTrue(reached.contains("souther.compiler.observe.Observations"),
+        // Named by their classes and not by how they are spelled: a rename would otherwise leave
+        // this looking for a type nothing declares any more, and a walk that had stopped reaching
+        // it would read the same as the rename.
+        assertTrue(reached.contains(Prepared.ForExamples.class.getName()),
+                () -> "no prepared examples in " + reached);
+        assertTrue(reached.contains(Observations.class.getName()),
                 () -> "no observations in " + reached);
         assertTrue(reached.size() > 30, () -> "the walk reached only " + reached.size());
     }

@@ -72,8 +72,8 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
         // `Composition.composed` is written for, and the one a reader off the searches cannot read.
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.carried", true), Map.of(), declared);
-        assertFalse(composed.rows().isEmpty(), "the row is offered under its carrier: " + composed);
-        for (String carrier : composed.rows().keySet()) {
+        assertFalse(composed.rowsByBehavior().isEmpty(), "the row is offered under its carrier: " + composed);
+        for (String carrier : composed.rowsByBehavior().keySet()) {
             assertFalse(composed.searched().containsKey(carrier),
                     "and nothing was searched for that behavior: " + carrier);
         }

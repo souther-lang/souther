@@ -161,7 +161,7 @@ public final class DoesNotComeBack {
 
     /** Every row of {@code target}, evaluated — its fixtures built, the behavior applied. */
     static Predicate<Deadline.Work> everyRowOf(String target) {
-        return w -> w instanceof Deadline.Work.Row row && row.target().equals(target);
+        return w -> w instanceof Deadline.Work.WholeRow row && row.target().equals(target);
     }
 
     /** The statements every row of {@code target} is read from, with nothing applied. */
@@ -185,7 +185,7 @@ public final class DoesNotComeBack {
     static Predicate<Deadline.Work> everythingAboutTheRowNamed(String name) {
         RowIdentity named = new RowIdentity.Named(name);
         return w -> switch (w) {
-            case Deadline.Work.Row row -> named.equals(row.identity());
+            case Deadline.Work.WholeRow row -> named.equals(row.identity());
             case Deadline.Work.Fixtures f -> named.equals(f.identity());
             default -> false;
         };

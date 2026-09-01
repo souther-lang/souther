@@ -130,11 +130,11 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
         BoundExamples examples = bound();
 
         assertThrows(IllegalArgumentException.class,
-                () -> examples.row("findTodo", "a todo that was never written"));
+                () -> examples.rowKey("findTodo", "a todo that was never written"));
         assertEquals(0, RowKey.class.getConstructors().length,
                 "nothing outside the package makes one");
 
-        RowKey stored = examples.row("findTodo", "a todo that is stored");
+        RowKey stored = examples.rowKey("findTodo", "a todo that is stored");
         assertTrue(stored.is(examples.rows().get(0)));
         assertFalse(stored.is(examples.rows().get(1)));
     }
@@ -142,7 +142,7 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
     /** A key of one enumeration is refused by another rather than quietly matching nothing. */
     @Test
     void aKeyOfOneBindingIsRefusedByAnothersRows() throws Exception {
-        RowKey stored = bound().row("findTodo", "a todo that is stored");
+        RowKey stored = bound().rowKey("findTodo", "a todo that is stored");
         RecordedRow elsewhere = bound().rows().get(0);
 
         assertThrows(IllegalArgumentException.class, () -> stored.is(elsewhere));

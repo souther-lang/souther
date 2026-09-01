@@ -39,9 +39,10 @@ public interface Deadline {
         /** Where the writing this is about starts, which says which source it is in. */
         SourcePos pos();
 
-        /** A row of an {@code example}, evaluated: its fixtures built, the behavior applied, the
-         * result compared. {@code identity} is what the row names itself. */
-        record Row(String target, SourcePos pos, RowIdentity identity) implements Work {}
+        /** A row of an {@code example}, evaluated whole: its fixtures built, the behavior applied,
+         * the result compared. What {@link Fixtures} is the first third of, and named for the
+         * difference. {@code identity} is what the row names itself. */
+        record WholeRow(String target, SourcePos pos, RowIdentity identity) implements Work {}
 
         /** The statements a row is read from, with no behavior applied. */
         record Fixtures(String target, SourcePos pos, RowIdentity identity) implements Work {}

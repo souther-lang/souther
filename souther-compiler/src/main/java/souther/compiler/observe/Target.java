@@ -174,11 +174,12 @@ public sealed interface Target {
      * behavior, they were one identity and the second was dropped wherever these are kept one per
      * identity (issue #996).
      */
-    record OfRow(RowRef row) implements Target {
+    record OfRow(RowRef rowRef) implements Target {
 
         @Override
         public String subject() {
-            return row.behavior() + "/" + row.source().value() + "/" + row.identity().shown();
+            return rowRef.behavior() + "/" + rowRef.source().value() + "/"
+                    + rowRef.identity().shown();
         }
 
         @Override
@@ -186,7 +187,7 @@ public sealed interface Target {
             // The row decides which of its parts a reader needs; the caller decides what its file
             // is called. Written the other way round, a renderer would be choosing how much of an
             // identity to show, which is the row's to say.
-            return row.shown(names.nameOf(row.source()));
+            return rowRef.shown(names.nameOf(rowRef.source()));
         }
 
         @Override
@@ -204,7 +205,7 @@ public sealed interface Target {
 
         @Override
         public java.util.Optional<String> onlyBehavior() {
-            return java.util.Optional.of(row.behavior());
+            return java.util.Optional.of(rowRef.behavior());
         }
     }
 

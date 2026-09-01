@@ -189,7 +189,7 @@ class AGroupTooWideToWalkSaysSoTest {
 
 
     private static AdequacyPolicy.OfTheGeneration atMost(int cells) {
-        return new AdequacyPolicy.OfTheGeneration(Budgets.generation().rows(), cells);
+        return new AdequacyPolicy.OfTheGeneration(Budgets.generation().rowLimit(), cells);
     }
 
     /**

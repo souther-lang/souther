@@ -126,7 +126,7 @@ class EveryRowWrittenIsARowThatCrossesTest {
         int rows = 0;
         for (String module : compilation.modules()) {
             Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
-            for (Prepared.Rows block : prepared.forExamples().rows()) {
+            for (Prepared.Example block : prepared.forExamples().examples()) {
                 rows += block.read().rows().size();
             }
         }

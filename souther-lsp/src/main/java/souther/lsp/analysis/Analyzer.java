@@ -593,14 +593,14 @@ public final class Analyzer {
         // source that did not answer as one holding no rows, so a behavior whose file could not be
         // evaluated drew the same lens as one nobody has exampled — and drew none (issue #996).
         Map<String, Adequacy.RowReading> readings =
-                compilation.db().ask(new Adequacy.Rows(module)).value();
+                compilation.db().ask(new Adequacy.RowReadings(module)).value();
         if (readings == null) {
             // The compile did not get as far as the shapes, so there is nothing to draw a lens
             // from. Not a reading that found no rows, which is what an editor would show as one.
             return null;
         }
         List<souther.compiler.observe.RowOutcome> read =
-                Adequacy.Rows.readingFor(readings, behavior).measured().made()
+                Adequacy.RowReadings.readingFor(readings, behavior).measured().made()
                         .map(Adequacy.Observed::rows).orElse(null);
         if (read == null || read.isEmpty()) {
             // No numbers to show: either nobody has written a row here, or nothing read the ones
@@ -926,7 +926,7 @@ public final class Analyzer {
                 souther.compiler.report.GeneratedRows.of(compilation, offer.module(),
                         offer.behavior(), true,
                         souther.compiler.diag.SourceNameResolver.identity());
-        if (block.rows() == 0) {
+        if (block.rowCount() == 0) {
             return null;
         }
         // Inserted at the end of the document. Where rows belong is the author's choice — this

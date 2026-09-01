@@ -832,9 +832,9 @@ public final class Output {
      * behavior, because which behaviors it wrote rows for is exactly what could not be read.
      *
      * <p>What is here are the rows as they were read and the reasons a reading fell short, and
-     * nothing made of either. What a measurement makes of them is {@link Adequacy.Rows}, which is
-     * asked only where a build measures; what a behavior owes is a fact about the model, and an
-     * output holding a checked program reads it whether or not anything was measured.
+     * nothing made of either. What a measurement makes of them is {@link Adequacy.RowReadings},
+     * which is asked only where a build measures; what a behavior owes is a fact about the model,
+     * and an output holding a checked program reads it whether or not anything was measured.
      */
     public record RowsRead(String name) implements Key<RowsRead.Of> {
 
@@ -1057,8 +1057,8 @@ public final class Output {
                 }
                 return;
             }
-            for (souther.compiler.check.Prepared.Rows block
-                    : prepared.value().forExamplesWrittenIn(sourceId).rows()) {
+            for (souther.compiler.check.Prepared.Example block
+                    : prepared.value().forExamplesWrittenIn(sourceId).examples()) {
                 souther.compiler.ast.Hir.Example written = block.read();
                 List<ReadRow> mine = into.computeIfAbsent(written.target(),
                         _ -> new ArrayList<>());
@@ -1254,7 +1254,7 @@ public final class Output {
             if (asked == null) {
                 return Answer.absent();   // nothing here can have its examples evaluated yet
             }
-            if (asked.rowsWrittenIn(sourceId).rows().isEmpty()) {
+            if (asked.forExamplesWrittenIn(sourceId).examples().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
             List<Report> reports = new ArrayList<>(alreadyDeclared(db, name, sourceId));
