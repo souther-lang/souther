@@ -20,10 +20,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * extend both enums with the same name and the translation goes on quietly, having decided nothing.
  *
  * <p>The rule this stands for is that this pass does not infer one closed representation from
- * another one's spelling. What is checked is stricter: the word {@code valueOf(} does not appear in
- * the pass at all. That catches the spelling written straight, the same call with the name held in
- * a variable first, and {@code Enum.valueOf(BinOp.class, ...)}, and it costs nothing today, because
- * translating by name was the only thing this pass used the word for.
+ * another one's spelling. What is checked is stricter: the word {@code valueOf} does not appear in
+ * the pass at all. The word and not a call written a particular way — a call is one of the shapes
+ * the word comes in, beside {@code valueOf (x)}, beside {@code BinOp::valueOf} handed to something
+ * that applies it, and beside {@code Enum.valueOf(BinOp.class, ...)}. Each of those is the same
+ * thing asked for, and a check that named the shape in front of it would be one the next shape
+ * walks past. It costs nothing today, because translating by name was the only thing this pass used
+ * the word for.
  *
  * <p>Being stricter than the rule, it can refuse something the rule allows —
  * {@code Denotations.valueOf(BindingId)}, next door in this package, is a lookup and no crossing at
@@ -41,7 +44,7 @@ class NothingCrossesThisBoundaryByItsSpellingTest {
         assertTrue(Files.isRegularFile(RESOLVE), () -> "no " + RESOLVE.toAbsolutePath());
         String text = Files.readString(RESOLVE);
 
-        assertEquals(0, occurrences(text, "valueOf("),
+        assertEquals(0, occurrences(text, "valueOf"),
                 "a closed vocabulary crosses this boundary in a switch that names both sides, so"
                         + " that adding to what may be written stops the compile until somebody says"
                         + " what it denotes; a name the two sides happen to share says nothing about"

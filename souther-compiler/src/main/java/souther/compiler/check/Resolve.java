@@ -1108,7 +1108,7 @@ public final class Resolve {
     }
 
     /**
-     * Which kind of primitive Raw a written one reads, in the vocabulary below this boundary.
+     * Which kind of primitive Raw a parsed kind denotes, in the vocabulary below this boundary.
      *
      * <p>The parsed tree and what this pass answers hold the kinds as separate types, so crossing
      * between them is a decision and this is where it is made. Written out on both sides rather
