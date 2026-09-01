@@ -711,24 +711,58 @@ final class Term {
         }
 
         /**
-         * The operator over its two operands.
+         * The operator over its two operands, in the order written.
          *
-         * <p>Six comparisons are three: {@code >} is {@code <} the other way round, and {@code >=}
-         * and {@code <=} are the denials of the other two. So two clauses comparing the same two
-         * terms are one term however the author reached for it, which matters wherever the
-         * comparison is not the whole condition — only there can the denial not be carried by the
-         * polarity instead.
+         * <p>Knows nothing about comparisons and refuses one. What a comparison of two values comes
+         * to is decided from what it placed and reaches here as a statement
+         * ({@link #comparison}); an operator arriving here is what is left, which is arithmetic,
+         * a join of two conditions, or a concatenation. Answered here as well, the six ways to
+         * compare two values would be read a second time out of the operator, below the point where
+         * what they state was already settled.
          */
         Term operator(BinOp op, Term left, Term right) {
-            return switch (op) {
-                case EQ -> of(Shape.EQ, null, List.of(left, right));
-                case NE -> not(of(Shape.EQ, null, List.of(left, right)));
-                case LT -> of(Shape.OP, BinOp.LT, List.of(left, right));
-                case GT -> of(Shape.OP, BinOp.LT, List.of(right, left));
-                case GE -> not(of(Shape.OP, BinOp.LT, List.of(left, right)));
-                case LE -> not(of(Shape.OP, BinOp.LT, List.of(right, left)));
-                default -> of(Shape.OP, op, List.of(left, right));
-            };
+            if (op.compares()) {
+                throw new IllegalArgumentException(
+                        "what a comparison names is decided from what it placed: " + op);
+            }
+            return of(Shape.OP, op, List.of(left, right));
+        }
+
+        /**
+         * The term {@code canonical} names.
+         *
+         * <p>Two clauses comparing the same two terms are one term however the author reached for
+         * the comparison, which matters wherever the comparison is not the whole condition — only
+         * there can the denial not be carried by the polarity instead. What each spelling states is
+         * the claim's answer, and this says what a term for each of the three is.
+         */
+        Term comparison(CanonicalComparison<Term> canonical) {
+            return canonical.expressedAs(asTerms);
+        }
+
+        private final AsTerms asTerms = new AsTerms();
+
+        /** Which term each of the three canonical statements is. */
+        private final class AsTerms implements CanonicalComparison.Expression<Term, Term> {
+
+            /** Whose two parts are unordered, because which side of an equality a value was written
+             *  on says nothing about it ({@link Shape#EQ}). */
+            @Override
+            public Term theSameValue(Term left, Term right) {
+                return of(Shape.EQ, null, List.of(left, right));
+            }
+
+            /** The one order the terms are written in, so a comparison written the other way round
+             *  is the same term with its two operands exchanged. */
+            @Override
+            public Term below(Term left, Term right) {
+                return of(Shape.OP, BinOp.LT, List.of(left, right));
+            }
+
+            @Override
+            public Term denied(Term statement) {
+                return not(statement);
+            }
         }
 
         Term list(List<Term> elements) {

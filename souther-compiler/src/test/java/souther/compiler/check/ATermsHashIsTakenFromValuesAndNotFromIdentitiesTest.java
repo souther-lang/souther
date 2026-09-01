@@ -124,7 +124,8 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                 interned.unit(data),
                 interned.negated(one),
                 interned.not(interned.written(true)),
-                interned.operator(BinOp.EQ, one, one),
+                interned.comparison(
+                        ((ComparisonClaim) ComparisonPlacement.of(BinOp.EQ)).canonical(one, one)),
                 interned.operator(BinOp.ADD, one, one),
                 interned.list(List.of(one)),
                 interned.tuple(List.of(one)),

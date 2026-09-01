@@ -56,6 +56,22 @@ public sealed interface ComparisonClaim
      */
     Rel statedRelation();
 
+    /**
+     * The canonical statement this claim makes of {@code left} and {@code right}.
+     *
+     * <p>The one derivation from what a comparison placed to what it states. Two facts decide it
+     * and neither decides the other: which class the value named is in says which side of the
+     * canonical order each of the two goes on, and whether the comparison holds at the value says
+     * whether the canonical statement is denied. The two shapes read the second fact opposite ways,
+     * because an order does not hold at the value it names and an equality does.
+     *
+     * <p>Here rather than wherever a reader wants it, because a reader that pairs the two facts
+     * itself remembers the pairing in as many places as there are readers, and one that pairs them
+     * the other way round states the comparison that holds exactly where this one does not while
+     * answering every one of its own questions consistently.
+     */
+    <A> CanonicalComparison<A> canonical(A left, A right);
+
     @Override
     ComparisonClaim turned();
 
@@ -109,6 +125,18 @@ public sealed interface ComparisonClaim
         @Override
         public Cut denied() {
             return new Cut(valueBelongs, !holdsAtTheValue);
+        }
+
+        /** The canonical order, taken with the value named above the other — which is the side the
+         *  canonical form wants it on, so a cut that puts it below states the same thing with its
+         *  sides exchanged — and denied where the comparison holds at the value, because the
+         *  canonical order does not hold there. */
+        @Override
+        public <A> CanonicalComparison<A> canonical(A left, A right) {
+            boolean exchanged = valueBelongs == Towards.BELOW;
+            CanonicalComparison<A> order = CanonicalComparison.below(
+                    exchanged ? right : left, exchanged ? left : right);
+            return holdsAtTheValue ? order.denied() : order;
         }
 
         /** Which way the values it admits lie, and whether the number named is one of them: the
@@ -177,6 +205,16 @@ public sealed interface ComparisonClaim
         @Override
         public Singled denied() {
             return new Singled(!holdsAtTheValue);
+        }
+
+        /** The two sides being the same value, denied where the comparison does not hold at the
+         *  value it names — which is the canonical equality read the way round it is stated, and
+         *  the opposite of how an order reads that same fact. Nothing is exchanged: an equality
+         *  orders nothing, so neither side is the one the canonical form wants. */
+        @Override
+        public <A> CanonicalComparison<A> canonical(A left, A right) {
+            CanonicalComparison<A> equality = CanonicalComparison.theSameValue(left, right);
+            return holdsAtTheValue ? equality : equality.denied();
         }
 
         /** An equality or its denial, which is the whole of what singling a value out states. */
