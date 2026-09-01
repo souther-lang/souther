@@ -905,10 +905,25 @@ final class Coverages {
         return composed(a) >= composed(b);
     }
 
-    /** Whether the search of this reading's own region built a row to offer. */
+    /**
+     * How much the search of this reading's own region came back with.
+     *
+     * <p>A row read back where it was built for outranks one nothing could place, which outranks
+     * none at all. The first is grounds that a row can be written at the point and the second is
+     * not, so a reading holding the second cannot be the one that is kept where another holds the
+     * first — the grounds are read off whichever reading this keeps, and taking them from the
+     * reading that happened to come first would lose them to the order two call sites of one helper
+     * were walked in.
+     */
     private static int composed(ItemAssessment item) {
-        return item instanceof ItemAssessment.Owed owed
-                && owed.attempt() instanceof ItemAssessment.Attempt.Built ? 1 : 0;
+        if (!(item instanceof ItemAssessment.Owed owed)) {
+            return 0;
+        }
+        return switch (owed.attempt()) {
+            case ItemAssessment.Attempt.Certified _ -> 2;
+            case ItemAssessment.Attempt.Unverified _ -> 1;
+            case null, default -> 0;
+        };
     }
 
     private static int rank(ItemAssessment item) {
