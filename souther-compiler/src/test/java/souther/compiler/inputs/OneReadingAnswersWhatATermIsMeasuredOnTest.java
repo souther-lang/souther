@@ -42,6 +42,9 @@ class OneReadingAnswersWhatATermIsMeasuredOnTest {
     /** Where both orders of a term are worked out from a type. */
     private static final String DERIVES = "souther.compiler.inputs.TermOrdering";
 
+    /** The pair itself, whose constructor and factory are the two ways to make one. */
+    private static final String MADE = "souther.compiler.inputs.TermOrders";
+
     /**
      * Read off what was compiled rather than off the sources.
      *
@@ -77,6 +80,54 @@ class OneReadingAnswersWhatATermIsMeasuredOnTest {
         assertEquals(Set.of("souther.compiler.inputs.ReadQuantities"), derives,
                 "a term's orders are worked out where the reading that resolved its subject is,"
                         + " and a second place is a reader answering for a reading of its own");
+    }
+
+    /**
+     * And one place makes one, which is not the same question.
+     *
+     * <p>Closing the constructor says who may make a pair and the count above says who works one
+     * out from a type; neither says how many places inside this package put two carriers together.
+     * A line added to any class here would be a pair about no reading, made where the compiler has
+     * nothing left to refuse, and both other checks would stay green.
+     *
+     * <p>Both ways in are counted, and separately: a constructor and a factory that calls it are
+     * two things a reader can reach for, and a check that added them up would go on passing while
+     * one moved to the other.
+     */
+    @Test
+    void oneProductionPlaceMakesAPair() throws IOException {
+        Set<String> built = new TreeSet<>();
+        Set<String> named = new TreeSet<>();
+        for (Path each : classes()) {
+            ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
+            String from = nestOf(model.thisClass().asInternalName().replace('/', '.'));
+            if (from.equals(MADE)) {
+                continue;   // what the pair does with itself is its own business
+            }
+            for (var method : model.methods()) {
+                CodeModel code = method.code().orElse(null);
+                if (code == null) {
+                    continue;
+                }
+                for (var element : code) {
+                    if (!(element instanceof InvokeInstruction call)
+                            || !call.owner().asInternalName().replace('/', '.').equals(MADE)) {
+                        continue;
+                    }
+                    if (call.name().stringValue().equals("<init>")) {
+                        built.add(from);
+                    } else if (call.typeSymbol().returnType().displayName().equals("TermOrders")) {
+                        named.add(from);
+                    }
+                }
+            }
+        }
+
+        assertEquals(Set.of(DERIVES), built,
+                "a pair of orders is put together where a term's orders are worked out, and"
+                        + " a second place is a pair about no reading in particular");
+        assertEquals(Set.of(DERIVES), named,
+                "and the same of the factory beside the constructor");
     }
 
     /** The nest a class belongs to: a lambda written inside a reader is that reader. */

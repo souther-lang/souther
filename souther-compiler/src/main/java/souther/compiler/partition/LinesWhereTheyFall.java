@@ -195,7 +195,7 @@ public final class LinesWhereTheyFall {
      */
     private static LineDrawn lineAt(LineDrawn line, NumericTerm moves, NumericTerm to,
                                     Quantities quantities) {
-        Cutting cut = line.cuts().movedTo(moves, to, quantities.ordersOf(to), quantities);
+        Cutting cut = line.cuts().movedTo(moves, to, quantities);
         if (cut == null) {
             throw new IllegalStateException(
                     "`" + moves + "` was filed at " + to + " and the line on it cannot be taken "

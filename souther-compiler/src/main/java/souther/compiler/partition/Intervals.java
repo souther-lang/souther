@@ -5,6 +5,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
@@ -185,14 +186,17 @@ final class Intervals {
      * not the second: five is not what is written at the position, a string of five characters is,
      * and which values carry a count is asked of what builds them rather than settled here.
      *
-     * <p>The orders are handed in and not worked out from the type. Which order a number is
-     * measured on follows from where the reading has its term standing, and a caller deriving it
-     * from whatever type reached it would be answering about wherever that type came from.
+     * <p>The orders are asked of the reading rather than handed in beside the term. Which order a
+     * number is measured on follows from where the reading has that term standing, so a caller
+     * working it out from whatever type reached it would be answering about wherever that type came
+     * from — and a caller handing the answer over is handing two arguments that can be about two
+     * terms.
      */
     static List<PartitionClass> classesOf(List<Band> runs, NumericTerm.FromOnePosition of,
-                                          Type type, TermOrders orders,
+                                          Type type, Quantities reading,
                                           ReadingPolicy policy,
                                           Symbols symbols, Endpoint min, Endpoint max) {
+        TermOrders orders = reading.ordersOf(of);
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
         Carrier carrier = orders.answered();

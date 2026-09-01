@@ -494,7 +494,7 @@ public final class Partitions {
             // sides of a value the behavior treats alike.
             mine.forEach(each -> account.measured(each, id));
             return made(out, at, behavior, term,
-                    classesOf(axis, () -> singledClasses(points, term, type, orders, domain,
+                    classesOf(axis, () -> singledClasses(points, term, type, reading, domain,
                             symbols)),
                     mergedPoints(cutsOf(axis), points, carrier),
                     partedOf(axis), narrowedOf(axis),
@@ -541,7 +541,7 @@ public final class Partitions {
                 classesOf(axis, () -> Intervals.classesOf(
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
-                        term, type, orders, policy, symbols,
+                        term, type, reading, policy, symbols,
                         within == null ? null : within.min(),
                         within == null ? null : within.max())),
                 mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier),
@@ -839,8 +839,12 @@ public final class Partitions {
      */
     private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
                                                        NumericTerm.FromOnePosition term, Type type,
-                                                       TermOrders orders,
+                                                       Quantities reading,
                                                        NumericDomain.Bounds within, Symbols symbols) {
+        // Asked here rather than handed in beside the term. A term and a pair of orders are two
+        // arguments, and two arguments can be about two terms; the reading is one argument that
+        // answers about whichever term it is asked.
+        TermOrders orders = reading.ordersOf(term);
         Carrier carrier = orders.answered();
         List<Place> values = new ArrayList<>();
         for (GuardThresholds.Guards.Singled each : points) {
