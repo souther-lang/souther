@@ -48,6 +48,16 @@ public final class Comparisons {
      * <p>Yes or no, and the same walk. What being the same value means — a set is its elements, a
      * decimal is the amount it stands for, a value is of its type first — is answered for both
      * questions in one place, so a fake's table picks the row an execution picks.
+     *
+     * <p>Of two values that are there, which is what makes yes or no the whole of the answer. An
+     * observation that stopped, or that could not read what it met, is not a value: what stands
+     * where it stopped may be anything, including the value it is being compared with. Answered
+     * "no" for one, this would hand a caller the difference between two values where what it has is
+     * the absence of one — and the caller would go on to whatever it does when two values differ.
+     * That is what {@link #verdict} says as {@code UNREADABLE} rather than as a value that did not
+     * hold, and it is refused here because a yes-or-no has nowhere to say it.
+     *
+     * @throws IllegalArgumentException if either side is not a value that is there in full
      */
     public static boolean same(ObservedValue left, ObservedValue right, ValueTypes types,
                                Position position) {
@@ -55,6 +65,19 @@ public final class Comparisons {
             throw new IllegalArgumentException("two values are the same or not, read with what the"
                     + " declarations say and where they stand");
         }
+        // Held to what admits a value that is there and not to what a snapshot keeps. Whether two
+        // values are the same does not depend on how much of one may be carried somewhere, and a
+        // large whole value refused here would put that question inside this one.
+        refuseWhatIsNotThere(left, "the first");
+        refuseWhatIsNotThere(right, "the second");
         return new ValueMatch(types).same(left, right, position);
+    }
+
+    private static void refuseWhatIsNotThere(ObservedValue value, String which) {
+        Incompleteness.Code stopped = Limits.UNBOUNDED.stoppedBy(value);
+        if (stopped != null) {
+            throw new IllegalArgumentException(which + " of two values being compared is not a"
+                    + " value: " + stopped);
+        }
     }
 }

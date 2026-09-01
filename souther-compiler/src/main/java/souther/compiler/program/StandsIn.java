@@ -2,6 +2,7 @@ package souther.compiler.program;
 
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.Comparisons;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.StoodIn;
@@ -77,15 +78,27 @@ public final class StandsIn {
      * <p>The stand-in's own rule and not a lookup a reader arranges: the first entry stating these
      * arguments answers, and where none states them the answer is whatever the stand-in was written
      * to answer for the rest — which may be nothing.
+     *
+     * <p>Asked with values that are there. What a stand-in answers is decided by comparing what it
+     * was asked against what its entries state, and an observation that stopped is not something an
+     * entry either states or does not — read as "not this entry", it would walk on to what the
+     * stand-in answers for arguments it does not list, which is the fake answering one thing here
+     * and another where the row ran. A reader has the value it handed the import; one that could not
+     * read its own value has not got as far as asking this.
+     *
+     * @throws IllegalArgumentException if any of {@code asked} is not a value that is there in full
      */
     public Answer answering(List<ObservedValue> asked) {
         if (asked == null) {
             throw new IllegalArgumentException("a stand-in is asked what it answers for values");
         }
-        for (ObservedValue value : asked) {
-            if (value == null) {
-                throw new IllegalArgumentException("a stand-in is asked what it answers for"
-                        + " values");
+        // All of them before any of them is compared. The comparison refuses one of these too, but
+        // it is reached for an argument only where an earlier one matched — so which entries the
+        // stand-in happens to hold would decide whether asking it is refused at all.
+        for (int i = 0; i < asked.size(); i++) {
+            if (asked.get(i) == null || !Limits.UNBOUNDED.admits(asked.get(i))) {
+                throw new IllegalArgumentException("`" + dependency() + "` is asked what it answers"
+                        + " for values, and the one at " + i + " is not there in full");
             }
         }
         if (asked.size() != arguments.size()) {

@@ -1,20 +1,25 @@
 package souther.program.api;
 
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Verdict;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
 import souther.compiler.program.CheckedRow;
 import souther.compiler.program.StandsIn;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A stand-in answers an output what it answered the run.
@@ -131,6 +136,39 @@ class AStandInAnswersWhatItAnsweredWhenTheRowRanTest {
     }
 
     /**
+     * A stand-in is asked with values, and an observation that stopped is not one.
+     *
+     * <p>The table below answers everything it does not list, so a value it cannot be compared with
+     * would fall through to that: an argument whose observation stopped would be answered {@code 99}
+     * on the strength of not being {@code 1} or {@code 2}, when what stands where it stopped may be
+     * either of them. That is the fake answering one thing here and another where the row ran, which
+     * is what carrying the table across was for.
+     *
+     * <p>Refused rather than answered, wherever it is: a value with nothing readable in it, one a
+     * limit stopped, and one whose field is either — the walk goes down, so the rule has to.
+     */
+    @Test
+    void aStandInIsAskedWithValuesThatAreThere() {
+        CheckedRow row = behavior(CheckedProgram.of(List.of(MODULE)), "rateOf").rows().get(0);
+        StandsIn standsIn = assertInstanceOf(CheckedRow.WithStandIns.class, row.statement())
+                .standsIn().get(0);
+
+        for (ObservedValue nothing : List.of(new ObservedValue.Unknown("nothing read it"),
+                new ObservedValue.Truncated(),
+                priceHolding(new ObservedValue.Unknown("nothing read it")),
+                priceHolding(new ObservedValue.Truncated()))) {
+            assertThrows(IllegalArgumentException.class, () -> standsIn.answering(List.of(nothing)),
+                    () -> "asked with " + nothing);
+        }
+
+        // And what it does answer for a value that is there, so that the refusal above is about the
+        // value rather than about everything this stand-in is asked.
+        assertEquals(new StandsIn.Answer.TheValue(
+                        newtype("Rate", new ObservedValue.Integer(99))),
+                standsIn.answering(List.of(price(7))));
+    }
+
+    /**
      * A table asked something it does not list, and does not answer for, states no answer.
      *
      * <p>The table's own rule and not the reader's. A stand-in that answered anything here would
@@ -226,14 +264,22 @@ class AStandInAnswersWhatItAnsweredWhenTheRowRanTest {
                 .standsIn().get(0);
     }
 
-    /** A price as an output would hand it over, which is what a newtype is written as. */
-    private static souther.compiler.observe.ObservedValue price(long value) {
-        java.util.Map<String, souther.compiler.observe.ObservedValue> fields =
-                souther.compiler.observe.ObservedValue.fields();
-        fields.put("value", new souther.compiler.observe.ObservedValue.Integer(value));
-        return new souther.compiler.observe.ObservedValue.Constructed(
-                souther.compiler.types.TypeSymbols.declared(
-                        new souther.compiler.types.TypeKey("demo", "Price")), fields);
+    /** A price as an output would hand it over. */
+    private static ObservedValue price(long value) {
+        return newtype("Price", new ObservedValue.Integer(value));
+    }
+
+    /** A price holding something an observation did not come back with. */
+    private static ObservedValue priceHolding(ObservedValue value) {
+        return newtype("Price", value);
+    }
+
+    /** A value under a name, which is the single field every newtype is written with. */
+    private static ObservedValue newtype(String data, ObservedValue value) {
+        Map<String, ObservedValue> fields = ObservedValue.fields();
+        fields.put("value", value);
+        return new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("demo", data)),
+                fields);
     }
 
     /** The rows of every behavior that depends on something, in the order they are written. */
