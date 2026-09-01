@@ -397,10 +397,10 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("obligations[].disposition",
                     List.of("$defs", "obligations", "items", "properties", "disposition"),
                     List.of(ObligationDisposition.class), dispositionWords(), Set.of()),
-            new Vocabulary("obligations[].notCountedBecause",
+            new Vocabulary("obligations[].undecidedAbout",
                     List.of("$defs", "obligations", "items", "properties",
-                            "notCountedBecause", "items"),
-                    List.of(ObligationDisposition.Reason.class), notCountedWords(), Set.of()),
+                            "undecidedAbout", "items"),
+                    List.of(ObligationDisposition.Uncertainty.class), undecidedWords(), Set.of()),
             new Vocabulary("obligations[].readings[].reason",
                     List.of("$defs", "obligations", "items",
                             "properties", "readings", "items", "properties", "reason"),
@@ -453,9 +453,7 @@ class EverySchemaWordIsAccountedForTest {
                 new ObligationDisposition.Undecided(
                         Set.of(ObligationDisposition.Uncertainty.COVERAGE)),
                 new ObligationDisposition.Undecided(
-                        Set.of(ObligationDisposition.Uncertainty.WRITABILITY)),
-                new ObligationDisposition.NotCounted(
-                        Set.of(ObligationDisposition.Reason.NOTHING_WAS_READ)));
+                        Set.of(ObligationDisposition.Uncertainty.WRITABILITY)));
     }
 
     /** Every kind of disposition is sampled above, so the words below are all the words there are. */
@@ -522,9 +520,9 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** The reasons an obligation leaves the count, likewise spelled by the writer. */
-    private static Set<String> notCountedWords() {
-        return Arrays.stream(ObligationDisposition.Reason.values())
+    /** The questions an obligation may be undecided about, likewise spelled by the writer. */
+    private static Set<String> undecidedWords() {
+        return Arrays.stream(ObligationDisposition.Uncertainty.values())
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }

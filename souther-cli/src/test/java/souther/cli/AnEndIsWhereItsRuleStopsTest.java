@@ -89,9 +89,11 @@ class AnEndIsWhereItsRuleStopsTest {
         //
         // Under the declarations, because that is whose the lines are: a `data` clause's line is
         // owed once for the module, and the body carrying the type is short of nothing on it.
-        assertTrue(report.contains("declarations   obligations 0/0"
-                        + "   (2 not measured: no row names this behavior)"),
+        assertTrue(report.contains("declarations   obligations 0/2"),
                 () -> "and the row inside each line is one somebody is owed:\n" + report);
+        assertTrue(report.contains("undecided whether a row is at the IN point value in 0 < value"
+                        + " (invariant Positive (positive)) — no row names this behavior"),
+                () -> "and why nobody could say whether it is written:\n" + report);
     }
 
     /**
