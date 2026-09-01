@@ -934,7 +934,7 @@ class EveryFindingHasAGenerationDispositionTest {
         return souther.compiler.partition.MeasuredInput.of("pick",
                 souther.compiler.inputs.InputDomain.of(List.of(), symbols,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES).reading(symbols),
-                List.of());
+                souther.compiler.partition.AxesATestWrote.asAMeasurement("pick", List.of()));
     }
 
     /**

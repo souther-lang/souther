@@ -30,12 +30,21 @@ import java.util.Map;
  */
 public final class InputClassifications {
 
-    /** Where each axis's value fell, for the axes that have classes. An axis the model only bounds
-     * has nothing to fall into and is left out. */
-    public static Map<AxisId, Classification> of(List<ObservedValue> inputs, BehaviorInputs where,
-                                                 List<Axis> axes) {
+    /**
+     * Where each axis's value fell, for the axes that have classes. An axis the model only bounds
+     * has nothing to fall into and is left out.
+     *
+     * <p>Takes the classes with the input they were measured at, and not a walk beside a list of
+     * them. Which position a value is written at is the walk's answer and which class it falls in
+     * is the axis's, and the two are only about one row where both came from one reading — two
+     * behaviors taking a parameter spelled the same way have an axis apiece at the same path, and
+     * placed through the wrong walk a row lands in classes nothing measured where it was read.
+     */
+    public static Map<AxisId, Classification> of(List<ObservedValue> inputs,
+                                                 MeasuredInput.MeasuredAxes axes) {
+        BehaviorInputs where = axes.subject().inputs();
         Map<AxisId, Classification> out = new LinkedHashMap<>();
-        for (Axis axis : axes) {
+        for (Axis axis : axes.axes()) {
             if (!axis.derivable()) {
                 continue;
             }

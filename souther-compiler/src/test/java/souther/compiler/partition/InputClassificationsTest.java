@@ -59,7 +59,12 @@ class InputClassificationsTest {
             }
             """;
 
-    private record Read(List<Axis> axes, BehaviorInputs inputs, List<RowOutcome> rows) {}
+    private record Read(MeasuredInput subject, List<RowOutcome> rows) {
+
+        MeasuredInput.MeasuredAxes axes() {
+            return subject.axes();
+        }
+    }
 
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -90,8 +95,7 @@ class InputClassificationsTest {
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        return new Read(partitioning.axes(),
-                new BehaviorInputs(parameters, sigs.get("submit").inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        return new Read(MeasuredInput.of("submit", read.reading(symbols), partitioning),
                 observed.rows());
     }
 
@@ -111,7 +115,7 @@ class InputClassificationsTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.axes());
 
         assertEquals(Classification.in("Domestic"), at(classes, "request.kind"));
         assertEquals(Classification.in("request.cost/0 <= x <= 100"),
@@ -127,7 +131,7 @@ class InputClassificationsTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.axes());
 
         assertEquals(Classification.in("Overseas"), at(classes, "request.kind"));
         assertEquals(Classification.in("request.cost/100 < x"),
@@ -144,7 +148,7 @@ class InputClassificationsTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.axes());
 
         assertTrue(classes.keySet().stream().noneMatch(a -> a.term().equals("request.memo")),
                 "a plain String is not divided, so there is no class to be in");
@@ -178,7 +182,7 @@ class InputClassificationsTest {
                 row.run());
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(damaged.inputs(), read.inputs(), read.axes());
+                InputClassifications.of(damaged.inputs(), read.axes());
 
         assertEquals(Classification.in("Domestic"), at(classes, "request.kind"),
                 "the readable field still answers");
@@ -198,7 +202,7 @@ class InputClassificationsTest {
         assertEquals(List.of(), row.inputs(), "the fixture never built");
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(row.inputs(), read.inputs(), read.axes());
+                InputClassifications.of(row.inputs(), read.axes());
 
         assertTrue(classes.values().stream().noneMatch(Classification::isClassified));
     }

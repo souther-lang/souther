@@ -134,7 +134,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     void twoClassesOfOneLocationWantingDifferentValuesComposeNoRow() {
         Partitions.Partitioning read = partitioningOf();
         MeasuredInput subject =
-                MeasuredInput.of("gate", readingOf(), read.axes());
+                MeasuredInput.of("gate", readingOf(), read);
 
         FillResult filled = Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY,
                 Budgets.generation());

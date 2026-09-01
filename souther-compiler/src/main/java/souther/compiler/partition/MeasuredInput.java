@@ -2,12 +2,16 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * One behavior's input as it was read, and where the model divides it.
@@ -22,6 +26,13 @@ import java.util.List;
  * orders and read back by another's walk. There is one value here, so there is nothing to put
  * together wrongly — and one place makes it, from one {@code (module, behavior)}.
  *
+ * <p><b>What a reader gets is a projection of this and never its parts.</b> Placing a row's values
+ * takes the walk and some of the classes, and looking for a row at a line takes the walk and that
+ * line: both are the walk beside something measured, which is exactly the pairing above. So a
+ * reader asks here for {@link MeasuredAxes} or a {@link BorderReading}, and neither can be made
+ * anywhere else — the classes a projection holds are this measurement's own, and the geometry a
+ * border reading holds is checked against this reading before it is one.
+ *
  * <p><b>The reading itself does not come through.</b> What is offered is the two questions a search
  * asks — where a value is written, and what a number there is measured on — and not a way of asking
  * the reading anything else. A construction plan's coordinate is spelled with the same
@@ -33,32 +44,39 @@ public final class MeasuredInput {
     private final String behavior;
     private final BehaviorInputs written;
     private final Quantities quantities;
-    private final List<Axis> axes;
+    private final Partitions.Partitioning divided;
 
     private MeasuredInput(String behavior, BehaviorInputs written, Quantities quantities,
-                          List<Axis> axes) {
+                          Partitions.Partitioning divided) {
         this.behavior = behavior;
         this.written = written;
         this.quantities = quantities;
-        this.axes = axes;
+        this.divided = divided;
     }
 
     /**
-     * The input {@code read} was made of, divided by {@code axes}.
+     * The input {@code read} was made of, divided by {@code divided}.
      *
      * <p>The one way to make one. What a row is written by and what its numbers are measured on are
-     * both taken from the reading rather than from the caller, and the axes are held to it: a
+     * both taken from the reading rather than from the caller, and the measurement is held to it: a
      * measure of a number the reading cannot answer for is a measure of another behavior's input,
      * whatever it is named after.
      *
+     * <p><b>The whole measurement and not a list of axes.</b> What a reader wants of it is several
+     * projections — every measure, the ones that divide their number into classes, the ones a
+     * search can derive a value at — and a caller handed one list works the others out beside this
+     * one. The lines are here for the same reason: a border is measured against this reading like
+     * an axis is, and taking one from a partitioning beside this would be the pairing this type
+     * exists to remove.
+     *
      * @param behavior what the rows are written for, which every axis agrees with
      */
-    public static MeasuredInput of(String behavior, InputReading read, List<Axis> axes) {
+    public static MeasuredInput of(String behavior, InputReading read,
+                                   Partitions.Partitioning divided) {
         if (behavior == null || behavior.isEmpty()) {
             throw new IllegalArgumentException("a row is written for a behavior with a name");
         }
-        List<Axis> divided = List.copyOf(axes);
-        for (Axis axis : divided) {
+        for (Axis axis : divided.axes()) {
             // An axis of another behavior, which is a subject assembled from two measurements. The
             // name would then be one of two answers rather than the subject's, and whichever
             // sentence read it would be right about one of them.
@@ -88,17 +106,17 @@ public final class MeasuredInput {
                 && behavior.equals(that.behavior)
                 && written.equals(that.written)
                 && quantities.equals(that.quantities)
-                && axes.equals(that.axes);
+                && divided.equals(that.divided);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(behavior, written, quantities, axes);
+        return java.util.Objects.hash(behavior, written, quantities, divided);
     }
 
     @Override
     public String toString() {
-        return "MeasuredInput[" + behavior + " over " + axes.size() + " axes]";
+        return "MeasuredInput[" + behavior + " over " + divided.axes().size() + " axes]";
     }
 
     /** What the rows are written for. */
@@ -110,9 +128,11 @@ public final class MeasuredInput {
      * The walk into what a row writes: what the inputs are called, what they are, and what those
      * names denote.
      *
-     * <p>For composing a value and for reading one back, and for neither of the two questions
-     * below. What a number at a position is measured on is the reading's
-     * ({@link #quantities()}), and where the model divides one is the measure's.
+     * <p>For composing a value and for neither of the two questions below. Reading a value back is
+     * done through a projection of this measurement ({@link MeasuredAxes}, {@link BorderReading}),
+     * because a walk is only ever right beside geometry measured against the same reading. What a
+     * number at a position is measured on is the reading's ({@link #quantities()}), and where the
+     * model divides one is the measure's.
      */
     public BehaviorInputs inputs() {
         return written;
@@ -123,9 +143,64 @@ public final class MeasuredInput {
         return quantities;
     }
 
-    /** Where the model divides its positions. */
-    public List<Axis> axes() {
-        return axes;
+    /**
+     * Where the model divides its positions, whole.
+     *
+     * <p>For a reader whose question is about the measurement rather than about a row: which
+     * positions came back with nothing to divide them by, which rules drew no line, how far the
+     * enumeration got. Placing a row's values is not one of those questions and goes through the
+     * projections below, which carry the walk the values are found by.
+     */
+    public Partitions.Partitioning partitioning() {
+        return divided;
+    }
+
+    /** Every measure of its positions, in the order the rules name the numbers. */
+    public MeasuredAxes axes() {
+        return new MeasuredAxes(this, divided.axes());
+    }
+
+    /**
+     * The measures that divide their number into classes, which is what a partition is counted
+     * over.
+     *
+     * <p>A measure may be a boundary and no partition, and such a number has no class for a value
+     * to fall in. Asked here rather than filtered by whoever wants them, so that what a partition
+     * is over is one answer.
+     */
+    public MeasuredAxes partitionAxes() {
+        return new MeasuredAxes(this, divided.partitionAxes());
+    }
+
+    /**
+     * This measurement's reading of one of its lines.
+     *
+     * <p>Where a border becomes something a row can be looked for at. What the line cuts is a
+     * number, and whether this input has that number is what makes the line one of this
+     * measurement's — so the terms are put to the reading here, exactly as an axis's are when the
+     * subject is made.
+     *
+     * <p><b>A quantity a transformation produced comes back through here.</b> Moving a quantity to
+     * another number ({@link BorderQuantity#movedTo}) is done on the quantity alone and carries
+     * nothing of where it was measured, so what comes out is geometry again rather than a reading
+     * of it. Asked for here, it is checked like any other.
+     */
+    public BorderReading at(Border border) {
+        BorderQuantity quantity = border.cut().of();
+        // Whose input the line cuts, which the quantity says of itself. A line of another behavior
+        // is not one of this measurement's however its numbers are spelled — two behaviors taking
+        // a parameter spelled the same way have a line apiece at the same term.
+        if (!quantity.behavior().equals(behavior)) {
+            throw new IllegalArgumentException("a line of " + quantity.behavior()
+                    + " in the measurement of " + behavior);
+        }
+        // And a number this reading takes nothing of, which is what a line drawn at another
+        // reading of a behavior of this name comes to. The reading refuses such a term, so asking
+        // it is the check.
+        for (NumericTerm term : quantity.terms()) {
+            quantities.ordersOf(term);
+        }
+        return new BorderReading(this, border);
     }
 
     /**
@@ -156,13 +231,13 @@ public final class MeasuredInput {
     /**
      * Whether the model divides this position into a class spelled this way.
      *
-     * <p>The one place the question is answered. A reader working it out from a partition's axes
-     * beside this one is a second reading of what a search's own universe is, and the two agree
-     * until either moves — which is how a case of an input came to be told there was no axis at its
-     * position by one reading while the search had classes there under the other.
+     * <p>The one place the question is answered, and asked of the whole measurement rather than of
+     * a projection of it. What a projection holds is what some reader is looking at; whether the
+     * model divides a position is what the model says, and answered from a projection the two
+     * would come back as one {@code false}.
      */
     public boolean divides(Generator.ClassOwed owed) {
-        for (Axis axis : axes) {
+        for (Axis axis : divided.axes()) {
             if (!axis.id().equals(owed.at())) {
                 continue;
             }
@@ -173,5 +248,151 @@ public final class MeasuredInput {
             }
         }
         return false;
+    }
+
+    /**
+     * Some of one measurement's axes, in an order, with the input they were measured at.
+     *
+     * <p>What a reader placing values actually holds. Every question about where a row sits takes
+     * the walk and the classes together, and this is the two as one value — so a reader cannot be
+     * handed classes from one measurement beside a walk from another.
+     *
+     * <p><b>Made only from a measurement, and narrowed only by what it already holds.</b> The ways
+     * to make one are {@link MeasuredInput#axes()}, {@link MeasuredInput#partitionAxes()} and the
+     * two below, all of which select from this measurement's own axes. There is no way to name an
+     * axis from outside and have it admitted, so a foreign axis has no road in and nothing has to
+     * check for one.
+     *
+     * <p><b>An order and not a set.</b> A search fixes its positions in an order and names a place
+     * in the assignment by the index, so two of these over the same axes in different orders are
+     * two different readings of the same row.
+     */
+    public static final class MeasuredAxes {
+
+        private final MeasuredInput subject;
+        private final List<Axis> axes;
+
+        private MeasuredAxes(MeasuredInput subject, List<Axis> axes) {
+            this.subject = subject;
+            this.axes = List.copyOf(axes);
+        }
+
+        /** The measurement these were measured at, and the walk a row of it is written by. */
+        public MeasuredInput subject() {
+            return subject;
+        }
+
+        /** The axes themselves, for a reader whose question is about the geometry alone. */
+        public List<Axis> axes() {
+            return axes;
+        }
+
+        public int size() {
+            return axes.size();
+        }
+
+        public Axis get(int at) {
+            return axes.get(at);
+        }
+
+        public boolean isEmpty() {
+            return axes.isEmpty();
+        }
+
+        /**
+         * The ones {@code admits} keeps, which is a narrowing and never a widening.
+         *
+         * <p>Takes what to keep rather than which to take. A caller naming axes would be handing
+         * identities in, and an identity handed in is one that came from somewhere — which is the
+         * road a foreign axis would take. A predicate names none.
+         */
+        MeasuredAxes where(Predicate<Axis> admits) {
+            List<Axis> kept = new ArrayList<>(axes.size());
+            for (Axis axis : axes) {
+                if (admits.test(axis)) {
+                    kept.add(axis);
+                }
+            }
+            return new MeasuredAxes(subject, kept);
+        }
+
+        /** The same axes in the order {@code by} puts them in. */
+        MeasuredAxes sortedBy(Comparator<Axis> by) {
+            List<Axis> ordered = new ArrayList<>(axes);
+            ordered.sort(by);
+            return new MeasuredAxes(subject, ordered);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof MeasuredAxes that
+                    && subject.equals(that.subject)
+                    && axes.equals(that.axes);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(subject, axes);
+        }
+
+        @Override
+        public String toString() {
+            return "MeasuredAxes[" + subject.behavior() + " over " + axes.size() + " axes]";
+        }
+    }
+
+    /**
+     * One measurement's reading of one of its lines.
+     *
+     * <p>The border beside the walk a row of this input is read by, for the reason
+     * {@link MeasuredAxes} is: whether a row stands at a line is asked of the row's values, and the
+     * values are found by walking. Two behaviors taking a parameter spelled the same way have a
+     * line apiece at the same spelling, and read through the wrong walk one of them answers about
+     * the other's rows.
+     *
+     * <p>Made only by {@link MeasuredInput#at}, which is where the line's numbers are put to the
+     * reading.
+     */
+    public static final class BorderReading {
+
+        private final MeasuredInput subject;
+        private final Border border;
+
+        private BorderReading(MeasuredInput subject, Border border) {
+            this.subject = subject;
+            this.border = border;
+        }
+
+        /** The measurement this line was read at. */
+        public MeasuredInput subject() {
+            return subject;
+        }
+
+        /** The line itself. */
+        public Border border() {
+            return border;
+        }
+
+        /** What it is a border of. */
+        public BorderQuantity quantity() {
+            return border.cut().of();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof BorderReading that
+                    && subject.equals(that.subject)
+                    && border.equals(that.border);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(subject, border);
+        }
+
+        @Override
+        public String toString() {
+            return "BorderReading[" + subject.behavior() + " at " + border.cut() + "]";
+        }
     }
 }

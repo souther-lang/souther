@@ -447,6 +447,15 @@ final class AnswerClosure {
             part("souther.compiler.partition.FillResult", "plan"),
             part("souther.compiler.partition.GenerationPlan", "subject")};
 
+    /** The measurement a subject holds, down to the axes of one position. A subject is a reading
+     *  and the whole of what was measured against it, so an axis is reached through the
+     *  measurement rather than off a list beside it. */
+    private static final TypePath.Step[] A_MEASUREMENT = {
+            part("souther.compiler.partition.MeasuredInput", "divided"),
+            part("souther.compiler.partition.Partitions$Partitioning", "measurements"),
+            HELD,
+            part("souther.compiler.partition.PositionMeasurements", "axes")};
+
     /** What a generation's subject carries to go on asking with, under the plan that holds it. */
     private static KnownDeclared generationReader(String offender, TypePath.Step... under) {
         return new KnownDeclared(
@@ -571,7 +580,7 @@ final class AnswerClosure {
                 part("souther.compiler.partition.Axis", "classes"), HELD,
                 part("souther.compiler.partition.PartitionClass", "denotes"));
         theMachineUnderALanguage(out, Q + "Adequacy$Generated",
-                then(A_SUBJECT, part("souther.compiler.partition.MeasuredInput", "axes"), HELD,
+                then(then(A_SUBJECT, A_MEASUREMENT), HELD,
                         part("souther.compiler.partition.Axis", "classes"), HELD,
                         part("souther.compiler.partition.PartitionClass", "denotes")));
         // The same ends, reached where an axis carries what the reading left the position.
@@ -580,7 +589,7 @@ final class AnswerClosure {
                 part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
                 part("souther.compiler.partition.Axis", "narrowed"));
         bothEndsOfARange(out, Q + "Adequacy$Generated",
-                then(A_SUBJECT, part("souther.compiler.partition.MeasuredInput", "axes"), HELD,
+                then(then(A_SUBJECT, A_MEASUREMENT), HELD,
                         part("souther.compiler.partition.Axis", "narrowed")));
         return List.copyOf(out);
     }

@@ -204,7 +204,6 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         List<String> names = new ArrayList<>();
         spec().params().forEach(each -> names.add(each.name()));
         return MeasuredInput.of(spec().name(), domain().reading(symbols()),
-                Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES)
-                        .axes());
+                Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES));
     }
 }

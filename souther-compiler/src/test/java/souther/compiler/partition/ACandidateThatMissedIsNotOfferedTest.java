@@ -174,7 +174,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     /** Every claim any combination of the model makes, so that one run answers all of them. */
     private static List<ControlClaim> everyClaimOf(Model model) {
         List<ControlClaim> out = new ArrayList<>();
-        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation()).groups()) {
+        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation()).groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection != null) {
@@ -230,7 +230,7 @@ class ACandidateThatMissedIsNotOfferedTest {
             assertNotNull(body, "the behavior under test has a body");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
                     Partitions.of(spec.name(), inputs, symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes()),
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
                             CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()), inputs,

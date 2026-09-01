@@ -89,13 +89,20 @@ public final class StandingAtAPoint {
     /**
      * The first of {@code rows} that stands there, or why none was found.
      *
+     * <p>Takes the line as one measurement's reading of it, so that the walk a row's values are
+     * found by is the one the line was measured against. Handed the quantity beside a walk, a
+     * caller could put a line drawn at one reading to the rows of a behavior read at another —
+     * which two behaviors taking a parameter spelled the same way is all it takes.
+     *
      * @param site which comparison a row has to have got an answer out of, for a rule that meeting
      *             takes more than standing at the level. Empty where standing there is the whole
      *             of it
      */
-    public static Met met(BorderQuantity quantity, BehaviorInputs where,
+    public static Met met(MeasuredInput.BorderReading line,
                           List<ObservedInputs> observed, Criterion criterion,
                           Optional<ComparisonOccurrence> site) {
+        BorderQuantity quantity = line.quantity();
+        BehaviorInputs where = line.subject().inputs();
         Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
         boolean unwatched = false;
         for (ObservedInputs one : observed) {

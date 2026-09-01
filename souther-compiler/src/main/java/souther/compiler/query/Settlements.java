@@ -2,8 +2,6 @@ package souther.compiler.query;
 
 import souther.compiler.check.Sig;
 import souther.compiler.execute.BoundaryValues;
-import souther.compiler.partition.Axis;
-import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
@@ -299,7 +297,8 @@ public record Settlements(List<OfferItem> requested,
      * positions are, what the model divides them into, and which lines this behavior's readings meet
      * — is the behavior's and does not move between the rows of one block.
      */
-    private record OneBehavior(String behavior, BehaviorInputs where, List<Axis> axes, Sig sig,
+    private record OneBehavior(String behavior,
+                               souther.compiler.partition.MeasuredInput subject, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
                                List<Generator.ClassOwed> classes, List<Generator.ArmOwed> arms,
                                Map<OfferItem.APointOfALine, List<AtAPoint>> reads) {
@@ -323,11 +322,13 @@ public record Settlements(List<OfferItem> requested,
                               souther.compiler.execute.RowTrials trials, boolean boundaries,
                               Map<BorderObligationPoint, Map<String, List<BorderAssessment>>>
                                       declared) {
-            // How a row of this behavior is read, asked of the store rather than taken off a
-            // search. A behavior that composed a row for a declaration's line and was asked
-            // nothing else has no search to take it from, and its rows are read like any other.
-            Adequacy.HowARowIsRead read = Adequacy.readingOf(db, module, behavior);
-            if (read == null) {
+            // What a row of this behavior is measured against, asked of the store rather than
+            // taken off a search. A behavior that composed a row for a declaration's line and was
+            // asked nothing else has no search to take it from, and its rows are read like any
+            // other.
+            souther.compiler.partition.MeasuredInput subject = Adequacy.subjectOf(db, module,
+                    behavior);
+            if (subject == null) {
                 return null;
             }
             Map<OfferItem.APointOfALine, List<AtAPoint>> reads = new LinkedHashMap<>();
@@ -365,7 +366,7 @@ public record Settlements(List<OfferItem> requested,
             });
             // What this behavior was asked to offer a row for, which is the search's answer and
             // is nothing where nothing asked it.
-            return new OneBehavior(behavior, read.where(), read.axes(), sig, building,
+            return new OneBehavior(behavior, subject, sig, building,
                     sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
                             : Adequacy.runningRowsOf(trials, behavior, sig),
                     filling == null ? List.of() : filling.composed().plan().classesOwed(),
@@ -442,7 +443,7 @@ public record Settlements(List<OfferItem> requested,
                 return undetermined(asRead);
             }
             Classification at =
-                    InputClassifications.of(asRead.values(), where, axes).get(owed.at());
+                    InputClassifications.of(asRead.values(), subject.axes()).get(owed.at());
             if (at == null) {
                 return new Settlement.DoesNotSettle();
             }
@@ -494,7 +495,7 @@ public record Settlements(List<OfferItem> requested,
             // met: a row standing on the line anywhere the behavior reads it is a row at the point.
             Settlement answer = new Settlement.DoesNotSettle();
             for (AtAPoint one : here) {
-                Settlement said = switch (StandingAtAPoint.met(one.line().cut().of(), where,
+                Settlement said = switch (StandingAtAPoint.met(subject.at(one.line()),
                         List.of(observed), one.criterion(),
                         one.line().origin().comparisonAt())) {
                     case StandingAtAPoint.Met.Reached _ -> new Settlement.Settles();

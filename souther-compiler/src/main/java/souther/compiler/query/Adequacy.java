@@ -821,7 +821,7 @@ public final class Adequacy {
         }
         InputDomain domain = domainOf(db.ask(new Inputs(module)).value(), spec);
         return souther.compiler.partition.MeasuredInput.of(spec.name(),
-                domain.reading(scope.value()), divided.axes());
+                domain.reading(scope.value()), divided);
     }
 
     /** What one behavior states about its answer, or nothing where it states none. A behavior
@@ -1324,6 +1324,14 @@ public final class Adequacy {
                         + " reading of its input, and no reading of what the model divides it"
                         + " into");
             }
+            // The measurement itself, which is the partitioning above beside the reading it was
+            // made against. What a row is placed by comes off it, so nothing here pairs a walk
+            // with classes.
+            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
+            if (subject == null) {
+                throw new IllegalStateException("`" + spec.name() + "` has a reading of what the"
+                        + " model divides it into, and no measurement of the input it divides");
+            }
             RowReading seen = RowReadings.readingFor(byTarget, spec.name());
             if (lines == null) {
                 // Nothing came back about this behavior's lines, from a question that has
@@ -1336,8 +1344,7 @@ public final class Adequacy {
             // Counted with nothing a body claims in scope. What was claimed travels beside the
             // numbers rather than into them ({@link Claimed}), and the two meet where a report
             // is written.
-            return Coverages.of(spec, sig, scope,
-                    db.ask(new Front.Reading()).value(), divided, seen, level,
+            return Coverages.of(subject, seen, level,
                     db.ask(new Front.Adequacy()).value().measures());
         }
     }
@@ -1835,65 +1842,25 @@ public final class Adequacy {
     }
 
     /**
-     * How a row of one behavior is read: where its positions are, and what the model divides them
-     * into.
-     *
-     * <p>What it takes to read a row, and nothing about what anybody was asked to compose. The two
-     * arrived together while the only reader was the search that composes rows — so a row composed
-     * by a behavior nothing else was asked of could not be read at all, and every question put to it
-     * came back as one nothing could tell about.
-     *
-     * @param axes empty where the model divides this behavior's positions into nothing, or where
-     *             what it divides them into could not be read. A row still has values and still
-     *             stands where it stands; what is missing is the classes to place them in
-     */
-    record HowARowIsRead(souther.compiler.partition.BehaviorInputs where, List<Axis> axes) {
-
-        HowARowIsRead {
-            axes = List.copyOf(axes);
-        }
-    }
-
-    /**
-     * The reading, from the pieces a caller already holds.
-     *
-     * <p>The one place a {@link souther.compiler.partition.BehaviorInputs} is made for a generation.
-     * A second assembly of the same four things is a second answer to where a row's values are, and
-     * the two would agree until one of them moved.
-     */
-    static HowARowIsRead readingOf(Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                                   souther.compiler.check.ReadingPolicy policy,
-                                   souther.compiler.partition.Partitions.Partitioning divided) {
-        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        return new HowARowIsRead(
-                new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                        symbols, policy),
-                divided == null ? List.of() : divided.axes());
-    }
-
-    /**
-     * The same, asked of the store for any behavior of a module.
+     * The measurement a row of one behavior is read against, asked of the store by name.
      *
      * <p>For a reader that holds a row and not a search. A row a declaration's line is owed is
      * composed by whichever reading could compose it, and that behavior need not be one anything
      * else was asked about — so what it takes to read the row is asked for here rather than taken
      * off an answer about generating rows, which such a behavior has none of.
+     *
+     * <p>Null where the behavior is not one this module declares with an input of its own, or
+     * where its input has no reading — which is a behavior nothing measured rather than one
+     * measured into nothing.
      */
-    static HowARowIsRead readingOf(Db db, String module, String behavior) {
+    static souther.compiler.partition.MeasuredInput subjectOf(Db db, String module,
+                                                              String behavior) {
         souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
-        Answer<Symbols> symbols = Names.derivedSymbols(db, module);
-        souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
-        if (prepared == null || sigs == null || !symbols.present() || policy == null) {
+        if (prepared == null) {
             return null;
         }
         Hir.SpecBehavior spec = specOf(prepared, behavior);
-        Sig sig = sigs.get(behavior);
-        if (spec == null || sig == null) {
-            return null;
-        }
-        return readingOf(spec, sig, symbols.value(), policy,
-                db.ask(new Divided(module, behavior)).value());
+        return spec == null ? null : subjectOf(db, module, spec);
     }
 
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
@@ -2047,31 +2014,22 @@ public final class Adequacy {
             }
             Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
             Sig sig = sigs.value().get(behavior);
-            souther.compiler.partition.Partitions.Partitioning divided =
-                    db.ask(new Divided(name, behavior)).value();
-            if (spec == null || sig == null || divided == null) {
+            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);
+            if (spec == null || sig == null || subject == null) {
                 return Answer.absent();
             }
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say. And whether anything was
             // measured against the rows at all, which is what `off` answers.
             Level level = levelOf(db);
-            Symbols symbols = scope.value();
-            return Answer.of(assess(spec, sig, symbols, db.ask(new Front.Reading()).value(),
-                    divided, RowReadings.readingFor(db.ask(new RowReadings(name)).value(), behavior), level));
+            return Answer.of(assess(subject,
+                    RowReadings.readingFor(db.ask(new RowReadings(name)).value(), behavior), level));
         }
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
-        private static LineReadings assess(
-                Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                souther.compiler.check.ReadingPolicy policy,
-                souther.compiler.partition.Partitions.Partitioning divided, RowReading observed,
-                Level level) {
-            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-            souther.compiler.partition.BehaviorInputs inputs =
-                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy);
-            souther.compiler.partition.Partitions.Partitioning partitioning = divided;
+        private static LineReadings assess(souther.compiler.partition.MeasuredInput subject,
+                                           RowReading observed, Level level) {
+            souther.compiler.partition.Partitions.Partitioning partitioning = subject.partitioning();
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
             // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
@@ -2083,11 +2041,11 @@ public final class Adequacy {
                 // state belongs to the lines between two positions, where the question is not put at
                 // all, and is spelled there rather than here — a boolean lifted at the boundary it
                 // is answered at cannot arrive somewhere as the wrong one of the three.
-                out.addAll(Coverages.assess(partitioning.along(axis), inputs, observed, level,
+                out.addAll(Coverages.assess(partitioning.along(axis), subject, observed, level,
                         ItemAssessment.WritabilityProjection.ofReading(
                                 partitioning.edgeIsKnownWritable(axis.term()))));
             }
-            out.addAll(Coverages.assessBetween(partitioning, inputs, observed, level));
+            out.addAll(Coverages.assessBetween(subject, observed, level));
             return new LineReadings(out);
         }
 
@@ -3306,7 +3264,8 @@ public final class Adequacy {
                                 spec.name(), observed.gaps())));
             }
             List<RowOutcome> rows = observed.rowsSeen();
-            souther.compiler.partition.BehaviorInputs inputs = asked.subject().inputs();
+            // The measurement's own axes, so that a row is placed by the walk it was measured at.
+            souther.compiler.partition.MeasuredInput.MeasuredAxes axes = asked.subject().axes();
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
 
@@ -3315,7 +3274,7 @@ public final class Adequacy {
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> new Generator.ObservedRow(
-                            InputClassifications.of(row.inputs(), inputs, partitioning.axes()),
+                            InputClassifications.of(row.inputs(), axes),
                             watched(row, recording)))
                     .toList();
             return Generator.fill(asked, existing, check,

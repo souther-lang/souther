@@ -172,7 +172,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                         List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
                                 Type.INT)),
                         SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS),
-                List.of(days));
+                AxesATestWrote.asAMeasurement("fee", List.of(days)));
         return new GenerationPlan(subject, classes, arms);
     }
 

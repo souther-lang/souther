@@ -70,7 +70,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         Partitions.Partitioning partitioning =
                 Partitions.of(spec.name(), domain, symbols, ReadAs.THE_COMPILATION_DOES);
         return new Model(
-                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning.axes()),
+                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning),
                 partitioning.axes());
     }
 

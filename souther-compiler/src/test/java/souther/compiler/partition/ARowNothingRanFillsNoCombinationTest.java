@@ -92,7 +92,7 @@ class ARowNothingRanFillsNoCombinationTest {
     void aCombinationIsSearchedForAnArmOnTheListAndForNothingElse() {
         Model model = Model.of(SHIPPING, "shippingFee");
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation());
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation());
         List<InteractionCells.Group> groups = offered.groups();
         assertEquals(1, groups.size(), "the two decisions meet once");
         assertEquals(List.of(), offered.notOffered(),
@@ -119,7 +119,7 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aRowIsComposedForTheArmsAndNotForWhereTheyWereFound() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation())
+        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation())
                 .groups().get(0).at(0);
         assertNotNull(first);
         Set<Integer> takes = claimedBy(first);
@@ -403,7 +403,7 @@ class ARowNothingRanFillsNoCombinationTest {
             CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied());
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
-                    partitioning.axes()),
+                    partitioning),
                     CoverageRead.of(spec.name(), body, plan, inputs, symbols));
         }
     }

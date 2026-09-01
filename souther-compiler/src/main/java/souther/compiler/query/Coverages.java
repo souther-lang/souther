@@ -3,7 +3,6 @@ package souther.compiler.query;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
-import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Place;
 import souther.compiler.core.Core;
@@ -28,7 +27,6 @@ import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
-import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.InputClassifications;
 
 import java.util.ArrayList;
@@ -144,18 +142,12 @@ final class Coverages {
      *                   ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes
      *                   measure reads none of it
      */
-    static PartitionEvidence of(Hir.SpecBehavior behavior, Sig sig,
-                                Symbols symbols, ReadingPolicy policy,
-                                Partitions.Partitioning partitioning,
+    static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.query.Adequacy.Level level,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget) {
         List<RowOutcome> rows = observed.rowsSeen();
-        List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
-        // What a row's values are, where they sit and what they are written as, read together:
-        // a field under a name is reached by taking the name off, and a walk given the paths
-        // alone reaches nothing where the derivation reaches a field.
-        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
+        Partitions.Partitioning partitioning = subject.partitioning();
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
@@ -163,7 +155,7 @@ final class Coverages {
         // The measures that divide their number, which are the ones a row is placed at. Handed
         // every measure, this asks a classifier about numbers there are no classes to place a value
         // in, and the count it comes back with is over a set no answer here is about.
-        Readings readings = Readings.of(rows, where, partitioning.partitionAxes(),
+        Readings readings = Readings.of(rows, subject.partitionAxes(),
                 observed.gaps().stream()
                         .filter(gap -> gap.code().leftNoRowRead()).toList());
         // A position at a time, because what one of its measures is owed to say includes what the
@@ -187,7 +179,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
+                pairsOf(subject.behavior(), divided, readings, level.readsRows(), budget),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
@@ -241,11 +233,12 @@ final class Coverages {
      */
     private record Readings(List<Map<AxisId, Classification>> byRow, List<Incompleteness> unseen) {
 
-        static Readings of(List<RowOutcome> rows, BehaviorInputs where, List<Axis> axes,
+        static Readings of(List<RowOutcome> rows,
+                           souther.compiler.partition.MeasuredInput.MeasuredAxes axes,
                            List<Incompleteness> unseen) {
             List<Map<AxisId, Classification>> read = new ArrayList<>();
             for (RowOutcome row : rows) {
-                read.add(InputClassifications.of(row.inputs(), where, axes));
+                read.add(InputClassifications.of(row.inputs(), axes));
             }
             return new Readings(List.copyOf(read), List.copyOf(unseen));
         }
@@ -577,7 +570,7 @@ final class Coverages {
      *                  left short of what it is owed, and not that the region is idle here.
      */
     static List<BorderAssessment> assess(
-            List<Border> lines, BehaviorInputs where,
+            List<Border> lines, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level,
             ItemAssessment.WritabilityProjection projection) {
@@ -588,7 +581,7 @@ final class Coverages {
         // still apart. They are brought together by {@link #merged}, after that.
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : lines) {
-            out.add(assessed(each, reading(each, where, projection), observed, level));
+            out.add(assessed(each, reading(subject.at(each), projection), observed, level));
         }
         return List.copyOf(out);
     }
@@ -762,16 +755,16 @@ final class Coverages {
      * asks which kind of line this is. Two readings written apart is what left a criterion about one
      * place reaching the reader of a pair as an {@code IllegalStateException}.
      */
-    private static OneShapeOfBorder reading(Border border, BehaviorInputs where,
-                                            ItemAssessment.WritabilityProjection projection) {
-        BorderQuantity quantity = border.cut().of();
+    private static OneShapeOfBorder reading(
+            souther.compiler.partition.MeasuredInput.BorderReading line,
+            ItemAssessment.WritabilityProjection projection) {
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
-                border.origin().comparisonAt();
+                line.border().origin().comparisonAt();
         return new OneShapeOfBorder() {
 
             @Override
             public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
-                return StandingAtAPoint.met(quantity, where, rows, criterion, site);
+                return StandingAtAPoint.met(line, rows, criterion, site);
             }
 
             @Override
@@ -792,9 +785,9 @@ final class Coverages {
                                                 souther.compiler.partition.MeasuredInput input,
                                                 Probe probe, LevelRealizer realizer,
                                                 souther.compiler.partition.WayToTheBorder within) {
-        BehaviorInputs where = input.inputs();
+        souther.compiler.partition.MeasuredInput.BorderReading line = input.at(border);
         souther.compiler.inputs.Quantities rules = input.quantities();
-        BorderQuantity quantity = border.cut().of();
+        BorderQuantity quantity = line.quantity();
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
                 border.origin().comparisonAt();
         // Built here and gone when the search is. What a row has to be to arrive is a way of asking
@@ -832,7 +825,7 @@ final class Coverages {
                         souther.compiler.partition.Generator.BoundaryAttempt made =
                                 probe.attempt(label, found.fixing(), able);
                         yield whatCameOfIt(made, label, within,
-                                () -> standingThere(probe, quantity, where, criterion, site,
+                                () -> standingThere(probe, line, criterion, site,
                                         (souther.compiler.partition.Generator.BoundaryAttempt.Built)
                                                 made));
                     }
@@ -970,7 +963,8 @@ final class Coverages {
      * owed the same row it was owed before, and nothing here says one cannot be written.
      */
     private static StandingAtAPoint.Met standingThere(
-            Probe probe, BorderQuantity quantity, BehaviorInputs where, Criterion criterion,
+            Probe probe, souther.compiler.partition.MeasuredInput.BorderReading line,
+            Criterion criterion,
             java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site,
             souther.compiler.partition.Generator.BoundaryAttempt.Built built) {
         souther.compiler.partition.ObservedInputs read =
@@ -985,7 +979,7 @@ final class Coverages {
             return new StandingAtAPoint.Met.CouldNotTell(
                     Set.of(souther.compiler.partition.ReadingGap.NO_VALUE));
         }
-        return StandingAtAPoint.met(quantity, where, List.of(read), criterion, site);
+        return StandingAtAPoint.met(line, List.of(read), criterion, site);
     }
 
     /** Whether an observation is among the reasons a reading came to nothing. */
@@ -1111,15 +1105,16 @@ final class Coverages {
      * not counted, the same account any other unpromised edge gets.
      */
     static List<BorderAssessment> assessBetween(
-            Partitions.Partitioning partitioning, BehaviorInputs where,
+            souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level) {
+        Partitions.Partitioning partitioning = subject.partitioning();
         // One entry per reading, the way a line at a place is read: what several readings of one
         // line come to is one answer, and it is put together where the last thing that is a
         // reading's own has been asked ({@link #merged}).
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : partitioning.between()) {
-            out.add(assessed(each, reading(each, where,
+            out.add(assessed(each, reading(subject.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED),
                     observed, level));
         }
