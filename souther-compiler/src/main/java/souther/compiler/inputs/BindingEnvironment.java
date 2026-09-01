@@ -73,22 +73,6 @@ final class BindingEnvironment {
         return value == null ? new BindingRole.Unknown() : new BindingRole.Alias(value);
     }
 
-    /** The position {@code binding} is the name of, or null where it names none. */
-    TermPath rootOf(BindingId binding) {
-        return roots.get(binding);
-    }
-
-    /** What {@code binding} holds where this reading has got to, or null where it holds nothing
-     *  here. */
-    Core boundValueOf(BindingId binding) {
-        return bound.get(binding);
-    }
-
-    /** The container an operation handed {@code binding} an element of, or null where none did. */
-    Core containerOf(BindingId binding) {
-        return elements.containerOf(binding);
-    }
-
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
      *  where the walk answered no place of it ({@link ElementProjection}). */
     ElementProjection projectionAt(BindingId binding) {

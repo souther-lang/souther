@@ -33,12 +33,22 @@ import souther.compiler.types.BindingId;
  * a count of how many names a reading may pass through is a count of how a model was written, and
  * one name more than it allows is a position this reports as one nothing names.
  *
- * <p>Which is about what stops the steps and not about how many shapes are taken. Not every shape
- * is descended — an expression that binds a name of its own is one this does not go under, and it
- * comes back said rather than answered ({@link PathResolution.Reason}).
+ * <p><b>What a name is decides which step is taken, and one step is taken.</b> A binding is a
+ * parameter, or what an operation handed an element of a container on, or what a name was given, in
+ * that order and asked once ({@link BindingRole}). A binding can be more than one: two walks over one
+ * collection joined into one leave the second walk's element bound to what the first walk's closure
+ * made. Tried as roads and raced, the winner is whichever reaches a position, and there it is the
+ * value the rewrite left under the name — a rule about a value <em>made from</em> a position read as
+ * a rule about the position. So an element is answered by its container and by nothing beside it,
+ * whatever that answer comes to.
  *
- * <p>What is known of the names comes in as facts and nothing else ({@link BindingEnvironment}).
- * How many of them there are is not a fact about how far a value's provenance runs — a name bound in
+ * <p>An expression that binds a name of its own is descended under that name. That is what a
+ * {@code let} means, and it is what a helper applied to an argument is left as; a shape a splice
+ * happens to leave is not a reason to stop, and stopping there left every claim inside an expanded
+ * helper about a position nothing here could name.
+ *
+ * <p>What is known of the names comes in as answers and nothing else ({@link BindingEnvironment}).
+ * How many names there are is not a fact about how far a value's provenance runs — a name bound in
  * an arm is read under bindings written elsewhere — and a reading of what a name means is built on
  * this one rather than beside it, so neither is something a walk here can reach for.
  *
@@ -112,41 +122,29 @@ final class InputPath {
 
     private PathResolution named(Core e, BindingEnvironment names) {
         return switch (e) {
-            case Core.Read r -> {
-                TermPath stands = names.rootOf(r.binding());
-                if (stands != null) {
-                    yield new PathResolution.At(stands);
-                }
-                // Three ways a name reaches a position and no more. It is a parameter; or it holds
-                // what something else was, which is followed; or an operation of the language handed
-                // it an element of a container, and then it is at the container's position, inside
-                // it. The third is the one no walk over the tree that runs could work out — what
-                // handed it is gone by then — and it is read from what was recorded where the
-                // operation still stood.
-                Core held = names.boundValueOf(r.binding());
-                PathResolution holds = held == null ? new PathResolution.NotAPosition()
-                        : trail.through(r.binding(), () -> named(held, names));
-                if (holds instanceof PathResolution.At) {
-                    yield holds;
-                }
-                // What it holds names no position, and it may still be an element of one. Two
-                // walks over one collection joined into one leave a binding that is both: it
-                // holds what the first walk made, and it is what the second was handed. Stopping
-                // at the first left every rule inside the second reading as being about nothing.
-                yield either(holds, elementOf(r.binding(), names));
-            }
+            // What the name is, asked once, and the step that answers is the answer. An element is
+            // answered by the container it came from even where that container is at no position:
+            // the value a rewrite left under such a name is what the walk before it made of an
+            // element, and reaching a position through it would put a line at a place whose values
+            // are not the ones a rule about the name is about.
+            case Core.Read r -> switch (names.roleOf(r.binding())) {
+                case BindingRole.Root(var stands) -> new PathResolution.At(stands);
+                case BindingRole.Element _ -> elementOf(r.binding(), names);
+                case BindingRole.Alias(var held) ->
+                        trail.through(r.binding(), () -> named(held, names));
+                case BindingRole.Unknown _ -> new PathResolution.NotAPosition();
+            };
             case Core.FieldAccess fa -> switch (named(fa.target(), names)) {
                 case PathResolution.At(var base) -> new PathResolution.At(
                         Location.isStep(fa.target().type(), fa.field(), symbols)
                                 ? base.then(fa.field()) : base);
                 case PathResolution other -> other;
             };
-            // A name bound inside the expression handed over, which this reading does not go under.
-            // What it comes to is what its body comes to under that name, and whether the name may
-            // stand for the position its value names is a question about the model rather than
-            // about the shape — so what is said is that this was not read.
-            case Core.LetIn _ -> new PathResolution.Unread(
-                    PathResolution.Reason.A_NAME_BOUND_INSIDE_THE_EXPRESSION);
+            // What an expression that binds a name comes to is what its body comes to, under that
+            // name. Whether the name may stand for the position its value names is not asked here
+            // and is not a question about this shape: it is asked where the name is read, of what
+            // the name is.
+            case Core.LetIn let -> named(let.body(), names.inside(let.binder(), let.value()));
             // A call kept standing names no location. Where the walk is over a tree that keeps them
             // that is the answer, and where it is not, its presence says this walk was handed a
             // representation it does not read — said rather than answered with "no path", which
@@ -162,8 +160,7 @@ final class InputPath {
     }
 
     private PathResolution elementOf(BindingId binding, BindingEnvironment names) {
-        Core container = names.containerOf(binding);
-        if (container == null) {
+        if (!(names.roleOf(binding) instanceof BindingRole.Element(var container))) {
             return new PathResolution.NotAPosition();
         }
         // The container names no position of this behavior's input — it is what another operation
