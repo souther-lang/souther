@@ -360,8 +360,7 @@ public final class AstBuilder {
                                 .at(bodyRegion(product.get()))
                                 .hint(new DataMessage.WriteItAsAUnitDataOrGiveItFields(name)).say(new DataMessage.ADataWithAnEmptyBody(name)).build());
             }
-            return new Ast.Data(declared, moduleName, false, includes, fields, clauses,
-                    Optional.empty(), Optional.empty(), pos);
+            return new Ast.Data(declared, moduleName, false, includes, fields, clauses, pos);
         }
         Optional<SyntaxNode> sum = n.child(SyntaxKind.SUM_BODY);
         if (sum.isPresent()) {
@@ -390,8 +389,7 @@ public final class AstBuilder {
                 innerType = Ast.TypeRef.written("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
             }
             List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, pos(inner)));
-            return new Ast.Data(declared, moduleName, true, List.of(), fields, clauses,
-                    Optional.empty(), Optional.empty(), pos);
+            return new Ast.Data(declared, moduleName, true, List.of(), fields, clauses, pos);
         }
         // No body of any kind: a unit data, which has no fields for an invariant to observe (spec
         // §unit-data). The parser takes an `invariant` clause after any data, so this is where a

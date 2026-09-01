@@ -3,27 +3,33 @@ package souther.compiler.ast;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.BindingOwner;
-import souther.compiler.types.MapKeyRepresentation;
-import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.UnaryOperator;
 
 /**
- * The slice-2 abstract syntax: a module of product {@code data} definitions with one or
- * more fields, each with an optional {@code invariant}, {@code decoder} (a single-value
- * {@code from Text|Int} form or a multi-field {@code from Object} form), and
- * {@code encoder} (a single Raw value or a {@code Object { ... }} form).
+ * The abstract syntax: a module as the characters that spell it were read, with every name still a
+ * spelling and nothing yet settled about what it denotes.
+ *
+ * <p>Every form here is one the frontend writes, and that is what this is — not {@link Hir} with
+ * the resolution taken out. A form that comes into being further down belongs to the
+ * representation whose pass makes it: a codec is derived from a data's shape, an expansion is
+ * written where a call is inlined, and neither has a twin up here for nothing to build. A twin
+ * would be a form no parse answers with, held to every rule the reachable frontend is held to,
+ * with a reader taking it for something the language can be written in.
+ *
+ * <p>What the frontend writes is not the same as what an author wrote. A unit data a construction
+ * implied, a binder for a name the source never spelled, the {@code Option<T>} a {@code T?} became
+ * — all of them are written here, by the pass that reads the concrete syntax. What may not be
+ * written here is a form that pass never answers with, and
+ * {@code TheParsedTreeHoldsOnlyWhatTheFrontendWritesTest} asks of each of these forms whether it
+ * is one.
  */
 public interface Ast {
 
@@ -358,11 +364,7 @@ public interface Ast {
     record EnsuresClause(Optional<String> name, List<EnsuresArm> arms, SourcePos pos, Region region)
             implements Written {}
 
-    record EnsuresArm(List<Name> cases, Expr expr, SourcePos pos, Region region) implements Written {
-        public EnsuresArm with(Expr rewritten) {
-            return new EnsuresArm(cases, rewritten, pos, region);
-        }
-    }
+    record EnsuresArm(List<Name> cases, Expr expr, SourcePos pos, Region region) implements Written {}
 
     /** A behavior parameter. Its type may be an anonymous union of cases (spec §unmarked-output). */
     record Param(WrittenName written, RetType type) implements Ast {
@@ -673,8 +675,6 @@ public interface Ast {
                 List<Name> includes,
                 List<Field> fields,
                 List<InvariantClause> invariants,
-                Optional<DecoderDef> decoder,
-                Optional<EncoderDef> encoder,
                 SourcePos pos) implements Def {}
 
     /**
@@ -695,12 +695,6 @@ public interface Ast {
             return new InvariantClause(Optional.empty(), expr, expr.pos(), expr.region());
         }
 
-        /** The same clause over a rewritten expression — what a stage that rewrites expressions
-         * produces, so a rewrite never drops the name the rest of the compiler classifies by, nor
-         * where the author wrote the clause it rewrote. */
-        public InvariantClause with(Expr rewritten) {
-            return new InvariantClause(name, rewritten, pos, region);
-        }
     }
 
     /** A sum data definition {@code data X = A | B | ...}. Carries no boundary representation — see
@@ -799,112 +793,8 @@ public interface Ast {
         }
     }
 
-    /** The kind of primitive Raw a single-value decoder reads / an encoder writes. */
-    enum RawKind { TEXT, INT, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT }
-
-    // --- decoders ---
-
-    sealed interface DecoderDef extends Ast permits PrimDecoder, ObjectDecoder, NewtypeDecoder {}
-
-    /** {@code decoder from Text|Int as <input> { <stmts> <construct> }} (single value). */
-    record PrimDecoder(RawKind from,
-                       Binder input,
-                       List<DecStmt> stmts,
-                       Construct result,
-                       SourcePos pos) implements DecoderDef {
-
-        public String inputName() {
-            return input.name();
-        }
-    }
-
-    /** {@code decoder from Object { <binds> <construct> }} (multi-field, accumulating). */
-    record ObjectDecoder(List<Bind> binds, Construct result, SourcePos pos) implements DecoderDef {}
-
-    /**
-     * A newtype {@code data X = Y} over a non-primitive {@code Y} (spec §newtype): the whole input is
-     * decoded by {@code inner} (a reference to {@code Y}'s decoder), and the result wrapped in
-     * {@code X}. {@code X}'s external representation is {@code Y}'s — an object or a discriminated
-     * sum, not {@code {value: ...}}.
-     */
-    record NewtypeDecoder(DecRef inner, Binder input, Construct result, SourcePos pos)
-            implements DecoderDef {
-
-        public String inputName() {
-            return input.name();
-        }
-    }
-
-    /** One field an object decoder reads: the key it is found under, how the value there is read,
-     *  and the name the construction below refers to it by. Built by {@code Deriver}; no source
-     *  writes one. */
-    record Bind(Binder binder, String key, DecRef ref, SourcePos pos) implements Ast {
-
-        public String name() {
-            return binder.name();
-        }
-    }
-
-    /** The decoder referenced by a bind: a primitive, another data's {@code .decoder}, or a list. */
-    sealed interface DecRef extends Ast permits DecRef.Bare, OptionDecRef {
-
-        /** A reference that is not an optional. What the distinction is for is the one position that
-         *  requires it: what an optional decodes. Absence has one form wherever it stands, so an
-         *  optional under an optional has two forms for three values and is not written
-         *  (spec {@code [#what-has-no-external-representation]}). */
-        sealed interface Bare extends DecRef
-                permits PrimDecRef, DataDecRef, ListDecRef, SetDecRef, MapDecRef {}
-    }
-
-    record PrimDecRef(LeafScalar kind, SourcePos pos) implements DecRef.Bare {}
-
-    record DataDecRef(Name typeName, SourcePos pos) implements DecRef.Bare {}
-
-    /** {@code list(<elementDecRef>)} */
-    record ListDecRef(DecRef element, SourcePos pos) implements DecRef.Bare {}
-
-    /** {@code set(<elementDecRef>)} — a list decoder deduplicated into a Set on decode (ADR-0009). */
-    record SetDecRef(DecRef element, SourcePos pos) implements DecRef.Bare {}
-
-    /** An optional decoder. Under a key, a missing key or {@code null} is {@code None}; standing as
-     *  an element or a map's value, where there is no key to be missing, {@code null} is the whole
-     *  of it. Either way a present value decodes through {@code element}. */
-    record OptionDecRef(DecRef.Bare element, SourcePos pos) implements DecRef {}
-
-    /** A {@code Map<K, T>} decoder: each object value is decoded with {@code value}, and each of the
-     * object's string keys through {@code key}.
-     *
-     * <p>The key is a {@link MapKeyRepresentation} rather than a {@code DecRef}: a key position holds one of
-     * the representations the boundary admits, and nothing else — not a list, not an option — so the
-     * type says as much and a reader that switches on it needs no arm for what cannot be there. It is
-     * also the classification the checker already made, carried here rather than worked out again. */
-    record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef.Bare {}
-
-    /** A statement in a single-value decoder body. */
-    sealed interface DecStmt extends Ast permits Let {}
-
-    record Let(Binder binder, Expr value, SourcePos pos) implements DecStmt {
-
-        public String name() {
-            return binder.name();
-        }
-    }
-
-    /**
-     * The construction a decoder ends in: {@code TypeName { field: expr, ... }}, one value per field.
-     *
-     * <p>Not an expression, and not what a body writes — a decoder is derived or written in the codec
-     * grammar, and nothing there spreads. A construction a body writes is {@link NewData}.
-     */
-    record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Ast {}
-
     /** {@code field: expr}, or the shorthand {@code field}, in a construction. */
     record FieldInit(WrittenName written, Expr value) implements Ast {
-
-        /** An initialiser a pass wrote — a derived encoder's, a newtype's implicit {@code value}. */
-        public FieldInit(String name, Expr value, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), value);
-        }
 
         /** The field this fills. */
         public String name() {
@@ -916,109 +806,13 @@ public interface Ast {
             return written.pos();
         }
 
-        /**
-         * The same initialiser over a rewritten value.
-         *
-         * <p>The field's occurrence is the author's and survives a rewrite of what fills it. Naming
-         * the field again — which every rewrite that took {@link #name()} and a position did — puts a
-         * spelling where an occurrence was, and what is lost is the only record of where the author
-         * wrote it: a report about the field then underlines as many characters as the name has,
-         * starting where it starts, which is the same thing until it is not.
-         */
-        public FieldInit withValue(Expr rewritten) {
-            return rewritten == value ? this : new FieldInit(written, rewritten);
-        }
     }
-
-    // --- encoders ---
-
-    record EncoderDef(Binder self, RawExpr result, SourcePos pos) implements Ast {
-
-        public String selfName() {
-            return self.name();
-        }
-    }
-
-    /** A Raw-building expression. */
-    sealed interface RawExpr extends Ast
-            permits TextRaw, IntRaw, BoolRaw, DecimalRaw, IsoTextRaw, ObjectRaw, EncodeRaw, ListEnc,
-                    SetEnc, OptionRaw, MapEnc {}
-
-    /** Encodes a {@code Map<K, T>} to a {@code Raw.Object}, each value via {@code elem} and each key
-     * to its bare string through {@code key} — the representation the checker admitted it as, closed
-     * for the reason {@link MapDecRef}'s is. */
-    record MapEnc(Expr source, EncElem elem, MapKeyRepresentation key, SourcePos pos) implements RawExpr {}
-
-    /** Encodes an optional field: {@code None} becomes {@code Raw.Null}, {@code Some(v)} encodes
-     * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elemVar}. */
-    record OptionRaw(Expr access, RawExpr inner, Binder elem, SourcePos pos) implements RawExpr {
-
-        public String elemVar() {
-            return elem.name();
-        }
-    }
-
-    record TextRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    record IntRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    record BoolRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    /** Encodes a {@code Decimal} field to a {@code Raw.Decimal}. */
-    record DecimalRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    /** Encodes a {@code Date}/{@code DateTime} field to a {@code Raw.Text} via its ISO8601 form. */
-    record IsoTextRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    record ObjectRaw(List<RawEntry> entries, SourcePos pos) implements RawExpr {}
-
-    /** {@code TypeName.encode(expr)} — encode a nested data value to Raw. */
-    record EncodeRaw(Name typeName, Expr arg, SourcePos pos) implements RawExpr {}
-
-    /** {@code list(expr, <elemEnc>)} — encode a {@code List<T>} to a Raw.List. */
-    record ListEnc(Expr source, EncElem elem, SourcePos pos) implements RawExpr {}
-
-    /** Encodes a {@code Set} as a JSON array: the set is listed, then each element encoded. */
-    record SetEnc(Expr source, EncElem elem, SourcePos pos) implements RawExpr {}
-
-    /** How to encode a list/set/map element: a primitive, another data's {@code .encode}, or another
-     * collection — a collection may hold a collection ({@code Map<String, List<商品ID>>}), so the
-     * element encoder nests as deeply as the type does. */
-    sealed interface EncElem extends Ast permits EncElem.Bare, OptionElemEnc {
-
-        /** An element encoder that is not an optional, for the reason {@link DecRef.Bare} carries. */
-        sealed interface Bare extends EncElem
-                permits PrimEnc, DataEnc, ListElemEnc, SetElemEnc, MapElemEnc {}
-    }
-
-    record PrimEnc(LeafScalar kind, SourcePos pos) implements EncElem.Bare {}
-
-    record DataEnc(Name typeName, SourcePos pos) implements EncElem.Bare {}
-
-    /** A {@code List<T>} element, each {@code T} encoded by {@code elem}. */
-    record ListElemEnc(EncElem elem, SourcePos pos) implements EncElem.Bare {}
-
-    /** A {@code Set<T>} element: listed, then each element encoded by {@code elem}, as {@link SetEnc}
-     * does for a field. */
-    record SetElemEnc(EncElem elem, SourcePos pos) implements EncElem.Bare {}
-
-    /** A {@code Map<K, V>} element, each value encoded by {@code value} and each key by {@code key},
-     * as {@link MapEnc} does for a field. */
-    record MapElemEnc(EncElem value, MapKeyRepresentation key, SourcePos pos) implements EncElem.Bare {}
-
-    /** An optional standing where there is no key to omit — a collection's element, a map's value.
-     * {@code None} is written {@code null} and {@code Some(v)} through {@code elem}
-     * (spec {@code [#absence-is-written-as-null]}). A field's optional is {@link OptionRaw}, which
-     * omits its key instead. */
-    record OptionElemEnc(EncElem.Bare elem, SourcePos pos) implements EncElem {}
-
-    record RawEntry(String key, RawExpr value, SourcePos pos) implements Ast {}
 
     // --- expressions ---
 
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
-                    NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Expansion, Block,
+                    NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Block,
                     Tuple, TupleGet, Unreachable {
     }
 
@@ -1133,78 +927,6 @@ public interface Ast {
         }
     }
 
-    /**
-     * One application of a non-recursive helper, with the callee's body in place of the call.
-     *
-     * <p>It is one node rather than the bindings it becomes because a signature is one statement.
-     * {@code emptyLike (xs: List<'a>) : List<'a>} says the result holds what the argument held, and
-     * that is said by the two occurrences of {@code 'a} being one variable. Written out as a binding
-     * per argument, each carrying its own declared type, there is nothing left saying the two
-     * occurrences were ever the same — and a signature position that leaves no binding at all, which
-     * the declared return and an unapplied function parameter both do, has nowhere to say anything.
-     * Holding the whole instantiation here is what makes the rule hold however the callee was
-     * written.
-     *
-     * <p>{@code application} names this one expansion, and the variables of {@code declaredReturn},
-     * {@code bound} and {@code given} are that application's ({@link Type.MetaVar}). Two calls of one
-     * helper are two applications and two sets of variables; a call inside an expansion is another.
-     *
-     * <p>{@code body} is the callee's, with each parameter read as the binding or the function it was
-     * given. It is the only slot holding code that runs: what {@code given} holds is already inside
-     * it wherever the callee applies it, and is kept here so the signature can be read against it.
-     */
-    record Expansion(ValueName callee, BindingOwner application, List<Bound> bound,
-                     List<Given> given, RetType declaredReturn, Expr body,
-                     SourcePos pos, Region region) implements Expr {
-
-        /**
-         * The same expansion as the nested bindings it writes — for a reader whose question is only
-         * about what flows where.
-         *
-         * <p>Not every reader is asking about the signature. What an invariant may be discharged
-         * from is a question about which value reached which position, and to that reader an
-         * expansion is a name bound to an argument and a body reading it, exactly as a {@code let}
-         * the author wrote is. Reading it as one keeps those readers saying about a call what they
-         * say about the code it stands for.
-         */
-        public Expr asBindings() {
-            Expr out = body;
-            for (int i = bound.size() - 1; i >= 0; i--) {
-                Bound b = bound.get(i);
-                out = new LetIn(b.binder(), b.value(), b.declaredType(), out, pos, region);
-            }
-            return out;
-        }
-    }
-
-    /** {@code e} with every expansion in it read as the bindings it writes ({@link
-     * Expansion#asBindings}), at every depth. */
-    public static Expr asBindings(Expr e) {
-        Expr through = e instanceof Expansion ex ? ex.asBindings() : e;
-        return mapChildren(through, Ast::asBindings, name -> name);
-    }
-
-    /** A value argument. It becomes a binding, so the body reads a name rather than the argument's
-     * text, and the callee's declared type for it comes along. */
-    record Bound(Binder binder, RetType declaredType, Expr value) {}
-
-    /**
-     * A function argument. It leaves no binding, so what the signature said about it reaches a
-     * reader only from here.
-     *
-     * <p>{@code arrivesAs} is what the argument is declared as where it comes from, where this
-     * expansion can see that. The two declarations are what a boundary holds — what this callee
-     * wants of the position, and what the function handed to it is — and reading them against each
-     * other is what the boundary is for.
-     *
-     * <p>{@code applied} is whether the callee's body still reaches it. Where it does, the body is
-     * where this argument is typed and what the signature said is checked by that application, as it
-     * is for a function written in place. Where it does not — the callee named a function parameter
-     * and never used it — the body says nothing about it at all, and this is the only place it can
-     * be held to the type the callee declared for it.
-     */
-    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs) {}
-
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type). */
     record ListLit(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
 
@@ -1288,10 +1010,6 @@ public interface Ast {
             return new ElseArm(Optional.empty(), body, body.pos());
         }
 
-        /** The same arm over a rewritten body, so a rewriting stage keeps the clause it answers. */
-        public ElseArm with(Expr rewritten) {
-            return new ElseArm(clause, rewritten, pos);
-        }
     }
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. {@code origin} is the
@@ -1462,13 +1180,6 @@ public interface Ast {
             return new FieldAccess(target, WrittenName.synthetic(field, at), at, over);
         }
 
-        /** The same access over a rewritten target. The field's occurrence and the stretch of source
-         * the read was written over are the author's and survive a rewrite of what it reads from —
-         * naming the field again here would put a spelling where an occurrence was. */
-        public FieldAccess withTarget(Expr rewritten) {
-            return rewritten == target ? this : new FieldAccess(rewritten, name, pos, region);
-        }
-
         /** The field this reads. */
         public String field() {
             return name.canonical();
@@ -1605,8 +1316,6 @@ public interface Ast {
                             region);
             case LetIn x -> new LetIn(x.binder(), x.value(), x.declaredType(), x.annotated(),
                     x.opens(), x.body(), x.pos(), region);
-            case Expansion x -> new Expansion(x.callee(), x.application(), x.bound(), x.given(),
-                    x.declaredReturn(), x.body(), x.pos(), region);
             case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.pos(), region);
             case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
@@ -1619,203 +1328,77 @@ public interface Ast {
     }
 
     /**
-     * {@code e} with each of its slots replaced by what the operator for that slot answers, its own
-     * kind and position kept — or {@code e} itself where every slot answered what it was given, so a
-     * walk that only reads allocates nothing.
-     *
-     * <p>The children of an expression occupy two kinds of slot, and they differ in what may stand
-     * there. An expression slot takes any expression — an argument, a field's value, the thing an
-     * {@code if} tests. A name slot takes only a name: a construction's spread {@code T { ..base }}
-     * copies the fields of what the name stands for, so there is nothing there to evaluate and
-     * nothing else that could be written.
-     *
-     * <p>This is the one place that says which slots a node has. Both {@link #mapChildren} and
-     * {@link #forEachChild} are derived from it, so a slot a node gains later is written once and
-     * neither walk can be left behind. Being exhaustive over {@code Expr}, a node kind added later
-     * stops the build here, which is the one place it has to be accounted for.
-     */
-    private static Expr atSlots(Expr e, UnaryOperator<Expr> atExpr, UnaryOperator<Var> atName) {
-        return switch (e) {
-            case IntLit x -> x;
-            case DecimalLit x -> x;
-            case StringLit x -> x;
-            case BoolLit x -> x;
-            case Var x -> x;
-            case Unreachable x -> x;
-            case Neg n -> {
-                Expr operand = atExpr.apply(n.operand());
-                yield operand == n.operand() ? n : new Neg(operand, n.pos(), n.region());
-            }
-            case FieldAccess fa -> {
-                Expr target = atExpr.apply(fa.target());
-                yield fa.withTarget(target);
-            }
-            case Binary b -> {
-                Expr left = atExpr.apply(b.left());
-                Expr right = atExpr.apply(b.right());
-                yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.origin(), b.pos(), b.region());
-            }
-            case Apply a -> {
-                Expr function = atExpr.apply(a.function());
-                List<Expr> args = each(a.args(), atExpr);
-                yield function == a.function() && args == a.args() ? a
-                        : new Apply(function, args, a.origin(), a.appliedAs(), a.pos(), a.region());
-            }
-            case If iff -> {
-                Expr cond = atExpr.apply(iff.cond());
-                Expr then = atExpr.apply(iff.then());
-                Expr els = atExpr.apply(iff.els());
-                yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
-                        : new If(cond, then, els, iff.origin(), iff.pos(), iff.region());
-            }
-            case IfConstructed ic -> {
-                Expr construct = atExpr.apply(ic.construct());
-                Expr then = atExpr.apply(ic.then());
-                List<ElseArm> els = each(ic.els(), arm -> {
-                    Expr body = atExpr.apply(arm.body());
-                    return body == arm.body() ? arm : arm.with(body);
-                });
-                yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
-                        : new IfConstructed(construct, ic.binder(), then, els, ic.origin(), ic.pos(),
-                                ic.region());
-            }
-            case LetIn li -> {
-                Expr value = atExpr.apply(li.value());
-                Expr body = atExpr.apply(li.body());
-                yield value == li.value() && body == li.body() ? li
-                        : new LetIn(li.binder(), value, li.declaredType(), li.annotated(),
-                                li.opens(), body, li.pos(), li.region());
-            }
-            // `given` is not a slot. What stands there is caller code that is also inside `body`,
-            // wherever the callee applies it, so a walk that took both would read one lambda twice —
-            // and rewrite it into two different things. It is read only by whoever asks what the
-            // signature said about it.
-            case Expansion ex -> {
-                List<Bound> bound = each(ex.bound(), b -> {
-                    Expr value = atExpr.apply(b.value());
-                    return value == b.value() ? b
-                            : new Bound(b.binder(), b.declaredType(), value);
-                });
-                Expr body = atExpr.apply(ex.body());
-                yield bound == ex.bound() && body == ex.body() ? ex
-                        : new Expansion(ex.callee(), ex.application(), bound, ex.given(),
-                                ex.declaredReturn(), body, ex.pos(), ex.region());
-            }
-            case Block bl -> {
-                Expr body = atExpr.apply(bl.body());
-                yield body == bl.body() ? bl
-                        : new Block(bl.params(), body, bl.rule(), bl.pos(), bl.region());
-            }
-            case ListLit l -> {
-                List<Expr> elements = each(l.elements(), atExpr);
-                yield elements == l.elements() ? l : new ListLit(elements, l.pos(), l.region());
-            }
-            case ListComp comp -> {
-                Expr element = atExpr.apply(comp.element());
-                List<Expr> guards = each(comp.guards(), atExpr);
-                yield element == comp.element() && guards == comp.guards() ? comp
-                        : new ListComp(element, guards, comp.origin(), comp.pos(), comp.region());
-            }
-            case Tuple tup -> {
-                List<Expr> elements = each(tup.elements(), atExpr);
-                yield elements == tup.elements() ? tup : new Tuple(elements, tup.pos(), tup.region());
-            }
-            case TupleGet tg -> {
-                Expr tuple = atExpr.apply(tg.tuple());
-                yield tuple == tg.tuple() ? tg
-                        : new TupleGet(tuple, tg.index(), tg.arity(), tg.pos(), tg.region());
-            }
-            case NewData nd -> {
-                // the spreads first: `..base` is written before the fields that replace what it
-                // brought, and a walk that records the first thing it sees should see them that way
-                List<Var> spreads = each(nd.spreads(), atName);
-                List<FieldInit> inits = each(nd.inits(), i -> {
-                    Expr value = atExpr.apply(i.value());
-                    return i.withValue(value);
-                });
-                yield spreads == nd.spreads() && inits == nd.inits() ? nd
-                        : new NewData(nd.typeName(), inits, spreads, nd.origin(), nd.pos(), nd.region());
-            }
-            case Match m -> {
-                Expr scrutinee = atExpr.apply(m.scrutinee());
-                List<Case> cases = each(m.cases(), c -> {
-                    Expr body = atExpr.apply(c.body());
-                    return body == c.body() ? c
-                            : new Case(c.caseTypes(), c.binding(), body, c.unwrapAsserts(), c.pos());
-                });
-                yield scrutinee == m.scrutinee() && cases == m.cases() ? m
-                        : new Match(scrutinee, cases, m.origin(), m.pos(), m.region());
-            }
-        };
-    }
-
-    /** {@code xs} with {@code f} applied to each, or {@code xs} itself where none of them changed. */
-    private static <T> List<T> each(List<T> xs, UnaryOperator<T> f) {
-        List<T> out = null;
-        for (int i = 0; i < xs.size(); i++) {
-            T before = xs.get(i);
-            T after = f.apply(before);
-            if (out == null && after != before) {
-                out = new ArrayList<>(xs.subList(0, i));
-            }
-            if (out != null) {
-                out.add(after);
-            }
-        }
-        return out == null ? xs : out;
-    }
-
-    /**
-     * Rebuilds {@code e} with each of its slots replaced by what the operator for that slot answers;
-     * a leaf (a literal, a name) is returned unchanged. The single authoritative rewrite over the
-     * expression tree, so an AST-to-AST pass (a Lower desugar, an optimization) writes only the cases
-     * it rewrites and delegates the rest here, instead of hand-copying every node type.
-     *
-     * <p>The two operators are the two kinds of slot. {@code onNameSlot} answers a {@link Var}
-     * because that is all a spread may hold, so a rewrite cannot put an expression where the language
-     * admits only a name; a pass that does have an expression to put there — the inliner — binds it
-     * ahead of the construction and spreads the binding. There is no one-operator form: what a
-     * rewrite does to a name is a decision, and it is made where the rewrite is written.
-     */
-    static Expr mapChildren(Expr e, UnaryOperator<Expr> onExprSlot, UnaryOperator<Var> onNameSlot) {
-        return atSlots(e, onExprSlot, onNameSlot);
-    }
-
-    /**
-     * Applies {@code f} to each direct child of {@code e} (a leaf has none) — the read-only
-     * counterpart of {@link #mapChildren}. A visiting pass (a checker walk) delegates its default
-     * recursion here rather than hand-copying every node type.
+     * Applies {@code f} to each direct child of {@code e} (a leaf has none). A visiting pass (a
+     * checker walk) delegates its default recursion here rather than hand-copying every node type.
      *
      * <p>A name a spread holds is a child like any other, so a pass that asks what an expression
      * names reaches one without knowing that spreads exist.
+     *
+     * <p>This is the one place that says which children a node has, and all it does is read them.
+     * No pass below the frontend rewrites an expression of the parsed tree into another, so there
+     * is no walk here that rebuilds one: what the frontend itself reduces as it reads — the
+     * parentheses {@link #withRegion} takes off — it reduces where it reads it. Being exhaustive
+     * over {@code Expr} with no {@code default}, a node kind added
+     * later stops the build here, which is the one place it has to be accounted for — and a leaf
+     * says it is one by having an arm with nothing to visit rather than by falling through.
      */
     public static void forEachChild(Expr e, java.util.function.Consumer<Expr> f) {
-        atSlots(e, child -> {
-            f.accept(child);
-            return child;
-        }, child -> {
-            f.accept(child);
-            return child;
-        });
+        switch (e) {
+            case IntLit _ -> { }
+            case DecimalLit _ -> { }
+            case StringLit _ -> { }
+            case BoolLit _ -> { }
+            case Var _ -> { }
+            case Unreachable _ -> { }
+            case Neg n -> f.accept(n.operand());
+            case FieldAccess fa -> f.accept(fa.target());
+            case Binary b -> {
+                f.accept(b.left());
+                f.accept(b.right());
+            }
+            case Apply a -> {
+                f.accept(a.function());
+                a.args().forEach(f);
+            }
+            case If iff -> {
+                f.accept(iff.cond());
+                f.accept(iff.then());
+                f.accept(iff.els());
+            }
+            case IfConstructed ic -> {
+                f.accept(ic.construct());
+                f.accept(ic.then());
+                for (ElseArm arm : ic.els()) {
+                    f.accept(arm.body());
+                }
+            }
+            case LetIn li -> {
+                f.accept(li.value());
+                f.accept(li.body());
+            }
+            case Block bl -> f.accept(bl.body());
+            case ListLit l -> l.elements().forEach(f);
+            case ListComp comp -> {
+                f.accept(comp.element());
+                comp.guards().forEach(f);
+            }
+            case Tuple tup -> tup.elements().forEach(f);
+            case TupleGet tg -> f.accept(tg.tuple());
+            case NewData nd -> {
+                // the spreads first: `..base` is written before the fields that replace what it
+                // brought, and a walk that records the first thing it sees should see them that way
+                nd.spreads().forEach(f);
+                for (FieldInit i : nd.inits()) {
+                    f.accept(i.value());
+                }
+            }
+            case Match m -> {
+                f.accept(m.scrutinee());
+                for (Case c : m.cases()) {
+                    f.accept(c.body());
+                }
+            }
+        }
     }
 
-    /** Rewrites each clause's expression, keeping its name. Every stage that rewrites a declaration's
-     * invariant goes through here, so no rewrite can drop the name the failure is classified by. */
-    public static List<InvariantClause> mapClauses(List<InvariantClause> clauses, UnaryOperator<Expr> f) {
-        List<InvariantClause> out = new ArrayList<>();
-        for (InvariantClause clause : clauses) {
-            out.add(clause.with(f.apply(clause.expr())));
-        }
-        return out;
-    }
-
-    /** Rewrites each departure's body, keeping the clause it answers. */
-    public static List<ElseArm> mapArms(List<ElseArm> arms, UnaryOperator<Expr> f) {
-        List<ElseArm> out = new ArrayList<>();
-        for (ElseArm arm : arms) {
-            out.add(arm.with(f.apply(arm.body())));
-        }
-        return out;
-    }
 }
