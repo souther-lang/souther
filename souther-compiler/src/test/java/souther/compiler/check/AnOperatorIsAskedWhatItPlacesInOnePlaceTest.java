@@ -48,6 +48,8 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
 
     private static final String PLACEMENT = "souther/compiler/check/ComparisonPlacement";
 
+    private static final String WRITING = "souther/compiler/check/ComparisonWriting";
+
     /** A method that may read an operator for what it places, how many times it does, and why. */
     private record Licence(String who, int calls, String why) { }
 
@@ -62,9 +64,32 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
                     "reads any binary a walk met, so an operator that places nothing arrives here"
                             + " and is answered rather than excluded"));
 
+    private static final List<Licence> MAY_WRITE = List.of(
+            new Licence("souther.compiler.check.Conditions.asOrderComparison", 1,
+                    "the one comparison this compiler composes: what an operation answering an"
+                            + " order proves about its two arguments, which no author wrote and"
+                            + " everything below reads as though they had"));
+
+    /**
+     * And who writes one, which is the way back and is one place for the same reason.
+     *
+     * <p>A reading that composes a comparison out of what the rules proved has to say it in an
+     * operator. Everything downstream reads what is written as a comparison, so the composing and
+     * the recognising are the two crossings between how a comparison is written and what it means —
+     * and a second way across is a second table of six that agrees with these only for as long as
+     * somebody keeps it so.
+     */
+    @Test
+    void onlyAComposedComparisonIsWrittenAsAnOperator() throws IOException {
+        assertEquals(declared(MAY_WRITE), callsTo(WRITING, "operatorStating"),
+                "a relation written as an operator anywhere else is a second way from what a rule"
+                        + " means to how one is written. What each of these writes one for: "
+                        + why(MAY_WRITE));
+    }
+
     @Test
     void onlyARecognitionReadsAnOperatorForWhatItPlaces() throws IOException {
-        assertEquals(declared(MAY_ASK), callsTo("of"),
+        assertEquals(declared(MAY_ASK), callsTo(PLACEMENT, "of"),
                 "a reader below a recognised comparison that asks the operator again holds the"
                         + " wide answer, and has a case to invent an answer for; a second call in a"
                         + " licensed reader is a second question under the first one's licence."
@@ -83,20 +108,20 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
         return out;
     }
 
-    /** How many times each method of the compiler calls {@code ComparisonPlacement.<name>}. */
-    private static Map<String, Integer> callsTo(String name) throws IOException {
+    /** How many times each method of the compiler calls {@code owner.name}. */
+    private static Map<String, Integer> callsTo(String owner, String name) throws IOException {
         Map<String, Integer> calls = new TreeMap<>();
         int read = 0;
         for (Path each : classes()) {
             ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
             read++;
-            String owner = model.thisClass().asInternalName().replace('/', '.').replace('$', '.');
+            String from = model.thisClass().asInternalName().replace('/', '.').replace('$', '.');
             for (MethodModel method : model.methods()) {
                 method.code().ifPresent(code -> code.forEach(element -> {
                     if (element instanceof InvokeInstruction call
-                            && call.owner().asInternalName().equals(PLACEMENT)
+                            && call.owner().asInternalName().equals(owner)
                             && call.name().stringValue().equals(name)) {
-                        calls.merge(owner + "." + method.methodName().stringValue(), 1, Integer::sum);
+                        calls.merge(from + "." + method.methodName().stringValue(), 1, Integer::sum);
                     }
                 }));
             }
