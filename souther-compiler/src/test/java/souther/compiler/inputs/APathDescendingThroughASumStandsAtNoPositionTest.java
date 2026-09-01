@@ -35,11 +35,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * found, or the one a context happened to have opened — a total would be held against numbers half
  * the rows it is measured over never reach.
  *
- * <p>And a reader holding some of the cases can say nothing, which is what {@code CasesRead} already
- * says of a sum: a sum has a value wherever any case does. So the join is an answer only where every
- * case was read, and the absence of one case is the absence of the answer rather than a narrower one.
+ * <p><b>The join is the ceiling on what may be assumed, and is not what anybody computes.</b>
+ * {@code RunReach} asks what a value of the type standing at the run's path guarantees of itself,
+ * which says nothing at all where the bound was written on the cases — so the reading actually taken
+ * lies inside the join and is blunter than it. What is fixed here is the ceiling: a reading that
+ * answered anything outside it would be claiming of every occurrence something half of them do not
+ * satisfy, and either case taken alone is exactly that.
  */
-class WhatHoldsOfEveryOccurrenceOfARunIsTheJoinOverItsCasesTest {
+class APathDescendingThroughASumStandsAtNoPositionTest {
 
     /**
      * A number every case of a sum spreads, bounded differently by each.
