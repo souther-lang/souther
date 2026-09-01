@@ -59,6 +59,14 @@ class AComparisonNamingNoPositionIsSettledByItsConstantTest {
             row(0, NumericDomain.Rel.NE, false),
             row(1, NumericDomain.Rel.NE, true));
 
+    /** Every relation at each of the three ways its constant can stand. The table is what both
+     *  halves of the test below are read out of, so a row taken out of it goes from the answers as
+     *  well and nothing else would say so. */
+    @Test
+    void everyRelationIsAskedAboutAtEachSign() {
+        assertEquals(NumericDomain.Rel.values().length * 3, ROWS.size());
+    }
+
     @Test
     void whichExtremeAnAssertionWithoutPositionsIsReadAsIsWhichWayItsConstantStands() {
         List<String> expected = new ArrayList<>();

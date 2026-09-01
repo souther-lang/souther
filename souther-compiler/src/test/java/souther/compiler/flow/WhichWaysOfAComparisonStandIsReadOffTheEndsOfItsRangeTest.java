@@ -92,6 +92,20 @@ class WhichWaysOfAComparisonStandIsReadOffTheEndsOfItsRangeTest {
             row(BinOp.NE, HIGH, true, true), row(BinOp.NE, HIGH, false, true),
             row(BinOp.NE, LOW, true, true), row(BinOp.NE, LOW, false, true));
 
+    /**
+     * Every comparison, both ways it can come out, at each number that is asked about.
+     *
+     * <p>The tables below are what both halves of every test here are read out of, so a row taken
+     * out of one goes from the answers as well and nothing else would say so.
+     */
+    @Test
+    void everyComparisonIsAskedAboutAtEachNumber() {
+        assertEquals(6 * 2, INTERIOR.size(),
+                "six comparisons, each asked which ways it comes out");
+        assertEquals(6 * 2 * 2, AT_THE_ENDS.size(),
+                "the same at each of the two numbers the order stops at");
+    }
+
     @Test
     void aWayStandsWhereTheRangeHoldsAValueThatTakesIt() {
         assertEquals(expected(INTERIOR, false), answered(INTERIOR, false));

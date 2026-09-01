@@ -103,5 +103,10 @@ class ARelationIsAnsweredByWhichWayItsSidesStandTest {
 
         assertEquals(EnumSet.allOf(Rel.class), asked);
         assertEquals(Rel.values().length, DENIALS.size());
+        // Each of them at each of the three ways the sides can stand. The table above is what both
+        // halves of the first test are read out of, so a row taken out of it goes from both and
+        // nothing else would say so.
+        assertEquals(Rel.values().length * 3, ROWS.size(),
+                "every relation at each of the three ways the two sides can stand");
     }
 }
