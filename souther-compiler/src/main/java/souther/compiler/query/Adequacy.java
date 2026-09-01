@@ -2089,164 +2089,14 @@ public final class Adequacy {
      * conditions is four arms and says nothing about whether their combinations were tried, so nothing
      * here calls this covering the paths a body has.
      *
-     * @param all     every arm the behavior is owed a row for. An arm the model's own rules prove
-     *                nothing reaches is not one of them: it is instrumented, because a probe is what
-     *                would show the proof wrong, and it is not owed, because no row can light it.
-     *                Which arms those are is {@link ArmReachability}'s answer, asked once for the
-     *                module and read by every measure.
-     * @param covered the ones a row went through
-     * @param contradicted arms proven unreachable that a row went through anyway. Nothing in the model
-     *                is wrong here — the proof is. Kept rather than dropped, and the arm is left in
-     *                {@link #all} beside it, because a measure that quietly counted such an arm as
-     *                covered would report a full denominator and hide the one fact worth acting on.
+     * <p>What the measure has where it has anything is {@link ArmSummary}: every arm the behavior
+     * is owed a row for, where each of them stands, and whether the set of them is the set it owes.
+     * An arm the model's own rules prove nothing reaches is not one of them — it is instrumented,
+     * because a probe is what would show the proof wrong, and it is not owed, because no row can
+     * light it. Which arms those are is {@link ArmReachability}'s answer, asked once for the module
+     * and read by every measure.
      */
-    public record BranchEvidence(Measure<Arms> measured) {
-
-        /**
-         * The arms of one behavior and what the rows went through.
-         *
-         * @param all     the arms this behavior is owed a row for, with the ones nothing reaches
-         *                taken out
-         * @param covered the ones a row went through
-         */
-        public record Arms(List<souther.compiler.coverage.CoverageSites.Site> all,
-                           Set<Integer> covered) {
-
-            public Arms {
-                all = List.copyOf(all);
-                covered = Set.copyOf(covered);
-            }
-
-            /**
-             * The occurrences of each arm this behavior is owed a row for, in the order the body
-             * holds them.
-             *
-             * <p>Where the quotient is taken, and the only place. Everything below this — the
-             * probes, the proofs about what can reach what — is about one occurrence at a time,
-             * because a copy of an arm spliced under one call site is reachable on terms the copy
-             * under the next one does not share. What a row is owed for is the arm the author wrote,
-             * so the counts and the findings above this line are per key and not per copy.
-             */
-            private java.util.SequencedMap<souther.compiler.coverage.CoverageSites.Obligation,
-                    List<souther.compiler.coverage.CoverageSites.Site>> byObligation() {
-                java.util.SequencedMap<souther.compiler.coverage.CoverageSites.Obligation,
-                        List<souther.compiler.coverage.CoverageSites.Site>> out =
-                        new LinkedHashMap<>();
-                for (souther.compiler.coverage.CoverageSites.Site site : all) {
-                    out.computeIfAbsent(site.obligation(), _ -> new ArrayList<>()).add(site);
-                }
-                return out;
-            }
-
-            /**
-             * How many arms this behavior is owed a row for.
-             *
-             * <p>An arm is owed where something can reach any one of its occurrences: a helper
-             * called down a path a proof rules out is still owed rows through the paths it is called
-             * down elsewhere, and an arm nothing at all can reach was already taken out of
-             * {@link #all}.
-             */
-            public int obligations() {
-                return byObligation().size();
-            }
-
-            /** How many of them some row goes through — through any one occurrence, since going
-             * through an arm is going through it whichever call site the row arrived by. */
-            public int coveredObligations() {
-                int hit = 0;
-                for (List<souther.compiler.coverage.CoverageSites.Site> occurrences
-                        : byObligation().values()) {
-                    if (occurrences.stream().anyMatch(site -> covered.contains(site.index()))) {
-                        hit++;
-                    }
-                }
-                return hit;
-            }
-
-            /**
-             * The arms no row goes through, one entry per arm.
-             *
-             * <p>Named at the first occurrence the body holds. Where the copies keep the positions
-             * they were written at they all say the same thing; where a copy could not — the body
-             * came from a module this compile has no source for, so each copy was given the call
-             * site that spliced it — the occurrences are at different places and one of them has to
-             * be the one shown, since the arm is one arm and the report says so once.
-             *
-             * <p>Which one is a choice about where to send a reader and not about where the arm is.
-             * What each occurrence carries says the arm is written out of sight and names the
-             * declaration, so the report says that however this chooses; the choice only decides
-             * which call the reader is shown. A module of this compile that declares the helper is
-             * not this case at all — its body is in a file the reader holds, and every copy keeps
-             * its own positions.
-             *
-             * <p><b>How it is worked out, and not who may say it.</b> Which arms no row reaches is a
-             * negative claim about every row there was, and this value holds no row: it holds what
-             * was owed and what was seen, so the difference is computable here and is not assertable
-             * here. Whether every row could be read is the measurement's, so the claim is
-             * {@link BranchEvidence#unreached()}'s to make and this is the arithmetic under it.
-             *
-             * <p>Which is why this is not public. It was, with a sentence saying to ask the
-             * measurement first — and a query that needs a caller to remember what to ask before
-             * calling it is the shape this whole issue is about, one level up: the accessors #997
-             * removed answered with a manufactured empty where a caller forgot {@code made()}, and
-             * this answered with a real set where a caller forgot the reading. Both put the
-             * condition in the caller.
-             */
-            List<souther.compiler.coverage.CoverageSites.Site> unreached() {
-                List<souther.compiler.coverage.CoverageSites.Site> out = new ArrayList<>();
-                for (Map.Entry<souther.compiler.coverage.CoverageSites.Obligation,
-                        List<souther.compiler.coverage.CoverageSites.Site>> each
-                        : byObligation().entrySet()) {
-                    // An obligation whose occurrences were put together without anything
-                    // establishing that they are one is not one this can say a row misses: a row
-                    // through either of them may or may not be a row through this one. Asked the
-                    // same way it is said — one occurrence is nothing to be told from another, and
-                    // what its arms did is read like any other's.
-                    if (unsettledDecision(each.getKey())) {
-                        continue;
-                    }
-                    List<souther.compiler.coverage.CoverageSites.Site> occurrences = each.getValue();
-                    if (occurrences.stream().noneMatch(site -> covered.contains(site.index()))) {
-                        out.add(occurrences.get(0));
-                    }
-                }
-                return List.copyOf(out);
-            }
-
-            /** The forks whose occurrences nothing tells apart. The one place the fact is found;
-             *  everything downstream reads it off the weakening this went into. */
-            List<souther.compiler.types.CoverageOrigin> unsettledForks() {
-                List<souther.compiler.types.CoverageOrigin> out = new ArrayList<>();
-                byObligation().forEach((key, occurrences) -> {
-                    // Of the fork and not of its arms. Both arms of one fork are counted together or
-                    // neither is, so saying it per arm says one thing twice.
-                    if (unsettledDecision(key) && !out.contains(key.origin())) {
-                        out.add(key.origin());
-                    }
-                });
-                return List.copyOf(out);
-            }
-
-            /**
-             * Whether nothing established how many rules this obligation stands for.
-             *
-             * <p>Not how many places it was counted at. Which rule decides at a fork the caller
-             * decides is what says what one obligation is, and where nothing said, one place can be
-             * as many obligations as there are rules reaching it — a rule chosen while the behavior
-             * runs arrives at one call site, and the arms one of them takes say nothing about the
-             * arms another would. Asked as "were several places put together", a single place came
-             * back settled and its arms were judged as though one rule had been through them.
-             *
-             * <p>One question and one answer, asked by what says so and by what acts on it. Asked
-             * one way where it is reported and another where a row is judged against it, a fork
-             * could be left out of what the rows are owed and named nowhere — an arm nothing
-             * reaches, missing from the findings, over a measurement still calling itself complete.
-             */
-            private static boolean unsettledDecision(
-                    souther.compiler.coverage.CoverageSites.Obligation key) {
-                return !key.decided().isSettled();
-            }
-        }
+    public record BranchEvidence(Measure<ArmSummary> measured) {
 
         /**
          * Why a behavior's arms have no number, where nobody asked for one.
@@ -2362,106 +2212,55 @@ public final class Adequacy {
          * instrumentation is; this says which of it is owed a row, and the two are different
          * questions — a site with no probe could never disprove the reachability it was excluded by.
          *
-         * <p>Three things can leave this weaker than complete and all three arrive as what they are.
-         * A row nothing could read leaves every arm undecided. A proof a row has already disproved
-         * is not something to report a complete measurement over: what is wrong is this analysis,
-         * not the model's rows. And arms counted as one that nothing tells apart are more than one,
-         * so what the numbers hold is more than they say. Folded into one word, the second took the
-         * first's meaning — an arm no row goes through, and nothing uncertain about it, stopped
-         * being reported because a helper elsewhere in the body could not be told apart — which is
-         * why this measure grew a second status field beside the first (issue #953).
+         * <p>Three things can leave this weaker than complete, and each of them is written onto what
+         * it is about rather than onto the measurement over all of them. A reading that did not run
+         * out leaves the arms it may have lit and did not undecided, and leaves the arms it lit
+         * alight. A fork whose occurrences nothing tells apart takes its own arms out of the count.
+         * A proof a row has already disproved is not about any one arm at all — the arms stand where
+         * they stand and what is in doubt is whether the set of them is the set this behavior owes.
+         * The measurement's own weakening is assembled from those, and never read back to work out
+         * what an arm came to: folded into one word, the second took the first's meaning — an arm no
+         * row goes through, and nothing uncertain about it, stopped being reported because a helper
+         * elsewhere in the body could not be told apart.
          */
         public static BranchEvidence measured(String behavior,
                                               List<souther.compiler.coverage.CoverageSites.Site> all,
                                               Set<Integer> covered,
                                               souther.compiler.check.PathReachability.Answers.AsRun reachable,
                                               WeakeningSet weakenings) {
-            List<souther.compiler.coverage.CoverageSites.Site> owed = owed(all, reachable);
-            Set<Integer> counted = new LinkedHashSet<>(covered);
-            counted.retainAll(owed.stream()
-                    .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
-            Arms arms = new Arms(owed, counted);
-            WeakeningSet by = weakenings;
-            for (int probe : reachable.provedWrong()) {
-                by = by.union(WeakeningSet.of(new Weakening.ProofContradicted(behavior, probe)));
-            }
-            for (souther.compiler.types.CoverageOrigin fork : arms.unsettledForks()) {
-                by = by.union(WeakeningSet.of(new Weakening.ArmsUnsettled(fork)));
-            }
+            ArmAccount account = ArmAccount.of(owed(all, reachable), covered, weakenings,
+                    ArmCensus.of(behavior, reachable.provedWrong()));
+            WeakeningSet by = account.weakening();
             return new BranchEvidence(by.isEmpty()
-                    ? new Measurement.Complete<>(arms) : new Measurement.Partial<>(arms, by));
+                    ? new Measurement.Complete<>(account.summary())
+                    : new Measurement.Partial<>(account.summary(), by));
         }
 
         /**
-         * The arms, for a caller that has established there are some.
+         * The account, for a caller that has established there is one.
          *
-         * <p>Throws where there are none, and that is what it is for. The accessors this replaces
+         * <p>Throws where there is none, and that is what it is for. The accessors this replaces
          * answered a measurement with no value with an empty list and a zero, so a caller that
-         * forgot to ask got a number that looked like a measurement and was not (issue #997). Here
-         * the same forgetting stops the caller rather than reaching a document. A caller writing a
-         * document asks {@link #measured()} and is handed the value only where there is one; this is
-         * for the ones that have already settled that there is.
+         * forgot to ask got a number that looked like a measurement and was not. Here the same
+         * forgetting stops the caller rather than reaching a document. A caller writing a document
+         * asks {@link #measured()} and is handed the value only where there is one; this is for the
+         * ones that have already settled that there is.
+         *
+         * <p>And what it hands over is the whole of what a consumer may read. Every question a
+         * surface has about the arms — how many, which ones, what is open about them and whether the
+         * count is over the set the behavior owes — is {@link ArmSummary}'s. There is nothing else
+         * here to ask, which is the point: the accessors beside this one answered from what weakened
+         * the measurement, and every reader of them was working an arm's state out of a set of
+         * reasons that were never about one arm.
          */
-        public Arms arms() {
+        public ArmSummary arms() {
             return measured.made().orElseThrow(() -> new IllegalStateException(
                     "a branch measurement with no arms was read for them: " + measured.why()));
         }
 
         /** Whether this behavior has arms for the measure to be about. */
         public boolean applicable() {
-            return !(measured instanceof Measure.NotApplicable<Arms>);
-        }
-
-        /**
-         * The arms no row goes through, where this measure can say — and nothing where it cannot.
-         *
-         * <p><b>Here because this is what can stand behind it.</b> The arithmetic is
-         * {@link Arms#unreached()}'s: what was owed, less what was seen. The claim is that no row in
-         * the whole of what was observed goes through them, and only a measure knows whether the
-         * whole of it could be read. A query belongs to the type that can assert the answer rather
-         * than the one that can work it out, and putting it on the value left a protocol — ask the
-         * measure, then ask the value — that a caller had to be told about in prose (issue #997).
-         *
-         * <p><b>Absent for either reason, because a reader can do nothing with the difference.</b>
-         * There is no claim where there is no value, and none where a row this measure reads did not
-         * come back; a document writes the field in neither case, and what it says instead is the
-         * status and the weakening. What is <em>not</em> a reason is an obligation nothing can tell
-         * from its neighbour: that leaves the one obligation undecided and says nothing about the
-         * rest, so those arms are left out where they are collected and the arms beside them are
-         * read as usual.
-         *
-         * <p>Empty and absent are different answers. Empty is this measure having read every row and
-         * found an arm for each; absent is it not being in a position to look.
-         */
-        public Optional<List<souther.compiler.coverage.CoverageSites.Site>> unreached() {
-            return measured.weakening().causes().stream()
-                    .allMatch(Weakening.ArmsUnsettled.class::isInstance)
-                    ? measured.made().map(Arms::unreached) : Optional.empty();
-        }
-
-        /** The arms a row went through that this compiler had proven nothing arrives at. Read off
-         *  what weakened the measurement, which is where that fact is now kept. */
-        public Set<Integer> contradicted() {
-            return measured.weakening().causes().stream()
-                    .filter(Weakening.ProofContradicted.class::isInstance)
-                    .map(each -> ((Weakening.ProofContradicted) each).probe())
-                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        }
-
-        /**
-         * The forks whose occurrences nothing tells apart. Read off what weakened the measurement,
-         * which is where the fact is kept once.
-         *
-         * <p>The measurement's question and not the value's, which is why it stays here while the
-         * counts and the unreached arms moved onto {@link Arms}. It is total on purpose: a
-         * measurement with no value was weakened by no fork, and that is a true answer rather than
-         * an empty set standing in for one. What it qualifies is the two counts, so a document shows
-         * it only where those are shown (issue #997).
-         */
-        public List<souther.compiler.types.CoverageOrigin> unsettledDecisions() {
-            return measured.weakening().causes().stream()
-                    .filter(Weakening.ArmsUnsettled.class::isInstance)
-                    .map(each -> ((Weakening.ArmsUnsettled) each).fork()).toList();
+            return !(measured instanceof Measure.NotApplicable<ArmSummary>);
         }
     }
 
@@ -4397,8 +4196,10 @@ public final class Adequacy {
                 partitionFindings(behavior,
                         partitions == null ? null : partitions.get(behavior.name()),
                         accounts == null ? null : accounts.get(behavior.name()), out);
-                armFindings(behavior,
-                        branches == null ? null : branches.get(behavior.name()), out);
+                BranchEvidence branch = branches == null ? null : branches.get(behavior.name());
+                if (branch != null && branch.measured().made().isPresent()) {
+                    out.addAll(armFindings(behavior.name(), branch.arms()));
+                }
             }
             declaredFindings(db, name, out);
             return Answer.of(List.copyOf(out));
@@ -4602,29 +4403,32 @@ public final class Adequacy {
             }
         }
 
-        /** An arm no row goes through, at the arm and not at the declaration: what to do about it is
-         *  written there. Named only where every row was read — an arm a row that never finished might
-         *  have gone through is undecided, and calling it unreached sends the author after a row that
-         *  exists. */
-        private static void armFindings(Hir.BehaviorDef behavior, BranchEvidence branch,
-                                        List<Finding> out) {
-            // Asked of what was observed and not of the measurement as a whole. An obligation
-            // nothing can tell from its neighbour is undecidable on its own and is left out of the
-            // arms this collects already; gating on the number that falls for it as well threw away
-            // every arm the rows certainly do not reach.
-            if (branch == null) {
-                return;
+        /**
+         * An arm no row goes through, at the arm and not at the declaration: what to do about it is
+         * written there.
+         *
+         * <p>One per arm the account has settled that way. An arm a row that never finished might
+         * have gone through is undecided and is named as that, and calling it unreached sends the
+         * author after a row that exists.
+         *
+         * <p>Written off the account and nothing else, which is what lets it be held to that on its
+         * own. What a build does about a finding turns on what the measurement behind it went
+         * without, and the measurement behind this one is the arm's own reading — handed the branch
+         * measure instead, an arm the rows certainly do not reach was reported as one nobody could
+         * decide, because a fork somewhere else in the body stood for a number of rules nothing
+         * established.
+         */
+        static List<Finding> armFindings(String behavior, ArmSummary arms) {
+            List<Finding> out = new ArrayList<>();
+            for (ArmObligation.Counted arm : arms.unmet()) {
+                // The arm itself and not words about it. What to call one differs between a report,
+                // which is written in one language, and a diagnostic, which is written in the
+                // reader's — and the two readings ask the same arm rather than one of them being
+                // handed the other's answer.
+                out.add(Finding.by(behavior, arm.coverage(), arm.display().at(),
+                        new About.AnArmNoRowGoesThrough(arm.display())));
             }
-            branch.unreached().ifPresent(arms -> {
-                for (souther.compiler.coverage.CoverageSites.Site arm : arms) {
-                    // The arm itself and not words about it. What to call one differs between a
-                    // report, which is written in one language, and a diagnostic, which is written
-                    // in the reader's — and the two readings ask the same arm rather than one of
-                    // them being handed the other's answer.
-                    out.add(Finding.by(behavior.name(), branch.measured(), arm.at(),
-                            new About.AnArmNoRowGoesThrough(arm)));
-                }
-            });
+            return List.copyOf(out);
         }
     }
 

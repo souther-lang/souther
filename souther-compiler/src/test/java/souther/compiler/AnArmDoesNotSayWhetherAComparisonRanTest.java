@@ -155,6 +155,7 @@ coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000").made().o
 
         assertEquals(List.of("then", "else"),
                 branches.get("gate").arms().all().stream()
-                        .map(souther.compiler.report.ArmVocabulary::label).toList());
+                        .map(arm -> souther.compiler.report.ArmVocabulary.label(arm.display()))
+                        .toList());
     }
 }

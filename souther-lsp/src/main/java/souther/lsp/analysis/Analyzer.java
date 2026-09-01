@@ -657,9 +657,8 @@ public final class Analyzer {
         // the value is how the numbers are worked out (issue #997).
         if (branch != null
                 && branch.measured() instanceof souther.compiler.query.Measurement.Complete<
-                        souther.compiler.query.Adequacy.BranchEvidence.Arms> whole) {
-            parts.add("branch " + whole.value().coveredObligations()
-                    + "/" + whole.value().obligations());
+                        souther.compiler.query.ArmSummary> whole) {
+            parts.add("branch " + whole.value().covered() + "/" + whole.value().counted());
         }
         return String.join(" · ", parts);
     }

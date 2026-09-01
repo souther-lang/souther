@@ -6,6 +6,8 @@ import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmObligation;
+import souther.compiler.query.ArmSummary;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ObligationSummary;
@@ -72,12 +74,71 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                 | (Draft { groups = someGroups(64), cost = Amount(0) }) -> Ok { n = 0 }
             """;
 
+    /**
+     * A behavior whose one row does not come back, so its arms are the ones nobody could decide.
+     *
+     * <p>Beside the model above rather than instead of it. That one is past what an observation
+     * holds and reaches the third state of a line; a line has no arms, and what reaches the third
+     * state of an arm is a row that went somewhere before it stopped.
+     */
+    private static final String A_ROW_THAT_DOES_NOT_COME_BACK = """
+            module example.loop
+
+            data Draft = { n: Int }
+            data Done = { n: Int }
+            data Small = { n: Int }
+
+            partial let spin (n: Int): Int = spin(n)
+
+            behavior go : (request: Draft) -> Done | Small
+                constructs Done, Small
+
+            let go (request) = {
+                guard request.n <= 0 else Done { n = spin(request.n) }
+                Small { n = request.n }
+            }
+
+            example go
+                | (Draft { n = 1 }) -> Done { n = 1 }
+            """;
+
+    /**
+     * A behavior whose rows were all read and go through one arm of two.
+     *
+     * <p>The corpora cover every arm they have, so nothing in them reaches the state a build
+     * refuses over. What a gap needs is a model that leaves one.
+     */
+    private static final String ONE_ARM_OF_TWO = """
+            module example.gate
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Draft = { cost: Amount }
+            data Ok = { n: Int }
+            data Waiting = { n: Int }
+
+            behavior submit : (request: Draft) -> Ok | Waiting
+                constructs Ok, Waiting
+
+            let submit (request) = {
+                guard request.cost.value <= 100 else Waiting { n = request.cost.value }
+                Ok { n = request.cost.value }
+            }
+
+            example submit
+                | (Draft { cost = Amount(50) }) -> Ok { n = 50 }
+            """;
+
     @Test
     void everyObligationCountedAndNotMetIsNamedByTheBlockThatCountsIt() {
         List<String> wrong = new ArrayList<>();
         int met = 0;
         int unmet = 0;
         int undecided = 0;
+        int armsMet = 0;
+        int armsUnmet = 0;
+        int armsUndecided = 0;
         for (Reported reported : reports()) {
             String page = reported.report().human(reported.names());
             // Which block each obligation nobody could decide belongs to, so that what is checked is
@@ -122,20 +183,67 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                                     + gap.point() + " carries " + found + " findings");
                         }
                     }
-                    openIn.put(module.module() + "/" + behavior.name(),
-                            account.undecided().size());
                     for (BorderObligationPointAssessment open : account.undecided()) {
                         carriesNoFinding(wrong, reported.name(), open,
                                 findingsAbout(behavior, open));
                     }
+                    // The arms of the same behavior, under the same block and held to the same
+                    // law. Two accounts and one rule: what a reader does is walk from a number to
+                    // the work it names, and a block printing `3/7` with four arms nothing accounts
+                    // for is a number nothing can be done about, whichever account it came from.
+                    ArmSummary arms = behavior.branch() == null
+                            || behavior.branch().measured().made().isEmpty()
+                            ? null : behavior.branch().arms();
+                    int openArms = 0;
+                    if (arms != null) {
+                        armsMet += arms.met().size();
+                        armsUnmet += arms.unmet().size();
+                        openArms = arms.undecided().size();
+                        armsUndecided += openArms;
+                        if (arms.counted() != arms.met().size() + arms.unmet().size() + openArms) {
+                            wrong.add(reported.name() + " " + behavior.name()
+                                    + ": the count holds arms in none of the three states");
+                        }
+                        for (ArmObligation.Counted gap : arms.unmet()) {
+                            long found = findingsAbout(behavior, gap);
+                            if (found != 1) {
+                                wrong.add(reported.name() + " " + behavior.name() + ": an arm at "
+                                        + gap.display().at() + " carries " + found + " findings");
+                            }
+                        }
+                        for (ArmObligation.Counted open : arms.undecided()) {
+                            if (findingsAbout(behavior, open) != 0) {
+                                wrong.add(reported.name() + " " + behavior.name()
+                                        + ": an undecided arm at " + open.display().at()
+                                        + " carries a finding");
+                            }
+                        }
+                        for (ArmObligation.NotCounted left : arms.notCounted()) {
+                            if (findingsAbout(behavior, left) != 0) {
+                                wrong.add(reported.name() + " " + behavior.name()
+                                        + ": an arm out of the count at " + left.display().at()
+                                        + " carries a finding");
+                            }
+                        }
+                    }
+                    openIn.put(module.module() + "/" + behavior.name(),
+                            account.undecided().size() + openArms);
                 }
             }
             saidUnderEachBlock(wrong, reported.name(), page, openIn);
         }
 
-        String reached = "met " + met + ", unmet " + unmet + ", undecided " + undecided;
+        String reached = "met " + met + ", unmet " + unmet + ", undecided " + undecided
+                + "; arms met " + armsMet + ", unmet " + armsUnmet
+                + ", undecided " + armsUndecided;
         assertEquals(List.of(), wrong, "an obligation the count holds is met, marked or named");
         assertTrue(met > 0 && unmet > 0 && undecided > 0, "every state is reached: " + reached);
+        // The arms reach three of their four states here. The fourth is a fork whose declaration
+        // says the caller decides and whose rule nothing worked out, and a model of that shape has
+        // no rows to read at all — its arms come back unavailable, so no report holds one. What the
+        // account does with such an arm is held at the seam it is made at.
+        assertTrue(armsMet > 0 && armsUnmet > 0 && armsUndecided > 0,
+                "every state an arm reaches here is reached: " + reached);
     }
 
     /** A point nobody could decide carries no finding. */
@@ -173,7 +281,7 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                 String named = module + "/" + line.strip().split("\\s+")[0];
                 block = undecided.containsKey(named) ? named : block;
             } else if (block != null
-                    && line.strip().startsWith("? undecided whether a row is at")) {
+                    && line.strip().startsWith("? undecided whether a row")) {
                 said.merge(block, 1, Integer::sum);
             }
         }
@@ -193,6 +301,15 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                 .count();
     }
 
+    /** The findings about one arm, which are told apart by the arm itself and not by its label:
+     *  a behavior with two guards writes two arms called `else`. */
+    private static long findingsAbout(AdequacyReport.BehaviorReport behavior, ArmObligation arm) {
+        return behavior.findings().stream()
+                .filter(f -> f.about() instanceof About.AnArmNoRowGoesThrough(var at)
+                        && at.obligation().equals(arm.id()))
+                .count();
+    }
+
     /** One report and what to call the sources it is about. */
     private record Reported(String name, AdequacyReport report, SourceNameResolver names) {}
 
@@ -206,6 +323,18 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         unread.measure(Adequacy.Asked.fullReport());
         unread.answerEverything();
         out.add(new Reported("example.unread", AdequacyReport.of(unread),
+                SourceNameResolver.identity()));
+        Compilation stopped = Compilation.ofSource(A_ROW_THAT_DOES_NOT_COME_BACK, "Main");
+        stopped.withJvmExampleDeadlines(souther.compiler.DoesNotComeBack.overrunningOn(
+                souther.compiler.DoesNotComeBack.everythingAboutRowsOf("go")));
+        stopped.measure(Adequacy.Asked.fullReport());
+        stopped.answerEverything();
+        out.add(new Reported("example.loop", AdequacyReport.of(stopped),
+                SourceNameResolver.identity()));
+        Compilation gate = Compilation.ofSource(ONE_ARM_OF_TWO, "Main");
+        gate.measure(Adequacy.Asked.fullReport());
+        gate.answerEverything();
+        out.add(new Reported("example.gate", AdequacyReport.of(gate),
                 SourceNameResolver.identity()));
         return out;
     }

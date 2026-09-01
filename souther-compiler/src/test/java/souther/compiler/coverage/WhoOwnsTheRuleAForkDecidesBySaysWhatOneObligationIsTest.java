@@ -59,10 +59,10 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "the first holds and the second does not" : (true, false) -> No
                 """, "both");
 
-        assertEquals(4, both.arms().obligations(),
+        assertEquals(4, both.arms().counted(),
                 "the helper's two calls are one fork, beside the fork of the body itself");
-        assertEquals(List.of(), both.unsettledDecisions(),
-                () -> "and nothing about them is uncertain: " + both.unsettledDecisions());
+        assertEquals(List.of(), both.arms().exclusions(),
+                () -> "and nothing about them is uncertain: " + both.arms().exclusions());
     }
 
     /**
@@ -91,8 +91,10 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                 """, "both");
 
         assertEquals(List.of("ELSE"),
-                both.unreached().orElseThrow().stream().map(site -> site.name().toString()).toList(),
-                () -> "the body's own else, which the one row does not take: " + both.unreached().orElseThrow());
+                both.arms().unmet().stream()
+                        .map(arm -> arm.display().name().toString()).toList(),
+                () -> "the body's own else, which the one row does not take: "
+                        + both.arms().unmet());
     }
 
     /** A value the call site specialises the helper with is not the rule either. */
@@ -114,10 +116,10 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "over the first and under the second" : (20, 1) -> No
                 """, "pick");
 
-        assertEquals(4, pick.arms().obligations(),
+        assertEquals(4, pick.arms().counted(),
                 "one fork written once, whatever number each call hands it");
-        assertEquals(List.of(), pick.unsettledDecisions(),
-                () -> "and nothing uncertain about it: " + pick.unsettledDecisions());
+        assertEquals(List.of(), pick.arms().exclusions(),
+                () -> "and nothing uncertain about it: " + pick.arms().exclusions());
     }
 
     /** A rule the call site writes is the rule, and two of them are two obligations. */
@@ -140,12 +142,12 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one under the first line and under the second" : ([ 1 ], [ 1 ]) -> Count(1)
                 """, "twice");
 
-        assertEquals(4, twice.arms().obligations(),
+        assertEquals(4, twice.arms().counted(),
                 "two calls of one combinator, each deciding by the rule it was handed");
-        assertEquals(2, twice.arms().covered().size(),
+        assertEquals(2, twice.arms().covered(),
                 "and the one row reaches one arm of each");
-        assertEquals(List.of(), twice.unsettledDecisions(),
-                () -> "neither is in doubt: " + twice.unsettledDecisions());
+        assertEquals(List.of(), twice.arms().exclusions(),
+                () -> "neither is in doubt: " + twice.arms().exclusions());
     }
 
     /** Told apart by the rule and not by what the rule compares: the same shape, two subjects. */
@@ -168,7 +170,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one over the first line and under the second" : ([ 20 ], [ 20 ]) -> Count(1)
                 """, "sift");
 
-        assertEquals(4, sift.arms().obligations(),
+        assertEquals(4, sift.arms().counted(),
                 "one comparison, specialised twice, handed in as two rules");
     }
 
@@ -199,9 +201,9 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one under the first line and under the second" : ([ 1 ], [ 1 ]) -> Count(1)
                 """, "sift");
 
-        assertEquals(4, sift.arms().obligations(),
+        assertEquals(4, sift.arms().counted(),
                 "two rules written at two call sites, whatever they were handed through");
-        assertEquals(2, sift.arms().covered().size(), "and the one row reaches one arm of each");
+        assertEquals(2, sift.arms().covered(), "and the one row reaches one arm of each");
     }
 
     /**
@@ -238,9 +240,9 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "under the first line and under the second" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(8, twice.arms().obligations(),
+        assertEquals(8, twice.arms().counted(),
                 "the helper's fork is one obligation per rule handed to it, beside the two here");
-        assertEquals(4, twice.arms().covered().size(), "and the one row reaches half of them");
+        assertEquals(4, twice.arms().covered(), "and the one row reaches half of them");
     }
 
     /** And so is one resting on it through a name the body bound it to. */
@@ -268,7 +270,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "under the line" : (1) -> Count(1)
                 """, "pick");
 
-        assertEquals(4, pick.arms().obligations(),
+        assertEquals(4, pick.arms().counted(),
                 "the name stands for the rule, so the fork is the caller's to decide");
     }
 
@@ -300,8 +302,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one over and one under" : ([ 20 ], [ 1 ]) -> Count(1)
                 """, "twice");
 
-        assertEquals(2, twice.arms().obligations(), "one rule, handed over twice");
-        assertEquals(2, twice.arms().covered().size(), "and both its arms are reached");
+        assertEquals(2, twice.arms().counted(), "one rule, handed over twice");
+        assertEquals(2, twice.arms().covered(), "and both its arms are reached");
     }
 
     /** Two declarations named at two call sites are two. */
@@ -325,7 +327,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one over the first and under the second" : ([ 20 ], [ 20 ]) -> Count(1)
                 """, "twice");
 
-        assertEquals(4, twice.arms().obligations(), "two rules, one apiece");
+        assertEquals(4, twice.arms().counted(), "two rules, one apiece");
     }
 
     /**
@@ -361,7 +363,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "both over" : (1, 1) -> Count(2)
                 """, "twice");
 
-        assertEquals(6, twice.arms().obligations(),
+        assertEquals(6, twice.arms().counted(),
                 "the helper's fork is one obligation, beside the two written here");
     }
 
@@ -397,7 +399,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "under and under" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(8, twice.arms().obligations(),
+        assertEquals(8, twice.arms().counted(),
                 "the helper's fork is one obligation per rule handed to it, beside the two here");
     }
 
@@ -426,8 +428,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "under the first and under the second" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(4, twice.arms().obligations(), "one guard per rule handed to it");
-        assertEquals(2, twice.arms().covered().size(), "and the one row reaches one arm of each");
+        assertEquals(4, twice.arms().counted(), "one guard per rule handed to it");
+        assertEquals(2, twice.arms().covered(), "and the one row reaches one arm of each");
     }
 
     /**
@@ -462,7 +464,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "both over" : (1, 1) -> Count(2)
                 """, "twice");
 
-        assertEquals(6, twice.arms().obligations(),
+        assertEquals(6, twice.arms().counted(),
                 "the helper's fork is one obligation, beside the two written here");
     }
 
@@ -485,7 +487,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one each" : ([ 1 ], [ 1 ]) -> Count(2)
                 """, "twice");
 
-        assertEquals(2, twice.arms().obligations(), "one rule, copied twice");
+        assertEquals(2, twice.arms().counted(), "one rule, copied twice");
     }
 
     /**
@@ -521,7 +523,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "under and under" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(8, twice.arms().obligations(),
+        assertEquals(8, twice.arms().counted(),
                 "the helper's fork is one obligation per rule handed to it, beside the two here");
     }
 
@@ -556,8 +558,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one each" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(4, twice.arms().obligations(), "one match per rule handed in");
-        assertEquals(2, twice.arms().covered().size(), "and the one row reaches one arm of each");
+        assertEquals(4, twice.arms().counted(), "one match per rule handed in");
+        assertEquals(2, twice.arms().covered(), "and the one row reaches one arm of each");
     }
 
     /**
@@ -588,9 +590,9 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one over and one under" : ([ 20 ], [ 1 ]) -> Count(1)
                 """, "twice");
 
-        assertEquals(2, twice.arms().obligations(), "one rule, bound under two names");
-        assertEquals(List.of(), twice.unsettledDecisions(),
-                () -> "and nothing about it is uncertain: " + twice.unsettledDecisions());
+        assertEquals(2, twice.arms().counted(), "one rule, bound under two names");
+        assertEquals(List.of(), twice.arms().exclusions(),
+                () -> "and nothing about it is uncertain: " + twice.arms().exclusions());
     }
 
     /**
@@ -624,7 +626,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one each" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(8, twice.arms().obligations(),
+        assertEquals(8, twice.arms().counted(),
                 "the helper's fork is one obligation per rule handed to it, beside the two here");
     }
 
@@ -656,7 +658,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "under and under" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(8, twice.arms().obligations(), "one obligation per rule handed in");
+        assertEquals(8, twice.arms().counted(), "one obligation per rule handed in");
     }
 
     /**
@@ -686,8 +688,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "one each" : ([ 1 ], [ 1 ]) -> Count(2)
                 """, "twice");
 
-        assertEquals(4, twice.arms().obligations(), "one fork per rule handed to the helper");
-        assertEquals(2, twice.arms().covered().size(), "and the one row reaches one arm of each");
+        assertEquals(4, twice.arms().counted(), "one fork per rule handed to the helper");
+        assertEquals(2, twice.arms().covered(), "and the one row reaches one arm of each");
     }
 
     /** And it says so wherever the value it stands in reaches. */
@@ -711,7 +713,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "under and under" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(4, twice.arms().obligations(),
+        assertEquals(4, twice.arms().counted(),
                 "the fork is in the helper's copy, whatever it was written into");
     }
 
@@ -745,9 +747,9 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "different sides" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(4, twice.arms().obligations(),
+        assertEquals(4, twice.arms().counted(),
                 "one fork per rule the call sites handed `decide`, not one per lambda it writes");
-        assertEquals(2, twice.arms().covered().size(), "and the one row reaches one arm of each");
+        assertEquals(2, twice.arms().covered(), "and the one row reaches one arm of each");
     }
 
     /**
@@ -785,7 +787,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "both over" : (1, 1) -> Count(2)
                 """, "twice");
 
-        assertEquals(6, twice.arms().obligations(),
+        assertEquals(6, twice.arms().counted(),
                 "the helper's fork rests on none of the rules, so it is one obligation");
     }
 
@@ -825,7 +827,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "both over" : (1, 1) -> Count(2)
                 """, "twice");
 
-        assertEquals(6, twice.arms().obligations(),
+        assertEquals(6, twice.arms().counted(),
                 "the helper answers out of none of the rules, so its fork is one obligation");
     }
 
@@ -862,6 +864,6 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                     | "under and under" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(8, twice.arms().obligations(), "one obligation per rule handed in");
+        assertEquals(8, twice.arms().counted(), "one obligation per rule handed in");
     }
 }

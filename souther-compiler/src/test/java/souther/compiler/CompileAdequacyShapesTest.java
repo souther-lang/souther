@@ -130,7 +130,7 @@ class CompileAdequacyShapesTest {
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value().get("check");
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch.measured()),
                 "the behavior's own arms are countable whatever its helpers look like");
-        assertEquals(2, branch.arms().all().size(), "the guard's two arms, and none of the helper's");
+        assertEquals(2, branch.arms().counted(), "the guard's two arms, and none of the helper's");
 
         assertTrue(BorderAssessment.pointsOf(lines(compilation, "check")).stream()
                         .anyMatch(p -> p.item().weakeningSource() instanceof Measurement.Complete<?>),
@@ -180,8 +180,8 @@ class CompileAdequacyShapesTest {
                 .ask(new Adequacy.BranchCoverage("example.rule")).value().get("count");
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch.measured()),
                 "the invariant's own fork is not this behavior's, and does not stop it being counted");
-        assertEquals(2, branch.arms().all().size(), "the guard's two arms, and none of the invariant's");
-        assertEquals(1, branch.arms().covered().size());
+        assertEquals(2, branch.arms().counted(), "the guard's two arms, and none of the invariant's");
+        assertEquals(1, branch.arms().covered());
     }
 
     /**

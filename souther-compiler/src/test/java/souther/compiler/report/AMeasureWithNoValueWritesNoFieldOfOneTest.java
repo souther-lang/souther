@@ -176,11 +176,11 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
     }
 
     /**
-     * A behavior with no body writes no arm count, and none of the three fields read beside one.
+     * A behavior with no body writes no arms, and nothing that is read beside them.
      *
-     * <p>{@code unsettledDecisions} goes with them although it is the measurement's own answer
-     * rather than the value's: what it qualifies is {@code arms} and {@code covered}, and an empty
-     * array beside no numbers is an empty set standing in for a measurement nobody made.
+     * <p>{@code denominatorSettled} goes with them although it is the account's answer about the
+     * set rather than about any arm: what it qualifies is the arms, and a word beside no arms is an
+     * answer standing in for a measurement nobody made.
      */
     @Test
     void aBehaviorWithNoBodyWritesNoArmCount() {
@@ -188,19 +188,24 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
 
         assertEquals("unavailable", branch.get("status").asString());
         assertEquals("no_body", branch.get("reason").asString());
-        for (String key : new String[] {"arms", "covered", "unsettledDecisions", "unreached"}) {
+        for (String key : new String[] {"obligations", "denominatorSettled"}) {
             assertNull(branch.get(key), () -> key + " is a measurement nobody made: " + branch);
         }
     }
 
-    /** And a behavior whose arms were counted writes all four. */
+    /** And a behavior whose arms were counted writes each of them, with what it came to. */
     @Test
     void aBehaviorWhoseArmsWereCountedWritesThem() {
         JsonNode branch = behavior(reportOf(INJECTED, Adequacy.Level.ALL), "submit").get("branch");
 
         assertEquals("complete", branch.get("status").asString());
-        assertEquals(2, branch.get("arms").asInt());
-        assertFalse(branch.get("unreached").isEmpty(),
+        assertEquals(2, branch.get("obligations").size());
+        assertTrue(branch.get("denominatorSettled").asBoolean(),
+                () -> "nothing has shown the arms to be short of one: " + branch);
+        List<String> dispositions = new java.util.ArrayList<>();
+        branch.get("obligations")
+                .forEach(arm -> dispositions.add(arm.get("disposition").asString()));
+        assertEquals(List.of("met", "unmet"), dispositions,
                 () -> "the one row takes the guard's continued arm and not its else: " + branch);
     }
 

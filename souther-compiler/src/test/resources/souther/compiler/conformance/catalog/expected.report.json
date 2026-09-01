@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 10,
+  "schemaVersion" : 11,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread" ],
@@ -811,10 +811,52 @@
       },
       "branch" : {
         "status" : "complete",
-        "arms" : 2,
-        "covered" : 2,
-        "unsettledDecisions" : [ ],
-        "unreached" : [ ]
+        "obligations" : [ {
+          "obligationId" : {
+            "module" : "conformance.catalog",
+            "construct" : 7,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "continued",
+          "kind" : "continued",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "0",
+            "line" : 68,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.catalog",
+            "construct" : 7,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "0",
+            "line" : 68,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        } ],
+        "denominatorSettled" : true
       },
       "findings" : [ {
         "kind" : "partition_not_derivable",
@@ -2178,10 +2220,274 @@
       },
       "branch" : {
         "status" : "complete",
-        "arms" : 12,
-        "covered" : 12,
-        "unsettledDecisions" : [ ],
-        "unreached" : [ ]
+        "obligations" : [ {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 12,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "continued",
+          "kind" : "continued",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 78,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 55,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 55,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "souther.bool",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 79,
+            "column" : 11,
+            "writtenAt" : {
+              "kind" : "outOfSight",
+              "declaration" : "Bool.not"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "souther.bool",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 79,
+            "column" : 11,
+            "writtenAt" : {
+              "kind" : "outOfSight",
+              "declaration" : "Bool.not"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 10,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "continued",
+          "kind" : "continued",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 79,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 9,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "case 書けなかった",
+          "kind" : "case",
+          "construct" : "match",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 80,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 9,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "case 出荷済み",
+          "kind" : "case",
+          "construct" : "match",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 80,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 7,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 75,
+            "column" : 28,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 7,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 75,
+            "column" : 28,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 10,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 79,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "construct" : 12,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 78,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met",
+          "status" : "complete",
+          "hit" : true
+        } ],
+        "denominatorSettled" : true
       },
       "findings" : [ {
         "kind" : "domain_point_uncovered",

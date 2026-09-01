@@ -219,17 +219,34 @@ class EverySchemaWordIsAccountedForTest {
             // is a site and not a fork a row is in or out of, so it never reaches this field —
             // projected off the same predicate the measure uses rather than listed here, so that an
             // arm kind added later still has to teach the schema its word.
-            new Vocabulary("branch.unreached[].kind",
-                    List.of("$defs", "branch", "properties", "unreached", "items", "properties",
+            new Vocabulary("branch.obligations[].kind",
+                    List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "kind"),
                     List.of(souther.compiler.coverage.OutcomeName.class), armWords(), Set.of()),
             // The other half of what an arm is. Held apart from the outcome because they vary on
             // their own: an `else` is written under an `if` and under a `guard`, and a construct
             // added to the language does not add an outcome.
-            new Vocabulary("branch.unreached[].construct",
-                    List.of("$defs", "branch", "properties", "unreached", "items", "properties",
+            new Vocabulary("branch.obligations[].construct",
+                    List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "construct"),
                     List.of(souther.compiler.types.CoverageConstruct.class), constructWords(), Set.of()),
+            // Where the arm account puts an arm, and why it leaves one out. Spelled by the writer
+            // for the reason the obligations' are: which states a consumer must handle is a
+            // decision about the contract, and a state renamed inside the compiler is not.
+            new Vocabulary("branch.obligations[].disposition",
+                    List.of("$defs", "branch", "properties", "obligations", "items", "properties",
+                            "disposition"),
+                    List.of(souther.compiler.query.ArmDisposition.class), armDispositionWords(),
+                    Set.of()),
+            new Vocabulary("branch.obligations[].notCountedBecause",
+                    List.of("$defs", "branch", "properties", "obligations", "items", "properties",
+                            "notCountedBecause"),
+                    List.of(souther.compiler.query.ArmExclusion.class), armExclusionWords(),
+                    Set.of()),
+            // What settles which rule a fork decides by, which is part of what one arm is.
+            new Vocabulary("armObligationId.decidedBy",
+                    List.of("$defs", "armObligationId", "properties", "decidedBy"),
+                    List.of(souther.compiler.coverage.DecidedBy.class), decidedByWords(), Set.of()),
             // What a rule of the model raises. Only the questions this compiler issues today: a
             // word arrives here in the same change that starts raising it, so the enum and the
             // schema move together or the compile stops.
@@ -464,6 +481,41 @@ class EverySchemaWordIsAccountedForTest {
     /** The dispositions a document may name, spelled by the one writer of the field. */
     private static Set<String> dispositionWords() {
         return dispositions().stream()
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** Where the arm account puts an arm, spelled by the one writer of the field. */
+    private static Set<String> armDispositionWords() {
+        return Arrays.stream(souther.compiler.query.ArmDisposition.values())
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * The reasons the arm account leaves an arm out, likewise spelled by the writer.
+     *
+     * <p>Built from a value of each rather than from a list of names: what a fork carries is not
+     * part of the word, and an exclusion added to the sum arrives here as a case the writer has no
+     * word for rather than as a word this test forgot.
+     */
+    private static Set<String> armExclusionWords() {
+        souther.compiler.types.CoverageOrigin fork = souther.compiler.types.CoverageOrigin.written(
+                "m", 0, souther.compiler.types.CoverageConstruct.IF);
+        return java.util.stream.Stream
+                .<souther.compiler.query.ArmExclusion>of(
+                        new souther.compiler.query.ArmExclusion.OccurrencesNotToldApart(fork))
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** What settles which rule a fork decides by, spelled by the writer for the same reason. */
+    private static Set<String> decidedByWords() {
+        return java.util.stream.Stream.of(souther.compiler.coverage.DecidedBy.THE_DECLARATION,
+                        new souther.compiler.coverage.DecidedBy.BySupplied(List.of(
+                                new souther.compiler.coverage.SuppliedRules.RuleIdentity.Written(
+                                        souther.compiler.types.RuleOrigin.written("m", 0)))),
+                        souther.compiler.coverage.DecidedBy.NOT_SAID)
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }

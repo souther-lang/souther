@@ -208,8 +208,8 @@ class FindingDispositionFollowsTheBarTest {
      * <p>A behavior with two {@code guard}s writes two arms labelled {@code else}, and the label is
      * what a finding's subject is — so kind, disposition, subject and code came out identical on
      * both, and which arm a reader was being told about could not be worked out from the document.
-     * The place is what {@code branch.unreached} already tells them apart by, so it is written under
-     * the same key and the two join.
+     * The place is what {@code branch.obligations} already tells them apart by, so it is written
+     * under the same key and the two join.
      */
     @Test
     void twoArmsOfOneNameAreToldApartByWhereTheyAre() {
@@ -254,10 +254,12 @@ class FindingDispositionFollowsTheBarTest {
         assertEquals(2, arms.stream().map(a -> a.get("at").toString()).distinct().count(),
                 "two arms of one name are two places: " + arms);
 
-        // The same places, under the same key, as the measure that already told them apart.
+        // The same places, under the same key, as the account that already told them apart.
         List<String> unreached = new ArrayList<>();
-        for (JsonNode each : check.get("branch").get("unreached")) {
-            unreached.add(each.get("at").toString());
+        for (JsonNode each : check.get("branch").get("obligations")) {
+            if ("unmet".equals(each.get("disposition").asString())) {
+                unreached.add(each.get("at").toString());
+            }
         }
         assertEquals(unreached.stream().sorted().toList(),
                 arms.stream().map(a -> a.get("at").toString()).sorted().toList());
