@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -84,7 +83,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
         assertTrue(at.writabilityEvidence().has(ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
                 "a value at 10 went through the decoder");
-        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.searches().only(),
                 "and the value it built is kept, because it is also the row an author is offered");
     }
 
@@ -130,7 +129,7 @@ at.coverage().made().orElseThrow());
                 at.writabilityEvidence().grounds(),
                 "every rule of `Amount` was read, so 0 is a value it holds, and that is the whole"
                         + " of what showed it");
-        assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.searches().only(),
                 "and the search still came back with nothing, which takes nothing away from that");
     }
 
@@ -219,8 +218,8 @@ at.coverage().made().orElseThrow());
                 "the row is the witness");
         assertFalse(at.worthSearching(),
                 "and a value that is already there is not worth building one for");
-        assertNull(at.attempt(),
-                "so nothing was searched for, which is said by there being no attempt");
+        assertFalse(at.searches().ran(),
+                "so nothing was searched for, which is said by there being no search");
     }
 
     /**
@@ -260,7 +259,7 @@ at.coverage().made().orElseThrow());
                 "nobody wrote a row, which says nothing about whether one could be written");
         assertFalse(at.writabilityEvidence().has(ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT),
                 "and a measurement nobody made puts no row at the point");
-        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.searches().only(),
                 "a value was built here, and what it settles is the writability and not the rows");
     }
 
@@ -306,7 +305,7 @@ at.coverage().made().orElseThrow());
                     assertInstanceOf(Measurement.NotMeasured.class,
                             at.owed().coverage()).why(), at.label());
             assertFalse(at.owed().worthSearching(), at.label());
-            assertNull(at.owed().attempt(), at.label());
+            assertFalse(at.owed().searches().ran(), at.label());
         }
     }
 
@@ -368,8 +367,8 @@ at.coverage().made().orElseThrow());
                         + " left when nothing was");
         assertTrue(unbuilt.worthSearching(),
                 "a value here would have settled something, so the point is worth searching");
-        assertNull(unbuilt.attempt(),
-                "and nobody asked for one: said by there being no attempt, not by an attempt that"
+        assertFalse(unbuilt.searches().ran(),
+                "and nobody asked for one: said by there being no search, not by a search that"
                         + " reports not having been asked for");
         assertInstanceOf(Measurement.Complete.class, unbuilt.coverage(),
                 "the rows were read all the same: what is missing is the value, not the reading");

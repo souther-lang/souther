@@ -78,6 +78,13 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/partition/StandingAtAPoint$Met;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 3),
             Map.entry("souther.compiler.query.Coverages#whyNoGuardLine(Lsouther/compiler/query/Adequacy$RowReading;Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 2),
             Map.entry("souther.compiler.query.Coverages#whyNoInvariantLine(Lsouther/compiler/query/Adequacy$RowReading;Lsouther/compiler/query/Adequacy$Level;)Lsouther/compiler/query/Measurement;", 1),
+            // Two searches of one reading of one line, as that reading's measurement. It makes
+            // states and decides none of them: what the pair comes to is asked of
+            // `acrossTheReadings`, and the three here are the measurements that say each of that
+            // one's answers back. A second reading of the same question would be a second coverage
+            // semantics, which is what this count exists to stop, so the answer is borrowed rather
+            // than worked out and only the writing back is here.
+            Map.entry("souther.compiler.query.ObligationCoverage#acrossOneReadingsSearches(Lsouther/compiler/query/Measurement;Lsouther/compiler/query/Measurement;)Lsouther/compiler/query/Measurement;", 3),
             // The reading of a behavior's rows, which is a measure like the ones counted over them
             // and is the one that can never be inapplicable. `of` chooses between the three states
             // a reading that was asked for comes to; the two constants are a behavior with no rows

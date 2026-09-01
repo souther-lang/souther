@@ -392,9 +392,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                         "a reading owing nothing at a point it owes one at: " + role);
             }
             coverage.add(owed.coverage());
-            if (owed.attempt() != null) {
-                attempts.add(owed.attempt());
-            }
+            attempts.addAll(owed.searches().each());
             if (owed.projection().proves()) {
                 projection = ItemAssessment.WritabilityProjection.PROVEN;
             } else if (projection != ItemAssessment.WritabilityProjection.PROVEN

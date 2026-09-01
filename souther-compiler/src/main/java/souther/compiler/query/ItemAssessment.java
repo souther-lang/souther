@@ -38,14 +38,19 @@ public sealed interface ItemAssessment {
      *                   about a value being there. What the rules say on their own, so it is settled
      *                   without building anything and stays true whatever a search afterwards makes
      *                   of the point
-     * @param attempt    what building a value here came to, or null where nobody asked for one to be
-     *                   built. Null is the absence of the evidence and never a state of the point:
-     *                   whether a value was composed is a fact about who asked, and it used to be
-     *                   carried here as an attempt saying nobody had — a measurement answering a
-     *                   question it was not put (issue #1001)
+     * @param searches   what building a value here came to, over every search that was made for it,
+     *                   and empty where nobody asked for one to be built. Empty is the absence of
+     *                   the evidence and never a state of the point: whether a value was composed is
+     *                   a fact about who asked, and it used to be carried here as an attempt saying
+     *                   nobody had — a measurement answering a question it was not put.
+     *
+     *                   <p>Several, because one reading of a line can be searched more than once: a
+     *                   helper called from two arms is the same line at the same target, and a row
+     *                   for it is composed under each caller's own conditions
      */
     record Owed(Criterion criterion, Measurement<Coverage> coverage,
-                WritabilityProjection projection, Attempt attempt) implements ItemAssessment {
+                WritabilityProjection projection, SearchOutcomes searches)
+            implements ItemAssessment {
 
         /**
          * Whether building a value here would tell anybody anything.
@@ -107,13 +112,10 @@ public sealed interface ItemAssessment {
             };
         }
 
-        /** The same point, with what a search of it came to. */
+        /** The same point, with what one more search of it came to. */
         public Owed settledBy(Attempt searched) {
-            if (attempt != null) {
-                throw new IllegalStateException(
-                        "a point searched twice: " + criterion + " already has " + attempt);
-            }
-            return new Owed(criterion, coverage, projection, searched);
+            return new Owed(criterion, coverage, projection,
+                    searches.plus(SearchOutcomes.of(searched)));
         }
 
         /**
@@ -124,11 +126,12 @@ public sealed interface ItemAssessment {
          * a value with a row at it and no {@code A_ROW_IS_AT_IT} would be a state somebody could
          * build. Read through, that state cannot be spelled.
          *
-         * <p>Which is also what makes composing a search safe. A search changes the {@link #attempt}
-         * and nothing else, and every ground is monotone in what it reads, so the set this answers
-         * can only grow. It used to be a verdict picked from the evidence by a fixed order, where
-         * building a value at a point the rules already proved replaced the proof with the witness —
-         * true of whether anything was known, and false of what was doing the knowing.
+         * <p>Which is also what makes composing a search safe. A search adds to the
+         * {@link #searches} and changes nothing else, and every ground is monotone in what it reads,
+         * so the set this answers can only grow. It used to be a verdict picked from the evidence by
+         * a fixed order, where building a value at a point the rules already proved replaced the
+         * proof with the witness — true of whether anything was known, and false of what was doing
+         * the knowing.
          */
         public WritabilityEvidence writabilityEvidence() {
             // The certified arm and not `Built`. What grounds this is a value shown to be at the
@@ -136,8 +139,7 @@ public sealed interface ItemAssessment {
             // counted here, an observation this compiler cut short would be reported as the model
             // admitting a row, which is the same trade as the one it is here to stop, made the
             // other way round. What that row does license is said by `WritabilityKnowledge`.
-            return WritabilityEvidence.of(projection, hasRowWitness(),
-                    attempt instanceof Attempt.Certified);
+            return WritabilityEvidence.of(projection, hasRowWitness(), searches.certified());
         }
     }
 

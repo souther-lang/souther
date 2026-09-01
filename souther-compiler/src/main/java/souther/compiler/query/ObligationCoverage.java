@@ -157,4 +157,33 @@ public sealed interface ObligationCoverage {
         return missed ? new Missed()
                 : new NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS);
     }
+
+    /**
+     * What two searches of one reading of one line saw, as one reading's measurement.
+     *
+     * <p>For the one place two of those meet: a line read once and searched twice, which is a
+     * helper called from two arms. They are not two readings — the authored line and the target are
+     * the same, and what differs is the region a row for it was composed in — so what a debt is
+     * gathered from has to be one measurement, and this is how the two become it.
+     *
+     * <p><b>Written in terms of {@link #acrossTheReadings} and not beside it.</b> What a set of
+     * measurements comes to is that one's answer, and a second reading of the same question here
+     * would be a second coverage semantics free to part from it. So the pair is put through it and
+     * the answer is written back as the measurement that says the same thing, which makes
+     * {@code acrossTheReadings(a, b)} and {@code acrossTheReadings(across(a, b))} the same answer by
+     * construction rather than by two pieces of code being kept in step.
+     */
+    static Measurement<ItemAssessment.Coverage> acrossOneReadingsSearches(
+            Measurement<ItemAssessment.Coverage> a, Measurement<ItemAssessment.Coverage> b) {
+        return switch (acrossTheReadings(List.of(a, b))) {
+            // A row was seen. Kept as the measurement that saw it, so that what that reading went
+            // without is still said: a row found by a reading which could not read everything is
+            // found, and what it could not read is a fact of its own.
+            case Witnessed _ -> a.made().map(ItemAssessment.Coverage::hit).orElse(false) ? a : b;
+            case Undecided it -> new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
+                    it.weakening());
+            case Missed _ -> new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit());
+            case NotMeasured it -> new Measurement.NotMeasured<>(it.why());
+        };
+    }
 }

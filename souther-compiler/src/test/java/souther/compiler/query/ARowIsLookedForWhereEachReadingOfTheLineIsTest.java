@@ -77,8 +77,8 @@ class ARowIsLookedForWhereEachReadingOfTheLineIsTest {
         ItemAssessment.Owed on = assertInstanceOf(ItemAssessment.Owed.class,
                 at(searched, "a = 100").get(0).at(PointRole.ON));
         ItemAssessment.Attempt.Built built = assertInstanceOf(
-                ItemAssessment.Attempt.Built.class, on.attempt(),
-                () -> "a row stands at the line under one of the two calls: " + on.attempt());
+                ItemAssessment.Attempt.Built.class, on.searches().rowToOffer().orElseThrow(),
+                () -> "a row stands at the line under one of the two calls: " + on.searches().rowToOffer().orElseThrow());
         List<String> row = built.row().inputs().stream()
                 .map(each -> each.text()).toList();
 

@@ -17,7 +17,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -525,7 +524,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertTrue(line.owedAt(PointRole.OUT).hasRowWitness(), "and one is well over it");
         for (PointRole role : List.of(PointRole.IN, PointRole.OUT)) {
             assertFalse(line.owedAt(role).worthSearching(), role.toString());
-            assertNull(line.owedAt(role).attempt(), role.toString());
+            assertFalse(line.owedAt(role).searches().ran(), role.toString());
         }
 
         // And the block an author reads says nothing about them, because nothing is owed there.

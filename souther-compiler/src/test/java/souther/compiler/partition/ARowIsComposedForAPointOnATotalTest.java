@@ -142,7 +142,7 @@ class ARowIsComposedForAPointOnATotalTest {
                 // the one a line is drawn at owes no point off it, which is the order's answer and
                 // was the order's answer before any of this.
                 if (item instanceof ItemAssessment.Owed one
-                        && !(one.attempt() instanceof ItemAssessment.Attempt.Built)) {
+                        && one.searches().rowToOffer().isEmpty()) {
                     owed.add(point);
                 }
             });
@@ -300,7 +300,7 @@ class ARowIsComposedForAPointOnATotalTest {
             }
             ItemAssessment at = border.at(PointRole.ON);
             if (at instanceof ItemAssessment.Owed owed
-                    && owed.attempt() instanceof ItemAssessment.Attempt.Stopped why) {
+                    && owed.searches().only() instanceof ItemAssessment.Attempt.Stopped why) {
                 said.add(why.why().reason().toString());
                 budgets.add(why.stoppedBy().budgets());
             }
@@ -338,7 +338,7 @@ class ARowIsComposedForAPointOnATotalTest {
         for (String behavior : ON_A_TOTAL) {
             forEachPoint(behavior, (point, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
-                        && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
+                        && owed.searches().only() instanceof ItemAssessment.Attempt.Built built) {
                     held.check(behavior, point, written(built.row()));
                 }
             });

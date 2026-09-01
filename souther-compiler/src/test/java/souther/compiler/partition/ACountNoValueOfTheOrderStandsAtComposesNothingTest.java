@@ -70,7 +70,7 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
         for (BorderAssessment border : measured()) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
-                        && owed.attempt() instanceof ItemAssessment.Attempt.Unresolved unresolved) {
+                        && owed.searches().only() instanceof ItemAssessment.Attempt.Unresolved unresolved) {
                     reasons.add(unresolved.why().reason().toString());
                 }
             });
@@ -88,7 +88,7 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
         for (BorderAssessment border : measured()) {
             border.items().forEach((role, item) -> {
                 if (item instanceof ItemAssessment.Owed owed
-                        && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
+                        && owed.searches().only() instanceof ItemAssessment.Attempt.Built built) {
                     rows.add(built.row().inputs().stream().map(FixtureTemplate::text).toList()
                             .toString());
                 }

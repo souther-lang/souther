@@ -1786,7 +1786,7 @@ public final class Adequacy {
             throw new IllegalStateException("a reading owing nothing at a point its line owes one"
                     + " at: " + debt.point() + " at " + reading);
         }
-        if (here.attempt() == null) {
+        if (!here.searches().ran()) {
             // The search answered about this behavior and looked for nothing here, at a point the
             // line says is worth searching. That is the search and the debt disagreeing about one
             // point rather than evidence of anything, and a state read as either would report our
@@ -1794,7 +1794,7 @@ public final class Adequacy {
             throw new IllegalStateException("nothing was searched for at " + debt.point()
                     + ", which the line says is worth searching, at " + reading);
         }
-        return new PointResolver.ReadingEvidence.Searched(here.attempt());
+        return new PointResolver.ReadingEvidence.Searched(here.searches());
     }
 
     /** The same, with a value composed at every point worth one — which is a request, and costs what
@@ -3111,7 +3111,12 @@ public final class Adequacy {
             for (OwedBoundaryPoint point
                     : OwedBoundaryPoint.oneForEachPoint(OwedBoundaryPoint.across(boundaries)).at()) {
                 ItemAssessment.Owed each = point.item();
-                switch (each.attempt()) {
+                // Every search of the point, because a block short of rows is short of what each of
+                // them did not offer. One of them stands for none of the others: a reading searched
+                // twice can have composed a row under one caller's conditions and been stopped
+                // under the other's, and both are things this run has to account for.
+                for (ItemAssessment.Attempt made : each.searches().each()) {
+                switch (made) {
                     case ItemAssessment.Attempt.Built built -> rows.add(built.row());
                     // A search a budget of this compiler's ended came to nothing like any other,
                     // and what a block short of rows records is that nothing came of it. Which
@@ -3144,15 +3149,14 @@ public final class Adequacy {
                     // per point would put the compiler's own bookkeeping in a list of an author's
                     // work.
                     //
-                    // A point the measurement does say is worth searching is a different thing, and
-                    // it is the same thing `atEdge` refuses: this walks what a search answered, so a
-                    // hole in it is the search having skipped a point it was asked about.
-                    case null -> {
-                        if (each.worthSearching()) {
-                            throw new IllegalStateException("nothing was searched for at "
-                                    + point + ", which is worth searching");
-                        }
-                    }
+                }
+                }
+                // A point the measurement does say is worth searching is a different thing, and it
+                // is the same thing `atEdge` refuses: this walks what a search answered, so a hole
+                // in it is the search having skipped a point it was asked about.
+                if (!each.searches().ran() && each.worthSearching()) {
+                    throw new IllegalStateException("nothing was searched for at "
+                            + point + ", which is worth searching");
                 }
             }
             return new Generator.GenerationResult(rows, unresolved,

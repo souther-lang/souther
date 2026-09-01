@@ -20,6 +20,7 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
+import souther.compiler.query.SearchOutcomes;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.observe.MeasurementStatus;
@@ -526,7 +527,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("      · not known to be writable: the %s point %s (%s)%n",
                     each.debt().role(), each.said(), each.debt().describe(names, null)));
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
-                    at.owedAt(each.debt().at()).attempt(), names, null));
+                    at.owedAt(each.debt().at()).searches(), names, null));
         }
         Map<String, List<Adequacy.Finding>> byDeclaration = new java.util.LinkedHashMap<>();
         for (Adequacy.Finding each : module.declarations()) {
@@ -1312,7 +1313,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // reader looking at two models that differ here is looking at what the compiler could
             // establish — and without this the difference reads as the tool being arbitrary.
             readings(out, p, _ -> true, at -> whatWasTried(
-                    at.owedAt(p.at()).attempt(), names, declaredIn));
+                    at.owedAt(p.at()).searches(), names, declaredIn));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
@@ -1874,6 +1875,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** What the search for a value at an edge came to, where it ran and found none. */
+    private static String whatWasTried(SearchOutcomes outcomes, SourceNameResolver names,
+                                       SourceId declaredIn) {
+        List<String> said = new ArrayList<>();
+        for (ItemAssessment.Attempt each : outcomes.each()) {
+            String here = whatWasTried(each, names, declaredIn);
+            if (!here.isEmpty() && !said.contains(here)) {
+                said.add(here);
+            }
+        }
+        return String.join("", said);
+    }
+
+    /** The same, of one search of the point. */
     private static String whatWasTried(ItemAssessment.Attempt attempt, SourceNameResolver names,
                                        SourceId declaredIn) {
         // One opening per outcome, and not one for everything that came back without a row. A

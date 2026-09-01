@@ -721,12 +721,12 @@ final class Coverages {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
                             : verdictOf(shape.met(owed.criterion(), rows), guard,
                                     border, observed);
-                    // No attempt. Nothing was searched for here, and that is said by there being no
-                    // attempt rather than by an attempt saying nobody asked: whether a value was
+                    // No search. Nothing was searched for here, and that is said by there being no
+                    // search rather than by a search saying nobody asked: whether a value was
                     // composed is a fact about who asked for one, and a measurement that carried it
                     // was answering a question it had not been put.
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            shape.projection(), null);
+                            shape.projection(), SearchOutcomes.none());
                 }
             });
         }
@@ -884,66 +884,42 @@ final class Coverages {
         }
         java.util.Map<DomainPoint, ItemAssessment> kept = new java.util.LinkedHashMap<>();
         for (DomainPoint point : a.items().keySet()) {
-            kept.put(point, keeps(a.at(point), b.at(point)) ? a.at(point) : b.at(point));
+            kept.put(point, together(a.at(point), b.at(point)));
         }
         return new BorderAssessment(a.border(), kept);
     }
 
     /**
-     * Whether what the first reading saw at a point stands, rather than what the second saw.
+     * What two searches of one point of one reading come to, dimension by dimension.
      *
-     * <p>What was measured first, and what was composed only where the two measured alike. A row
-     * that was found is the whole of what a point asks for; where neither reading found one, the
-     * reading that composed a row to offer has something to say that a reading which composed
-     * nothing does not, and the point is owed the same row either way.
+     * <p><b>Not one of them.</b> They are searches of the same point under one reading, and the
+     * point is owed once — so what a reader is owed is what both of them found out. Taking whichever
+     * saw more, every fact the other one established was gone before anything downstream could ask:
+     * a search a budget of this compiler's stopped, dropped for one that came back with nothing, is
+     * how a point this declined to work on left the count as one the model admits no row at.
      *
-     * <p>Here because the search is made per reading. One search against one region has one outcome
-     * and nothing to choose between; two readings carry two, and keeping the first would drop a row
-     * an author could have been offered.
+     * <p>Each dimension by whatever owns it. What the rows came to is coverage's own question
+     * ({@link ObligationCoverage#acrossOneReadingsSearches}); what the rules prove is a reading of
+     * the declarations and the two searches read the same ones, so a difference there is not
+     * something to fold but something that has gone wrong.
      */
-    private static boolean keeps(ItemAssessment a, ItemAssessment b) {
-        if (rank(a) != rank(b)) {
-            return rank(a) > rank(b);
+    private static ItemAssessment together(ItemAssessment a, ItemAssessment b) {
+        if (!(a instanceof ItemAssessment.Owed one) || !(b instanceof ItemAssessment.Owed two)) {
+            // Two readings of one line owe the same points, so a point no row is owed at is that
+            // under both — and there is nothing about it to put together.
+            return a;
         }
-        return composed(a) >= composed(b);
-    }
-
-    /**
-     * How much the search of this reading's own region came back with.
-     *
-     * <p>A row read back where it was built for outranks one nothing could place, which outranks a
-     * search a budget of this compiler's stopped, which outranks none at all. The first is grounds
-     * that a row can be written at the point; the third is not grounds and is still the point's
-     * question left open for a reason somebody could act on, and a reading holding it cannot be
-     * dropped for one that holds nothing.
-     */
-    private static int composed(ItemAssessment item) {
-        if (!(item instanceof ItemAssessment.Owed owed) || owed.attempt() == null) {
-            return 0;
+        if (!one.criterion().equals(two.criterion())) {
+            throw new IllegalStateException("two searches of one point asking for different"
+                    + " values: " + one.criterion() + " and " + two.criterion());
         }
-        return switch (owed.attempt()) {
-            case ItemAssessment.Attempt.Certified _ -> 3;
-            case ItemAssessment.Attempt.Unverified _ -> 2;
-            case ItemAssessment.Attempt.Stopped _ -> 1;
-            case ItemAssessment.Attempt.Unresolved _, ItemAssessment.Attempt.Unavailable _ -> 0;
-        };
-    }
-
-    private static int rank(ItemAssessment item) {
-        if (!(item instanceof ItemAssessment.Owed owed)) {
-            // Two readings of one line owe the same points, so this is one of them against itself.
-            return 0;
+        if (one.projection() != two.projection()) {
+            throw new IllegalStateException("two searches of one point disagreeing about what the"
+                    + " rules prove there: " + one.projection() + " and " + two.projection());
         }
-        return switch (owed.coverage()) {
-            case Measurement.Complete<ItemAssessment.Coverage> whole ->
-                    whole.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 1;
-            // A reading made in part saw less than a settled one and more than none: found is
-            // found either way, and what it did not find is undecided rather than absent.
-            case Measurement.Partial<ItemAssessment.Coverage> part ->
-                    part.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 2;
-            case Measurement.NotMeasured<ItemAssessment.Coverage> _,
-                 Measurement.FailedToMeasure<ItemAssessment.Coverage> _ -> 0;
-        };
+        return new ItemAssessment.Owed(one.criterion(),
+                ObligationCoverage.acrossOneReadingsSearches(one.coverage(), two.coverage()),
+                one.projection(), one.searches().plus(two.searches()));
     }
 
     /**

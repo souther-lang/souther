@@ -173,7 +173,8 @@ final class AReportOfOneBorder {
             // was at the point while handing in a coverage that says none is.
             items.put(point, new ItemAssessment.Owed(border.demand(point).criterion(),
                     coverage.apply(border.roleOf(point)),
-                    ItemAssessment.WritabilityProjection.PROVEN, null));
+                    ItemAssessment.WritabilityProjection.PROVEN,
+                    souther.compiler.query.SearchOutcomes.none()));
         }
         return new BorderAssessment(border, items);
     }

@@ -321,7 +321,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     }
 
     private static PointResolver.ReadingEvidence searched(ItemAssessment.Attempt attempt) {
-        return new PointResolver.ReadingEvidence.Searched(attempt);
+        return new PointResolver.ReadingEvidence.Searched(SearchOutcomes.of(attempt));
     }
 
     private static ItemAssessment.Attempt built(String carrier) {
