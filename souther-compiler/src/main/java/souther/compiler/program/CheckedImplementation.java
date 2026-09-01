@@ -6,12 +6,19 @@ import souther.compiler.core.Core;
 import java.util.List;
 
 /**
- * Where a behavior's implementation comes from, in the four states a checked module has them in.
+ * Where a behavior's implementation comes from, as this checked program can state it.
  *
- * <p>Four and not a body that may be absent. A composition is an implementation (spec
- * §sequential-composition) and has no body: a reader given {@code Optional<Core>} would find nothing
- * there and have to decide what nothing meant, and the two things it can mean — composed, and not
- * written yet — are different programs. Nothing here has to be recovered from a second fact.
+ * <p>Answered for every behavior this compile read the declaration of, which is wider than the
+ * modules it checked: a body may call a behavior a module on the path declares, and what an output
+ * emitting that call needs is this. So the states are not the ones a checked module's behaviors are
+ * in — {@link ImplementedElsewhere} is none of them — but the ones a snapshot can say a behavior's
+ * implementation is in.
+ *
+ * <p>Each state, and not a body that may be absent. A composition is an implementation (spec
+ * §sequential-composition) and has no body; so is an implementation another compile emitted. A
+ * reader given {@code Optional<Core>} would find nothing there and have to decide what nothing
+ * meant, and every arm below but one is something it can mean — each of them a different program.
+ * Nothing here has to be recovered from a second fact.
  */
 public sealed interface CheckedImplementation {
 
@@ -28,10 +35,10 @@ public sealed interface CheckedImplementation {
      *
      * <p>The binders and not the types. A type here would be a second reading of what
      * {@link CheckedSignature} already answers, and the two would agree until either moved.
-     * {@link CheckedBehavior} is where they are held to the same length, which is what makes
+     * {@link BehaviorTarget} is where they are held to the same length, which is what makes
      * reading them as one parameter safe.
      *
-     * <p>Here and not on {@link CheckedBehavior}, because a binder exists exactly where a body
+     * <p>Here and not on {@link BehaviorTarget}, because a binder exists exactly where a body
      * does. An injected behavior takes inputs and has no body to bind them in, an unwritten one has
      * none either, and a composition applies its first stage to what it was given. Answering this
      * for any of them would be answering a question that has no answer.
@@ -66,4 +73,19 @@ public sealed interface CheckedImplementation {
     /** Souther's to write, and not written (spec §unwritten-behavior). Nothing that would need the
      *  body it has not got is emitted. */
     record Unwritten() implements CheckedImplementation {}
+
+    /**
+     * Implemented, and the implementation is not this snapshot's: the module that declares it was
+     * read off the path, and the build that published it emitted the implementation already.
+     *
+     * <p>What a call to one reaches is written, so a caller has a callee rather than a crossing to
+     * something supplied from outside. What is not here is the {@link Core} or the
+     * {@link Composition} it is written as — that belongs to the compile that checked it, and a
+     * second one emitted under the same name would be two definitions of one behavior.
+     *
+     * <p>Says nothing about how a call to it is reached on some machine. Whether an output links
+     * the implementation in, calls across a module boundary, or imports it is that output's answer,
+     * for the reason a class name and a Wasm block are not decided here.
+     */
+    record ImplementedElsewhere() implements CheckedImplementation {}
 }

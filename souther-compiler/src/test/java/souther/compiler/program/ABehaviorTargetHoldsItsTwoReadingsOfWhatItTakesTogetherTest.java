@@ -4,7 +4,6 @@ import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -15,8 +14,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A behavior says what it takes twice — as types on its signature, and as the bindings its body
- * reads them through — and a {@link CheckedBehavior} holding the two at different lengths is not
- * one that can be made.
+ * reads them through — and a {@link BehaviorTarget} holding the two at different lengths is not one
+ * that can be made.
+ *
+ * <p>Held here and not where a behavior of a checked module is made. A target is what a call
+ * reaches whichever module declares the behavior, so a boundary that says two things is unmakeable
+ * everywhere rather than wherever a reader happened to come through the module.
  *
  * <p>Written against the model and not through a compile. What the assembler produces is held to
  * this by every module {@code AnOutputOutsideTheCompilerReadsACheckedProgramTest} compiles, and a
@@ -24,22 +27,23 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * passing after the constructor stopped making it, because a correct assembler never offers it a
  * mismatch. Here the mismatch is offered.
  */
-class ACheckedBehaviorHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
+class ABehaviorTargetHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
 
     private static final Type INT = Type.INT;
 
     @Test
     void aBodyBindingFewerThanTheSignatureTakesIsRefused() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> behavior(List.of(INT, INT), body(binder("only"))));
+                () -> target(List.of(INT, INT), body(binder("only"))));
 
-        assertEquals("`demo.combine` takes 2 and its body binds 1", refused.getMessage());
+        assertEquals("a behavior declared [INT, INT] -> INT has a body binding [only]",
+                refused.getMessage());
     }
 
     @Test
     void andSoIsOneBindingMore() {
         assertThrows(IllegalArgumentException.class,
-                () -> behavior(List.of(INT), body(binder("input"), binder("dependency"))),
+                () -> target(List.of(INT), body(binder("input"), binder("dependency"))),
                 "a definition's trailing parameters are what it depends on, and are not inputs");
     }
 
@@ -50,26 +54,28 @@ class ACheckedBehaviorHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
      */
     @Test
     void aBodyBindingWhatTheSignatureTakesIsMade() {
-        CheckedBehavior made = behavior(List.of(INT, INT), body(binder("first"), binder("second")));
+        BehaviorTarget made = target(List.of(INT, INT), body(binder("first"), binder("second")));
 
         assertEquals(List.of("first", "second"),
                 ((CheckedImplementation.Body) made.implementation()).parameters().stream()
                         .map(Core.Binder::name).toList());
     }
 
-    /** The states with no body of their own are not held to it, having no binders to be held by. */
+    /** The states with no body of their own are not held to it, having no binders to be held by.
+     *  An implementation another compile emitted is one of them: what a call to it hands over is
+     *  what it was declared to take, and the bindings it arrives in are that compile's. */
     @Test
     void anImplementationWithNoBodyIsNotAskedWhichBindingsItsInputsArriveIn() {
-        assertEquals(2, behavior(List.of(INT, INT), new CheckedImplementation.Injected())
+        assertEquals(2, target(List.of(INT, INT), new CheckedImplementation.Injected())
                 .signature().takes().size());
-        assertEquals(2, behavior(List.of(INT, INT), new CheckedImplementation.Unwritten())
+        assertEquals(2, target(List.of(INT, INT), new CheckedImplementation.Unwritten())
+                .signature().takes().size());
+        assertEquals(2, target(List.of(INT, INT), new CheckedImplementation.ImplementedElsewhere())
                 .signature().takes().size());
     }
 
-    private static CheckedBehavior behavior(List<Type> takes, CheckedImplementation implementation) {
-        return new CheckedBehavior(new ValueName.Behavior("demo", "combine"),
-                new CheckedSignature(takes, INT), implementation,
-                souther.compiler.core.EnsuresEnforcement.NoContract.INSTANCE, List.of());
+    private static BehaviorTarget target(List<Type> takes, CheckedImplementation implementation) {
+        return new BehaviorTarget(new CheckedSignature(takes, INT), implementation);
     }
 
     private static CheckedImplementation.Body body(Core.Binder... parameters) {

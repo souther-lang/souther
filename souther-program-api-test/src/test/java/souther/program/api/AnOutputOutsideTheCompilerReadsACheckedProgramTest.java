@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -179,11 +180,14 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     }
 
     /**
-     * The four states an implementation is in, told apart by asking rather than by finding nothing
-     * where a body would be.
+     * The states an implementation is in, told apart by asking rather than by finding nothing where
+     * a body would be.
      *
      * <p>The switch has no {@code default}: a state added later stops this compiling, which is what
-     * a consumer outside the compiler wants from a set it is meant to handle all of.
+     * a consumer outside the compiler wants from a set it is meant to handle all of. The behaviors
+     * asked here are this compile's own, and one implemented by another compile is a behavior of a
+     * module this program does not emit —
+     * {@code ACallReachesTheBehaviorItsProgramDeclaresTest} asks that one.
      */
     @Test
     void whereAnImplementationComesFromIsAskedAndNotInferredFromAnAbsence() {
@@ -206,6 +210,12 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             }
             case CheckedImplementation.Injected ignored -> "injected";
             case CheckedImplementation.Unwritten ignored -> "unwritten";
+            // Every behavior asked here is one this compile checked, and an implementation another
+            // compile emitted belongs to a module this program does not hold. Answered with a word
+            // of its own it would be a state this test reads as covered and never sees.
+            case CheckedImplementation.ImplementedElsewhere ignored ->
+                    fail("`" + behavior.name() + "` is a behavior of a checked module and its"
+                            + " implementation is another compile's");
         };
     }
 
