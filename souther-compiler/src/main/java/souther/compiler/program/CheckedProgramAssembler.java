@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Takes the snapshot: reads what the compiler decided and writes it down as a {@link
@@ -89,17 +90,30 @@ final class CheckedProgramAssembler {
         // stand is read off the dependency's own boundary — which is a behavior of another module
         // as often as one of this.
         Map<ValueName.Behavior, BehaviorTarget> targets = new LinkedHashMap<>();
+        List<ModuleBoundaries> boundaries = new ArrayList<>();
         for (ModuleReading module : read) {
-            fileWhatIsChecked(targets, module);
+            boundaries.add(fileWhatIsChecked(targets, module));
         }
         fileWhatIsOnThePath(targets, db);
         List<CheckedModule> modules = new ArrayList<>();
-        for (ModuleReading module : read) {
+        for (ModuleBoundaries module : boundaries) {
             modules.add(moduleOf(module, types, targets));
         }
         return new CheckedProgram(modules, language, onThePath, targets,
                 libraryOf(db).kernelSignatures());
     }
+
+    /**
+     * What was read of a module, and the call boundary of each behavior it declares.
+     *
+     * <p>The boundaries in the order the module declares them, which is the order its behaviors are
+     * made in. Carried from where they were filed to where the module is made, rather than looked
+     * up there: the module is made off the same declarations they were made off, and a second walk
+     * of those declarations would be two statements of what the module declares held together by a
+     * check.
+     */
+    private record ModuleBoundaries(ModuleReading read,
+                                    Map<ValueName.Behavior, BehaviorTarget> declared) {}
 
     /**
      * Files the call boundary of every behavior {@code module} declares.
@@ -109,8 +123,9 @@ final class CheckedProgramAssembler {
      * signature this compile failed to answer for leave the program without anything having missed
      * it: what a module declares would be whatever the answer happened to hold.
      */
-    private static void fileWhatIsChecked(Map<ValueName.Behavior, BehaviorTarget> targets,
-                                          ModuleReading module) {
+    private static ModuleBoundaries fileWhatIsChecked(
+            Map<ValueName.Behavior, BehaviorTarget> targets, ModuleReading module) {
+        Map<ValueName.Behavior, BehaviorTarget> declares = new LinkedHashMap<>();
         for (Hir.BehaviorDef declared : module.bodies().behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(module.name(), declared.name());
             Sig signature = module.signatures().get(declared.name());
@@ -121,10 +136,13 @@ final class CheckedProgramAssembler {
                 throw new IllegalStateException("`" + named + "` was taken as checked and this"
                         + " compile has nothing to say about what it takes");
             }
-            file(targets, named, new BehaviorTarget(signatureOf(signature),
+            BehaviorTarget target = new BehaviorTarget(signatureOf(signature),
                     implementationOf(named, declared, module.bodies(), module.implementations(),
-                            module.checked(), module.compositions())));
+                            module.checked(), module.compositions()));
+            file(targets, named, target);
+            declares.put(named, target);
         }
+        return new ModuleBoundaries(module, declares);
     }
 
     /**
@@ -145,11 +163,7 @@ final class CheckedProgramAssembler {
      */
     private static void fileWhatIsOnThePath(Map<ValueName.Behavior, BehaviorTarget> targets,
                                             Db db) {
-        Front.FromPath.Of read = db.ask(new Front.FromPath()).value();
-        if (read == null) {
-            return;
-        }
-        for (String module : read.modules().keySet()) {
+        for (String module : readOffThePath(db)) {
             Ast.Module declares = db.ask(new Front.Available(module)).value();
             Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
             Map<String, BehaviorImplementation> implementations =
@@ -203,6 +217,21 @@ final class CheckedProgramAssembler {
         }
     }
 
+    /**
+     * The modules this compile read off the path.
+     *
+     * <p>{@link Front.FromPath}'s answer: the ones this compilation may read declarations from,
+     * which is not every module on the path and never one it refused. Asked once for everything
+     * taken off them, so that what a dependency declares and what its behaviors are are read off
+     * one set of modules — two walks with a rule each would agree until either was written again.
+     *
+     * <p>Empty where nothing was read off a path, which is a compilation given none.
+     */
+    private static Set<String> readOffThePath(Db db) {
+        Front.FromPath.Of read = db.ask(new Front.FromPath()).value();
+        return read == null ? Set.of() : read.modules().keySet();
+    }
+
     /** The library this compilation was checked against. Asked for here rather than fetched: what a
      *  name in a checked body denotes was settled against that one, and a second copy could be a
      *  different version of the language. */
@@ -254,22 +283,13 @@ final class CheckedProgramAssembler {
      * field off one — so what is handed over is the reading the checker itself used, and an output
      * laying such a value out places its fields exactly where the check placed them.
      *
-     * <p>Which modules those are is {@link Front.FromPath}'s answer: the ones this compilation may
-     * read declarations from, which is not every module on the path and never one it refused. What
-     * each of them declares comes from the derivation this compile ran over it, in the same three
-     * forms a module of its own is read in.
-     *
      * <p>The whole of what each declares, and not the part something here happens to name. Which
      * declarations a body reaches is a walk, and a snapshot carrying only what one walk found would
      * be right about the names that walk thought to visit.
      */
     private static List<CheckedData> declaredOnThePath(Db db) {
-        Front.FromPath.Of read = db.ask(new Front.FromPath()).value();
         List<CheckedData> declared = new ArrayList<>();
-        if (read == null) {
-            return declared;
-        }
-        for (String module : read.modules().keySet()) {
+        for (String module : readOffThePath(db)) {
             Map<String, Derived.Def> defs = db.ask(new Shapes.DerivedDeclarations(module)).value();
             Map<TypeSymbol.AtModule, ValueShape> shapes =
                     db.ask(new Shapes.ValueShapes(module)).value();
@@ -376,23 +396,15 @@ final class CheckedProgramAssembler {
      * program's rather than this module's: a row written here may state a value of a data declared
      * elsewhere.
      */
-    private static CheckedModule moduleOf(ModuleReading read, ValueTypes types,
+    private static CheckedModule moduleOf(ModuleBoundaries module, ValueTypes types,
                                           Map<ValueName.Behavior, BehaviorTarget> targets) {
+        ModuleReading read = module.read();
         List<CheckedBehavior> behaviors = new ArrayList<>();
-        for (Hir.BehaviorDef declared : read.bodies().behaviors()) {
-            ValueName.Behavior named = new ValueName.Behavior(read.name(), declared.name());
-            BehaviorTarget target = targets.get(named);
-            if (target == null) {
-                // Every behavior this module declares was filed before any module was made, off
-                // this same walk. Reaching here is that walk and this one having come apart.
-                throw new IllegalStateException("`" + named + "` is declared by a module of this"
-                        + " compile and has no call boundary");
-            }
-            behaviors.add(new CheckedBehavior(named, target,
-                    EnsuresEnforcement.in(read.checks(), read.name(), named),
-                    rowsOf(read.rows().getOrDefault(declared.name(), List.of()), types,
-                            target.signature(), targets)));
-        }
+        module.declared().forEach((named, target) ->
+                behaviors.add(new CheckedBehavior(named, target,
+                        EnsuresEnforcement.in(read.checks(), read.name(), named),
+                        rowsOf(read.rows().getOrDefault(named.name(), List.of()), types,
+                                target.signature(), targets))));
         return new CheckedModule(read.name(), behaviors,
                 helpersOf(read.name(), read.bodies(), read.checked()), read.data());
     }
@@ -577,7 +589,11 @@ final class CheckedProgramAssembler {
     }
 
     /**
-     * Which of the four states this behavior's implementation is in.
+     * Where this behavior's implementation comes from, for a behavior this compile checked.
+     *
+     * <p>Never {@link CheckedImplementation.ImplementedElsewhere}: this compile holds what a module
+     * it checked is implemented as, and a behavior published by another compile is read by
+     * {@link #publishedAs}.
      *
      * <p>Read in one place, from the state the declarations were read into and the form the check
      * produced. A reader handed the two separately would be deciding for itself what an implemented

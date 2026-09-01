@@ -60,9 +60,4 @@ public final class BehaviorTarget {
     public CheckedImplementation implementation() {
         return implementation;
     }
-
-    @Override
-    public String toString() {
-        return signature + " " + implementation;
-    }
 }

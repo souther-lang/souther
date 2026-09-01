@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -209,7 +210,12 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             }
             case CheckedImplementation.Injected ignored -> "injected";
             case CheckedImplementation.Unwritten ignored -> "unwritten";
-            case CheckedImplementation.ImplementedElsewhere ignored -> "elsewhere";
+            // Every behavior asked here is one this compile checked, and an implementation another
+            // compile emitted belongs to a module this program does not hold. Answered with a word
+            // of its own it would be a state this test reads as covered and never sees.
+            case CheckedImplementation.ImplementedElsewhere ignored ->
+                    fail("`" + behavior.name() + "` is a behavior of a checked module and its"
+                            + " implementation is another compile's");
         };
     }
 
