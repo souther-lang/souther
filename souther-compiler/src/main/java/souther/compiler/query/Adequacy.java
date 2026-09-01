@@ -2006,16 +2006,11 @@ public final class Adequacy {
 
         @Override
         public Answer<LineReadings> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
-                return Answer.absent();
-            }
-            Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
-            Sig sig = sigs.value().get(behavior);
+            // What the lines are read against, which is the whole of what this needs: a behavior
+            // this module declares with an input of its own, read, and measured. Every question
+            // that has to have been answered for one to exist is asked where it is made.
             souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);
-            if (spec == null || sig == null || subject == null) {
+            if (subject == null) {
                 return Answer.absent();
             }
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having

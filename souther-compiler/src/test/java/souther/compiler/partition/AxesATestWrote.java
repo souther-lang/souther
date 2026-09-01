@@ -21,8 +21,10 @@ import java.util.Set;
  * exists to stop.
  *
  * <p>The positions are written the way {@link PositionAccount#at} means them: outside a reading, so
- * they carry no residue and answer for nothing. Only {@link Partitions.Partitioning#axes()} is
- * about them here — a test reading what a position's measure came to wants a real reading.
+ * they carry no residue and answer for nothing. What a position here is declared to be is written
+ * down because a position has to be something and is read by nothing that reaches this — the
+ * measures are what a caller of this is about, and a test asking what a position's reading came to
+ * wants a real reading rather than one of these.
  */
 public final class AxesATestWrote {
 

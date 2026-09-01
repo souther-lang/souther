@@ -42,15 +42,36 @@ public final class InputClassifications {
      */
     public static Map<AxisId, Classification> of(List<ObservedValue> inputs,
                                                  MeasuredInput.MeasuredAxes axes) {
-        BehaviorInputs where = axes.subject().inputs();
+        List<Classification> placed = placedAt(inputs, axes);
         Map<AxisId, Classification> out = new LinkedHashMap<>();
-        for (Axis axis : axes.axes()) {
-            if (!axis.derivable()) {
-                continue;
+        for (int at = 0; at < axes.size(); at++) {
+            if (placed.get(at) != null) {
+                out.put(axes.get(at).id(), placed.get(at));
             }
-            out.put(axis.id(), classify(inputs, where, axis));
         }
         return Map.copyOf(out);
+    }
+
+    /**
+     * The same, in the order the axes were handed over.
+     *
+     * <p>What a reader walking the measurement wants: it asked for these axes in this order, so
+     * what comes back is at the place it asked. Keyed by the axis instead, such a reader looks its
+     * own axis up in the answer it was just given — which is the shape that reads a measure of
+     * another measurement as a class no row reached.
+     *
+     * <p>Null at an axis the model only bounds. There is nothing there for a value to fall into,
+     * and a reader walking the run of axes is told so at the place the axis stands rather than by
+     * an entry that is not there.
+     */
+    public static List<Classification> placedAt(List<ObservedValue> inputs,
+                                                MeasuredInput.MeasuredAxes axes) {
+        BehaviorInputs where = axes.subject().inputs();
+        List<Classification> out = new ArrayList<>(axes.size());
+        for (Axis axis : axes.axes()) {
+            out.add(axis.derivable() ? classify(inputs, where, axis) : null);
+        }
+        return java.util.Collections.unmodifiableList(out);
     }
 
 

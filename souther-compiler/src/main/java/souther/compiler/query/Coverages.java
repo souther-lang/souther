@@ -12,7 +12,6 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
-import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
@@ -226,36 +225,25 @@ final class Coverages {
         static Readings of(List<RowOutcome> rows,
                            souther.compiler.partition.MeasuredInput subject,
                            List<Incompleteness> unseen) {
-            // The measures a row is placed at, walked once and in the measurement's own shape. What
-            // comes out keeps it: the location a measure sits at is beside the measure, and the
-            // classes are in the order the rows were read by.
-            List<Axis> walked = new ArrayList<>();
-            List<List<Axis>> byPosition = new ArrayList<>();
-            List<souther.compiler.partition.MeasuredInput.MeasuredPosition> locations =
-                    new ArrayList<>();
-            for (var at : subject.measurements()) {
-                locations.add(at);
-                byPosition.add(at.partitionAxes().axes());
-                walked.addAll(at.partitionAxes().axes());
-            }
+            // The measures a row is placed at, in the measurement's own order, and what each row
+            // came to at each of them — asked for in that order and answered in it, so nothing
+            // here looks a measure up in what it was just handed.
+            souther.compiler.partition.MeasuredInput.MeasuredAxes walked = subject.partitionAxes();
             List<WhereARowSat> read = new ArrayList<>(rows.size());
             for (RowOutcome row : rows) {
-                Map<AxisId, Classification> where =
-                        InputClassifications.of(row.inputs(), subject.partitionAxes());
-                List<Classification> placed = new ArrayList<>(walked.size());
-                for (Axis axis : walked) {
-                    placed.add(where.get(axis.id()));
-                }
-                read.add(new WhereARowSat(java.util.Collections.unmodifiableList(placed)));
+                read.add(new WhereARowSat(InputClassifications.placedAt(row.inputs(), walked)));
             }
-            List<AtPosition> out = new ArrayList<>(locations.size());
+            // And the same run of measures cut where the locations cut it, which is what the walk
+            // above is the flattening of.
+            List<AtPosition> out = new ArrayList<>();
             int index = 0;
-            for (int p = 0; p < locations.size(); p++) {
-                List<AxisReading> here = new ArrayList<>(byPosition.get(p).size());
-                for (Axis axis : byPosition.get(p)) {
+            for (souther.compiler.partition.MeasuredInput.MeasuredPosition at
+                    : subject.measurements()) {
+                List<AxisReading> here = new ArrayList<>();
+                for (Axis axis : at.partitionAxes().axes()) {
                     here.add(readingOf(axis, index++, read));
                 }
-                out.add(new AtPosition(locations.get(p), List.copyOf(here)));
+                out.add(new AtPosition(at, List.copyOf(here)));
             }
             return new Readings(List.copyOf(out), List.copyOf(read), List.copyOf(unseen));
         }
