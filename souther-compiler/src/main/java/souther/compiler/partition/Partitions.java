@@ -10,7 +10,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
-import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.Quantities;
@@ -1641,12 +1640,17 @@ public final class Partitions {
         if (base == Type.STRING && symbols.declarations().declaration(newtype) instanceof Hir.Data data) {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
-                    if (InvariantConstraints.against(symbols).of(each, base).orElse(null)
-                            instanceof InvariantConstraints.Pattern format) {
-                        String written = writtenFor(format.regex());
-                        if (written != null) {
-                            candidates.add(FixtureTemplate.string(written));
-                        }
+                    // Asked of what the predicate means and not of what the decoder is told. The
+                    // two are different questions: a constraint is what a generated class declares
+                    // to the runtime, which is a format and nothing else, and this is which strings
+                    // the rule admits — asked through the constraint, every predicate the decoder
+                    // has no word for proposed no value, and a position an author had written a
+                    // rule for was offered `"x"` and refused (issue #1249).
+                    souther.compiler.regex.PatternSyntax admits =
+                            souther.compiler.check.StringPredicates.statedBy(each, symbols);
+                    String written = admits == null ? null : writtenFor(admits);
+                    if (written != null) {
+                        candidates.add(FixtureTemplate.string(written));
                     }
                 }
             }
@@ -1678,13 +1682,8 @@ public final class Partitions {
      * own, which meant two answers to "what does this pattern accept" and one model where they
      * could differ.
      */
-    private static String writtenFor(String regex) {
-        if (!(souther.compiler.regex.PatternParser.read(regex)
-                instanceof souther.compiler.regex.PatternRead.Read read)) {
-            return null;
-        }
-        souther.compiler.regex.Language language = souther.compiler.regex.PatternPlan
-                .of(read.syntax())
+    private static String writtenFor(souther.compiler.regex.PatternSyntax syntax) {
+        souther.compiler.regex.Language language = souther.compiler.regex.PatternPlan.of(syntax)
                 .compile(souther.compiler.regex.PatternPlan.Budget.OF_A_WITNESS);
         return language == null ? null : language.someWritten();
     }

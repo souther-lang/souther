@@ -139,12 +139,13 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 module g
 
                 data Email = String
-                    invariant String.startsWith("a", value)
+                    invariant UNREAD
 
                 data Accepted = { at: String }
 
                 behavior classify : (email: Email) -> Accepted
-                """, "classify").undivided();
+                """.replace("UNREAD", souther.compiler.ARuleNoReadingTakesIn.about("value")),
+                "classify").undivided();
 
         assertEquals(1, undivided.size(), undivided.toString());
         assertFalse(undivided.get(0).isAbsent(),

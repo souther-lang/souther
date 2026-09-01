@@ -60,8 +60,8 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
             data Plain = Int
             data Slot = { hour: Int, room: String }
             data Gender = String invariant value == "A" || value == "B"
-            data Email = String invariant String.startsWith("a", value)
-            """;
+            data Email = String invariant UNREAD
+            """.replace("UNREAD", souther.compiler.ARuleNoReadingTakesIn.about("value"));
 
     private final Symbols symbols = Symbols.of(resolved(), DefaultStdlib.get());
 

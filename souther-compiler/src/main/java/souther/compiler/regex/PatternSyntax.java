@@ -149,5 +149,32 @@ public sealed interface PatternSyntax {
     static PatternSyntax withoutAnchors(PatternSyntax syntax) {
         return Anchors.placed(syntax);
     }
+
+    /**
+     * The one string {@code written} is.
+     *
+     * <p>By code point and not by char, so a symbol outside the basic plane is one symbol here as
+     * it is everywhere else in this package. Written as a sequence of one-symbol sets, which is
+     * what a literal is ({@link Symbols}) — there is no node for a run of characters, and inventing
+     * one would be a second spelling of a thing that is compared.
+     */
+    static PatternSyntax text(String written) {
+        List<PatternSyntax> symbols = written.codePoints()
+                .mapToObj(point -> (PatternSyntax) new Symbols(CodePoints.of(point)))
+                .toList();
+        return symbols.isEmpty() ? new Nothing() : new InTurn(symbols);
+    }
+
+    /**
+     * Every string there is.
+     *
+     * <p>Every symbol and not what {@code .} holds. A dot is the universe less the line
+     * terminators, which is a fact about how a pattern is written; what stands on either side of
+     * text somebody looked for is any string at all, newlines included.
+     */
+    static PatternSyntax anything() {
+        return new Repeated(new Symbols(
+                CodePoints.EVERYTHING.less(CodePoints.LINE_TERMINATORS)), 0, Repeated.NO_CEILING);
+    }
 }
 

@@ -367,7 +367,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
 
                 data Code = String
                     invariant enumerated = value == "a" || value == "b"
-                    invariant shape = String.startsWith("a", value)
+                    invariant shape = UNREAD
 
                 data Accepted = { at: String }
                 data Refused = { at: String }
@@ -378,7 +378,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 let classify (c) =
                     if String.length(c.value) == 1 then Accepted { at = "x" }
                     else Refused { at = "y" }
-                """;
+                """.replace("UNREAD", souther.compiler.ARuleNoReadingTakesIn.about("value"));
         Read read = of(model, "classify");
         Partitions.Partitioning base =
                 Partitions.of(read.spec().name(), InputDomain.of(read.spec(), read.sig(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

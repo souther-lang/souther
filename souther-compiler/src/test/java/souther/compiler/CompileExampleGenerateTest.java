@@ -619,7 +619,7 @@ class CompileExampleGenerateTest {
                 data Flag = Yes | No
 
                 data Req = { %sflag: Flag }
-                    invariant String.startsWith("y", a.value)
+                    invariant UNREAD
 
                 data Ok = { n: Int }
 
@@ -627,7 +627,8 @@ class CompileExampleGenerateTest {
                     constructs Ok
 
                 let take (request) = Ok { n = 0 }
-                """.formatted(declarations, fields);
+                """.formatted(declarations, fields)
+                .replace("UNREAD", ARuleNoReadingTakesIn.about("a.value"));
 
         List<Generator.UnresolvedCombination> left = generated(source).get("take").composed()
                 .unresolved();

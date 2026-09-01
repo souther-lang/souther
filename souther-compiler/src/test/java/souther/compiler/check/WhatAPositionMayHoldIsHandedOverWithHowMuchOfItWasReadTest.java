@@ -50,8 +50,23 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         return read(source, named, ReadAs.THE_COMPILATION_DOES);
     }
 
+    /**
+     * The models above with their stand-in for a rule nothing reads written out.
+     *
+     * <p>Named rather than written, because which spelling this compiler cannot read is a fact
+     * about this compiler and moves ({@link souther.compiler.ARuleNoReadingTakesIn}). Written out
+     * six times, the day one of them became readable was the day these tests went on passing about
+     * a model with nothing unread in it.
+     */
+    private static String unreadable(String source) {
+        return source
+                .replace("UNREAD_VALUE", souther.compiler.ARuleNoReadingTakesIn.about("value"))
+                .replace("UNREAD_LEFT", souther.compiler.ARuleNoReadingTakesIn.about("left"))
+                .replace("UNREAD_RIGHT", souther.compiler.ARuleNoReadingTakesIn.about("right"));
+    }
+
     private static Read read(String source, String named, ReadingPolicy policy) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = Compilation.ofSource(unreadable(source), "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
@@ -213,7 +228,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant either = value == "A" || String.startsWith("0",value)
+                    invariant either = value == "A" || UNREAD_VALUE
                 """, "Gender");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
@@ -234,7 +249,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant either = left == "A" || String.startsWith("0",right)
+                    invariant either = left == "A" || UNREAD_RIGHT
                 """, "Pair");
         asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "left");
     }
@@ -378,7 +393,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant both = value == "A" && String.startsWith("A",value)
+                    invariant both = value == "A" && UNREAD_VALUE
                 """, "Gender");
         asFarAsRead(ValueSet.just(A), UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
@@ -394,7 +409,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant both = left == "A" && String.startsWith("A",right)
+                    invariant both = left == "A" && UNREAD_RIGHT
                 """, "Pair");
         wholly(ValueSet.just(A), read, "left");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "right");
@@ -427,7 +442,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant shape = String.startsWith("A",left)
+                    invariant shape = UNREAD_LEFT
                 """, "Pair");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, shaped, "left");
     }
@@ -489,7 +504,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant shape = String.startsWith("A",value)
+                    invariant shape = UNREAD_VALUE
                 """, "Gender");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
