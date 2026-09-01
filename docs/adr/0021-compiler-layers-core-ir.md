@@ -71,10 +71,11 @@ and the type checker produces it — see the implementation note above.)
 1. **Parse** — source to surface AST. Only concrete-syntax desugars that need no types.
 2. **Resolve** — import/`exposing` name resolution (today `Exposing`).
 3. **Derive** — fill decoders/encoders into the AST from each data's shape (today
-   `Deriver`). Stays at AST level. (What "the AST" is here is the tree Resolve answers with,
-   which carries the derived codec. The parse answers with no codec form of any kind: a decoder
-   does not appear in the language's syntax, and the surface tree the parser builds has no node
-   for one.)
+   `Deriver`). Stays at AST level. (What "the AST" is here, in the implementation this became, is
+   `Hir` — the representation `check.Resolve` answers with, which is where a derived codec is
+   held. The stage numbered 2 above is not that class: it is name resolution as this decision
+   named it, `Exposing`. The parse answers with no codec form of any kind: a decoder does not
+   appear in the language's syntax, and the surface tree the parser builds has no node for one.)
 4. **Lower** — the surface AST to Core IR. The one place every body-level transformation
    happens, once: helper inlining, the remaining desugars,
    `match` lowering, closure conversion, intrinsic lowering, and — when it lands —

@@ -4702,7 +4702,7 @@ Source -> Lexer -> Parser -> AST
   -> Derive (add decoder/encoder to each resolved data from its shape)
   -> Lower (behavior / let bodies: helper inlining, desugaring)
   -> Type Check -> Core IR (typed: the checker produces it as it types a body)
-       name resolution / construction-authority check / requirement-set check and composition inference / exhaustiveness check / invariant type check
+       construction-authority check / requirement-set check and composition inference / exhaustiveness check / invariant type check
   -> ClassFile Backend -> .class (direct bytecode generation)
 ----
 
