@@ -317,7 +317,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.compilerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 (generated, compiled) -> answerer,
                 CheckedEnsures.executableOf(

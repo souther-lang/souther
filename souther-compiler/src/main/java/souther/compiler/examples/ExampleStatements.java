@@ -458,7 +458,8 @@ public final class ExampleStatements {
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 // Nothing here was going to read how far it got, so it is given up on at once.
                 abandon.run();
-                return new Read.Unanswered<>(deadline.budgetMs());
+                // In milliseconds, which is what the report this ends up in is written in.
+                return new Read.Unanswered<>(deadline.timeout().toMillis());
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The reading spent what the policy allows. That is an answer about the statements —

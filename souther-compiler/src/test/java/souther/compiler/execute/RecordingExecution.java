@@ -71,7 +71,7 @@ final class RecordingExecution implements ProgramExecution {
                 + ", names " + (Objects.requireNonNull(about.symbols()) != null)
                 + ", " + held.stepLimit() / written + " steps an example"
                 + ", " + held.recursionDepthLimit() + " deep"
-                + ", given up on after " + held.outerTimeout().toMillis() + "ms)";
+                + ", given up on after " + held.compilerTimeout().toMillis() + "ms)";
     }
 
     @Override

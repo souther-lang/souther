@@ -405,8 +405,8 @@ public final class ExampleVerifier {
                 abandon.run();
                 return new StandinObservation.Unobserved(
                         new StandinObservation.Reason.TheObservationRanOut(
-                                "the implementation did not answer within "
-                                        + deadline.budgetMs() + "ms"));
+                                "the observation did not answer within "
+                                        + within(deadline) + "ms of this compile's own time"));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 return new StandinObservation.Unobserved(whatTheWorkerThrew(cause));
@@ -442,8 +442,8 @@ public final class ExampleVerifier {
                 abandon.run();
                 return new ContractObservation.Unobserved(
                         new StandinObservation.Reason.TheObservationRanOut(
-                                "the implementation did not answer within "
-                                        + deadline.budgetMs() + "ms"));
+                                "the observation did not answer within "
+                                        + within(deadline) + "ms of this compile's own time"));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 return new ContractObservation.Unobserved(whatTheWorkerThrew(cause));
@@ -544,6 +544,17 @@ public final class ExampleVerifier {
         // union for a renderer to read.
         return new ContractObservation.Broken(why, observed,
                 fixtures.shown(observed, sig.outputType()));
+    }
+
+    /**
+     * The wait, as the reports here quote it.
+     *
+     * <p>Milliseconds, because that is what the sentences a reader sees are written in. What the
+     * deadline holds is a length; which unit it is said in is the report's answer and is given here
+     * once rather than at each of the places that says one.
+     */
+    private static long within(Deadline deadline) {
+        return deadline.timeout().toMillis();
     }
 
     /**
@@ -1358,7 +1369,7 @@ public final class ExampleVerifier {
                 // something structural that already is.
                 out.add(Diagnostic.at(row.pos())
                         .say(new ExampleMessage.TheEvaluationDidNotAnswer(
-                                Long.toString(deadline.budgetMs())))
+                                Long.toString(within(deadline))))
                         .hint(new ExampleMessage.NotAnsweringIsNotNotTerminating()).build());
                 // No spend is read: the worker is still writing to its state, and a count taken
                 // while it runs would be some of what it spent rather than what it spent. That is

@@ -17,22 +17,30 @@ import java.time.Duration;
  * neither is a measure of time. Two compiles of the same model under the same policy therefore say
  * the same thing about it, however fast the host is and however loaded.
  *
- * <p>{@code outerTimeout} is not about the model at all. It exists for what a counter cannot reach —
- * a call into code this compile did not generate, so has no counted points in. Losing to it is the
- * compiler failing to answer, not the model failing to terminate, and the two are reported as the
- * different things they are.
+ * <p>{@code compilerTimeout} is not about the model at all. It exists for what a counter cannot
+ * reach — a call into code this compile did not generate, so has no counted points in. Losing to it
+ * is the compiler failing to answer, not the model failing to terminate, and the two are reported as
+ * the different things they are.
  *
- * <p>What it obliges an execution to is elapsed time: past this, the caller is not still waiting.
- * A limit on how much work is done is not the same promise and does not discharge it — an
+ * <p>What it obliges an execution to is elapsed time, and the elapsed time it obliges is the
+ * compiler's own: past this, the compiler has not gone on working without answering. What decides
+ * whose it is is ownership and not who wrote the code — an implementation a caller supplied is
+ * answering out of the caller's world, and what that world takes is the caller's, so a clock over it
+ * would report a caller's database as this compiler failing to answer. Where a run is the compiler's
+ * from beginning to end, which is every run a compile makes for itself, this is the whole of the
+ * wait and the caller is not still waiting past it.
+ *
+ * <p>A limit on how much work is done is not the same promise and does not discharge it — an
  * implementation counting fuel, instructions or reductions has bounded the work and not the wait, and
- * still owes a clock of its own. What that clock is belongs to the implementation; that there is one
- * is what reading this means.
+ * still owes a clock of its own. What that clock is belongs to the implementation, and so is where
+ * it draws the line between its own time and the world's; that there is one, and that it is not over
+ * what the caller's own code takes, is what reading this means.
  *
  * <p>The relation between the counted pair and the wait is one-directional and cannot be made exact:
- * the outer timeout is set to be reached long after any budget a row could spend. It cannot be
+ * the compiler timeout is set to be reached long after any budget a row could spend. It cannot be
  * proven — a step's cost depends on what the step does — so it is set with room rather than derived.
  */
-public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration outerTimeout) {
+public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration compilerTimeout) {
 
     /**
      * Steps enough for anything a model states as an example, and far short of what code that does
@@ -73,11 +81,11 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
      * A short one would turn slow-but-counted work into a failure to answer, which is the reading this
      * whole arrangement exists to stop.
      */
-    public static final Duration DEFAULT_OUTER_TIMEOUT = Duration.ofSeconds(60);
+    public static final Duration DEFAULT_COMPILER_TIMEOUT = Duration.ofSeconds(60);
 
     /** What a compile that says nothing is held to. */
     public static final EvaluationPolicy DEFAULT = new EvaluationPolicy(DEFAULT_STEP_LIMIT,
-            DEFAULT_RECURSION_DEPTH_LIMIT, DEFAULT_OUTER_TIMEOUT);
+            DEFAULT_RECURSION_DEPTH_LIMIT, DEFAULT_COMPILER_TIMEOUT);
 
     public EvaluationPolicy {
         if (stepLimit <= 0) {
@@ -87,8 +95,9 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
             throw new IllegalArgumentException(
                     "a recursion depth limit has to be positive: " + recursionDepthLimit);
         }
-        if (outerTimeout == null || outerTimeout.isNegative() || outerTimeout.isZero()) {
-            throw new IllegalArgumentException("an outer timeout has to be positive: " + outerTimeout);
+        if (compilerTimeout == null || compilerTimeout.isNegative() || compilerTimeout.isZero()) {
+            throw new IllegalArgumentException(
+                    "a compiler timeout has to be positive: " + compilerTimeout);
         }
     }
 
@@ -111,8 +120,8 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
                 (int) Math.min(Integer.MAX_VALUE,
                         positiveLong("souther.example.recursion.depth",
                                 DEFAULT_RECURSION_DEPTH_LIMIT)),
-                Duration.ofMillis(positiveLong("souther.example.outer.timeout.ms",
-                        DEFAULT_OUTER_TIMEOUT.toMillis())));
+                Duration.ofMillis(positiveLong("souther.example.compiler.timeout.ms",
+                        DEFAULT_COMPILER_TIMEOUT.toMillis())));
     }
 
     private static long positiveLong(String setting, long fallback) {
@@ -130,18 +139,18 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
 
     /** The default, holding a row to {@code stepLimit} steps. */
     public static EvaluationPolicy of(long stepLimit) {
-        return new EvaluationPolicy(stepLimit, DEFAULT_RECURSION_DEPTH_LIMIT, DEFAULT_OUTER_TIMEOUT);
+        return new EvaluationPolicy(stepLimit, DEFAULT_RECURSION_DEPTH_LIMIT, DEFAULT_COMPILER_TIMEOUT);
     }
 
     public EvaluationPolicy withStepLimit(long steps) {
-        return new EvaluationPolicy(steps, recursionDepthLimit, outerTimeout);
+        return new EvaluationPolicy(steps, recursionDepthLimit, compilerTimeout);
     }
 
     public EvaluationPolicy withRecursionDepthLimit(int depth) {
-        return new EvaluationPolicy(stepLimit, depth, outerTimeout);
+        return new EvaluationPolicy(stepLimit, depth, compilerTimeout);
     }
 
-    public EvaluationPolicy withOuterTimeout(Duration timeout) {
+    public EvaluationPolicy withCompilerTimeout(Duration timeout) {
         return new EvaluationPolicy(stepLimit, recursionDepthLimit, timeout);
     }
 }

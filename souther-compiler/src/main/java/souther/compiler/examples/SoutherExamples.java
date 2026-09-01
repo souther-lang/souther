@@ -11,7 +11,6 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 import souther.compiler.execute.ExampleExecution;
-import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.execute.jvm.JvmExampleRuns;
 import souther.compiler.query.ExampleExecutions;
 import souther.compiler.query.Output;
@@ -197,14 +196,12 @@ public final class SoutherExamples {
                     + " run");
         }
         // The program is the compilation's and the terms are the compilation's; how this run keeps
-        // them is this run's. A row driven from here reaches an implementation that answers out of
-        // the caller's world, which the compile's own rows do not, and an arrangement is how a run
-        // is run rather than what it is held to.
+        // them is this run's, and is settled where the machine that keeps them is. A row driven from
+        // here reaches an implementation that answers out of the caller's world, which the compile's
+        // own rows do not, and an arrangement is how a run is run rather than what it is held to.
         return new BoundExamples(module, asked.forExamples(),
-                JvmExampleRuns.evaluating(compilation.jvmProgramImages(), asked,
-                        new CallerCrossingDeadlines(JvmDeadlines.workerStackFromSettings())
-                                .forThisCompile(asked.policy().outerTimeout()),
-                        Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))),
+                JvmExampleRuns.evaluating(compilation.jvmProgramImages(), asked, implementation,
+                        Set.copyOf(bound), sigs.get(module)),
                 bound);
     }
 

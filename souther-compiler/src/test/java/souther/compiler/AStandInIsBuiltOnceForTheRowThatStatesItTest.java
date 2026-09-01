@@ -96,7 +96,7 @@ class AStandInIsBuiltOnceForTheRowThatStatesItTest {
     private static List<RowOutcome> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(
-                EvaluationPolicy.of(10_000_000L).withOuterTimeout(Duration.ofSeconds(30)));
+                EvaluationPolicy.of(10_000_000L).withCompilerTimeout(Duration.ofSeconds(30)));
         compilation.answerEverything();
         SourceId sourceId = compilation.exampleSourcesOf("example.once").getFirst();
         return compilation.db()

@@ -66,13 +66,17 @@ final class BoundImplementation implements Answerer {
     /** The instance's values, read into its classes. */
     private final Crossing crossing;
 
+    /** Where the instance is applied, which is the world the caller called from. */
+    private final CallerApplication applied;
+
     BoundImplementation(Object implementation, Set<String> answersFor, Map<String, Sig> sigs,
-                        Answerer generatedHere, String module) {
+                        Answerer generatedHere, String module, CallerApplication applied) {
         this.implementation = implementation;
         this.answersFor = Set.copyOf(answersFor);
         this.sigs = sigs;
         this.generatedHere = generatedHere;
         this.module = module;
+        this.applied = applied;
         ClassLoader loader = implementation.getClass().getClassLoader();
         this.theirs = new ClassFileDeclarations(binaryName -> bytesOf(loader, binaryName));
         this.crossing = new Crossing(loader);
@@ -147,13 +151,10 @@ final class BoundImplementation implements Answerer {
         }
         Method apply = applyOf(behavior);
         try {
-            // Where the row was handed a way back to the thread that asked for it, the application
-            // goes there: this is the one part of a row that is not this compile's computation, and
-            // what it answers out of is that thread's world. A run with no hand-off — every one a
-            // compile makes — applies where it stands.
-            Handoff back = Handoff.onThisThread();
-            return back == null ? apply.invoke(implementation, args)
-                    : back.handOver(() -> apply.invoke(implementation, args));
+            // In the caller's world: this is the one part of a row that is not this compile's
+            // computation, and what it answers out of is the world the caller called from. Where
+            // that is and how a row reaches it are the arrangement's, and are not asked here.
+            return applied.call(() -> apply.invoke(implementation, args));
         } catch (IllegalArgumentException e) {
             // A crossed value the declared `apply` will not take. That is the crossing having built
             // something the other build's own parameter type does not admit, which is a fact about

@@ -33,10 +33,10 @@ import java.time.Duration;
 public interface JvmExampleDeadlines {
 
     /**
-     * The arrangement this compile's rows and readings are run under, keeping {@code outerTimeout}.
+     * The arrangement this compile's rows and readings are run under, keeping {@code compilerTimeout}.
      *
      * <p>Asked per compile rather than given once, so that the term reaches the arrangement that
      * keeps it rather than being read a second time out of somewhere else.
      */
-    Deadline forThisCompile(Duration outerTimeout);
+    Deadline forThisCompile(Duration compilerTimeout);
 }

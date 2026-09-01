@@ -395,7 +395,7 @@ public final class Compilation {
         if (budget.toMillis() <= 0) {
             throw new IllegalArgumentException("an example budget has to be positive: " + budget);
         }
-        db.set(new Front.Policy(), Output.policyOf(db).withOuterTimeout(budget));
+        db.set(new Front.Policy(), Output.policyOf(db).withCompilerTimeout(budget));
         return this;
     }
 

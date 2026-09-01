@@ -65,7 +65,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     /** Steps enough for anything these models do that finishes, and a clock long enough that losing
      *  to it would be a test that hangs rather than one that fails. */
     private static EvaluationPolicy holdingTo(long steps) {
-        return EvaluationPolicy.of(steps).withOuterTimeout(Duration.ofSeconds(30));
+        return EvaluationPolicy.of(steps).withCompilerTimeout(Duration.ofSeconds(30));
     }
 
     private static Compilation compiled(String source, EvaluationPolicy policy) {

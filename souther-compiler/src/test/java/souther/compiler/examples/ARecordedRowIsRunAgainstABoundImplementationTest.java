@@ -309,6 +309,42 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         assertEquals(List.of("E1930"), ran.diagnostics().stream().map(Diagnostic::code).toList());
     }
 
+    /** An implementation that stops with a throw rather than answering. */
+    private static final String THROWS = """
+            package example.todo;
+            public final class FindTodoImpl extends FindTodo {
+                public FindTodoResult apply(TodoId id) {
+                    throw new IllegalStateException("the query would not run");
+                }
+            }
+            """;
+
+    /**
+     * What the applied code ended with is read the same whether or not the application crossed back
+     * to the thread that asked for the row.
+     *
+     * <p>A binding drives its rows over the crossing and a run given a deadline of its own applies
+     * where it stands. Which of the two a row went through decides where the code ran and nothing
+     * else: the failure is the implementation's either way, and a reader deciding whose failure a
+     * row met would otherwise be told two different things about one throw.
+     */
+    @Test
+    void anImplementationThatThrowsFailsTheSameWayOnEitherSideOfTheCrossing() throws Exception {
+        BoundExamples over = SoutherExamples.ofSource(MODEL)
+                .bind(builtElsewhere(compiled(MODEL), THROWS));
+        RowOutcome crossed = over.evaluate(over.rows().get(0)).outcome();
+
+        RowOutcome stood = named(evaluated(MODEL, THROWS), crossed.identity().shown());
+
+        assertEquals(stood.disposition(), crossed.disposition());
+        assertEquals(stood.stage(), crossed.stage());
+        assertEquals(stood.failurePhase(), crossed.failurePhase());
+
+        // And what the two agree on is what a throw from the applied code means, rather than
+        // whatever the two happen to arrive at together.
+        assertEquals(Disposition.FAILED, crossed.disposition());
+        assertEquals(Stage.INVOKED, crossed.stage());
+    }
 
     private static Map<String, ClassFileImage> compiled(String model) {
         Compilation c = Compilation.ofSource(model, "Main");
@@ -356,12 +392,17 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.compilerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 // What this instance is supplied for, said by the caller. Whether a behavior may be
                 // supplied for at all is `SoutherExamples.bind`'s rule; this is the seam below it.
                 Answering.bound(bound, java.util.Set.of("findTodo"),
-                        c.db().ask(new Bodies.Signatures(name)).value()),
+                        c.db().ask(new Bodies.Signatures(name)).value(),
+                        // Applied where the row stands. What a binding arranges is that the
+                        // implementation answers on the thread that asked for the row, and nothing
+                        // here is that binding: this drives the seam under it, so it says outright
+                        // that the application does not cross anywhere.
+                        CallerApplication.Application::call),
                 CheckedEnsures.executableOf(
                         c.db().ask(new Bodies.ReachableContracts(name)).value()));
     }
