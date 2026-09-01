@@ -1,0 +1,174 @@
+package souther.bench;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * Every figure this compiler stops a search at is read where a rule says it is read, and nowhere
+ * else.
+ *
+ * <p>What a budget is for is being carried: a search that stopped at one says which, and an account
+ * that reads it knows the point is open for a reason somebody could raise rather than because the
+ * model refuses a row. That only works while every place a figure is reached is a place that hands
+ * it over — a walk that consults one and comes back with a word alone is a stop that vanished, and
+ * the word it comes back with is written wherever a walk stops for any reason at all, so nothing
+ * downstream can tell that it happened.
+ *
+ * <p><b>So the places are counted rather than trusted.</b> Twice while this was written the list of
+ * budgets was taken from the constants that looked like budgets, and twice it was short — once by a
+ * figure spelled differently and once by a figure that is the size of a walk rather than a number
+ * anybody wrote down. A name is not what makes a budget; being reached and stopping something is.
+ *
+ * <p>Each entry below says what that place does with the figure. A place added is a question — does
+ * it hand the budget over, or does it swallow it — and the answer belongs beside the code that
+ * decides, which is why the list is here and not a count.
+ *
+ * <p><b>What this does not see.</b> A figure a class copies into a field of its own is reached once,
+ * where the field is set, and the walk that then stops at the field is not a reader of the figure
+ * here. So this holds the inventory of figures and the places that hand one over; it does not catch
+ * a walk that consults a copy and comes back with a word. What would catch that is a rule about the
+ * constants themselves — every number of that kind in these classes being one of these figures —
+ * and it is not written.
+ */
+class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
+
+    private static final String BUDGET = "souther.compiler.partition.CompositionBudget";
+
+    /**
+     * Where a figure is read, and what that place does with it.
+     *
+     * <p>By the method and not by the class. A helper beside one that reads a figure answers for
+     * nothing, and counting per class would let a second reader hide behind the first.
+     */
+    private static final Map<String, String> READ_AT = new LinkedHashMap<>(Map.ofEntries(
+            // The figures themselves. Every other place asks one of these for its number.
+            Map.entry("souther.compiler.partition.CompositionBudget#<clinit>()V",
+                    "the figures, which is where they are"),
+
+            // The stops. Each reaches a figure and hands it over as itself.
+            Map.entry("souther.compiler.partition.Witnesses#<clinit>()V",
+                    "how many elements and characters a proposal holds, and how many pairings"),
+            Map.entry("souther.compiler.partition.Witnesses#sized("
+                            + "Lsouther/compiler/types/Type;ILsouther/compiler/check/Symbols;"
+                            + "Lsouther/compiler/check/ReadingPolicy;Ljava/util/Set;)"
+                            + "Lsouther/compiler/partition/Witnesses$Built;",
+                    "stops at the elements and the characters, and says which"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp#<clinit>()V",
+                    "how many elements a total is spread over, and how many shapes are offered"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp#to("
+                            + "Lsouther/compiler/numeric/Place;Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/Symbols;"
+                            + "Lsouther/compiler/check/ReadingPolicy;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "records the three a total can be short of, where each decides not to go on"),
+            Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
+                    "the places a pair is tried at, the steps, the progression and the re-reads"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofTwo("
+                            + "Lsouther/compiler/partition/Standing$OfTwoOnOneCarrier;"
+                            + "Lsouther/compiler/inputs/SearchRegion;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "stops walking a line at the places it tries and says which figure"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofAForm("
+                            + "Lsouther/compiler/partition/Standing$OfAForm;"
+                            + "Lsouther/compiler/inputs/SearchRegion;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "collects what the level walks ran out of, and the levels it was offered"),
+            Map.entry("souther.compiler.partition.LevelRealizer$Search#stepsLeft()Z",
+                    "the steps a search may take, marked where there is no room for another"),
+            Map.entry("souther.compiler.partition.LevelRealizer$Search#outward("
+                            + "ILsouther/compiler/partition/CandidateDomain$Outward;"
+                            + "Ljava/math/BigDecimal;Ljava/math/BigDecimal;"
+                            + "Lsouther/compiler/inputs/SearchRegion;)"
+                            + "Lsouther/compiler/partition/LevelRealizer$Reached;",
+                    "walks a progression as far as this walks one, and says that is why"),
+            Map.entry("souther.compiler.partition.NumericWitness#<clinit>()V",
+                    "how many values a position on the way is tried at"),
+            Map.entry("souther.compiler.partition.NumericWitness#walk("
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/List;I"
+                            + "Ljava/util/function/Function;Ljava/util/Map;Ljava/util/Set;)Z",
+                    "stops trying values of a position on the way and says which figure"),
+            Map.entry("souther.compiler.partition.Generator#<clinit>()V",
+                    "how many assignments a search composes"),
+            Map.entry("souther.compiler.partition.Generator#conditioned("
+                            + "Lsouther/compiler/partition/MeasuredInput;I"
+                            + "Lsouther/compiler/partition/ConstructionPlan;Ljava/util/Map;"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;)"
+                            + "Lsouther/compiler/partition/Generator$Outcome;",
+                    "the assignments a descent composes, marked where the bound is reached"),
+            Map.entry("souther.compiler.partition.Generator#over("
+                            + "Lsouther/compiler/partition/MeasuredInput;I"
+                            + "Lsouther/compiler/partition/ConstructionPlan;Ljava/util/List;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;)"
+                            + "Lsouther/compiler/partition/Generator$Outcome;",
+                    "the same bound over one pass of the assignments"),
+            Map.entry("souther.compiler.partition.ConstructionPlan#<clinit>()V",
+                    "how deep a plan descends, which nothing carries and which is named all the"
+                            + " same"),
+
+            // The readings. Each takes a figure that was handed over and says what it comes to.
+            Map.entry("souther.compiler.partition.Generator$UnresolvedCombination$Reason#wordFor("
+                            + "Ljava/util/Set;)"
+                            + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
+                    "the word a search stopped by these comes back with"),
+            Map.entry("souther.compiler.report.AdequacyReport#said(Ljava/util/Set;)"
+                            + "Ljava/lang/String;",
+                    "what a figure is called where a reader meets one")));
+
+    /**
+     * The places that read a figure are the places that say they do.
+     *
+     * <p>Both ways round. A place missing from the list is one nobody has said what it does with
+     * the figure it reached; a place in the list that reads none is a rule about code that has gone.
+     */
+    @Test
+    void aFigureIsReachedOnlyWhereSomethingSaysWhatItDoesWithIt() throws Exception {
+        Set<String> found = new LinkedHashSet<>();
+        for (Compiled.Site site : Compiled.sites()) {
+            if (site.owner().equals(BUDGET) && !site.member().equals("<init>")
+                    && !site.from().equals(BUDGET) && !javacsOwn(site.from())) {
+                found.add(site.at());
+            }
+        }
+        // The figures' own class reads itself, which is what an enum is; counted as a reader, every
+        // constant would be a place to explain.
+        found.add(BUDGET + "#<clinit>()V");
+
+        List<String> unsaid = new ArrayList<>(found);
+        unsaid.removeAll(READ_AT.keySet());
+        List<String> gone = new ArrayList<>(READ_AT.keySet());
+        gone.removeAll(found);
+
+        assertEquals(List.of(), unsaid,
+                "a figure of this compiler's reached where nothing says what it does with it."
+                        + " Either it hands the budget over, and the list says so, or it swallows"
+                        + " it — and a swallowed budget is a stop nothing downstream can see");
+        assertEquals(List.of(), gone,
+                "a rule about a place that no longer reads a figure");
+    }
+
+    /**
+     * A class javac wrote, which is not a place anybody decided anything.
+     *
+     * <p>A switch over the figures compiles to a table beside the class that switches, and the
+     * table reads every constant to number them. Counted as readers, every exhaustive switch would
+     * be a place to write a sentence about — and the sentence would be about the switch, which is
+     * already named here by the method that holds it.
+     */
+    private static boolean javacsOwn(String from) {
+        int nested = from.lastIndexOf('$');
+        return nested >= 0 && from.length() > nested + 1
+                && Character.isDigit(from.charAt(nested + 1));
+    }
+}
