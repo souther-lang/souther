@@ -29,7 +29,7 @@ public final class CstLexer {
             Map.entry("data", SyntaxKind.DATA_KW),
             Map.entry("invariant", SyntaxKind.INVARIANT_KW),
             Map.entry("ensures", SyntaxKind.ENSURES_KW),
-            // decoder / encoder / from / intrinsic are not reserved: they lex as identifiers.
+            // `intrinsic` is not reserved: it lexes as an identifier and is read by position.
             Map.entry("as", SyntaxKind.AS_KW),
             Map.entry("let", SyntaxKind.LET_KW),
             Map.entry("guard", SyntaxKind.GUARD_KW),

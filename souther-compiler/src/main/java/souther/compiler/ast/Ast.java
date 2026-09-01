@@ -15,10 +15,22 @@ import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 /**
- * The slice-2 abstract syntax: a module of product {@code data} definitions with one or
- * more fields, each with an optional {@code invariant}, {@code decoder} (a single-value
- * {@code from Text|Int} form or a multi-field {@code from Object} form), and
- * {@code encoder} (a single Raw value or a {@code Object { ... }} form).
+ * The abstract syntax: a module as the characters that spell it were read, with every name still a
+ * spelling and nothing yet settled about what it denotes.
+ *
+ * <p>Every form here is one the frontend writes, and that is what this is — not {@link Hir} with
+ * the resolution taken out. A form that comes into being further down belongs to the
+ * representation whose pass makes it: a codec is derived from a data's shape, an expansion is
+ * written where a call is inlined, and neither has a twin up here for nothing to build. A twin
+ * would be a form no parse answers with, held to every rule the reachable frontend is held to,
+ * with a reader taking it for something the language can be written in.
+ *
+ * <p>What the frontend writes is not the same as what an author wrote. A unit data a construction
+ * implied, a binder for a name the source never spelled, the {@code Option<T>} a {@code T?} became
+ * — all of them are written here, by the pass that reads the concrete syntax. What may not be
+ * written here is a form that pass never answers with, and
+ * {@code TheParsedTreeHoldsOnlyWhatTheFrontendWritesTest} asks of each of these forms whether it
+ * is one.
  */
 public interface Ast {
 

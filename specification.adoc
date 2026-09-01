@@ -4726,7 +4726,7 @@ Behavior definition nodes are two, corresponding to the two right-hand sides of 
 
 `+FnDef+` holds argument names and a body. If a same-named `+SpecBehavior+` exists the type comes from it; otherwise it is a helper `+let+` and holds its own argument types, except for a parameter its body determines (<<fn-declaration>>).
 
-A `+SumData+` case holds only a reference to a named data (<<sum-data>>). A `+...+` spread inherits taken-in fields and invariants flatly. `+DecoderDef+` / `+EncoderDef+` are filled by derivation from a data's shape (<<decoder>>, <<encoder>>). `+guard+` and `+let+` are desugared, so they do not appear in the AST; they appear as an `+if+` and as block bindings (<<guard>>, <<block-expression>>).
+A `+SumData+` case holds only a reference to a named data (<<sum-data>>). A `+...+` spread inherits taken-in fields and invariants flatly. `+DecoderDef+` / `+EncoderDef+` and the nodes only they hold (`+Construct+`, `+DecRef+`, `+RawExpr+`) are not written by the parse and have no form in it: a decoder does not appear in Souther's syntax (<<decoder>>). They are filled in by derivation from a data's shape, once the names in the definition have been resolved (<<decoder>>, <<encoder>>). `+guard+` and `+let+` are desugared, so they do not appear in the AST; they appear as an `+if+` and as block bindings (<<guard>>, <<block-expression>>).
 
 [#ast-behavior-info]
 === Information tracked about a behavior

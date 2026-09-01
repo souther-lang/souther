@@ -22,8 +22,8 @@ public enum SyntaxKind {
     // --- keywords ---
     // `example` / `examples` / `for` are NOT reserved (they would collide with the `example.*`
     // package/module names): the parser recognizes them by text at top-level position, like the
-    // contextual `intrinsic` / `decoder` / `from`. `on`, the second word of `depends on`, is read
-    // the same way, so a field or parameter may still be named on.
+    // contextual `intrinsic`. `on`, the second word of `depends on`, is read the same way, so a
+    // field or parameter may still be named on.
     MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW, ELSE_KW,
     TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW, MATCH_KW, WITH_KW,
     UNREACHABLE_KW,
