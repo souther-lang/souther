@@ -31,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -1004,7 +1005,9 @@ public final class Resolve {
                 yield new Hir.Data(d.written(), declared, d.newtype(), names(d.includes()),
                         fields(d.fields()),
                         clauses(d.invariants(), boundFields(d, declared)),
-                        d.decoder().map(this::decoder), d.encoder().map(this::encoder),
+                        // a codec is derived from the shape this answers with, by the pass that
+                        // derives it; nothing above answers with one
+                        Optional.empty(), Optional.empty(),
                         d.pos());
             }
             case Ast.SumData s -> new Hir.SumData(s.written(), declared, sumCases(s), s.pos());
@@ -1068,152 +1071,6 @@ public final class Resolve {
         return bound;
     }
 
-
-    // --- decoders ---
-
-    /** A decoder reads the value it is decoding under the name it gives it, and an object decoder
-     * reads what each of its binds took out of the object. Those are what bind its names. */
-    private Hir.DecoderDef decoder(Ast.DecoderDef d) {
-        return switch (d) {
-            case Ast.PrimDecoder p -> {
-                Answered input = bind(Bindings.NONE, p.input());
-                Bindings bound = input.bound();
-                List<Hir.DecStmt> stmts = new ArrayList<>();
-                for (Ast.DecStmt s : p.stmts()) {
-                    Ast.Let let = (Ast.Let) s;
-                    Hir.Expr value = expr(let.value(), bound);
-                    Answered a = bind(bound, let.binder());
-                    stmts.add(new Hir.Let(a.binder(), value, let.pos()));
-                    bound = a.bound();
-                }
-                yield new Hir.PrimDecoder(rawKind(p.from()), input.binder(), stmts,
-                        construct(p.result(), bound), p.pos());
-            }
-            case Ast.ObjectDecoder o -> {
-                List<Hir.Bind> binds = new ArrayList<>();
-                Bindings bound = Bindings.NONE;
-                for (Ast.Bind b : o.binds()) {
-                    Answered a = bind(bound, b.binder());
-                    binds.add(new Hir.Bind(a.binder(), b.key(), decRef(b.ref()), b.pos()));
-                    bound = a.bound();
-                }
-                yield new Hir.ObjectDecoder(binds, construct(o.result(), bound), o.pos());
-            }
-            case Ast.NewtypeDecoder n -> {
-                Answered input = bind(Bindings.NONE, n.input());
-                yield new Hir.NewtypeDecoder(decRef(n.inner()), input.binder(),
-                        construct(n.result(), input.bound()), n.pos());
-            }
-        };
-    }
-
-    /**
-     * Which kind of primitive Raw a parsed kind denotes, in the vocabulary below this boundary.
-     *
-     * <p>The parsed tree and what this pass answers hold the kinds as separate types, so crossing
-     * between them is a decision and this is where it is made. Written out on both sides rather
-     * than taken from a spelling: a kind added to what the parsed tree may hold then has no
-     * translation until one says which kind below it means, and a name shared by the two enums is
-     * no answer to that.
-     *
-     * <p>The switch is an expression and has no {@code default} for that reason. A {@code default}
-     * would answer for a kind nobody had decided about, which is the whole of what this stops.
-     */
-    private static Hir.RawKind rawKind(Ast.RawKind kind) {
-        return switch (kind) {
-            case TEXT -> Hir.RawKind.TEXT;
-            case INT -> Hir.RawKind.INT;
-            case BOOL -> Hir.RawKind.BOOL;
-            case DECIMAL -> Hir.RawKind.DECIMAL;
-            case DATE -> Hir.RawKind.DATE;
-            case TIME -> Hir.RawKind.TIME;
-            case DATETIME -> Hir.RawKind.DATETIME;
-            case INSTANT -> Hir.RawKind.INSTANT;
-        };
-    }
-
-    private Hir.DecRef decRef(Ast.DecRef ref) {
-        return switch (ref) {
-            case Ast.DecRef.Bare b -> bareDecRef(b);
-            case Ast.OptionDecRef o -> new Hir.OptionDecRef(bareDecRef(o.element()), o.pos());
-        };
-    }
-
-    /** Resolving keeps the shape it was given, so what an optional holds stays what an optional may
-     *  hold. Split here for that reason and not to say anything new about the arms. */
-    private Hir.DecRef.Bare bareDecRef(Ast.DecRef.Bare ref) {
-        return switch (ref) {
-            case Ast.PrimDecRef p -> new Hir.PrimDecRef(p.kind(), p.pos());
-            case Ast.DataDecRef d -> new Hir.DataDecRef(type(d.typeName()), d.pos());
-            case Ast.ListDecRef l -> new Hir.ListDecRef(decRef(l.element()), l.pos());
-            case Ast.SetDecRef s -> new Hir.SetDecRef(decRef(s.element()), s.pos());
-            // the key is already the classification the checker made, carrying a resolved name
-            case Ast.MapDecRef m -> new Hir.MapDecRef(decRef(m.value()), m.key(), m.pos());
-        };
-    }
-
-    private Hir.Construct construct(Ast.Construct c, Bindings bound) {
-        List<Hir.FieldInit> inits = new ArrayList<>();
-        for (Ast.FieldInit i : c.inits()) {
-            inits.add(new Hir.FieldInit(i.written(), expr(i.value(), bound)));
-        }
-        return new Hir.Construct(type(c.typeName()), inits, c.pos());
-    }
-
-    // --- encoders ---
-
-    /** An encoder reads the value it is encoding under the name it gives it. */
-    private Hir.EncoderDef encoder(Ast.EncoderDef e) {
-        Answered self = bind(Bindings.NONE, e.self());
-        return new Hir.EncoderDef(self.binder(), rawExpr(e.result(), self.bound()), e.pos());
-    }
-
-    private Hir.RawExpr rawExpr(Ast.RawExpr r, Bindings bound) {
-        return switch (r) {
-            case Ast.TextRaw t -> new Hir.TextRaw(expr(t.arg(), bound), t.pos());
-            case Ast.IntRaw i -> new Hir.IntRaw(expr(i.arg(), bound), i.pos());
-            case Ast.BoolRaw b -> new Hir.BoolRaw(expr(b.arg(), bound), b.pos());
-            case Ast.DecimalRaw d -> new Hir.DecimalRaw(expr(d.arg(), bound), d.pos());
-            case Ast.IsoTextRaw i -> new Hir.IsoTextRaw(expr(i.arg(), bound), i.pos());
-            case Ast.EncodeRaw en ->
-                    new Hir.EncodeRaw(type(en.typeName()), expr(en.arg(), bound), en.pos());
-            case Ast.ListEnc l -> new Hir.ListEnc(expr(l.source(), bound), encElem(l.elem()), l.pos());
-            case Ast.SetEnc s -> new Hir.SetEnc(expr(s.source(), bound), encElem(s.elem()), s.pos());
-            case Ast.MapEnc m -> new Hir.MapEnc(expr(m.source(), bound), encElem(m.elem()),
-                    m.key(), m.pos());
-            // the inner expression reads the element the option holds, under the name given here
-            case Ast.OptionRaw o -> {
-                Answered elem = bind(bound, o.elem());
-                yield new Hir.OptionRaw(expr(o.access(), bound),
-                        rawExpr(o.inner(), elem.bound()), elem.binder(), o.pos());
-            }
-            case Ast.ObjectRaw o -> {
-                List<Hir.RawEntry> entries = new ArrayList<>();
-                for (Ast.RawEntry entry : o.entries()) {
-                    entries.add(new Hir.RawEntry(entry.key(), rawExpr(entry.value(), bound),
-                            entry.pos()));
-                }
-                yield new Hir.ObjectRaw(entries, o.pos());
-            }
-        };
-    }
-
-    private Hir.EncElem encElem(Ast.EncElem e) {
-        return switch (e) {
-            case Ast.EncElem.Bare b -> bareEncElem(b);
-            case Ast.OptionElemEnc o -> new Hir.OptionElemEnc(bareEncElem(o.elem()), o.pos());
-        };
-    }
-
-    private Hir.EncElem.Bare bareEncElem(Ast.EncElem.Bare e) {
-        return switch (e) {
-            case Ast.PrimEnc p -> new Hir.PrimEnc(p.kind(), p.pos());
-            case Ast.DataEnc d -> new Hir.DataEnc(type(d.typeName()), d.pos());
-            case Ast.ListElemEnc l -> new Hir.ListElemEnc(encElem(l.elem()), l.pos());
-            case Ast.SetElemEnc s -> new Hir.SetElemEnc(encElem(s.elem()), s.pos());
-            case Ast.MapElemEnc m -> new Hir.MapElemEnc(encElem(m.value()), m.key(), m.pos());
-        };
-    }
 
     // --- expressions ---
 

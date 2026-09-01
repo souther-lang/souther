@@ -31,7 +31,7 @@ class EverySlotIsAChildTest {
     /** {@code Person { ..base, age: n }} — one name slot, one expression slot. */
     private static Ast.NewData construction() {
         return new Ast.NewData(Ast.Name.written("Person", POS),
-                List.of(new Ast.FieldInit("age", name("n"), POS)),
+                List.of(new Ast.FieldInit(WrittenName.of("age", POS), name("n"))),
                 List.of(name("base")),
                 ConstructionOrigin.own(), POS, null);
     }

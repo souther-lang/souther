@@ -3,8 +3,6 @@ package souther.compiler.ast;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.MapKeyRepresentation;
-import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeKey;
@@ -670,8 +668,6 @@ public interface Ast {
                 List<Name> includes,
                 List<Field> fields,
                 List<InvariantClause> invariants,
-                Optional<DecoderDef> decoder,
-                Optional<EncoderDef> encoder,
                 SourcePos pos) implements Def {}
 
     /**
@@ -796,112 +792,8 @@ public interface Ast {
         }
     }
 
-    /** The kind of primitive Raw a single-value decoder reads / an encoder writes. */
-    enum RawKind { TEXT, INT, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT }
-
-    // --- decoders ---
-
-    sealed interface DecoderDef extends Ast permits PrimDecoder, ObjectDecoder, NewtypeDecoder {}
-
-    /** {@code decoder from Text|Int as <input> { <stmts> <construct> }} (single value). */
-    record PrimDecoder(RawKind from,
-                       Binder input,
-                       List<DecStmt> stmts,
-                       Construct result,
-                       SourcePos pos) implements DecoderDef {
-
-        public String inputName() {
-            return input.name();
-        }
-    }
-
-    /** {@code decoder from Object { <binds> <construct> }} (multi-field, accumulating). */
-    record ObjectDecoder(List<Bind> binds, Construct result, SourcePos pos) implements DecoderDef {}
-
-    /**
-     * A newtype {@code data X = Y} over a non-primitive {@code Y} (spec §newtype): the whole input is
-     * decoded by {@code inner} (a reference to {@code Y}'s decoder), and the result wrapped in
-     * {@code X}. {@code X}'s external representation is {@code Y}'s — an object or a discriminated
-     * sum, not {@code {value: ...}}.
-     */
-    record NewtypeDecoder(DecRef inner, Binder input, Construct result, SourcePos pos)
-            implements DecoderDef {
-
-        public String inputName() {
-            return input.name();
-        }
-    }
-
-    /** One field an object decoder reads: the key it is found under, how the value there is read,
-     *  and the name the construction below refers to it by. Built by {@code Deriver}; no source
-     *  writes one. */
-    record Bind(Binder binder, String key, DecRef ref, SourcePos pos) implements Ast {
-
-        public String name() {
-            return binder.name();
-        }
-    }
-
-    /** The decoder referenced by a bind: a primitive, another data's {@code .decoder}, or a list. */
-    sealed interface DecRef extends Ast permits DecRef.Bare, OptionDecRef {
-
-        /** A reference that is not an optional. What the distinction is for is the one position that
-         *  requires it: what an optional decodes. Absence has one form wherever it stands, so an
-         *  optional under an optional has two forms for three values and is not written
-         *  (spec {@code [#what-has-no-external-representation]}). */
-        sealed interface Bare extends DecRef
-                permits PrimDecRef, DataDecRef, ListDecRef, SetDecRef, MapDecRef {}
-    }
-
-    record PrimDecRef(LeafScalar kind, SourcePos pos) implements DecRef.Bare {}
-
-    record DataDecRef(Name typeName, SourcePos pos) implements DecRef.Bare {}
-
-    /** {@code list(<elementDecRef>)} */
-    record ListDecRef(DecRef element, SourcePos pos) implements DecRef.Bare {}
-
-    /** {@code set(<elementDecRef>)} — a list decoder deduplicated into a Set on decode (ADR-0009). */
-    record SetDecRef(DecRef element, SourcePos pos) implements DecRef.Bare {}
-
-    /** An optional decoder. Under a key, a missing key or {@code null} is {@code None}; standing as
-     *  an element or a map's value, where there is no key to be missing, {@code null} is the whole
-     *  of it. Either way a present value decodes through {@code element}. */
-    record OptionDecRef(DecRef.Bare element, SourcePos pos) implements DecRef {}
-
-    /** A {@code Map<K, T>} decoder: each object value is decoded with {@code value}, and each of the
-     * object's string keys through {@code key}.
-     *
-     * <p>The key is a {@link MapKeyRepresentation} rather than a {@code DecRef}: a key position holds one of
-     * the representations the boundary admits, and nothing else — not a list, not an option — so the
-     * type says as much and a reader that switches on it needs no arm for what cannot be there. It is
-     * also the classification the checker already made, carried here rather than worked out again. */
-    record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef.Bare {}
-
-    /** A statement in a single-value decoder body. */
-    sealed interface DecStmt extends Ast permits Let {}
-
-    record Let(Binder binder, Expr value, SourcePos pos) implements DecStmt {
-
-        public String name() {
-            return binder.name();
-        }
-    }
-
-    /**
-     * The construction a decoder ends in: {@code TypeName { field: expr, ... }}, one value per field.
-     *
-     * <p>Not an expression, and not what a body writes — a decoder is derived or written in the codec
-     * grammar, and nothing there spreads. A construction a body writes is {@link NewData}.
-     */
-    record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Ast {}
-
     /** {@code field: expr}, or the shorthand {@code field}, in a construction. */
     record FieldInit(WrittenName written, Expr value) implements Ast {
-
-        /** An initialiser a pass wrote — a derived encoder's, a newtype's implicit {@code value}. */
-        public FieldInit(String name, Expr value, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), value);
-        }
 
         /** The field this fills. */
         public String name() {
@@ -926,90 +818,6 @@ public interface Ast {
             return rewritten == value ? this : new FieldInit(written, rewritten);
         }
     }
-
-    // --- encoders ---
-
-    record EncoderDef(Binder self, RawExpr result, SourcePos pos) implements Ast {
-
-        public String selfName() {
-            return self.name();
-        }
-    }
-
-    /** A Raw-building expression. */
-    sealed interface RawExpr extends Ast
-            permits TextRaw, IntRaw, BoolRaw, DecimalRaw, IsoTextRaw, ObjectRaw, EncodeRaw, ListEnc,
-                    SetEnc, OptionRaw, MapEnc {}
-
-    /** Encodes a {@code Map<K, T>} to a {@code Raw.Object}, each value via {@code elem} and each key
-     * to its bare string through {@code key} — the representation the checker admitted it as, closed
-     * for the reason {@link MapDecRef}'s is. */
-    record MapEnc(Expr source, EncElem elem, MapKeyRepresentation key, SourcePos pos) implements RawExpr {}
-
-    /** Encodes an optional field: {@code None} becomes {@code Raw.Null}, {@code Some(v)} encodes
-     * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elemVar}. */
-    record OptionRaw(Expr access, RawExpr inner, Binder elem, SourcePos pos) implements RawExpr {
-
-        public String elemVar() {
-            return elem.name();
-        }
-    }
-
-    record TextRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    record IntRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    record BoolRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    /** Encodes a {@code Decimal} field to a {@code Raw.Decimal}. */
-    record DecimalRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    /** Encodes a {@code Date}/{@code DateTime} field to a {@code Raw.Text} via its ISO8601 form. */
-    record IsoTextRaw(Expr arg, SourcePos pos) implements RawExpr {}
-
-    record ObjectRaw(List<RawEntry> entries, SourcePos pos) implements RawExpr {}
-
-    /** {@code TypeName.encode(expr)} — encode a nested data value to Raw. */
-    record EncodeRaw(Name typeName, Expr arg, SourcePos pos) implements RawExpr {}
-
-    /** {@code list(expr, <elemEnc>)} — encode a {@code List<T>} to a Raw.List. */
-    record ListEnc(Expr source, EncElem elem, SourcePos pos) implements RawExpr {}
-
-    /** Encodes a {@code Set} as a JSON array: the set is listed, then each element encoded. */
-    record SetEnc(Expr source, EncElem elem, SourcePos pos) implements RawExpr {}
-
-    /** How to encode a list/set/map element: a primitive, another data's {@code .encode}, or another
-     * collection — a collection may hold a collection ({@code Map<String, List<商品ID>>}), so the
-     * element encoder nests as deeply as the type does. */
-    sealed interface EncElem extends Ast permits EncElem.Bare, OptionElemEnc {
-
-        /** An element encoder that is not an optional, for the reason {@link DecRef.Bare} carries. */
-        sealed interface Bare extends EncElem
-                permits PrimEnc, DataEnc, ListElemEnc, SetElemEnc, MapElemEnc {}
-    }
-
-    record PrimEnc(LeafScalar kind, SourcePos pos) implements EncElem.Bare {}
-
-    record DataEnc(Name typeName, SourcePos pos) implements EncElem.Bare {}
-
-    /** A {@code List<T>} element, each {@code T} encoded by {@code elem}. */
-    record ListElemEnc(EncElem elem, SourcePos pos) implements EncElem.Bare {}
-
-    /** A {@code Set<T>} element: listed, then each element encoded by {@code elem}, as {@link SetEnc}
-     * does for a field. */
-    record SetElemEnc(EncElem elem, SourcePos pos) implements EncElem.Bare {}
-
-    /** A {@code Map<K, V>} element, each value encoded by {@code value} and each key by {@code key},
-     * as {@link MapEnc} does for a field. */
-    record MapElemEnc(EncElem value, MapKeyRepresentation key, SourcePos pos) implements EncElem.Bare {}
-
-    /** An optional standing where there is no key to omit — a collection's element, a map's value.
-     * {@code None} is written {@code null} and {@code Some(v)} through {@code elem}
-     * (spec {@code [#absence-is-written-as-null]}). A field's optional is {@link OptionRaw}, which
-     * omits its key instead. */
-    record OptionElemEnc(EncElem.Bare elem, SourcePos pos) implements EncElem {}
-
-    record RawEntry(String key, RawExpr value, SourcePos pos) implements Ast {}
 
     // --- expressions ---
 

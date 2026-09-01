@@ -72,19 +72,15 @@ public final class Deriver {
         // the decoder and the encoder each read the value under a name of their own, so each owns
         // the bindings it writes rather than sharing the declaration's
         BindingOwner declared = new BindingOwner.OfData(d.declares());
-        Optional<Hir.DecoderDef> decoder = d.decoder().isPresent()
-                ? d.decoder()
-                : Optional.of(deriveDecoder(d, shapes, symbols,
-                        new Hir.Binders(new BindingOwner.Synthesized(declared,
-                                BindingOwner.Pass.DERIVER, 0))));
-        Optional<Hir.EncoderDef> encoder = d.encoder().isPresent()
-                ? d.encoder()
-                : Optional.of(deriveEncoder(d, shapes,
-                        new Hir.Binders(new BindingOwner.Synthesized(declared,
-                                BindingOwner.Pass.DERIVER, 1))));
+        Hir.DecoderDef decoder = deriveDecoder(d, shapes, symbols,
+                new Hir.Binders(new BindingOwner.Synthesized(declared,
+                        BindingOwner.Pass.DERIVER, 0)));
+        Hir.EncoderDef encoder = deriveEncoder(d, shapes,
+                new Hir.Binders(new BindingOwner.Synthesized(declared,
+                        BindingOwner.Pass.DERIVER, 1)));
         return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
                 d.invariants(),
-                decoder, encoder, d.pos());
+                Optional.of(decoder), Optional.of(encoder), d.pos());
     }
 
     // --- decoder derivation ---
