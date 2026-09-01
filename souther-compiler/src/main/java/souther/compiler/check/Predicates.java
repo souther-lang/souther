@@ -468,10 +468,11 @@ final class Predicates {
     /**
      * Whether a clause came out one way or the other before any construction was looked at.
      *
-     * <p>Read here, off the expression this walk normalizes and reads, rather than off the one an
-     * author wrote. {@code Int.compare(1, 2) >= 0} is a call until {@link #asOrderComparison} makes
-     * it {@code 1 >= 2}, so a reader folding the written form first sees a call and the fold that
-     * matters happens in here.
+     * <p>Read here, off what this walk read the clause as, rather than off the expression an author
+     * wrote. {@code Int.compare(1, 2) >= 0} folds through nothing the library declares, and the
+     * order it states of {@code 1} and {@code 2} is what settles it — so a reader folding the
+     * written form sees a call, and the fold that matters happens once each reading of the clause is
+     * in hand.
      */
     enum Fold {
 
@@ -724,11 +725,13 @@ final class Predicates {
      * is why the polarity is asked. A caller that does not report the other way round is answered
      * with nothing here and reads on. */
     private static Owed decidedBy(Boolean folded, boolean positive, boolean decidesFalse) {
-        if (folded == null || folded != positive) {
-            return folded != null && decidesFalse
-                    ? Owed.decided(false).and(Owed.of(VIOLATED)) : null;
+        if (folded == null) {
+            return null;
         }
-        return Owed.decided(true);
+        if (folded == positive) {
+            return Owed.decided(true);
+        }
+        return decidesFalse ? Owed.decided(false).and(Owed.of(VIOLATED)) : null;
     }
 
     /** What a clause reading on says about its own fold: either it did not fold, or it folded the
@@ -737,7 +740,6 @@ final class Predicates {
     private static Fold foldOf(Boolean folded) {
         return folded == null ? Fold.NOT_DECIDED : Fold.FAILS;
     }
-
 
     /**
      * The atoms {@code cond} names as numbers, which for a condition that states no comparison is
@@ -889,12 +891,17 @@ final class Predicates {
         // expression is what files what its values carry, so the reading that named it has them
         // ({@link IntrinsicNumericFacts}).
         List<NumericConstraint> known = terms.carriedBy(atomsNamedBy(cond, at));
-        out = known.isEmpty() ? out : taking(out, known);
+        out = carrying(out, known);
         List<Quantified> quantified = new ArrayList<>();
         quantifiedBy(cond, at, positive, quantified);
         out = out.and(quantified);
-        boolean read = !known.isEmpty() || !quantified.isEmpty();
-        return settling(out, new Conditions.Polar(cond, positive), at, read, read);
+        // Two answers and not one, as everywhere here: what a proof may rest on, and what an
+        // unsettled arm may be explained by. They move together on this route and are still asked
+        // apart, because one of them coming to answer the other is how a limit of this compiler
+        // gets reported as a fact about the model.
+        boolean taken = !known.isEmpty() || !quantified.isEmpty();
+        boolean shapeRead = !known.isEmpty() || !quantified.isEmpty();
+        return settling(out, Conditions.Polar.itself(cond, positive), at, taken, shapeRead);
     }
 
     /**
@@ -903,12 +910,16 @@ final class Predicates {
      * <p>Both routes, always: what the comparison says of the numbers, and that the canonical
      * comparison it comes to holds. Which one carries a clause is decided where the clause is read,
      * and a guard does not know which that will be.
+     *
+     * <p>No quantifier is asked for. What states one is a call to an operation over a container, and
+     * a comparison is not one however it was arrived at — so asking would be asking a question whose
+     * answer the shape already gives.
      */
     private Assumed taking(StatedComparison stated, Known k, Denotations at, boolean positive) {
         // Taken before the comparison is read at all, for the reason the reachability question
         // below is asked with them.
         List<NumericConstraint> known = terms.carriedBy(atomsNamedBy(stated, at));
-        Known out = known.isEmpty() ? k : taking(k, known);
+        Known out = carrying(k, known);
         // A condition no case of what it is written over can satisfy is one this branch is never
         // entered under, and a value the program never builds is not one to report about. Asked of
         // everything the condition itself established and not only of what held on the way in: a
@@ -941,7 +952,7 @@ final class Predicates {
     /** {@code k} holding what those values carry. A size is never negative whether or not the
      * condition holds, so this holds of the value and not of the path — the condition is only where
      * the container got named. */
-    private Known taking(Known k, List<NumericConstraint> known) {
+    private Known carrying(Known k, List<NumericConstraint> known) {
         Known out = k;
         for (NumericConstraint c : known) {
             out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));

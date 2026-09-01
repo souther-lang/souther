@@ -170,7 +170,8 @@ final class Conditions {
      * operation answering an order answered, the comparison of the two values that order is of
      * ({@link #orderStatedBy}). Composition repeats while it says something, so a comparison of a
      * sign of a sign comes to the values underneath it; the deepest reading is first and the
-     * comparison as written is last.
+     * comparison as written is last. It stops on its own: each composition takes the arguments of a
+     * call one of the sides was, so the sides get smaller every time round.
      *
      * <p>Handed over as statements and not as expressions. What a reading arrived at is a claim and
      * two sides ({@link StatedComparison}), which is what every reader below does something with —
@@ -309,7 +310,16 @@ final class Conditions {
         return e;
     }
 
-    record Polar(Core expr, boolean positive) {}
+    record Polar(Core expr, boolean positive) {
+
+        /** A condition that states no comparison, which is stated as itself. There is nothing to
+         *  bring to a canonical form: what a guard settles such a condition by is the condition, and
+         *  the six ways of writing one thing that {@link #polar} exists for are ways of writing a
+         *  comparison. */
+        static Polar itself(Core e, boolean positive) {
+            return new Polar(e, positive);
+        }
+    }
 
     /**
      * {@code stated}, asserted with polarity {@code positive}, as the comparison of {@code ==} or
@@ -319,10 +329,14 @@ final class Conditions {
      * leave a clause written the other unsettled.
      */
     static Polar polar(StatedComparison stated, boolean positive) {
-        AsPolar as = new AsPolar();
-        Polar written = stated.claim().canonical(stated.left(), stated.right()).expressedAs(as);
-        return positive ? written : as.denied(written);
+        Polar written =
+                stated.claim().canonical(stated.left(), stated.right()).expressedAs(AS_POLAR);
+        return positive ? written : AS_POLAR.denied(written);
     }
+
+    /** One of them, because it holds nothing: what a canonical comparison is written as is the same
+     *  answer wherever it is asked. */
+    private static final AsPolar AS_POLAR = new AsPolar();
 
     /**
      * A canonical comparison, written as a node with what is asserted of it held beside it.
