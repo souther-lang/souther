@@ -31,12 +31,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * it hand the budget over, or does it swallow it — and the answer belongs beside the code that
  * decides, which is why the list is here and not a count.
  *
- * <p><b>What this does not see.</b> A figure a class copies into a field of its own is reached once,
+ * <p><b>One of two sheets.</b> A figure a class copies into a field of its own is reached once,
  * where the field is set, and the walk that then stops at the field is not a reader of the figure
- * here. So this holds the inventory of figures and the places that hand one over; it does not catch
- * a walk that consults a copy and comes back with a word. What would catch that is a rule about the
- * constants themselves — every number of that kind in these classes being one of these figures —
- * and it is not written.
+ * here — so this holds the registered figures to being handed over, and
+ * {@link EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest} holds the classes to
+ * registering a figure at all. Neither is enough alone: that one sees a number written down and
+ * this one sees a figure that is the size of a walk.
+ *
+ * <p><b>And what neither sees is the predicate.</b> Each entry below says the place hands the
+ * figure over; that the place reaches it only where there was more to do is not something either
+ * sheet can read. What says that is the threshold tests, one either side of a figure and on it, and
+ * they exist for the walks that can be put there.
  */
 class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
 

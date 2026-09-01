@@ -103,13 +103,12 @@ public final class LevelRealizer {
                 return made;
             }
         }
-        // Where the walk stopped at its figure, what came back empty is a walk this compiler cut
-        // short and not a line whose places were all tried. Said as the second, a pair the figure
-        // kept from being reached is reported as one nothing composes.
-        return walked.stoppedShort()
-                ? Realization.Unknown.stoppedBy(
-                        java.util.Set.of(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT))
-                : Realization.Unknown.nothingComposedOne();
+        // Nothing was composed, which is what a pair the ranges leave no place for comes to and
+        // what this has always said. Where the walk stopped at its figure, that is said beside the
+        // answer rather than in place of it.
+        return Realization.Unknown.nothingComposedOne(walked.stoppedShort()
+                ? java.util.Set.of(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT)
+                : java.util.Set.of());
     }
 
     /**
@@ -240,12 +239,10 @@ public final class LevelRealizer {
         if (bounded && over.where() instanceof Criterion.AtTheLevel) {
             return new Realization.Impossible();
         }
-        // What kept this from settling it, where a figure of this compiler's did. Where none did,
-        // the walk reached the end of what it had and the answer is that nothing was composed —
-        // said in that word rather than in the one for a search that stopped, which would name a
-        // budget nobody reached.
-        return stoppedBy.isEmpty() ? Realization.Unknown.nothingComposedOne()
-                : Realization.Unknown.stoppedBy(stoppedBy);
+        // A side is never settled by looking, so what this comes back with is that the search ran
+        // out — which is what it has always come back with, whether or not a figure of this
+        // compiler's was reached. The figures are said beside that answer and do not choose it.
+        return Realization.Unknown.searchRanOut(stoppedBy);
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
@@ -548,8 +545,9 @@ public final class LevelRealizer {
         private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
                                 java.math.BigDecimal coef,
                                 souther.compiler.inputs.SearchRegion here) {
-            for (Place x : Outwards.from(new Count(on.from()), new Count(on.by()), carriers[i],
-                    on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT)) {
+            Outwards.Walked walked = Outwards.from(new Count(on.from()), new Count(on.by()),
+                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+            for (Place x : walked) {
                 if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
                     return Reached.FOUND;
                 }
@@ -557,9 +555,14 @@ public final class LevelRealizer {
                     return Reached.INCOMPLETE;
                 }
             }
-            // A run without an end, walked as far as this compiler walks one. Never a proof, and
-            // the figure that decided how far is what a reader wanting more would raise.
-            stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+            // Never a proof either way: a run without an end is not walked to the end, and a walk
+            // of every value this had is still a walk of a progression. What the figure adds is
+            // only said where the run held one more and this did not take it — added whenever the
+            // walk came back empty, it would name a figure over a run that had nothing further in
+            // it, which is this compiler claiming to have been stopped where it was not.
+            if (walked.stoppedShort()) {
+                stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+            }
             return Reached.INCOMPLETE;
         }
 

@@ -71,29 +71,37 @@ public sealed interface Realization {
             }
         }
 
-        /** A walk that came to nothing without any budget of this compiler's having run out. */
+        /**
+         * A walk that composed no candidate, and the budgets of this compiler's it ran out of.
+         *
+         * <p><b>The word is the walk's and the budgets are beside it.</b> What a walk came to and
+         * whether a figure of this compiler's stopped it are two questions, and only the first has
+         * ever decided which word this comes back with. Made from the budgets instead — one word
+         * where some were reached and another where none were — a walk changes what it says by
+         * acquiring a fact about this compiler, and a reader who has been reading that word for
+         * reasons of their own is told something else.
+         *
+         * <p>Empty is the ordinary case and says the same thing: nothing was composed, and nothing
+         * of this compiler's is why.
+         */
+        public static Unknown nothingComposedOne(java.util.Set<CompositionBudget> stoppedBy) {
+            return new Unknown(Reason.NOTHING_COMPOSED_ONE, stoppedBy);
+        }
+
+        /** The same, of a walk that composed no candidate and met no figure. */
         public static Unknown nothingComposedOne() {
-            return new Unknown(Reason.NOTHING_COMPOSED_ONE, java.util.Set.of());
+            return nothingComposedOne(java.util.Set.of());
         }
 
         /**
-         * A walk these budgets of this compiler's stopped.
+         * A walk that tried what it had and settled nothing, and the budgets it ran out of.
          *
-         * <p>Which budget it was and the word it comes back with are made together here, and the
-         * word is never what the budget is read back from: one of these words is written wherever a
-         * walk of a side comes back empty, budget or no budget, so a reader recovering a budget
-         * from it would be recovering one that may never have been reached.
+         * <p>Beside {@link #nothingComposedOne} for the reason above: which of the two a walk says
+         * is the walk's own answer, and this one is what a side comes back with whether or not a
+         * figure was reached.
          */
-        public static Unknown stoppedBy(java.util.Set<CompositionBudget> budgets) {
-            if (budgets.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a walk this compiler stopped says which budget stopped it");
-            }
-            // The word each of these has always come back with, and not one word for all of them.
-            // Which of the two a stopped walk says is the budgets' to say, and a stop that said the
-            // other would move a sentence a reader has been reading for reasons of its own.
-            return new Unknown(Generator.UnresolvedCombination.Reason.wordFor(budgets)
-                    .asAWalksAnswer(), budgets);
+        public static Unknown searchRanOut(java.util.Set<CompositionBudget> stoppedBy) {
+            return new Unknown(Reason.THE_SEARCH_RAN_OUT, stoppedBy);
         }
 
         public enum Reason {
