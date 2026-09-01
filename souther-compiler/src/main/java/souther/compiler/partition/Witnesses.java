@@ -49,18 +49,17 @@ import java.util.Set;
  */
 final class Witnesses {
 
-    /** How many elements a proposed collection is worth building. A row is offered for somebody to read
-     * and complete, and a minimum past this asks for one nobody would. */
-    private static final int MOST_ELEMENTS = 64;
+    /** What this stops at, named where every budget of this compiler's is named. The figures are
+     *  {@link CompositionBudget}'s so that a reader of a stopped search reaches the one it ran out
+     *  of. */
+    private static final int MOST_ELEMENTS =
+            CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
 
-    /** How many characters a proposed string is worth building. Its own number, because a string of
-     * sixty-five is one literal where a collection of sixty-five is sixty-five values each built in
-     * turn — holding the two to one figure bounds a string by something about collections. */
-    private static final int MOST_CHARACTERS = 4096;
+    private static final int MOST_CHARACTERS =
+            CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum();
 
-    /** How many pairings of what a map's key and value propose are built at once. Every pair is built
-     * before any of them is tried, so this bounds what is allocated rather than what is walked. */
-    private static final int MOST_PAIRINGS = 64;
+    private static final int MOST_PAIRINGS =
+            CompositionBudget.PAIRINGS_BUILT_AT_ONCE.maximum();
 
     /**
      * Values of a count, and whether they are all the values of it there were.

@@ -54,29 +54,22 @@ import java.util.List;
  */
 final class ContainersAddingUp {
 
-    /**
-     * How many elements a container this composes is worth carrying.
-     *
-     * <p>Its own figure and not {@link Witnesses}'s, though they agree: what bounds a container
-     * built to hold a count is how many a row is worth reading, and what bounds one built to reach a
-     * total is the same thing said of the same reader. Held as one constant, a change made for one
-     * of them would move the other for no reason anybody could state.
-     */
-    private static final int MOST_ELEMENTS_A_ROW_CARRIES = 64;
+    /** What this stops at, named where every budget of this compiler's is named. */
+    private static final int MOST_ELEMENTS_A_ROW_CARRIES =
+            CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER.maximum();
+
+    private static final int HOW_MANY_SHAPES_ARE_OFFERED =
+            CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED.maximum();
 
     /**
-     * How many containers are offered for one total.
+     * How many ways a difference is spread over the elements, which is how many this walk has.
      *
-     * <p>More than one, because the containers that reach a total are not alike to the rules the
-     * elements are under: a container of ten is refused by a rule about how many it holds while one
-     * of eleven is not, and one that put the whole difference on a single element is refused by a
-     * rule that takes that value out of the run while one that shared it is not. The search that
-     * puts them through the decoder has nothing else to try.
-     *
-     * <p>Small all the same. They are alike to the total, so what a fifth buys is another row
-     * reading like the last, and what is not made is said rather than made up for.
+     * <p>Read off {@link Spread} rather than written down beside it. A third way of spreading is a
+     * budget raised, and a figure of its own here would be a second declaration that stayed at two.
      */
-    private static final int HOW_MANY_SHAPES_ARE_OFFERED = 4;
+    static int decompositionsOffered() {
+        return Spread.values().length;
+    }
 
     /**
      * Containers whose occurrences of {@code target}'s path come to {@code answer}, or why there are

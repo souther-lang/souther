@@ -112,7 +112,8 @@ public final class LevelRealizer {
      * that takes a value away takes one — everything that moves an end is in the range already. So
      * what this steps past is holes, and there are as many of those as the rules state.
      */
-    private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT = 64;
+    private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT =
+            CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT.maximum();
 
     /**
      * The places to try the pair at, from the one the ranges leave outward.
@@ -224,7 +225,8 @@ public final class LevelRealizer {
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
-    private static final int STEPS_A_SEARCH_MAY_TAKE = 200_000;
+    private static final int STEPS_A_SEARCH_MAY_TAKE =
+            CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
 
     /**
      * How many values of a progression nothing bounds are tried.

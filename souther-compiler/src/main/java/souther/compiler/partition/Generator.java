@@ -54,11 +54,11 @@ import java.util.Set;
  */
 public final class Generator {
 
-    /** How many assignments of values one parameter is tried at in one pass. The choices multiply, so
-     * this is a bound on the search and not on any one position — and reaching it is reported as the
-     * search having stopped, which is a different thing from every assignment having been refused. A
-     * parameter with something held in reserve is walked twice, each pass under this bound. */
-    private static final int MAX_TUPLES = 256;
+    /** How many assignments of values one parameter is tried at in one pass. A parameter with
+     *  something held in reserve is walked twice, each pass under this bound. The figure is
+     *  {@link CompositionBudget}'s, where every budget of this compiler's is named. */
+    private static final int MAX_TUPLES =
+            CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES.maximum();
 
     /**
      * How many things one combination may be asking before the search gives up on it.
