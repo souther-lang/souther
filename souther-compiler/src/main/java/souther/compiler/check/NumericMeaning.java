@@ -36,7 +36,24 @@ sealed interface NumericMeaning {
      * (spec §stdlib-decimal), which is a different operation from the one
      * {@link RoundedQuotient} states. Nothing derives a range from it, as nothing did before.
      */
-    record Operator(BinOp op, Core left, Core right) implements NumericMeaning {}
+    record Operator(BinOp op, Core left, Core right) implements NumericMeaning {
+
+        /**
+         * Which operators this is about, said where one arrives rather than left to the readings
+         * that meet it.
+         *
+         * <p>An operator answering something else is not arithmetic the language wrote, and a
+         * reader of this holds one that is: everything below takes the operator as naming a number
+         * two operands come to, and a comparison arriving here would be named as though it were
+         * one.
+         */
+        public Operator {
+            if (!op.answersANumber()) {
+                throw new IllegalArgumentException(
+                        "arithmetic is what this is about, and this answers no number: " + op);
+            }
+        }
+    }
 
     /** A division of whole numbers, truncated toward zero (spec §stdlib-int). */
     record TruncatingQuotient(Core dividend, Core divisor) implements NumericMeaning {}
