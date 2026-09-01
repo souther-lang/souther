@@ -190,6 +190,48 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
+     * Every operator against every way the cancelled positions can leave a number.
+     *
+     * <p>Which rows a clause holds of, once its positions have cancelled, is what the number left
+     * over stands to nought — and the operator says which way that has to be. {@code lo - lo <= 1}
+     * holds of every row for the same reason {@code lo - lo >= 0} does, and neither is more read
+     * than the other.
+     *
+     * <p>Both directions of every operator are here because the number left over is what
+     * {@code left - right} came to, and a reading that took it as what {@code right - left} came to
+     * would answer every strict comparison backwards while still agreeing about the equalities.
+     * Read at nought alone the two are the same reading.
+     */
+    @Test
+    void whichRowsAClauseHoldsOfIsWhatItsPositionsCancelTo() {
+        List<String> expected = List.of(
+                "lo - lo >= 0: every row", "lo - lo >= 1: not every row",
+                "lo - lo >= -1: every row",
+                "lo - lo > 0: not every row", "lo - lo > 1: not every row",
+                "lo - lo > -1: every row",
+                "lo - lo <= 0: every row", "lo - lo <= 1: every row",
+                "lo - lo <= -1: not every row",
+                "lo - lo < 0: not every row", "lo - lo < 1: every row",
+                "lo - lo < -1: not every row",
+                "lo - lo == 0: every row", "lo - lo == 1: not every row",
+                "lo - lo == -1: not every row",
+                "lo - lo /= 0: not every row", "lo - lo /= 1: every row",
+                "lo - lo /= -1: every row");
+
+        List<String> answered = new ArrayList<>();
+        for (String operator : List.of(">=", ">", "<=", "<", "==", "/=")) {
+            for (String against : List.of("0", "1", "-1")) {
+                String clause = "lo - lo " + operator + " " + against;
+                Measured measured = of("    invariant " + clause);
+                answered.add(clause + ": "
+                        + (measured.status().equals("complete") ? "every row" : "not every row"));
+            }
+        }
+
+        assertEquals(expected, answered);
+    }
+
+    /**
      * And a clause whose positions cancel to something no row satisfies, which is the opposite.
      *
      * <p>{@code lo - lo >= 1} is {@code 0 >= 1}. The quantity it cuts is empty, exactly as the two
