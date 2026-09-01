@@ -201,11 +201,12 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     private static BoundaryTarget aLineAt(int at) {
         souther.compiler.check.Carrier carrier = new souther.compiler.check.Carrier.Whole();
         AxisId axis = new AxisId("twice", "a.value");
+        souther.compiler.inputs.NumericTerm.ValueOf term =
+                new souther.compiler.inputs.NumericTerm.ValueOf(
+                        souther.compiler.inputs.TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new souther.compiler.inputs.NumericTerm.ValueOf(
-                                souther.compiler.inputs.TermPath.of(axis.term())),
-                        souther.compiler.inputs.TermOrdersFixtures.itself(carrier)),
+                new BorderQuantity.OfACoordinate(axis, term,
+                        souther.compiler.inputs.TermOrdersFixtures.itself(term, carrier)),
                 new Level.OnACarrier(carrier, souther.compiler.numeric.Count.of(at)));
     }
 

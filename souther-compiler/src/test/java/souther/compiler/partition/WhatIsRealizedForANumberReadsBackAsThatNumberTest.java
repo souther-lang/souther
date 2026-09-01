@@ -53,7 +53,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     /** The two orders an hour of a time stands on: seconds of a day at the position, a count by one
      *  for what the operation answers. */
     private static final souther.compiler.inputs.TermOrders AS_AN_HOUR =
-            souther.compiler.inputs.TermOrdersFixtures.orders(Carrier.TIME, Carrier.WHOLE);
+            souther.compiler.inputs.TermOrdersFixtures.orders(
+                    term("Time", "hour"), Carrier.TIME, Carrier.WHOLE);
 
     /**
      * Numbers the operation actually answers, which is where its own bound runs.
@@ -140,7 +141,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                 }
                 for (FixtureTemplate value : built.values()) {
                     assertEquals(new NumericTerm.Reading.Number(asked),
-                            term.read(observed(value), orders),
+                            orders.read(observed(value)),
                             operation + " built " + value.text() + " for " + each
                                     + ", and it does not read back as that");
                     checked++;
@@ -195,17 +196,15 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     @Test
     void whatEachAccountAnswersIsWhatTheLibraryAnswers() {
         assertEquals(Count.of(1),
-                number(term("String", "length").read(new ObservedValue.Text("😀"),
-                        souther.compiler.inputs.TermOrdersFixtures.orders(
-                                Carrier.TEXT, Carrier.WHOLE))),
+                number(souther.compiler.inputs.TermOrdersFixtures.orders(
+                        term("String", "length"), Carrier.TEXT, Carrier.WHOLE)
+                        .read(new ObservedValue.Text("😀"))),
                 "a string counts in code points, and one emoji is one of them");
         assertEquals(Count.of(13),
-                number(term("Time", "hour").read(
-                        new ObservedValue.Temporal("13:45:12"), AS_AN_HOUR)),
+                number(AS_AN_HOUR.read(new ObservedValue.Temporal("13:45:12"))),
                 "a quarter to two in the afternoon falls in the thirteenth hour");
         assertEquals(Count.of(0),
-                number(term("Time", "hour").read(
-                        new ObservedValue.Temporal("00:45:12"), AS_AN_HOUR)),
+                number(AS_AN_HOUR.read(new ObservedValue.Temporal("00:45:12"))),
                 "and three quarters of an hour past midnight falls in the noughth");
     }
 
@@ -247,10 +246,10 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     void theOrderAValueIsReadOnIsNotTheOrderItsAnswerIsMeasuredOn() {
         NumericTerm.FromOnePosition hour = term("Time", "hour");
         assertEquals(Count.of(13),
-                number(hour.read(new ObservedValue.Temporal("13:00:00"), AS_AN_HOUR)));
+                number(AS_AN_HOUR.read(new ObservedValue.Temporal("13:00:00"))));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                hour.read(new ObservedValue.Temporal("13:00:00"),
-                        souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
+                souther.compiler.inputs.TermOrdersFixtures.itself(hour, Carrier.WHOLE)
+                        .read(new ObservedValue.Temporal("13:00:00")),
                 "and read on the order the answer is measured on — which is what a caller handing"
                         + " one carrier used to be able to do — the same value reads as no number at"
                         + " all");
@@ -293,7 +292,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                     qualified + " answers " + each + " of some date, so there is one to offer");
             for (FixtureTemplate value : built.values()) {
                 assertEquals(new NumericTerm.Reading.Number(asked),
-                        term.read(observed(value), orders),
+                        orders.read(observed(value)),
                         qualified + " built " + value.text() + " for " + each
                                 + ", and it does not read back as that");
             }

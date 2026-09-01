@@ -271,9 +271,10 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** Where a line was read: one position of one behavior, cut at one value. */
     private static BoundaryTarget aLineAt(String behavior, String path) {
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(path));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(new AxisId(behavior, path),
-                        new NumericTerm.ValueOf(TermPath.of(path)), TermOrdersFixtures.itself(WHOLE)),
+                new BorderQuantity.OfACoordinate(new AxisId(behavior, path), term,
+                        TermOrdersFixtures.itself(term, WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(1)));
     }
 

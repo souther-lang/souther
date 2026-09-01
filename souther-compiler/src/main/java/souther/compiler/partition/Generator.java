@@ -2565,17 +2565,16 @@ public final class Generator {
         // readings does; a number over a run is read of all of them at once, since that is what the
         // walk was given and any one of them is not it.
         boolean stands = switch (target) {
-            case RealizationTarget.AtOnePosition one -> {
+            case RealizationTarget.AtOnePosition _ -> {
                 boolean any = false;
                 for (souther.compiler.observe.ObservedValue value : values) {
-                    any |= one.term().read(value, on)
-                            instanceof NumericTerm.Reading.Number number
+                    any |= on.read(value) instanceof NumericTerm.Reading.Number number
                             && number.value().compareTo(at) == 0;
                 }
                 yield any;
             }
-            case RealizationTarget.OverARun over ->
-                    over.term().readOver(values, on) instanceof NumericTerm.Reading.Number number
+            case RealizationTarget.OverARun _ ->
+                    on.readOver(values) instanceof NumericTerm.Reading.Number number
                             && number.value().compareTo(at) == 0;
         };
         return stands ? null

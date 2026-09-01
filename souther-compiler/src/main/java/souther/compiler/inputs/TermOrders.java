@@ -28,23 +28,75 @@ import souther.compiler.check.Carrier;
  */
 public final class TermOrders {
 
+    private final NumericTerm term;
     private final Carrier observed;
     private final Carrier answered;
 
     /**
+     * @param term     the number these are the orders of. Carried, because an answer that leaves
+     *                 the reading and cannot say what it is an answer about is one any reader may
+     *                 put beside any term — and two carriers say nothing about which question they
+     *                 came from
      * @param observed what a value at the term's path is decoded on, or null where nothing orders
      *                 it — a container has no order and is read by what it holds
      * @param answered what the number the term names is measured on, which is what a boundary on it
      *                 is drawn and written back on
      */
-    TermOrders(Carrier observed, Carrier answered) {
+    TermOrders(NumericTerm term, Carrier observed, Carrier answered) {
+        if (term == null) {
+            throw new IllegalArgumentException("orders of no term, which is an answer to nothing");
+        }
+        this.term = term;
         this.observed = observed;
         this.answered = answered;
     }
 
-    /** A term whose value is the number it answers, which is every {@link NumericTerm.ValueOf}. */
-    static TermOrders itself(Carrier carrier) {
-        return new TermOrders(carrier, carrier);
+    /** The number these are the orders of. */
+    public NumericTerm term() {
+        return term;
+    }
+
+    /**
+     * That {@code asked} is the number these are the orders of.
+     *
+     * <p>For the readers that hold a term beside a pair because their own shape needs the narrower
+     * type. Two components are two things to get right, and this is where the second is refused
+     * rather than carried into a document.
+     */
+    public void areOf(NumericTerm asked) {
+        if (!term.equals(asked)) {
+            throw new IllegalArgumentException("these are the orders of " + term
+                    + ", and they are held beside " + asked);
+        }
+    }
+
+    /**
+     * The number this term names at {@code value}, or why there is none.
+     *
+     * <p>Asked of the answer and not of the term, because reading takes both and an entry taking
+     * both is one any caller can hand a term and another term's orders. Here the two arrived
+     * together from the reading that settled them.
+     */
+    public NumericTerm.Reading read(souther.compiler.observe.ObservedValue value) {
+        NumericTerm.FromOnePosition one = term.atOnePosition();
+        if (one == null) {
+            throw new IllegalArgumentException(
+                    term + " is read over the values of a run, and this is one value");
+        }
+        return TermReading.at(one, value, this);
+    }
+
+    /**
+     * The same, over the values of a run.
+     *
+     * <p>Which rows there are and how many values stand at a place in one are the measure's; a term
+     * only says what its number is of them.
+     */
+    public NumericTerm.Reading readOver(java.util.List<souther.compiler.observe.ObservedValue> values) {
+        if (!(term instanceof NumericTerm.TakenOver over)) {
+            throw new IllegalArgumentException(term + " is a number of one value, not of a run");
+        }
+        return TermReading.over(over, values, this);
     }
 
     /** What a value at the term's path is decoded on, or null where nothing orders it. */
@@ -57,20 +109,29 @@ public final class TermOrders {
         return answered;
     }
 
+    /**
+     * Two of these are one where they are the orders of one term.
+     *
+     * <p>The term among them, because these are an answer and not a pair of carriers: what a string
+     * is measured at and what a whole number at another position is measured at come to the same two
+     * orders and are answers to two questions. A reader that wants the carriers alone compares
+     * those.
+     */
     @Override
     public boolean equals(Object other) {
         return other instanceof TermOrders that
+                && term.equals(that.term)
                 && java.util.Objects.equals(observed, that.observed)
                 && java.util.Objects.equals(answered, that.answered);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(observed, answered);
+        return java.util.Objects.hash(term, observed, answered);
     }
 
     @Override
     public String toString() {
-        return "TermOrders[observed=" + observed + ", answered=" + answered + "]";
+        return "TermOrders[" + term + " observed=" + observed + ", answered=" + answered + "]";
     }
 }

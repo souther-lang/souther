@@ -311,8 +311,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (drawn == null) {
             return null;
         }
-        return made(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against(),
-                        drawn.carriers()),
+        return made(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against()),
                 new Level.ACount(drawn.stepsApart()), claim, quantities);
     }
 
@@ -431,8 +430,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static LinearForm<NumericTerm> direction(BorderQuantity of) {
         return switch (of) {
             case BorderQuantity.OfACoordinate one -> LinearForm.atom(one.term());
-            case BorderQuantity.Apart two ->
-                    LinearForm.<NumericTerm>atom(two.on()).minus(LinearForm.atom(two.against()));
+            case BorderQuantity.Apart two -> LinearForm.<NumericTerm>atom(two.on().term())
+                    .minus(LinearForm.atom(two.against().term()));
             case BorderQuantity.OverAForm many -> many.form();
         };
     }

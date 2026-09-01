@@ -34,6 +34,15 @@ import souther.compiler.numeric.Place;
 public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlacement placed,
                              Place at) {
 
+    public ComparedNumber {
+        // The orders say which number they are of, and the number is held here as well because a
+        // comparison may name one this reading puts no order under. Where there are orders, the two
+        // are one thing said twice, and the second is refused here.
+        if (orders != null) {
+            orders.areOf(term);
+        }
+    }
+
     /**
      * What one comparison of a body draws: the number, where the line falls on it, and what the
      * rule placed there.
@@ -50,7 +59,15 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * @param claim  what the rule placed there
      */
     public record DrawnLine(NumericTerm.FromOnePosition term, Place at, TermOrders orders,
-                            ComparisonClaim claim) {}
+                            ComparisonClaim claim) {
+
+        public DrawnLine {
+            // A line is drawn on a position's own number, which is the narrower kind of term, and
+            // the orders say which number they are of. Refused here rather than carried into a
+            // document that reads a line on one number against the order of another.
+            orders.areOf(term);
+        }
+    }
 
     /**
      * What {@code binary} says, or null where it names no number of this input at all.
@@ -175,5 +192,14 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
         return new Named(term, orders == null || orders.answered() == null ? null : orders);
     }
 
-    private record Named(NumericTerm term, TermOrders orders) { }
+    /** The number an expression names, and what it is counted on where this reading puts an order
+     *  under it. Both, because a comparison may name a number the reading orders by nothing. */
+    private record Named(NumericTerm term, TermOrders orders) {
+
+        private Named {
+            if (orders != null) {
+                orders.areOf(term);
+            }
+        }
+    }
 }

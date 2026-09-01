@@ -37,6 +37,10 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
 
     private static final AxisId AT = new AxisId("take", "h.a");
 
+    /** The number that measure is of, which its orders are the orders of. */
+    private static final NumericTerm.ValueOf AT_A =
+            new NumericTerm.ValueOf(TermPath.of("h").then("a"));
+
     /** A reading of one line that drew it, which is what a closed one is. */
     @Test
     void aReadingThatDrewItsLineMayBeClosed() {
@@ -156,15 +160,14 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
     }
 
     private static Axis anAxis() {
-        return new Axis(AT, new NumericTerm.ValueOf(TermPath.of("h").then("a")),
+        return new Axis(AT, AT_A,
                 List.of(), List.of(Cut.at(Carrier.WHOLE, Count.of(5), bound("cap"))));
     }
 
     private static BoundaryTarget aLine() {
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(AT,
-                        new NumericTerm.ValueOf(TermPath.of("h").then("a")),
-                        souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
+                new BorderQuantity.OfACoordinate(AT, AT_A,
+                        souther.compiler.inputs.TermOrdersFixtures.itself(AT_A, Carrier.WHOLE)),
                 new Level.OnACarrier(Carrier.WHOLE, Count.of(5)));
     }
 

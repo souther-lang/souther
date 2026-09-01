@@ -90,9 +90,10 @@ class OneReadingAnswersWhatATermIsMeasuredOnTest {
      * A line added to any class here would be a pair about no reading, made where the compiler has
      * nothing left to refuse, and both other checks would stay green.
      *
-     * <p>Both ways in are counted, and separately: a constructor and a factory that calls it are
-     * two things a reader can reach for, and a check that added them up would go on passing while
-     * one moved to the other.
+     * <p>Both ways in are counted, and separately: a constructor and a factory beside it are two
+     * things a reader can reach for, and a check that added them up would go on passing while one
+     * moved to the other. There is no factory today, which is the stronger of the two states and is
+     * held to here rather than left to be noticed.
      */
     @Test
     void oneProductionPlaceMakesAPair() throws IOException {
@@ -126,8 +127,8 @@ class OneReadingAnswersWhatATermIsMeasuredOnTest {
         assertEquals(Set.of(DERIVES), built,
                 "a pair of orders is put together where a term's orders are worked out, and"
                         + " a second place is a pair about no reading in particular");
-        assertEquals(Set.of(DERIVES), named,
-                "and the same of the factory beside the constructor");
+        assertEquals(Set.of(), named,
+                "and nothing hands a pair back beside the constructor, so there is one way in");
     }
 
     /** The nest a class belongs to: a lambda written inside a reader is that reader. */

@@ -16,13 +16,13 @@ public final class TermOrdersFixtures {
     private TermOrdersFixtures() { }
 
     /** A term whose value is the number it answers. */
-    public static TermOrders itself(Carrier carrier) {
-        return TermOrders.itself(carrier);
+    public static TermOrders itself(NumericTerm term, Carrier carrier) {
+        return new TermOrders(term, carrier, carrier);
     }
 
     /** A term read on one order and answering on another, which is every taking of an operation. */
-    public static TermOrders orders(Carrier observed, Carrier answered) {
-        return new TermOrders(observed, answered);
+    public static TermOrders orders(NumericTerm term, Carrier observed, Carrier answered) {
+        return new TermOrders(term, observed, answered);
     }
 
     /**

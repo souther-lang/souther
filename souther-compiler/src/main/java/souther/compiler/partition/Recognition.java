@@ -67,6 +67,14 @@ public sealed interface Recognition {
                     souther.compiler.inputs.TermOrders orders, CountIs is)
             implements Recognition {
 
+        public OfACount {
+            // The term is here because a class of one position's count is asked about a position,
+            // which is the narrower of the two kinds of term; the orders say which number they are
+            // of. Two spellings of one thing, so the second is refused here rather than read as a
+            // class of a number the row is not asked about.
+            orders.areOf(term);
+        }
+
         /** What the count is compared on, which is what the class was written in. */
         public Carrier carrier() {
             return orders.answered();

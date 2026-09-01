@@ -154,10 +154,10 @@ class ANarrowingIsToldOnlyAboutTheEndItWasReadAtTest {
 
     private static BoundaryTarget aLineAt(int value) {
         AxisId axis = new AxisId("weigh", "w.a");
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                        TermOrdersFixtures.itself(WHOLE)),
+                new BorderQuantity.OfACoordinate(axis, term,
+                        TermOrdersFixtures.itself(term, WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(value)));
     }
 }

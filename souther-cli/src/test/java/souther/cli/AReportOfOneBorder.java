@@ -50,6 +50,10 @@ import java.util.function.Function;
  */
 final class AReportOfOneBorder {
 
+    /** The number the lines below are on, which their orders are the orders of. */
+    private static final NumericTerm.ValueOf AT_W_A =
+            new NumericTerm.ValueOf(TermPath.of("w").then("a"));
+
     private AReportOfOneBorder() {}
 
     /**
@@ -70,8 +74,9 @@ final class AReportOfOneBorder {
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
+                                AT_W_A,
+                                souther.compiler.inputs.TermOrdersFixtures
+                                        .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,
@@ -100,8 +105,9 @@ final class AReportOfOneBorder {
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
+                                AT_W_A,
+                                souther.compiler.inputs.TermOrdersFixtures
+                                        .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,
@@ -118,8 +124,9 @@ final class AReportOfOneBorder {
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
+                                AT_W_A,
+                                souther.compiler.inputs.TermOrdersFixtures
+                                        .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,

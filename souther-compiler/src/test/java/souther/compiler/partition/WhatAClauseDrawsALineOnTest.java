@@ -34,6 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatAClauseDrawsALineOnTest {
 
+    /** The number the line below is on, which its orders are the orders of. */
+    private static final souther.compiler.inputs.NumericTerm.ValueOf AT_ID =
+            new souther.compiler.inputs.NumericTerm.ValueOf(
+                    souther.compiler.inputs.TermPath.of("id"));
+
     /** The lines one behavior's clauses draw, through the readings a report is built from. */
     private static EnsuresThresholds.Clauses drawn(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -280,10 +285,9 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(1, clauses.singled().size(), clauses.singled().toString());
         Border singled = Border.at(BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(
-                                new AxisId("findTodo", "id"),
-                                new souther.compiler.inputs.NumericTerm.ValueOf(
-                                        souther.compiler.inputs.TermPath.of("id")),
-                                souther.compiler.inputs.TermOrdersFixtures.itself(new Carrier.Whole())),
+                                new AxisId("findTodo", "id"), AT_ID,
+                                souther.compiler.inputs.TermOrdersFixtures
+                                        .itself(AT_ID, new Carrier.Whole())),
                         new Level.OnACarrier(new Carrier.Whole(),
                                 clauses.singled().get(0).value())),
                 clauses.singled().get(0).origin(), null);

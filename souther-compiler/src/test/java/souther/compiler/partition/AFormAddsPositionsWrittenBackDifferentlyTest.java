@@ -96,8 +96,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                                 value("n"), BigDecimal.ONE.negate()));
 
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take", daysBetweenLessN,
-                Map.of(value("to"), on(Carrier.DATE), value("from"), on(Carrier.DATE),
-                        value("n"), on(Carrier.WHOLE)));
+                Map.of(value("to"), on("to", Carrier.DATE), value("from"), on("from", Carrier.DATE),
+                        value("n"), on("n", Carrier.WHOLE)));
 
         assertEquals(Carrier.DATE, over.carrierOf(value("to")));
         assertEquals(Carrier.WHOLE, over.carrierOf(value("n")));
@@ -107,8 +107,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
 
     /** A position read and written on one order, which is every position here: what an operation
      *  answered of one is not what these tests are about. */
-    private static souther.compiler.inputs.TermOrders on(Carrier carrier) {
-        return souther.compiler.inputs.TermOrdersFixtures.itself(carrier);
+    private static souther.compiler.inputs.TermOrders on(String field, Carrier carrier) {
+        return souther.compiler.inputs.TermOrdersFixtures.itself(value(field), carrier);
     }
 
     /** And a position with no number under it is one a sum has nothing to add. */
@@ -116,7 +116,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     void aPositionWithNoCountIsRefused() {
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> new BorderQuantity.OverAForm("take", aDecimalLessAnInt(),
-                        Map.of(value("d"), on(Carrier.TEXT), value("n"), on(Carrier.WHOLE))))
+                        Map.of(value("d"), on("d", Carrier.TEXT), value("n"), on("n", Carrier.WHOLE))))
                 .getMessage().contains("no number under it"));
     }
 
@@ -125,7 +125,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     void aFormOverTwoDifferentOrdersIsAQuantity() {
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take",
                 aDecimalLessAnInt(),
-                Map.of(value("d"), on(Carrier.DENSE), value("n"), on(Carrier.WHOLE)));
+                Map.of(value("d"), on("d", Carrier.DENSE), value("n"), on("n", Carrier.WHOLE)));
 
         assertEquals(Carrier.DENSE, over.carrierOf(value("d")),
                 "the decimal position is read and written as a decimal");
@@ -146,10 +146,10 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     void whatTheSumStepsByIsWhatItsPositionsStepByTogether() {
         BorderQuantity.OverAForm mixed = new BorderQuantity.OverAForm("take",
                 aDecimalLessAnInt(),
-                Map.of(value("d"), on(Carrier.DENSE), value("n"), on(Carrier.WHOLE)));
+                Map.of(value("d"), on("d", Carrier.DENSE), value("n"), on("n", Carrier.WHOLE)));
         BorderQuantity.OverAForm whole = new BorderQuantity.OverAForm("take",
                 aDecimalLessAnInt(),
-                Map.of(value("d"), on(Carrier.WHOLE), value("n"), on(Carrier.WHOLE)));
+                Map.of(value("d"), on("d", Carrier.WHOLE), value("n"), on("n", Carrier.WHOLE)));
 
         assertEquals(souther.compiler.numeric.Granularity.DENSE, mixed.spacing(),
                 "one dense position makes the sum dense");
@@ -170,12 +170,12 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     void aFormAndItsOrdersAreOverTheSamePositions() {
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> new BorderQuantity.OverAForm("take", aDecimalLessAnInt(),
-                        Map.of(value("d"), on(Carrier.DENSE))))
+                        Map.of(value("d"), on("d", Carrier.DENSE))))
                 .getMessage().contains("read on one order"));
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> new BorderQuantity.OverAForm("take", aDecimalLessAnInt(),
-                        Map.of(value("d"), on(Carrier.DENSE), value("n"), on(Carrier.WHOLE),
-                                value("from"), on(Carrier.DATE))))
+                        Map.of(value("d"), on("d", Carrier.DENSE), value("n"), on("n", Carrier.WHOLE),
+                                value("from"), on("from", Carrier.DATE))))
                 .getMessage().contains("read on one order"));
     }
 
@@ -192,7 +192,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     void aLevelOfSuchAFormIsReached() {
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take",
                 aDecimalLessAnInt(),
-                Map.of(value("d"), on(Carrier.DENSE), value("n"), on(Carrier.WHOLE)));
+                Map.of(value("d"), on("d", Carrier.DENSE), value("n"), on("n", Carrier.WHOLE)));
 
         Standing standing = over.standingAt(
                 new Criterion.AtTheLevel(new Level.ACount(Count.of(new BigDecimal("2.5")))));
@@ -226,7 +226,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 BigDecimal.ZERO,
                 Map.of(value("d"), new BigDecimal("3"), value("n"), BigDecimal.ONE));
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take", thriceD,
-                Map.of(value("d"), on(Carrier.DENSE), value("n"), on(Carrier.WHOLE)));
+                Map.of(value("d"), on("d", Carrier.DENSE), value("n"), on("n", Carrier.WHOLE)));
 
         Realization made = new LevelRealizer().realize(
                 over.standingAt(

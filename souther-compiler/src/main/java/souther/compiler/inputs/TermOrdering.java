@@ -28,11 +28,15 @@ final class TermOrdering {
      */
     static TermOrders of(NumericTerm term, Type positionType, Symbols symbols) {
         Carrier observed = observedOn(positionType, symbols);
-        return switch (term) {
-            case NumericTerm.ValueOf _ -> TermOrders.itself(observed);
+        // One construction and not one per arm. A term that is a location's own content answers on
+        // the order its value is read on, which is that order twice rather than a second way of
+        // making a pair — and a second way is a second place a pair can come from.
+        Carrier answered = switch (term) {
+            case NumericTerm.ValueOf _ -> observed;
             case NumericTerm.TakenOf _, NumericTerm.TakenOver _ ->
-                    new TermOrders(observed, answeredOn(term, positionType, symbols));
+                    answeredOn(term, positionType, symbols);
         };
+        return new TermOrders(term, observed, answered);
     }
 
     /**

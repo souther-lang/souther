@@ -51,6 +51,10 @@ public sealed interface BorderQuantity {
                 throw new IllegalArgumentException("a coordinate quantity names a position and an "
                         + "order: " + axis + " " + term + " " + of);
             }
+            // The position is here because a coordinate is a position's own number, which is the
+            // narrower kind of term; the orders say which number they are of. The second spelling
+            // is refused rather than carried into a document.
+            of.areOf(term);
         }
 
         @Override
@@ -86,7 +90,7 @@ public sealed interface BorderQuantity {
             // measured on. The two are one carrier for a position's own content and part for a term
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
-            return switch (term.read(row.at(term.position()), of)) {
+            return switch (of.read(row.at(term.position()))) {
                 case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
@@ -168,75 +172,72 @@ public sealed interface BorderQuantity {
      * arithmetic form over both positions and is read as {@link OverAForm}, whose coefficients are
      * where a conversion between two orders is written.
      */
-    record Apart(String behavior, NumericTerm.FromOnePosition on,
-                 NumericTerm.FromOnePosition against,
-                 Map<NumericTerm, TermOrders> carriers) implements BorderQuantity {
+    record Apart(String behavior, TermOrders on, TermOrders against) implements BorderQuantity {
+
+        /** The position at one end. */
+        public NumericTerm.FromOnePosition onTerm() {
+            return on.term().atOnePosition();
+        }
+
+        /** The position at the other. */
+        public NumericTerm.FromOnePosition againstTerm() {
+            return against.term().atOnePosition();
+        }
 
         @Override
         public List<NumericTerm> terms() {
-            return List.of(on, against);
+            return List.of(on.term(), against.term());
         }
 
         @Override
         public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
-            if (!on.equals(from) && !against.equals(from)) {
+            if (!on.term().equals(from) && !against.term().equals(from)) {
                 return null;
             }
+            TermOrders here = on.term().equals(from) ? orders : on;
+            TermOrders there = against.term().equals(from) ? orders : against;
             // A distance is between two positions, so a move that leaves either end answered by no
-            // single position leaves the pair something a distance is not.
-            NumericTerm.FromOnePosition landed = to.atOnePosition();
-            if (landed == null) {
+            // single position leaves the pair something a distance is not. And a name standing at
+            // more than one can bring the two ends of one together — answered here, because what a
+            // caller has in hand is a name that moved and not a pair it chose.
+            if (here.term().atOnePosition() == null || there.term().atOnePosition() == null
+                    || here.term().equals(there.term())) {
                 return null;
             }
-            NumericTerm.FromOnePosition here = on.equals(from) ? landed : on;
-            NumericTerm.FromOnePosition there = against.equals(from) ? landed : against;
-            // A distance runs between two positions, and a name standing at more than one can bring
-            // the two ends of one together. Answered here, because what a caller has in hand is a
-            // name that moved and not a pair it chose.
-            if (here.equals(there)) {
-                return null;
-            }
-            Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
-            moved.put(here, on.equals(from) ? orders : carriers.get(on));
-            moved.put(there, against.equals(from) ? orders : carriers.get(against));
-            return new Apart(behavior, here, there, moved);
+            return new Apart(behavior, here, there);
         }
 
         public Apart {
-            if (behavior == null || on == null || against == null || carriers == null) {
+            if (behavior == null || on == null || against == null) {
                 throw new IllegalArgumentException("a distance names two positions and their orders");
             }
-            // First, because a distance between one position and itself is what the rest of this
-            // cannot be asked about: two terms that are one term are one key, and a map of them
-            // would refuse the pair with a sentence about maps.
-            if (on.equals(against)) {
-                throw new IllegalArgumentException(
-                        "a distance runs between two positions, and this names one twice: " + on);
+            // Each end is a position's own number on the order that position is read and written
+            // on, and the orders say which position that is. Held as a pair of positions beside a
+            // map from position to orders, the keys could name the right pair with the values the
+            // other way round, and both structures would check out.
+            if (on.term().atOnePosition() == null || against.term().atOnePosition() == null) {
+                throw new IllegalArgumentException("a distance runs between two positions, and this"
+                        + " names " + on.term() + " against " + against.term());
             }
-            carriers = Map.copyOf(carriers);
-            // An order per position, held here so no reader has to answer for a position with none.
-            // A map beside a pair is two structures, and two structures are what come apart.
-            if (!carriers.keySet().equals(java.util.Set.of(on, against))) {
-                throw new IllegalArgumentException("a distance is between the positions it names,"
-                        + " each on one order: " + java.util.Set.of(on, against) + " against "
-                        + carriers.keySet());
+            if (on.term().equals(against.term())) {
+                throw new IllegalArgumentException("a distance runs between two positions, and this"
+                        + " names one twice: " + on.term());
             }
-            Carrier here = carriers.get(on).answered();
-            Carrier there = carriers.get(against).answered();
-            if (!here.standsAgainst(there)) {
+            if (!on.answered().standsAgainst(against.answered())) {
                 throw new IllegalArgumentException("a distance is between two orders a value of"
-                        + " one stands somewhere on: " + here + " against " + there);
+                        + " one stands somewhere on: " + on.answered() + " against "
+                        + against.answered());
             }
         }
 
         /** The order the first position is read and written on. */
         private Carrier onCarrier() {
-            return carriers.get(on).answered();
+            return on.answered();
         }
 
         /** The order the other position is read and written on. */
         private Carrier againstCarrier() {
-            return carriers.get(against).answered();
+            return against.answered();
         }
 
         /** Whether the two positions stand on one order, which is every pair a rule names itself and
@@ -269,8 +270,7 @@ public sealed interface BorderQuantity {
             if (!counts()) {
                 return LevelSpace.onlyWhereTheyMeet();
             }
-            return LevelSpace.addedUpOver(carriers.values().stream()
-                    .map(TermOrders::answered).toList())
+            return LevelSpace.addedUpOver(List.of(on.answered(), against.answered()))
                     == souther.compiler.numeric.Granularity.DISCRETE
                     ? LevelSpace.steppingBy(java.math.BigDecimal.ONE) : LevelSpace.dense();
         }
@@ -278,8 +278,10 @@ public sealed interface BorderQuantity {
         /** That position's own, which is what it is read off a row and written back on. */
         @Override
         public Carrier carrierOf(NumericTerm asked) {
-            TermOrders orders = carriers.get(asked);
-            return orders == null ? null : orders.answered();
+            if (on.term().equals(asked)) {
+                return on.answered();
+            }
+            return against.term().equals(asked) ? against.answered() : null;
         }
 
         /**
@@ -299,9 +301,8 @@ public sealed interface BorderQuantity {
             // Each on its own order. Read on one order for the pair, a position written back
             // differently from the other was read as a value it does not hold — a date read as a
             // whole number is no number at all, and the row stood at nothing (#1018).
-            NumericTerm.Reading here = on.read(row.at(on.subjectPath()), carriers.get(on));
-            NumericTerm.Reading there =
-                    against.read(row.at(against.subjectPath()), carriers.get(against));
+            NumericTerm.Reading here = on.read(row.at(on.term().subjectPath()));
+            NumericTerm.Reading there = against.read(row.at(against.term().subjectPath()));
             if (here instanceof NumericTerm.Reading.Missing
                     || there instanceof NumericTerm.Reading.Missing) {
                 return Stands.UNREADABLE;
@@ -356,21 +357,22 @@ public sealed interface BorderQuantity {
         @Override
         public Standing standingAt(Criterion where) {
             if (onOneCarrier()) {
-                return new Standing.OfTwoOnOneCarrier(on, against, onCarrier(), where);
+                return new Standing.OfTwoOnOneCarrier(onTerm(), againstTerm(), onCarrier(), where);
             }
             return new Standing.OfAForm(
-                    LinearForm.<NumericTerm>atom(on).minus(LinearForm.atom(against)),
-                    answeredOn(carriers), levels(), where);
+                    LinearForm.<NumericTerm>atom(on.term()).minus(LinearForm.atom(against.term())),
+                    Map.of(on.term(), on.answered(), against.term(), against.answered()),
+                    levels(), where);
         }
 
         @Override
         public String named() {
-            return new AxisId(behavior, on.toString()).toString();
+            return new AxisId(behavior, onTerm().toString()).toString();
         }
 
         @Override
         public String left() {
-            return on.toString();
+            return onTerm().toString();
         }
 
         /**
@@ -383,9 +385,10 @@ public sealed interface BorderQuantity {
         @Override
         public String writtenAt(Level level) {
             Count apart = level.asACount();
-            return apart.signum() == 0 ? against.toString()
-                    : apart.signum() < 0 ? against + " - " + apart.negate().key()
-                            : against + " + " + apart.key();
+            String there = againstTerm().toString();
+            return apart.signum() == 0 ? there
+                    : apart.signum() < 0 ? there + " - " + apart.negate().key()
+                            : there + " + " + apart.key();
         }
 
         @Override
@@ -453,6 +456,10 @@ public sealed interface BorderQuantity {
                         + " of them is read on one order: " + form.coefs().keySet() + " against "
                         + on.keySet());
             }
+            // And each entry's orders are that position's own. The key set agreeing says the map
+            // is about the right positions and says nothing about which of them each answer came
+            // from: a table with the two ends swapped has exactly the same keys.
+            on.forEach((term, orders) -> orders.areOf(term));
             // And each of those orders has counts under it, which is what a sum adds. Nothing
             // more: whether these positions add up to anything is settled by whatever produced the
             // form, and a rule here would be written without the coefficients. `b + a` over two
@@ -522,10 +529,9 @@ public sealed interface BorderQuantity {
                 // a total would be read off whichever element the row's reading happened to pick.
                 TermOrders orders = on.get(each.getKey());
                 NumericTerm.Reading read = switch (each.getKey()) {
-                    case NumericTerm.FromOnePosition one ->
-                            one.read(row.at(one.position()), orders);
+                    case NumericTerm.FromOnePosition one -> orders.read(row.at(one.position()));
                     case NumericTerm.TakenOver over ->
-                            over.readOver(row.everyValueAt(over.subjectPath()), orders);
+                            orders.readOver(row.everyValueAt(over.subjectPath()));
                 };
                 if (read instanceof NumericTerm.Reading.Missing) {
                     return Stands.UNREADABLE;
