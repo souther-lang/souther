@@ -1484,9 +1484,9 @@ public final class Partitions {
      * reads is the floor that was built against, and a reading here that knew only the type would
      * say "every value tried was refused" of a position whose values were never built.
      */
-    static Generator.UnresolvedCombination.Reason notBuilt(Type type, Symbols symbols,
-                                                           ReadingPolicy policy,
-                                                            FieldDomains.Held held) {
+    static java.util.Set<CompositionBudget> notBuilt(Type type, Symbols symbols,
+                                                     ReadingPolicy policy,
+                                                     FieldDomains.Held held) {
         return Witnesses.heldBackFor(TypeOps.base(type, symbols), leastHeld(type, symbols, held),
                 symbols, policy);
     }

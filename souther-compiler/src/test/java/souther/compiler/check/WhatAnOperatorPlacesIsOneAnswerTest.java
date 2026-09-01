@@ -5,7 +5,9 @@ import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.BinOp;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -279,30 +281,61 @@ class WhatAnOperatorPlacesIsOneAnswerTest {
      * A relation written down is a comparison stating it, and every relation can be written down.
      *
      * <p>The way back, and the whole of it. A reading that composes a comparison out of what the
-     * rules proved says it in an operator, and what is written is read as a comparison by
-     * everything downstream — so an operator stating something else is a rule nobody wrote arriving
-     * with the source's own position on it. Asked of every relation rather than of the ones some
-     * operator happens to state: what is composed comes from the numeric reasoning, which has all
-     * six whether or not an author wrote them.
+     * rules proved has a relation and needs what such a comparison places. Asked of every relation
+     * rather than of the ones some operator happens to state: what is composed comes from the
+     * numeric reasoning, which has all six whether or not an author wrote them.
      */
     @Test
-    void everyRelationIsWrittenAsAComparisonStatingIt() {
+    void everyRelationIsPlacedByAClaimStatingIt() {
         for (Rel rel : Rel.values()) {
-            BinOp written = ComparisonWriting.operatorStating(rel);
-            assertEquals(rel, claim(written).statedRelation(),
-                    () -> rel + " written down, and read back for what it states");
+            assertEquals(rel, ComparisonClaim.stating(rel).statedRelation(),
+                    () -> rel + " taken as what it places, and read back for what it states");
         }
     }
 
-    /** And an operator read for what it places and written back from that is the operator it was,
-     *  which is the two crossings between how a comparison is written and what it means holding
-     *  each other in place. */
+    /**
+     * And a claim read for what it states and taken back from that is the claim it was, which is
+     * what makes the way back an answer at all.
+     *
+     * <p>The other direction says the relation survives the crossing; this one says the claim does.
+     * Without it two claims could state one relation — an order and the equality at its edge, say —
+     * and a reading composing a comparison from that relation would place a partition the rules
+     * never proved while every relation still read back as itself.
+     *
+     * <p>Asked of every claim and not of the ones some operator states. The crossing this law is
+     * about has no operator in it, so a claim reachable from no operator would fall outside a law
+     * enumerated from {@link BinOp} while the two directions still looked closed. Which claims there
+     * are is what the two shapes are made of, and there are two because the type is sealed to them.
+     */
     @Test
-    void anOperatorWrittenBackFromWhatItPlacedIsItself() {
-        for (BinOp op : STATED.keySet()) {
-            assertEquals(op, ComparisonWriting.operatorStating(claim(op).statedRelation()),
-                    () -> op + " read for what it places and written back");
+    void aClaimTakenBackFromWhatItStatesIsItself() {
+        for (ComparisonClaim placed : everyClaim()) {
+            assertEquals(placed, ComparisonClaim.stating(placed.statedRelation()),
+                    () -> placed + " read for what it states, and placed again from it");
         }
+    }
+
+    /** Every claim there is: a value singled out or everything else, and an order by which class
+     *  the value it names is in and whether the comparison holds there. */
+    private static List<ComparisonClaim> everyClaim() {
+        List<ComparisonClaim> all = new ArrayList<>();
+        for (boolean holdsAtTheValue : List.of(true, false)) {
+            all.add(new ComparisonClaim.Singled(holdsAtTheValue));
+            for (Towards valueBelongs : Towards.values()) {
+                all.add(new ComparisonClaim.Cut(valueBelongs, holdsAtTheValue));
+            }
+        }
+        return all;
+    }
+
+    /** And the two enumerations are the same size, which with the two directions above is what says
+     *  the crossing is one to one. A claim shape added without a relation to state, or a relation
+     *  added with no claim, lands here. */
+    @Test
+    void thereAreAsManyClaimsAsThereAreRelations() {
+        assertEquals(Rel.values().length, everyClaim().size(),
+                "every relation places a claim and every claim states a relation, so a claim"
+                        + " reachable from no relation is one the way back cannot answer for");
     }
 
     /**

@@ -49,10 +49,10 @@ public final class PointResolver {
          * owed a row at is the search and the debt disagreeing about the same point, which the walk
          * refuses rather than records.
          */
-        record Searched(ItemAssessment.Attempt attempt) implements ReadingEvidence {
+        record Searched(SearchOutcomes outcomes) implements ReadingEvidence {
 
             public Searched {
-                if (attempt == null) {
+                if (outcomes == null || !outcomes.ran()) {
                     throw new IllegalArgumentException(
                             "a reading that was searched came to something");
                 }
@@ -104,7 +104,12 @@ public final class PointResolver {
                         walked.put(reading, new SearchCoverage.ReadingSearch.OutOfScope());
                 case ReadingEvidence.NoAnswer _ ->
                         walked.put(reading, new SearchCoverage.ReadingSearch.Unavailable());
-                case ReadingEvidence.Searched(ItemAssessment.Attempt attempt) -> {
+                // Every search of this reading, in the order they were made. One reading can be
+                // searched more than once — a helper called twice is one line at one target — and
+                // a row composed under one caller's conditions is a row, whatever the other came
+                // to. Read as one, the row an author is offered turned on which of them was kept.
+                case ReadingEvidence.Searched(SearchOutcomes outcomes) -> {
+                    for (ItemAssessment.Attempt attempt : outcomes.each()) {
                     switch (attempt) {
                         // A row read back where it was built for. Which reading composed it is
                         // where the row goes, and what a reader asking about one coordinate
@@ -122,6 +127,13 @@ public final class PointResolver {
                             }
                         }
                         case ItemAssessment.Attempt.Unresolved(var why, var _, var _) ->
+                                walked.put(reading,
+                                        new SearchCoverage.ReadingSearch.Attempted(why));
+                        // A search a budget of this compiler's ended, which came to nothing like
+                        // the one above. What offering a row is short of is the same either way,
+                        // and which figure ended it is the point's own to say rather than this
+                        // walk's: what is recorded here is that a search ran and produced no row.
+                        case ItemAssessment.Attempt.Stopped(var why, var _, var _, var _) ->
                                 walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));
                         // A search that ran with nothing to run against. Said in the words the
@@ -144,6 +156,7 @@ public final class PointResolver {
                                                 List.of(reading.target().label()),
                                                 Generator.UnresolvedCombination.Reason
                                                         .NOTHING_TO_BUILD_AGAINST)));
+                    }
                     }
                 }
             }

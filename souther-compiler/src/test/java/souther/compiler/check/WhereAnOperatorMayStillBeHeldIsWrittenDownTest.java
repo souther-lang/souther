@@ -50,10 +50,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * Everywhere an operator can be, and what each of them wants one for.
  *
  * <p>Beside {@link AnOperatorIsAskedWhatItPlacesInOnePlaceTest}, which says how often an operator
- * may be read for what it places and how often a relation may be written as one. That one holds the
- * two crossings between how a comparison is written and what it means to one call each; this one is
- * the ground they stand on, so that an operator reaching somewhere new is a line that has to be
- * written down and given a reason.
+ * may be read for what it places. That one holds the crossing from how a comparison is written to
+ * what it means to one call; this one is the ground it stands on, so that an operator reaching
+ * somewhere new is a line that has to be written down and given a reason. There is no crossing back:
+ * what a comparison places is taken from a relation without an operator in between
+ * ({@link ComparisonClaim#stating}), so a relation never becomes one.
  *
  * <p><b>One list, and the rule it comes from is the machine's.</b> A method that has an operator
  * names the type: to use a value as one, the type has to be established, and a symbolic reference
@@ -116,8 +117,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ConstEval.arith",
                     "what the operator computes of two constants"),
             new Held("souther.compiler.check.ConstEval.compare", "the same for a comparison"),
-            new Held("souther.compiler.check.Conditions.comparison",
-                    "builds a node from the operator it is handed"),
             new Held("souther.compiler.reading.Meetings.run",
                     "walks the operands under the operator they are written with"),
 
@@ -169,10 +168,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the same, for a clause of a data"),
             new Held("souther.compiler.inputs.ComparedNumber.of",
                     "the same, for any binary a walk over the input space met"),
-            new Held("souther.compiler.check.Conditions.asOrderComparison",
-                    "takes back the operator a composed comparison is written with, which is the"
-                            + " one place a relation becomes one"),
-
             // Rebuilding a tree, which carries the operator across unchanged.
             new Held("souther.compiler.ast.Hir.atSlots",
                     "copies it into the node it is rebuilding"),
@@ -305,9 +300,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.InvariantChecker.arithmeticOf",
                     "asks the enum whether the operator compares, which its caller has now"
                             + " recognised the comparison for as well"),
-            new Held("souther.compiler.check.Predicates.atomsNamedBy",
-                    "asks the enum whether the operator compares: both sides of a comparison are"
-                            + " named whatever it states, and anything else is the one value it is"),
             new Held("souther.compiler.check.Relates.twoPositions",
                     "asks the enum whether the operator compares, for a rule that stands one"
                             + " position against another"),
@@ -332,9 +324,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " place the two vocabularies are held together: both sides written"
                             + " out, so an operator added to what may be written stops the compile"
                             + " until somebody says what it means here"),
-            new Held("souther.compiler.check.ComparisonWriting.operatorStating",
-                    "names the constant a relation is written as, which is the one place a"
-                            + " composed comparison is said in the language's own operators"),
             new Held("souther.compiler.check.Conditions.asSizeComparison",
                     "writes the equality an emptiness check means: a size stood against nought"),
             new Held("souther.compiler.check.Conditions.AsPolar.theSameValue",
@@ -343,6 +332,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Conditions.AsPolar.below",
                     "writes the order a fact is keyed by, with the sides the way the claim wanted"
                             + " them"),
+            new Held("souther.compiler.check.Conditions.AsPolar.canonical",
+                    "the one place a canonical comparison is spelled as a node: written over"
+                            + " nothing the source holds, because a statement stands nowhere"),
             new Held("souther.compiler.check.Term.Interner.AsTerms.below",
                     "the one order a term is written in, which the claim exchanged the sides for"),
             new Held("souther.compiler.check.Terms.repeating",

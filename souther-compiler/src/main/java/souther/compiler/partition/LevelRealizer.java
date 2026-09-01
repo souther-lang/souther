@@ -61,7 +61,7 @@ public final class LevelRealizer {
     private Realization ofOne(Standing.OfOneCoordinate one,
                               souther.compiler.inputs.SearchRegion within) {
         Place at = placeMeeting(one.where(), one.of(), bounds(within, one.term()));
-        return at == null ? new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE)
+        return at == null ? Realization.Unknown.nothingComposedOne()
                 : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within);
     }
 
@@ -81,7 +81,8 @@ public final class LevelRealizer {
         NumericDomain.Bounds on = bounds(within, two.on());
         NumericDomain.Bounds together = commonRange(on, bounds(within, two.against()), two.of(),
                 two.where().anchor().asACount());
-        for (Place common : alongTheLine(together, two.of())) {
+        Outwards.Walked walked = alongTheLine(together, two.of());
+        for (Place common : walked) {
             // Where the first has to stand relative to the second: the place the level's distance
             // from it, and then whatever the item asks of that place. Arithmetic on the carrier's
             // counts and not a walk along it — a walk is an addition that only exists where the
@@ -102,7 +103,12 @@ public final class LevelRealizer {
                 return made;
             }
         }
-        return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+        // Nothing was composed, which is what a pair the ranges leave no place for comes to and
+        // what this has always said. Where the walk stopped at its figure, that is said beside the
+        // answer rather than in place of it.
+        return Realization.Unknown.nothingComposedOne(walked.stoppedShort()
+                ? java.util.Set.of(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT)
+                : java.util.Set.of());
     }
 
     /**
@@ -112,7 +118,8 @@ public final class LevelRealizer {
      * that takes a value away takes one — everything that moves an end is in the range already. So
      * what this steps past is holes, and there are as many of those as the rules state.
      */
-    private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT = 64;
+    private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT =
+            CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT.maximum();
 
     /**
      * The places to try the pair at, from the one the ranges leave outward.
@@ -130,10 +137,10 @@ public final class LevelRealizer {
      * <p>One place where the carrier's values do not count. There is no next place to step to, so
      * the one the ranges leave is the whole of what there is to try.
      */
-    private static List<Place> alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
+    private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
         // Nothing composed, which is this one's own answer and not something to ask a walk about.
         Place first = carrier.somethingInside(together.min(), together.max());
-        return first == null ? List.of()
+        return first == null ? new Outwards.Walked(List.of(), false)
                 : Outwards.from(first, Count.of(1), carrier, together,
                         HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
     }
@@ -198,9 +205,20 @@ public final class LevelRealizer {
             terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
         }
         boolean bounded = true;
-        for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
+        // Every budget any of the level walks ran out of. Collected and not chosen between: two
+        // levels stopped by two figures are two things this compiler declined to do, and a reader
+        // asking what would let the search go further is owed both.
+        java.util.Set<CompositionBudget> stoppedBy =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), levels);
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        for (Level level : offered.levels()) {
             Search search = new Search(terms, over.on(), within);
             Reached reached = search.solve(level.asACount());
+            stoppedBy.addAll(search.stoppedBy());
             if (reached == Reached.FOUND) {
                 Realization made = found(search.fixing(), within);
                 if (made instanceof Realization.Found) {
@@ -218,13 +236,18 @@ public final class LevelRealizer {
         // be settled by looking: a walk of the whole box that reaches the level nothing else does is
         // a proof, and a side that none of the levels tried reached is a side this stopped looking
         // at.
-        return bounded && over.where() instanceof Criterion.AtTheLevel
-                ? new Realization.Impossible()
-                : new Realization.Unknown(Realization.Unknown.Reason.THE_SEARCH_RAN_OUT);
+        if (bounded && over.where() instanceof Criterion.AtTheLevel) {
+            return new Realization.Impossible();
+        }
+        // A side is never settled by looking, so what this comes back with is that the search ran
+        // out — which is what it has always come back with, whether or not a figure of this
+        // compiler's was reached. The figures are said beside that answer and do not choose it.
+        return Realization.Unknown.searchRanOut(stoppedBy);
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
-    private static final int STEPS_A_SEARCH_MAY_TAKE = 200_000;
+    private static final int STEPS_A_SEARCH_MAY_TAKE =
+            CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
 
     /**
      * How many values of a progression nothing bounds are tried.
@@ -250,7 +273,8 @@ public final class LevelRealizer {
      * the second value, and what would ask for a third is a run with two holes in it beside each
      * other.
      */
-    private static final int VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT = 16;
+    private static final int VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT =
+            CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum();
 
     /**
      * What a walk of one position came to.
@@ -278,7 +302,8 @@ public final class LevelRealizer {
      *  reading of every rule reaching the form's positions, and what it buys is skipping
      *  assignments the rules refuse — worth paying for a search that ends quickly and not for one
      *  walking a box a hundred thousand wide. */
-    private static final int HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN = 2_000;
+    private static final int HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN =
+            CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN.maximum();
 
 
     /** How far a derived end is written out where the division that makes it does not end. Any
@@ -336,6 +361,23 @@ public final class LevelRealizer {
         private final AdditiveImage[] fromHere;
         private int taken;
         private int asked;
+        /** Which budgets of this compiler's this walk ran out of, recorded where each ran out. What
+         *  it came back with says that nothing was reached and not what kept it from reaching. */
+        private final java.util.Set<CompositionBudget> stoppedBy =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
+
+        java.util.Set<CompositionBudget> stoppedBy() {
+            return stoppedBy;
+        }
+
+        /** Whether there is room for another assignment, marking the budget where there is not. */
+        private boolean stepsLeft() {
+            if (taken > STEPS_A_SEARCH_MAY_TAKE) {
+                stoppedBy.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE);
+                return false;
+            }
+            return true;
+        }
 
         Search(List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms,
                Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within) {
@@ -398,7 +440,8 @@ public final class LevelRealizer {
          */
         private Reached walk(int i, java.math.BigDecimal owed,
                              souther.compiler.inputs.SearchRegion here) {
-            if (++taken > STEPS_A_SEARCH_MAY_TAKE) {
+            taken++;
+            if (!stepsLeft()) {
                 return Reached.INCOMPLETE;
             }
             java.math.BigDecimal coef = terms.get(i).getValue();
@@ -478,7 +521,7 @@ public final class LevelRealizer {
                 if (reached == Reached.INCOMPLETE) {
                     weakest = Reached.INCOMPLETE;
                 }
-                if (taken > STEPS_A_SEARCH_MAY_TAKE) {
+                if (!stepsLeft()) {
                     return Reached.INCOMPLETE;
                 }
             }
@@ -502,14 +545,23 @@ public final class LevelRealizer {
         private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
                                 java.math.BigDecimal coef,
                                 souther.compiler.inputs.SearchRegion here) {
-            for (Place x : Outwards.from(new Count(on.from()), new Count(on.by()), carriers[i],
-                    on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT)) {
+            Outwards.Walked walked = Outwards.from(new Count(on.from()), new Count(on.by()),
+                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+            for (Place x : walked) {
                 if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
                     return Reached.FOUND;
                 }
-                if (taken > STEPS_A_SEARCH_MAY_TAKE) {
+                if (!stepsLeft()) {
                     return Reached.INCOMPLETE;
                 }
+            }
+            // Never a proof either way: a run without an end is not walked to the end, and a walk
+            // of every value this had is still a walk of a progression. What the figure adds is
+            // only said where the run held one more and this did not take it — added whenever the
+            // walk came back empty, it would name a figure over a run that had nothing further in
+            // it, which is this compiler claiming to have been stopped where it was not.
+            if (walked.stoppedShort()) {
+                stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
             }
             return Reached.INCOMPLETE;
         }
@@ -837,7 +889,7 @@ public final class LevelRealizer {
                               souther.compiler.inputs.SearchRegion within) {
         return theRulesHaveNotRefused(fixing, within)
                 ? new Realization.Found(fixing)
-                : new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+                : Realization.Unknown.nothingComposedOne();
     }
 
     /**

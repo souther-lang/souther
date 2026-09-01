@@ -12,6 +12,8 @@ import souther.compiler.numeric.Count;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -66,9 +68,15 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
         TermRealizations.Realization.Built built =
                 assertInstanceOf(TermRealizations.Realization.Built.class, offering());
 
-        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT, built.heldBack(),
+        assertEquals(Set.of(CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
+                        CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
+                        CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED),
+                built.heldBack(),
                 "the walk stopped at the figure with counts left to try, and a reader told every"
                         + " container had been refused would act on a walk that never made them");
+        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
+                Generator.UnresolvedCombination.Reason.wordFor(built.heldBack()),
+                "and the word such a walk has always come back with is the one it comes back with");
     }
 
     /** Distinct containers, so the figure is a figure of what a caller has to try. */

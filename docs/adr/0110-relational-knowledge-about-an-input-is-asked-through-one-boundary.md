@@ -47,10 +47,27 @@ left and of what is proved empty alike. Which route proved an emptiness is not o
 and an arithmetic would decide what the model says.
 
 **Every term is answered for on its own first, and the relation is met onto that.** What one term
-runs between is where it stands if it has been fixed, what its own position was read to hold, and
-what the term guarantees of itself; what the rules relating the terms leave the form is met onto the
-sum of those. Meeting only narrows, so a border can go away for being asked about properly and can
-never appear.
+runs between is where it stands if it has been fixed, where the values it is answered from leave it,
+and what the term guarantees of itself; what the rules relating the terms leave the form is met onto
+the sum of those. Meeting only narrows, so a border can go away for being asked about properly and
+can never appear.
+
+Where a term's values come from is what says who answers for it, and there are two answerers:
+
+    a number one position answers → that position's published reach
+    a number taken over a run     → what every value the run walks guarantees, put through the
+                                    step the operation repeats from the value it starts at
+
+Read as one, because a position was the only publisher there was, a total came back with nothing
+said about it: it stands at no position, so nothing spoke for it, and a guard over it drew a border
+whose outward point is a value the model admits nothing at. That is this decision's own defect one
+axis along — several positions composing to one form is the space direction, several occurrences
+accumulating to one term is the multiplicity direction — and it is closed the same way, by the
+boundary answering for the term rather than by each caller working it out.
+
+What the run's answerer uses is what holds of *every* value it walks, and never what some context
+leaves them: a run fixes no case and no condition, so a reading narrowed by which case a value
+turned out to be would be a bound half the occurrences are outside.
 
 That order matters because the reading that relates positions has a name for some terms and not for
 others, and answers a form one parameter at a time. Asked only there, a floor on a position the

@@ -117,7 +117,7 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
             for (BorderAssessment border : lines(model)) {
                 border.items().forEach((role, item) -> {
                     if (item instanceof ItemAssessment.Owed owed
-                            && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
+                            && owed.searches().only() instanceof ItemAssessment.Attempt.Built built) {
                         held.check(model, border.label() + " " + border.border().named(role),
                                 written(built.row()));
                     }

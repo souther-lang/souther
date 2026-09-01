@@ -54,11 +54,11 @@ import java.util.Set;
  */
 public final class Generator {
 
-    /** How many assignments of values one parameter is tried at in one pass. The choices multiply, so
-     * this is a bound on the search and not on any one position — and reaching it is reported as the
-     * search having stopped, which is a different thing from every assignment having been refused. A
-     * parameter with something held in reserve is walked twice, each pass under this bound. */
-    private static final int MAX_TUPLES = 256;
+    /** How many assignments of values one parameter is tried at in one pass. A parameter with
+     *  something held in reserve is walked twice, each pass under this bound. The figure is
+     *  {@link CompositionBudget}'s, where every budget of this compiler's is named. */
+    private static final int MAX_TUPLES =
+            CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES.maximum();
 
     /**
      * How many things one combination may be asking before the search gives up on it.
@@ -419,6 +419,86 @@ public final class Generator {
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
                          THE_WAY_IN_PLACES_AT_NO_CLASS, NO_CANDIDATE_WAS_OFFERED,
                          NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> false;
+                };
+            }
+
+            /**
+             * The word a search these budgets stopped comes back with.
+             *
+             * <p>One way only. Which budget stopped a search is what the search hands over, and this
+             * is the word readers of the word have always had — read the other way round, a reader
+             * would be recovering a budget from something that never held one: two of these come
+             * back with the same word and one of them comes back with it without any budget having
+             * been reached at all.
+             *
+             * <p>The words are what each of these has always said, kept rather than tidied. A budget
+             * carries what stopped a search; what a report and a document say of it is a separate
+             * decision from this one, and moving a word here would move it for them.
+             *
+             * <p>Budgets that come back with different words are not one stop. Nothing composes such
+             * a set — a stop is one place — and this says so rather than choosing between them,
+             * which would be a precedence over causes at the one layer that has none.
+             */
+            public static Reason wordFor(java.util.Set<CompositionBudget> budgets) {
+                Reason word = null;
+                for (CompositionBudget each : budgets) {
+                    Reason here = switch (each) {
+                        case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS,
+                             PLACES_A_PAIR_IS_TRIED_AT -> NOTHING_COMPOSES_ONE;
+                        case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
+                             SHAPES_OF_A_TOTAL_OFFERED, DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
+                             STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
+                             VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
+                             LEVELS_A_SIDE_IS_ASKED_AT -> SEARCH_LIMIT;
+                        // Reaching these stops no composing, so no search comes back from one of
+                        // them and there is no word to give. Asked for one all the same, this says
+                        // so rather than lending a word from a budget that does stop something.
+                        case TIMES_THE_RULES_ARE_ASKED_AGAIN,
+                             VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
+                             DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> throw new IllegalArgumentException(
+                                "no search comes back from this budget, so it has no word: " + each);
+                    };
+                    if (word != null && word != here) {
+                        throw new IllegalStateException("one search stopped by budgets that come"
+                                + " back with two words: " + budgets);
+                    }
+                    word = here;
+                }
+                if (word == null) {
+                    throw new IllegalArgumentException(
+                            "a search nothing stopped has no word to read off what stopped it");
+                }
+                return word;
+            }
+
+            /**
+             * The same answer in the words a walk of a coverage item comes back with.
+             *
+             * <p>Two vocabularies for one distinction, and this is the whole of what relates them.
+             * A walk says one of two things and a search says one of thirteen, so the projection
+             * runs this way and never the other — read back, eleven words would have to name a
+             * walk's answer and none of them does.
+             *
+             * <p>Exhaustive, with the eleven named. A word added is a word somebody has to decide
+             * about here, and deciding is what a {@code default} would do on their behalf: it would
+             * put the new word among the ones no walk says, which is the answer for eleven of them
+             * and is nobody's to assume for the twelfth.
+             */
+            public Realization.Unknown.Reason asAWalksAnswer() {
+                return switch (this) {
+                    case NOTHING_COMPOSES_ONE -> Realization.Unknown.Reason.NOTHING_COMPOSED_ONE;
+                    case SEARCH_LIMIT -> Realization.Unknown.Reason.THE_SEARCH_RAN_OUT;
+                    // What a walk of a coverage item comes back with is what it did, and these are
+                    // what somebody else did: the model settling the point, a candidate refused, a
+                    // module with no classes, a position held back, a group never offered.
+                    case ALL_CANDIDATES_REJECTED, THE_RULES_LEAVE_NOTHING_THERE,
+                         ONE_POSITION_CANNOT_BE_BOTH, NOTHING_TO_BUILD_AGAINST,
+                         NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
+                         THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,
+                         THE_ROWS_WERE_NOT_READ, THE_WAY_IN_PLACES_AT_NO_CLASS,
+                         NO_CANDIDATE_WAS_OFFERED, NO_READING_OF_THE_LINE_COULD_BE_SEARCHED ->
+                            throw new IllegalStateException(
+                                    "no walk of a coverage item comes back with this: " + this);
                 };
             }
         }
@@ -2233,6 +2313,51 @@ public final class Generator {
                 unrepresented = List.copyOf(unrepresented);
             }
         }
+
+        /**
+         * No row came of it, and a budget of this compiler's is why.
+         *
+         * <p>Beside {@link Unresolved} and not a field on it. A search that tried what it had and a
+         * search this compiler ended leave the reader different work — only the second has a figure
+         * somebody could raise — and every reader that has to tell them apart is one an exhaustive
+         * switch already stops.
+         *
+         * <p>{@code why} is the word such a search has always come back with, read off the budgets
+         * so that the two cannot part.
+         */
+        record Stopped(UnresolvedCombination why, java.util.Set<CompositionBudget> by,
+                       List<ReachabilityGap.Uncomposed> unrepresented)
+                implements BoundaryAttempt {
+
+            public Stopped {
+                unrepresented = List.copyOf(unrepresented);
+                by = java.util.Set.copyOf(by);
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a search this compiler stopped says which budget stopped it");
+                }
+                // The word is the budgets' to say, so this pair cannot be put here disagreeing.
+                // Left to whoever builds one, the two are a copy of one answer kept beside it —
+                // which is what a stop lost its budget to before it travelled at all.
+                if (why.reason() != UnresolvedCombination.Reason.wordFor(by)) {
+                    throw new IllegalArgumentException("a search stopped by " + by
+                            + " does not come back with " + why.reason());
+                }
+            }
+
+            /** One at the label given, in the word its budgets come back with. */
+            static Stopped at(String label, java.util.Set<CompositionBudget> by,
+                              List<ReachabilityGap.Uncomposed> unrepresented) {
+                return at(label, null, by, unrepresented);
+            }
+
+            /** The same, of a search that has something to say about where it stopped. */
+            static Stopped at(String label, String detail, java.util.Set<CompositionBudget> by,
+                              List<ReachabilityGap.Uncomposed> unrepresented) {
+                return new Stopped(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.wordFor(by), detail), by, unrepresented);
+            }
+        }
     }
 
     /**
@@ -2277,7 +2402,10 @@ public final class Generator {
         // and taking the bottom of the type's range instead is how a boundary that can be written
         // came back as one every value tried was refused at.
         Map<TermPath, Place> settled = new LinkedHashMap<>();
-        Map<TermPath, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
+        // Which budgets each edge held values back at, and not the word for it. The word is one of
+        // two and says nothing about which figure; kept as the word, a refusal that turned out to
+        // be this compiler stopping could not say what stopping it cost.
+        Map<TermPath, java.util.Set<CompositionBudget>> heldBack = new LinkedHashMap<>();
         // Where every position of this row stands: the item's, and the ones the way to it bounds.
         // One map, because a row is one row — walked as two, the second was chosen from what the
         // declarations leave and the first from what reaches the border, and only one of them was
@@ -2292,9 +2420,15 @@ public final class Generator {
             Edge edge = edgeAt(subject, each.getKey(), each.getValue(),
                     fixing.size() > 1, reaching.region());
             if (edge.values().isEmpty()) {
-                return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), edge.reason()),
-                        where.unrepresented());
+                // What stopped the composing where a budget of this compiler's did, and the word
+                // for a search that came to nothing where none did. The two license different
+                // sentences and only the first names something anybody could raise.
+                return edge.stoppedBy().isEmpty()
+                        ? new BoundaryAttempt.Unresolved(
+                                new UnresolvedCombination(List.of(label), edge.reason()),
+                                where.unrepresented())
+                        : BoundaryAttempt.Stopped.at(label, edge.stoppedBy(),
+                                where.unrepresented());
             }
             TermPath at = each.getKey().writeRoot();
             // Two terms at one location is that location asked for two things at once — a string of
@@ -2323,7 +2457,7 @@ public final class Generator {
             if (edge.settledAt() != null) {
                 settled.put(at, edge.settledAt());
             }
-            heldBack.put(at, edge.refused());
+            heldBack.put(at, edge.stoppedBy());
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
@@ -2358,6 +2492,7 @@ public final class Generator {
                 // something this knows. Taken from whichever came first, the reason named the wrong
                 // position's search.
                 UnresolvedCombination.Reason why = tried.reason();
+                java.util.Set<CompositionBudget> stoppedBy = tried.stoppedBy();
                 // A search that offered candidates and certified none of them has not shown that
                 // every value the rules allow was refused: what it found out is that what it built
                 // did not stand where it was built for, which is its own answer.
@@ -2367,11 +2502,19 @@ public final class Generator {
                 }
                 if (here.size() == 1
                         && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
-                    why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
+                    java.util.Set<CompositionBudget> held =
+                            heldBack.getOrDefault(here.keySet().iterator().next(), java.util.Set.of());
+                    if (!held.isEmpty()) {
+                        stoppedBy = held;
+                        why = UnresolvedCombination.Reason.wordFor(held);
+                    }
                 }
-                return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), why, tried.detail()),
-                        where.unrepresented());
+                return stoppedBy.isEmpty()
+                        ? new BoundaryAttempt.Unresolved(
+                                new UnresolvedCombination(List.of(label), why, tried.detail()),
+                                where.unrepresented())
+                        : BoundaryAttempt.Stopped.at(label, tried.detail(), stoppedBy,
+                                where.unrepresented());
             }
             inputs.add(tried.value());
         }
@@ -2453,13 +2596,20 @@ public final class Generator {
             // pair: which values one of them may take depends on what the other took, and a value
             // chosen for the first without asking is right about its own run and wrong about the
             // pair as often as not.
-            Map<NumericTerm.FromOnePosition, Place> standing = shared || !placeable ? null
+            NumericWitness.Standing found = shared || !placeable ? null
                     : NumericWitness.of(here, owing,
                             term -> subject.quantities().ordersOf(term).answered());
+            Map<NumericTerm.FromOnePosition, Place> standing =
+                    found == null ? null : found.at();
             if (standing == null) {
+                // And where a budget of this compiler's is why the walk found nothing, that rather
+                // than the word for a walk that had everything and reached none of it.
                 unrepresented.add(new ReachabilityGap.Uncomposed(cut, shared
                         ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
-                        : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                        : found != null && !found.stoppedBy().isEmpty()
+                                ? new ReachabilityGap.Why.TheWalkForItsPositionsWasStopped(
+                                        found.stoppedBy())
+                                : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
                 continue;
             }
             for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
@@ -3382,14 +3532,14 @@ public final class Generator {
         // and not something this fell short of — the same answer the class search gives when two
         // classes select different refinements of one position.
         if (planned instanceof ConstructionPlan.Result.Conflict against) {
-            return new Outcome(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+            return Outcome.none(UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
                     "`" + against.at() + "` would have to be both " + against.one().spelled()
                             + " and " + against.other().spelled());
         }
         ConstructionPlan plan = ((ConstructionPlan.Result.Planned) planned).plan();
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
-            return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+            return Outcome.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     choices.missingAt());
         }
         Outcome product = walk(subject, p, choices, check);
@@ -3408,16 +3558,26 @@ public final class Generator {
         // reported as though it had: `ALL_CANDIDATES_REJECTED` is what a reader is told nothing else
         // can be written at, and a search still holding assignments it never composed has not
         // established that.
-        if (product.reason() == UnresolvedCombination.Reason.SEARCH_LIMIT
-                || conditioned.reason() == UnresolvedCombination.Reason.SEARCH_LIMIT) {
-            return new Outcome(null, UnresolvedCombination.Reason.SEARCH_LIMIT, null);
+        if (!product.stoppedBy().isEmpty() || !conditioned.stoppedBy().isEmpty()) {
+            // Both passes' budgets and not one of them. Neither pass outranks the other here: each
+            // stopped where it stopped, and a reader wanting to know what would let this go further
+            // is owed every budget that would.
+            java.util.Set<CompositionBudget> both =
+                    java.util.EnumSet.noneOf(CompositionBudget.class);
+            both.addAll(product.stoppedBy());
+            both.addAll(conditioned.stoppedBy());
+            return Outcome.stoppedBy(both);
         }
         // Every value that was offered was refused, which is only the whole story where every value
         // the rules allow was offered. A position that read a count past what a row is built to carry,
         // or that has more pairings than are built at once, held something back, and saying so is the
         // difference between a fact about the model and a fact about this.
-        UnresolvedCombination.Reason held = heldBack(subject, p, plan, settled);
-        return held == null ? product : new Outcome(null, held, null);
+        return switch (heldBack(subject, p, plan, settled)) {
+            case HeldBack.Nothing _ -> product;
+            case HeldBack.NoRoomForOne _ -> Outcome.none(
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null);
+            case HeldBack.ByABudget(var budgets) -> Outcome.stoppedBy(budgets);
+        };
     }
 
     /**
@@ -3472,37 +3632,52 @@ public final class Generator {
      * without them answers about a rule this row is no longer under — and would say "every value
      * tried was refused" of a position whose values were never built.
      */
-    private static UnresolvedCombination.Reason heldBack(MeasuredInput subject, int p,
-                                                         ConstructionPlan plan,
-                                                         Map<TermPath, Place> settled) {
+    private static HeldBack heldBack(MeasuredInput subject, int p, ConstructionPlan plan,
+                                     Map<TermPath, Place> settled) {
         TermPath root = TermPath.of(subject.parameters().get(p));
         Type declared = subject.types().get(p);
         FieldDomains rules = rulesOf(declared, subject.symbols(), subject.inputs().policy(),
                 under(root, settled));
-        UnresolvedCombination.Reason held = null;
         // A collection asked to hold a value in a class, whose rules say it holds fewer than that.
         // Nothing composes one: what the search would offer is a collection the rules refuse, and
         // saying every candidate was refused sends an author looking for a value where the rule
         // says there is no room for one.
         for (ConstructionPlan.Held each : plan.held()) {
             if (mostHeld(rules, each.at(), each.type(), subject.symbols()) < each.least()) {
-                return UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+                return new HeldBack.NoRoomForOne();
             }
         }
+        // Every budget that held a position back, and not the first or the strongest. Two positions
+        // stopped by two budgets are two things this compiler declined to do, and a reader asking
+        // what would let the search go further is owed both — read as one, whichever the walk met
+        // last was the whole answer.
+        java.util.Set<CompositionBudget> budgets =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
         for (ConstructionPlan.Slot each : plan.slots()) {
             RuleKey field = fieldUnder(each.at());
-            UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols(),
-                    subject.inputs().policy(), field == null ? null : rules.heldAt(field));
-            // Nothing of the shape having been built outranks some of it having been: the first says
-            // the search never had what the rule asks for, and a reader owed one sentence is owed that.
-            if (here == UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE) {
-                return here;
-            }
-            if (here != null) {
-                held = here;
+            budgets.addAll(Partitions.notBuilt(each.type(), subject.symbols(),
+                    subject.inputs().policy(), field == null ? null : rules.heldAt(field)));
+        }
+        return budgets.isEmpty() ? new HeldBack.Nothing() : new HeldBack.ByABudget(budgets);
+    }
+
+    /** Why a position of a parameter offered less than its rules allow. */
+    private sealed interface HeldBack {
+
+        /** Every position offered what its rules allow. */
+        record Nothing() implements HeldBack {}
+
+        /** A collection is asked to hold more than its rules leave room for, which is the model
+         *  settling it and not a budget of this compiler's. */
+        record NoRoomForOne() implements HeldBack {}
+
+        /** Budgets of this compiler's stopped positions offering the rest of what they had. */
+        record ByABudget(java.util.Set<CompositionBudget> budgets) implements HeldBack {
+
+            public ByABudget {
+                budgets = java.util.Set.copyOf(budgets);
             }
         }
-        return held;
     }
 
     /**
@@ -3533,11 +3708,12 @@ public final class Generator {
         FixtureTemplate built = descend(subject, p, plan, positions, 0, new LinkedHashMap<>(),
                 new LinkedHashMap<>(settled), decided, check, budget);
         if (built != null) {
-            return new Outcome(built, null, null);
+            return Outcome.built(built);
         }
-        return new Outcome(null, budget.cutShort
-                ? UnresolvedCombination.Reason.SEARCH_LIMIT
-                : UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+        return budget.cutShort
+                ? Outcome.stoppedBy(
+                        java.util.Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES))
+                : Outcome.none(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
     }
 
     /**
@@ -3900,7 +4076,28 @@ public final class Generator {
 
     /** What came of trying the assignments for one parameter: its value, or why there is none. */
     private record Outcome(FixtureTemplate value, UnresolvedCombination.Reason reason,
-                           String detail) {}
+                           String detail, java.util.Set<CompositionBudget> stoppedBy) {
+
+        Outcome {
+            stoppedBy = java.util.Set.copyOf(stoppedBy);
+        }
+
+        /** A value was composed. */
+        static Outcome built(FixtureTemplate value) {
+            return new Outcome(value, null, null, java.util.Set.of());
+        }
+
+        /** None was, and no budget of this compiler's is why. */
+        static Outcome none(UnresolvedCombination.Reason why, String detail) {
+            return new Outcome(null, why, detail, java.util.Set.of());
+        }
+
+        /** None was, and these budgets of this compiler's are why. The word is read off them so
+         *  that the two cannot part; which budget it was is what the word does not hold. */
+        static Outcome stoppedBy(java.util.Set<CompositionBudget> budgets) {
+            return new Outcome(null, UnresolvedCombination.Reason.wordFor(budgets), null, budgets);
+        }
+    }
 
     /**
      * The assignments, nearest first, until one builds.
@@ -3941,7 +4138,15 @@ public final class Generator {
         seen.add(Arrays.toString(first));
 
         int tried = 0;
-        while (!next.isEmpty() && tried < MAX_TUPLES) {
+        // Recorded where the bound is reached rather than read afterwards off what was left behind.
+        // A walk that stopped and a walk that ran out are told apart by the queue today and would go
+        // on being told apart by it until the day a second thing empties it.
+        boolean stopped = false;
+        while (!next.isEmpty()) {
+            if (tried == MAX_TUPLES) {
+                stopped = true;
+                break;
+            }
             int[] assignment = next.poll();
             tried++;
             Map<TermPath, FixtureTemplate> chosen = new LinkedHashMap<>();
@@ -3950,7 +4155,7 @@ public final class Generator {
             }
             FixtureTemplate built = compose(plan.root(), chosen, subject.symbols(), subject.inputs().policy());
             if (built != null && check.refuse(p, built).isEmpty()) {
-                return new Outcome(built, null, null);
+                return Outcome.built(built);
             }
             for (int i = 0; i < positions; i++) {
                 if (assignment[i] + 1 >= values.get(i).size()) {
@@ -3963,13 +4168,14 @@ public final class Generator {
                 }
             }
         }
-        // Nothing left to try is every assignment refused; something left is the search having stopped,
-        // and the difference is what the reader is owed. Neither carries a detail: what these are
-        // about is the combination, and a detail is read as the position that is the fact behind
-        // several of them.
-        return next.isEmpty()
-                ? new Outcome(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null)
-                : new Outcome(null, UnresolvedCombination.Reason.SEARCH_LIMIT, null);
+        // Nothing left to try is every assignment refused; a bound reached is the search having
+        // stopped, and the difference is what the reader is owed. Neither carries a detail: what
+        // these are about is the combination, and a detail is read as the position that is the fact
+        // behind several of them.
+        return stopped
+                ? Outcome.stoppedBy(
+                        java.util.Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES))
+                : Outcome.none(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
     }
 
     /**
@@ -4113,15 +4319,37 @@ public final class Generator {
      * same question building it asked, and the reading is what answers it both times — kept here,
      * an answer would travel from the one to the other and the two would be free to part.
      */
-    private record Edge(List<FixtureTemplate> values, UnresolvedCombination.Reason reason,
-                        Place settledAt, UnresolvedCombination.Reason heldBack) {
-
-        Edge {
-            values = List.copyOf(values);
-        }
+    private record Edge(TermRealizations.Realization came, Place settledAt) {
 
         static Edge none(UnresolvedCombination.Reason why) {
-            return new Edge(List.of(), why, null, null);
+            return new Edge(new TermRealizations.Realization.None(why), null);
+        }
+
+        List<FixtureTemplate> values() {
+            return came instanceof TermRealizations.Realization.Built built
+                    ? built.values() : List.of();
+        }
+
+        /** Which budgets of this compiler's stopped this edge offering more than it did, and empty
+         *  where none did. The same set whether or not anything was offered: what a budget is, is
+         *  what this compiler declined to do, and that does not turn on what came of the rest. */
+        java.util.Set<CompositionBudget> stoppedBy() {
+            return switch (came) {
+                case TermRealizations.Realization.Built built -> built.heldBack();
+                case TermRealizations.Realization.Stopped stopped -> stopped.by();
+                case TermRealizations.Realization.None _ -> java.util.Set.of();
+            };
+        }
+
+        /** What to report where no value was offered here at all. */
+        UnresolvedCombination.Reason reason() {
+            return switch (came) {
+                case TermRealizations.Realization.None none -> none.why();
+                case TermRealizations.Realization.Stopped stopped ->
+                        UnresolvedCombination.Reason.wordFor(stopped.by());
+                case TermRealizations.Realization.Built _ -> throw new IllegalStateException(
+                        "an edge that offered values asked why it offered none");
+            };
         }
 
         /**
@@ -4132,7 +4360,8 @@ public final class Generator {
          * would act on: another value of this edge may be the one that builds.
          */
         UnresolvedCombination.Reason refused() {
-            return heldBack == null ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED : heldBack;
+            return stoppedBy().isEmpty() ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
+                    : UnresolvedCombination.Reason.wordFor(stoppedBy());
         }
     }
 
@@ -4153,11 +4382,7 @@ public final class Generator {
             // position standing at three, and a hundred is not what the list adding up to it holds.
             case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;
         };
-        return switch (made) {
-            case TermRealizations.Realization.BuiltNone none -> Edge.none(none.why());
-            case TermRealizations.Realization.Built built ->
-                    new Edge(built.values(), null, settled, built.heldBack());
-        };
+        return new Edge(made, settled);
     }
 
     private Generator() {}

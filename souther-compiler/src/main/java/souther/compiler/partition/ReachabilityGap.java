@@ -66,6 +66,31 @@ public sealed interface ReachabilityGap {
         record NoValueComposedForItsPositions() implements Why {}
 
         /**
+         * The same, where a budget of this compiler's is what stopped the walk that would have
+         * placed the positions.
+         *
+         * <p>A case beside the one above rather than a field on it. The two are different news: one
+         * says nothing was found in what was walked, the other says the walking stopped, and only
+         * the second names something a reader could raise. Held as a set that is sometimes empty,
+         * every reader would decide again which of the two it had.
+         *
+         * <p>Not an {@link souther.compiler.query.EstablishmentGap}. A row was composed here; what
+         * the budget cost is one condition on the way being composed against, and reporting it as a
+         * point nothing could be established at would say more than happened.
+         */
+        record TheWalkForItsPositionsWasStopped(java.util.Set<CompositionBudget> by)
+                implements Why {
+
+            public TheWalkForItsPositionsWasStopped {
+                by = java.util.Set.copyOf(by);
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a walk this compiler stopped says which budget stopped it");
+                }
+            }
+        }
+
+        /**
          * Two numbers taken at one location, one of which the row is already being written for.
          *
          * <p>A row writes one value where a location is, and that one value would have to answer

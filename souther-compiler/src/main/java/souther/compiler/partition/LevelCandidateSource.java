@@ -35,7 +35,8 @@ public final class LevelCandidateSource {
      * of it; a box that holds none of the first few holds one only where the rules are shaped so that
      * the whole search is worth its own answer.
      */
-    private static final int LEVELS_TRIED = 8;
+    private static final int LEVELS_TRIED =
+            CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT.maximum();
 
     /**
      * The levels a row at this item could stand at, nearest the line first.
@@ -46,12 +47,26 @@ public final class LevelCandidateSource {
      * for outward from what they are written against until the budget runs out. Which is why a run
      * that came back empty settles nothing while a point may.
      */
-    public static List<Level> forItem(Criterion where, LevelSpace levels) {
+    public static Offered forItem(Criterion where, LevelSpace levels) {
         Level from = where.anchor();
         return switch (where) {
-            case Criterion.AtTheLevel _ -> List.of(from);
+            case Criterion.AtTheLevel _ -> new Offered(List.of(from), false);
             case Criterion.Within within -> inside(levels, within);
         };
+    }
+
+    /**
+     * The levels offered, and whether there were more this stopped short of.
+     *
+     * <p>Two halves of one answer. A caller reading only the first says the levels are all the
+     * levels there were, which is what a run whose far end nothing reached looks like from here —
+     * and the difference is whether raising a figure of this compiler's would offer more.
+     */
+    public record Offered(List<Level> levels, boolean stoppedShort) {
+
+        public Offered {
+            levels = List.copyOf(levels);
+        }
     }
 
     /**
@@ -62,17 +77,18 @@ public final class LevelCandidateSource {
      * from the run's far end instead, a row well inside a wide run was offered where one just inside
      * it says the same thing and is the row an author would have written.
      */
-    private static List<Level> inside(LevelSpace levels, Criterion.Within within) {
+    private static Offered inside(LevelSpace levels, Criterion.Within within) {
         Level from = within.anchor();
         if (from == null) {
-            return List.of();
+            return new Offered(List.of(), false);
         }
         List<Level> out = new ArrayList<>();
         if (within.holds(from)) {
             out.add(from);
         }
-        out.addAll(drawnFrom(levels, within.region(), from, within.away()));
-        return out;
+        Offered drawn = drawnFrom(levels, within.region(), from, within.away());
+        out.addAll(drawn.levels());
+        return new Offered(out, drawn.stoppedShort());
     }
 
     /**
@@ -87,11 +103,16 @@ public final class LevelCandidateSource {
      * <p>Which part of the region a level comes from settles itself: every part on the wrong side of
      * what has already been offered has its ends crossed and is passed over.
      */
-    private static List<Level> drawnFrom(LevelSpace levels, LevelRegion region, Level from,
-                                         Towards towards) {
+    private static Offered drawnFrom(LevelSpace levels, LevelRegion region, Level from,
+                                     Towards towards) {
         List<Level> out = new ArrayList<>();
         Bound past = from == null ? null : Bound.at(from, false);
-        for (int step = 0; step < LEVELS_TRIED; step++) {
+        // <b>A level found and not offered, never a count that came out even.</b> A region holding
+        // exactly this many and a region this stopped drawing from come back the same length, so
+        // the figure being reached says nothing on its own — what says this compiler declined to
+        // offer more is a level the region has that this did not take.
+        boolean stoppedShort = false;
+        while (true) {
             Level next = null;
             for (LevelInterval part : region.parts()) {
                 LevelInterval left = towards == Towards.ABOVE
@@ -106,12 +127,16 @@ public final class LevelCandidateSource {
                 }
             }
             if (next == null) {
+                break;   // nothing further in the region, so this drew the whole of it
+            }
+            if (out.size() == LEVELS_TRIED) {
+                stoppedShort = true;   // one the region has and this is not offering
                 break;
             }
             out.add(next);
             past = Bound.at(next, false);
         }
-        return out;
+        return new Offered(out, stoppedShort);
     }
 
     private LevelCandidateSource() {}

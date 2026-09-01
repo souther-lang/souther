@@ -615,29 +615,6 @@ final class Coverages {
     }
 
     /**
-     * The readings of one behavior's lines, one entry per line.
-     *
-     * <p>What each reading saw, kept whole: a point one reading found a row at is found, and no
-     * other reading of the line takes that back.
-     *
-     * <p><b>After everything that is a reading's own.</b> Which conditions a row has to satisfy to
-     * reach the comparison is one of those, so a search is made per reading and merged here rather
-     * than made once against whichever reading this kept. Merged first, the region a row is composed
-     * in is one reading's, chosen by the order a walk took.
-     *
-     * <p><b>And never across two debts.</b> A line holds the authored line and where it was read;
-     * a debt holds the authored line and the value it is at — so two readings under one line are one
-     * debt by construction, and a pair that is not says the two identities have come apart.
-     */
-    static List<BorderAssessment> merged(LineReadings readings) {
-        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        for (BorderAssessment each : readings.each()) {
-            out.merge(BoundaryLine.of(each.border()), each, Coverages::whicheverSawMore);
-        }
-        return List.copyOf(out.values());
-    }
-
-    /**
      * The same lines, with what building a value at each point that is worth one came to.
      *
      * <p>Takes what was measured rather than measuring again. A search is evidence added to an
@@ -762,12 +739,12 @@ final class Coverages {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
                             : verdictOf(shape.met(owed.criterion(), rows), guard,
                                     border, observed);
-                    // No attempt. Nothing was searched for here, and that is said by there being no
-                    // attempt rather than by an attempt saying nobody asked: whether a value was
+                    // No search. Nothing was searched for here, and that is said by there being no
+                    // search rather than by a search saying nobody asked: whether a value was
                     // composed is a fact about who asked for one, and a measurement that carried it
                     // was answering a question it had not been put.
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            shape.projection(), null);
+                            shape.projection(), SearchOutcomes.none());
                 }
             });
         }
@@ -800,6 +777,30 @@ final class Coverages {
                 return projection;
             }
         };
+    }
+
+    /**
+     * The readings of one behavior's lines, one entry per line.
+     *
+     * <p>What each reading saw, kept whole: a point one reading found a row at is found, and no
+     * other reading of the line takes that back.
+     *
+     * <p><b>After everything that is a reading's own.</b> Which conditions a row has to satisfy to
+     * reach the comparison is one of those, so a search is made per reading and the searches are
+     * put together here rather than one being made against whichever reading came first. Put
+     * together first, the region a row is composed in is one reading's, chosen by the order a walk
+     * took.
+     *
+     * <p><b>And never across two debts.</b> A line holds the authored line and where it was read;
+     * a debt holds the authored line and the value it is at — so two readings under one line are one
+     * debt by construction, and a pair that is not says the two identities have come apart.
+     */
+    static List<BorderAssessment> merged(LineReadings readings) {
+        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
+        for (BorderAssessment each : readings.each()) {
+            out.merge(BoundaryLine.of(each.border()), each, Coverages::asOneLine);
+        }
+        return List.copyOf(out.values());
     }
 
     /**
@@ -866,98 +867,79 @@ final class Coverages {
                                     java.util.List.of(label),
                                     souther.compiler.partition.Generator.UnresolvedCombination
                                             .Reason.THE_RULES_LEAVE_NOTHING_THERE), within);
-                    case Realization.Unknown unknown -> switch (unknown.why()) {
-                        case NOTHING_COMPOSED_ONE -> nothingComposedOne(label, within);
-                        case THE_SEARCH_RAN_OUT -> new ItemAssessment.Attempt.Unresolved(
-                                new souther.compiler.partition.Generator.UnresolvedCombination(
-                                        java.util.List.of(label),
-                                        souther.compiler.partition.Generator.UnresolvedCombination
-                                                .Reason.SEARCH_LIMIT), within);
-                    };
+                    // A walk that reached no placement. Where a budget of this compiler's is why it
+                    // reached none, that travels: the point is one this declined to look further
+                    // for, which is not the point being one nothing promises.
+                    case Realization.Unknown unknown -> unknown.stoppedBy().isEmpty()
+                            ? new ItemAssessment.Attempt.Unresolved(
+                                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                                            java.util.List.of(label), wordOf(unknown)), within)
+                            : new ItemAssessment.Attempt.Stopped(
+                                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                                            java.util.List.of(label), wordOf(unknown)),
+                                    within, java.util.List.of(),
+                                    new EstablishmentGap.Composition(unknown.stoppedBy()));
                 };
             }
         };
     }
 
     /**
-     * Which of two readings of one line the report keeps.
+     * Two readings of one line, as the one line they are readings of.
      *
-     * <p>Existential and per point, the same way an arm is: a row met a point if it met it through
-     * any reading of the line. So a reading that found a row outranks one that could not tell, which
-     * outranks one that looked and found none, which outranks one that was never made. Anything else
-     * would let a second call site of a helper take back what a row at the first one established.
+     * <p><b>Nothing is chosen between.</b> A helper called from two places is one line read once
+     * and searched twice — the authored line and the target are the same, and what differs is the
+     * region a row for it was composed in — so the two are put together and neither stands for the
+     * other. Kept as whichever saw more, whatever the other established was gone before anything
+     * downstream could ask, and a point whose only search a budget stopped came out holding nothing.
      *
-     * <p>Point by point rather than border by border. Two readings of one line are the same border
-     * and can have seen different things at different points, and keeping whichever border saw more
-     * on the whole would throw away a point the other one had.
+     * <p>Point by point rather than border by border. Two readings of one line can have seen
+     * different things at different points, and one answer for the whole border would settle a
+     * point from what happened at another.
      */
-    private static BorderAssessment whicheverSawMore(BorderAssessment a, BorderAssessment b) {
+    private static BorderAssessment asOneLine(BorderAssessment a, BorderAssessment b) {
         if (!a.border().obligation().equals(b.border().obligation())) {
             throw new IllegalStateException("two readings of one line owing different rows: "
                     + a.border().obligation() + " and " + b.border().obligation());
         }
         java.util.Map<DomainPoint, ItemAssessment> kept = new java.util.LinkedHashMap<>();
         for (DomainPoint point : a.items().keySet()) {
-            kept.put(point, keeps(a.at(point), b.at(point)) ? a.at(point) : b.at(point));
+            kept.put(point, together(a.at(point), b.at(point)));
         }
         return new BorderAssessment(a.border(), kept);
     }
 
     /**
-     * Whether what the first reading saw at a point stands, rather than what the second saw.
+     * What two searches of one point of one reading come to, dimension by dimension.
      *
-     * <p>What was measured first, and what was composed only where the two measured alike. A row
-     * that was found is the whole of what a point asks for; where neither reading found one, the
-     * reading that composed a row to offer has something to say that a reading which composed
-     * nothing does not, and the point is owed the same row either way.
+     * <p><b>Not one of them.</b> They are searches of the same point under one reading, and the
+     * point is owed once — so what a reader is owed is what both of them found out. Taking whichever
+     * saw more, every fact the other one established was gone before anything downstream could ask:
+     * a search a budget of this compiler's stopped, dropped for one that came back with nothing, is
+     * how a point this declined to work on left the count as one the model admits no row at.
      *
-     * <p>Here because the search is made per reading. One search against one region has one outcome
-     * and nothing to choose between; two readings carry two, and keeping the first would drop a row
-     * an author could have been offered.
+     * <p>Each dimension by whatever owns it. What the rows came to is coverage's own question
+     * ({@link ObligationCoverage#acrossOneReadingsSearches}); what the rules prove is a reading of
+     * the declarations and the two searches read the same ones, so a difference there is not
+     * something to fold but something that has gone wrong.
      */
-    private static boolean keeps(ItemAssessment a, ItemAssessment b) {
-        if (rank(a) != rank(b)) {
-            return rank(a) > rank(b);
+    private static ItemAssessment together(ItemAssessment a, ItemAssessment b) {
+        if (!(a instanceof ItemAssessment.Owed one) || !(b instanceof ItemAssessment.Owed two)) {
+            // Two readings of one line owe the same points, so a point no row is owed at is that
+            // under both — and there is nothing about it to put together.
+            return a;
         }
-        return composed(a) >= composed(b);
-    }
-
-    /**
-     * How much the search of this reading's own region came back with.
-     *
-     * <p>A row read back where it was built for outranks one nothing could place, which outranks
-     * none at all. The first is grounds that a row can be written at the point and the second is
-     * not, so a reading holding the second cannot be the one that is kept where another holds the
-     * first — the grounds are read off whichever reading this keeps, and taking them from the
-     * reading that happened to come first would lose them to the order two call sites of one helper
-     * were walked in.
-     */
-    private static int composed(ItemAssessment item) {
-        if (!(item instanceof ItemAssessment.Owed owed)) {
-            return 0;
+        if (!one.criterion().equals(two.criterion())) {
+            throw new IllegalStateException("two searches of one point asking for different"
+                    + " values: " + one.criterion() + " and " + two.criterion());
         }
-        return switch (owed.attempt()) {
-            case ItemAssessment.Attempt.Certified _ -> 2;
-            case ItemAssessment.Attempt.Unverified _ -> 1;
-            case null, default -> 0;
-        };
-    }
-
-    private static int rank(ItemAssessment item) {
-        if (!(item instanceof ItemAssessment.Owed owed)) {
-            // Two readings of one line owe the same points, so this is one of them against itself.
-            return 0;
+        if (one.projection() != two.projection()) {
+            throw new IllegalStateException("two searches of one point disagreeing about what the"
+                    + " rules prove there: " + one.projection() + " and " + two.projection());
         }
-        return switch (owed.coverage()) {
-            case Measurement.Complete<ItemAssessment.Coverage> whole ->
-                    whole.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 1;
-            // A reading made in part saw less than a settled one and more than none: found is
-            // found either way, and what it did not find is undecided rather than absent.
-            case Measurement.Partial<ItemAssessment.Coverage> part ->
-                    part.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 2;
-            case Measurement.NotMeasured<ItemAssessment.Coverage> _,
-                 Measurement.FailedToMeasure<ItemAssessment.Coverage> _ -> 0;
-        };
+        return new ItemAssessment.Owed(one.criterion(),
+                ObligationCoverage.acrossOneReadingsSearches(one.coverage(), two.coverage()),
+                one.projection(), one.searches().plus(two.searches()));
     }
 
     /**
@@ -1023,7 +1005,7 @@ final class Coverages {
      * not a thing an observation did, so it travels as far as the account's own reasons go and no
      * further.
      */
-    private static EstablishmentGap stopped(StandingAtAPoint.Met.CouldNotTell why) {
+    private static EstablishmentGap.Observation stopped(StandingAtAPoint.Met.CouldNotTell why) {
         Set<Incompleteness.Code> codes = new LinkedHashSet<>();
         for (souther.compiler.partition.ReadingGap each : why.why()) {
             if (each instanceof souther.compiler.partition.ReadingGap.Observation it) {
@@ -1031,6 +1013,23 @@ final class Coverages {
             }
         }
         return new EstablishmentGap.Observation(codes);
+    }
+
+    /**
+     * The word a walk that reached no placement comes back with.
+     *
+     * <p>The realizer's own, kept as it is. What it says is which of the two things a walk that
+     * found nothing did, and it says it whether or not a figure of this compiler's was reached —
+     * which is why the figure travels beside it rather than being read out of it.
+     */
+    private static souther.compiler.partition.Generator.UnresolvedCombination.Reason wordOf(
+            Realization.Unknown unknown) {
+        return switch (unknown.why()) {
+            case NOTHING_COMPOSED_ONE -> souther.compiler.partition.Generator
+                    .UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+            case THE_SEARCH_RAN_OUT -> souther.compiler.partition.Generator
+                    .UnresolvedCombination.Reason.SEARCH_LIMIT;
+        };
     }
 
     /** A search that came to nothing at {@code subject}, which is what a point is written as. */
@@ -1057,7 +1056,7 @@ final class Coverages {
      * outcome of a search that dropped its region, and the reader that wanted it back built the
      * same value by hand a moment later.
      */
-    private static ItemAssessment.Attempt.Searched whatCameOfIt(
+    private static ItemAssessment.Attempt whatCameOfIt(
             souther.compiler.partition.Generator.BoundaryAttempt made, String subject,
             souther.compiler.partition.WayToTheBorder within,
             Supplier<StandingAtAPoint.Met> standing) {
@@ -1115,6 +1114,12 @@ final class Coverages {
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
                     new ItemAssessment.Attempt.Unresolved(left.why(), within,
                             left.unrepresented());
+            // And a search a budget of this compiler's ended, which is the one outcome here that
+            // names something anybody could raise. Said as the one above, an obligation this
+            // declined to work on left the count as one the model admits no row at.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Stopped left ->
+                    new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
+                            new EstablishmentGap.Composition(left.by()));
         };
     }
 

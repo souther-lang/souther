@@ -50,19 +50,47 @@ final class TermRealizations {
          * thing to tell an author.
          */
         record Built(List<FixtureTemplate> values,
-                     Generator.UnresolvedCombination.Reason heldBack) implements Realization {
+                     java.util.Set<CompositionBudget> heldBack) implements Realization {
 
             public Built {
                 values = List.copyOf(values);
+                heldBack = java.util.Set.copyOf(heldBack);
                 if (values.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a realization that built nothing is one that built none, and says why");
                 }
             }
+
+            static Built whole(List<FixtureTemplate> values) {
+                return new Built(values, java.util.Set.of());
+            }
         }
 
-        /** Nothing here writes a value answering it, and this is what stopped there being one. */
-        record BuiltNone(Generator.UnresolvedCombination.Reason why) implements Realization {}
+        /**
+         * A budget of this compiler's stopped the composing, and no value came of it.
+         *
+         * <p>Apart from {@link None} and the difference is the whole of why this is here. Both are
+         * nothing built; only this one is a policy of this compiler's having run out, and only a
+         * policy running out leaves the question of whether a value exists open in a way somebody
+         * could act on by raising it.
+         *
+         * <p>Never where a value was built. A budget that cut an offering short after something was
+         * composed is {@link Built#heldBack()}: what it stopped is the rest of the offer, and the
+         * point it was composed for has a value at it either way.
+         */
+        record Stopped(java.util.Set<CompositionBudget> by) implements Realization {
+
+            public Stopped {
+                by = java.util.Set.copyOf(by);
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a composing this compiler stopped says which budget stopped it");
+                }
+            }
+        }
+
+        /** Nothing here writes a value answering it, and no budget of this compiler's is why. */
+        record None(Generator.UnresolvedCombination.Reason why) implements Realization {}
     }
 
     /**
@@ -108,13 +136,13 @@ final class TermRealizations {
      *
      * <p>A target that exists and a target nothing writes at are two different sentences, and both
      * of them are said here. {@link RealizationTarget} answers the first for every number there is;
-     * a {@link Realization.BuiltNone} is the second.
+     * a {@link Realization.None} or a {@link Realization.Stopped} is the second.
      */
     static Realization at(Type sourceType, TermOrders orders,
                           Place answer, souther.compiler.inputs.SearchRegion within,
                           Symbols symbols, ReadingPolicy policy) {
         if (sourceType == null) {
-            return new Realization.BuiltNone(
+            return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         // Which number is being written for, read off the answer that says which number it is of.
@@ -192,7 +220,7 @@ final class TermRealizations {
             case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, sourceType,
                     orders, within, symbols, policy);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
-                    new Realization.BuiltNone(
+                    new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         };
     }
@@ -202,7 +230,7 @@ final class TermRealizations {
                                        ReadingPolicy policy) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
-            return new Realization.BuiltNone(
+            return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         Type holder = TypeOps.base(sourceType, symbols);
@@ -212,9 +240,10 @@ final class TermRealizations {
             // stopped as two halves of one answer for exactly this, and asking it again would be
             // the same decision taken twice — the two could not disagree today and there is no
             // reason to leave a second taking of it here.
-            return new Realization.BuiltNone(built.heldBack() == null
-                    ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE
-                    : built.heldBack());
+            return built.heldBack().isEmpty()
+                    ? new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    : new Realization.Stopped(built.heldBack());
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
@@ -244,7 +273,7 @@ final class TermRealizations {
             // Outside the parts a day has. Not this reader's to report as a refusal: what a part
             // runs between is the operation's declared bound, and a number outside it is a number
             // nothing answers.
-            return new Realization.BuiltNone(
+            return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         Place seconds = Count.of(count.at()
@@ -252,9 +281,9 @@ final class TermRealizations {
         FixtureTemplate standing = Witnesses.wrapped(sourceType,
                 FixtureTemplate.on(observed, seconds, symbols.scope()::reach), symbols);
         return standing == null
-                ? new Realization.BuiltNone(
+                ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : new Realization.Built(List.of(standing), null);
+                : Realization.Built.whole(List.of(standing));
     }
 
     /**
@@ -279,22 +308,22 @@ final class TermRealizations {
     private static Realization onThatPart(TakenAs.DatePart part, Type sourceType, Carrier observed,
                                           Place answer, Symbols symbols) {
         if (observed == null || !(answer instanceof Count count) || !count.whole()) {
-            return new Realization.BuiltNone(
+            return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         java.time.LocalDate on = dateOn(part, count.at());
         if (on == null) {
             // Outside the parts a date has. Not this reader's to report as a refusal: a number no
             // date answers is a number nothing composes one for.
-            return new Realization.BuiltNone(
+            return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         FixtureTemplate standing = Witnesses.wrapped(sourceType,
                 FixtureTemplate.on(observed, Dates.dayOf(on), symbols.scope()::reach), symbols);
         return standing == null
-                ? new Realization.BuiltNone(
+                ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : new Realization.Built(List.of(standing), null);
+                : Realization.Built.whole(List.of(standing));
     }
 
     /**
@@ -356,9 +385,9 @@ final class TermRealizations {
     private static Realization oneValue(FixtureTemplate bare, Type sourceType, Symbols symbols) {
         FixtureTemplate standing = Witnesses.wrapped(sourceType, bare, symbols);
         return standing == null
-                ? new Realization.BuiltNone(
+                ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : new Realization.Built(List.of(standing), null);
+                : Realization.Built.whole(List.of(standing));
     }
 
     private TermRealizations() {}

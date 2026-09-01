@@ -1,35 +1,26 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.Induction;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
+import java.util.Collection;
 import java.util.Map;
 
 /**
- * What a walk from a seed answers, proved by checking a range rather than by running the walk.
+ * A walk this check reads, put to the proof that a walk stays inside a range.
  *
- * <p>A reduction answers {@code a}, where {@code a} is the seed or is the step applied to an earlier
- * accumulator and something the container held. So a range holds the answer if the seed is in it and
- * the step, given an accumulator in it and inputs the container guarantees, answers inside it again.
- * Two questions, each asked once. There is no iteration to a fixed point, no widening, nothing read
- * off how long the container is, and no expansion of the walk — a range is proposed, and it is
- * checked, and that is the whole of it.
+ * <p>The theorem is {@link Induction}'s and nothing of it is repeated here: what is here is this
+ * check's half of it — the forms a walk was named as, the domain they are read against, and the
+ * recipes an atom inside a step stands for. The measuring side reads a walk out of a term and a
+ * container's element range instead, and puts its own half to the same proof.
  *
- * <p>Which ranges are proposed is not here ({@link InvariantCandidates}). Nothing about soundness
- * depends on that list, which is the point of the split: a guess that cannot be proved costs a check
- * and is discarded, so the list may be lengthened by anyone without this being read again.
- *
- * <p>What it proves is conditional and the condition is not this check's to discharge: <em>if the
- * reduction answers at all, its answer is in the range</em>. A step that aborts part way — an
- * addition past what an {@code Int} holds — answers nothing, and a range that says where an answer
- * lies says nothing about a run that produces none. Whether the arithmetic can abort is the
- * arithmetic check's question and whether the walk terminates is the totality check's, and neither
- * is weakened by this and neither is assumed by it.
- *
- * <p>No operation's name reaches here. What arrives is a seed, an accumulator, a step, and facts
- * about what the step is handed — so an operation the library gains that reduces the same way is
- * proved by this unchanged.
+ * <p>What arrives is a seed, an accumulator, a step, and facts about what the step is handed, read
+ * where the walk was named. Nothing here is a tree to be read again and nothing holds an
+ * environment: what could be read of the walk was read then, and a walk whose parts could not be
+ * read that way is not one of these at all. So no operation's name reaches this either, and an
+ * operation the library gains that reduces the same way is proved unchanged.
  */
 final class InductiveBounds {
 
@@ -38,10 +29,6 @@ final class InductiveBounds {
     /**
      * A walk, as the numbers it is made of: what it starts from, what the accumulator is called while
      * the step runs, what the step answers, and what holds of everything else the step is handed.
-     *
-     * <p>Forms and atoms, read where the walk was named. Nothing here is a tree to be read again, and
-     * nothing here holds an environment: what could be read of the walk was read then, and a walk
-     * whose parts could not be read that way is not one of these at all.
      */
     record Walk(LinearForm<FactSubject> seed, FactSubject accumulator,
                 LinearForm<FactSubject> step, StepInputFacts inputs) {}
@@ -62,9 +49,6 @@ final class InductiveBounds {
         Bounds of(LinearForm<FactSubject> form, DerivedNumericFacts.ReadingDomain domain);
     }
 
-    /** The range with no ends, which every walk's answer is in and which proves nothing. */
-    static final Bounds ANYTHING = new Bounds(null, null);
-
     /**
      * What {@code walk} answers, as far as {@code base} settles it.
      *
@@ -75,59 +59,50 @@ final class InductiveBounds {
      */
     static Bounds provenOf(Walk walk, DerivedNumericFacts.ReadingDomain base, Terms terms,
                            Reading read) {
-        DerivedNumericFacts.ReadingDomain given = base.taking(walk.inputs());
-        if (given.isBottom()) {
-            return ANYTHING;   // a reading that holds nothing settles nothing about a walk under it
-        }
-        Bounds seed = read.of(walk.seed(), given);
-        // Every candidate proposed is one the seed lies in and every candidate proved was confirmed
-        // to be, so each of these holds every value the seed does and so does the meet of them —
-        // which is what lets the narrower of two be taken without asking whether it holds anything.
-        // Taking it is what keeps the answer from depending on the order they were proposed in: a
-        // generator lengthened later makes the answer sharper or leaves it alone.
-        Bounds proved = null;
-        for (Bounds candidate : InvariantCandidates.from(
-                seed, read.of(walk.step(), given), walk.inputs().at().values())) {
-            if (!inductive(walk, candidate, seed, given, terms, read)) {
-                continue;
-            }
-            proved = proved == null ? candidate : proved.meet(candidate);
-        }
-        return proved == null ? ANYTHING : proved;
+        return Induction.proves(base,
+                given -> new Read(walk, given.taking(walk.inputs()), terms, read));
     }
 
     /**
-     * Whether the answer cannot leave {@code candidate}: the seed is inside it, and a step given an
-     * accumulator inside it answers inside it.
+     * This check's walk read against one domain.
      *
-     * <p>The domain the step is read against is forked from the one the caller was given and is
-     * dropped here. Nothing derived under an assumed accumulator is true where the accumulator is
-     * not assumed, so letting it back would be this deriving from its own answers — which is what
+     * <p>The whole of what the proof is allowed to ask, so the facts a candidate is made from and
+     * the facts the step is checked against are the one domain this holds. A domain assumed for the
+     * accumulator makes another of these and never reaches back into this one: nothing derived under
+     * an assumed accumulator is true where the accumulator is not assumed, which is what
      * {@link DerivedNumericFacts} declines to be and for the same reason.
-     *
-     * <p>The step is read in that forked domain and not before it. A step whose answer is arithmetic
-     * the fragment cannot carry — {@code acc * x.value} — is one value the domain holds nothing
-     * about until what it was computed from is read, and what it was computed from is the
-     * accumulator this is assuming a range for. Read against the caller's domain instead, both
-     * factors are unknown and the product is unbounded whatever the candidate says, so a walk that
-     * multiplies could never be proved. This is one reading of the step for one candidate, not a
-     * round that feeds its own answer back.
      */
-    private static boolean inductive(Walk walk, Bounds candidate, Bounds seed,
-                                     DerivedNumericFacts.ReadingDomain given, Terms terms,
-                                     Reading read) {
-        if (!seed.liesWithin(candidate)) {
-            return false;
+    private record Read(Walk walk, DerivedNumericFacts.ReadingDomain domain, Terms terms,
+                        Reading read) implements Induction.Prepared {
+
+        @Override
+        public boolean isBottom() {
+            return domain.isBottom();
         }
-        Map<FactSubject, Granularity> spacing = terms.kindsOf(LinearForm.atom(walk.accumulator()));
-        DerivedNumericFacts.ReadingDomain assuming =
-                given.assuming(walk.accumulator(), candidate, spacing);
-        if (assuming.isBottom()) {
-            // The accumulator is an atom of its own, so a range for it cannot contradict a reading —
-            // unless the reading already held nothing, which was answered before this was reached.
-            throw new IllegalStateException("assuming a range for the accumulator left a reading that"
-                    + " holds nothing, so the accumulator was not a value of its own");
+
+        @Override
+        public Bounds seed() {
+            return read.of(walk.seed(), domain);
         }
-        return read.of(walk.step(), assuming).liesWithin(candidate);
+
+        @Override
+        public Bounds step() {
+            return read.of(walk.step(), domain);
+        }
+
+        @Override
+        public Collection<Bounds> whatTheStepIsHanded() {
+            return walk.inputs().at().values();
+        }
+
+        @Override
+        public Induction.Prepared assuming(Bounds candidate) {
+            // The accumulator's own spacing, since a range asserted about an atom whose spacing was
+            // never recorded is one the domain refuses.
+            Map<FactSubject, Granularity> spacing =
+                    terms.kindsOf(LinearForm.atom(walk.accumulator()));
+            return new Read(walk, domain.assuming(walk.accumulator(), candidate, spacing),
+                    terms, read);
+        }
     }
 }

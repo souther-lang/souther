@@ -49,6 +49,10 @@ final class ReadQuantities implements Quantities {
      *  number it is told a bound on. Held rather than asked for per question: the reading of an
      *  input is what a caller has, and where a position's values step is a fact about its type. */
     private final souther.compiler.check.Symbols symbols;
+    /** How far a declaration is read, which the reading of what a value guarantees is held to. The
+     *  reading of this input was made under it, so a question asked of the declarations afterwards
+     *  is answered under the same one or it is a second reading of them. */
+    private final souther.compiler.check.ReadingPolicy policy;
     /** What the behavior takes, which is what a path of this input starts at. */
     private final Set<TermPath> roots;
     /** Every position that was read, by where it sits. What one of them was read to hold is what
@@ -128,7 +132,9 @@ final class ReadQuantities implements Quantities {
                            Map<TermPath, Position> byPath, List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
-                           souther.compiler.check.Symbols symbols, List<Assumed> assumed) {
+                           souther.compiler.check.Symbols symbols,
+                           souther.compiler.check.ReadingPolicy policy, List<Assumed> assumed) {
+        this.policy = policy;
         this.cases = List.copyOf(cases);
         this.symbols = symbols;
         this.typeAt = typeAt;
@@ -150,8 +156,9 @@ final class ReadQuantities implements Quantities {
     static ReadQuantities of(Map<TermPath, OpenedRules> byRoot, Set<TermPath> roots,
                              Map<TermPath, Position> byPath, List<CasesRead> cases,
                              java.util.function.Function<TermPath, Type> typeAt,
-                             souther.compiler.check.Symbols symbols) {
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), symbols,
+                             souther.compiler.check.Symbols symbols,
+                             souther.compiler.check.ReadingPolicy policy) {
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), symbols, policy,
                 List.of());
     }
 
@@ -323,7 +330,7 @@ final class ReadQuantities implements Quantities {
         }
         List<Assumed> both = new ArrayList<>(assumed);
         both.add(taking);
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, symbols, both);
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, symbols, policy, both);
     }
 
     /**
@@ -803,7 +810,7 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, symbols, assumed);
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, symbols, policy, assumed);
     }
 
     /**
@@ -1101,12 +1108,18 @@ final class ReadQuantities implements Quantities {
     /**
      * Where one term runs, as bounds rather than as something to add up.
      *
-     * <p>Beside {@link #atOneTerm} and about the same three things. What it does not do is turn them
-     * into numbers: a position ordered by its own values has ends that are values — a string stops
-     * at {@code "A"} — and the arithmetic that adds terms together has no word for one.
+     * <p>Three things and they are not one thing. A value the caller fixed it at is where it stands
+     * whether or not any clause ever named that coordinate; where the values it is answered from
+     * leave it is where its values stop, on whatever order it is measured ({@link
+     * #whereItsValuesAre}); and what the term guarantees of itself is true of every term of its
+     * kind, which is how a count is never negative without a clause saying so.
+     *
+     * <p>What this does not do is turn them into numbers: a position ordered by its own values has
+     * ends that are values — a string stops at {@code "A"} — and the arithmetic that adds terms
+     * together has no word for one.
      */
     private NumericDomain.Bounds whereOneTermRuns(NumericTerm term) {
-        NumericDomain.Bounds runs = meeting(ownOf(term), term.intrinsicBounds());
+        NumericDomain.Bounds runs = meeting(whereItsValuesAre(term), term.intrinsicBounds());
         Fixed fixedAt = fixed.get(term);
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a
@@ -1138,25 +1151,31 @@ final class ReadQuantities implements Quantities {
      * with the position's, a body measuring the length of a string would be told where the string
      * stops.
      */
-    private NumericDomain.Bounds ownOf(NumericTerm term) {
-        Position at = byPath.get(term.subjectPath());
+    private NumericDomain.Bounds ownOf(NumericTerm.FromOnePosition term) {
+        Position at = byPath.get(term.position());
         return at != null && term.equals(at.term()) ? at.numericDomain() : null;
     }
 
     /**
-     * Where one term runs, from everything about that term and nothing about what it stands beside.
+     * Where the values this term is answered from leave it, or null where nothing here bounds them.
      *
-     * <p>Three things and they are not one thing. A value the caller fixed it at is where it stands
-     * whether or not any clause ever named that coordinate; what its own position was read to hold
-     * is where its values stop, on whatever order it is measured — a text position has a floor and
-     * no number for the arithmetic to relate; and what the term guarantees of itself is true of
-     * every term of its kind, which is how a count is never negative without a clause saying so.
-     *
-     * <p>The position's answer only where the position is measured at this term. Which number a
-     * position is measured at is settled by the reading that made it, and a count taken of a
-     * position the reading measured by its own value is a different quantity — answered with the
-     * position's, a body measuring the length of a string would be told where the string stops.
+     * <p>Exhaustive over the terms there are, with no {@code default}. Where a number's values come
+     * from is what says who bounds them, and the two answers are not one reader's: a number one
+     * position answers is bounded by what that position was read to hold, and a number taken over a
+     * run has no position and is bounded by what the values it walks guarantee. A kind of term added
+     * stops here until somebody says which — answered by falling through instead, it would come back
+     * unbounded, and a border on it would be owed a row at a value the model admits nothing at.
      */
+    private NumericDomain.Bounds whereItsValuesAre(NumericTerm term) {
+        return switch (term) {
+            case NumericTerm.FromOnePosition one -> ownOf(one);
+            case NumericTerm.TakenOver over ->
+                    RunReach.of(over, ordersOf(over), typeAt, symbols, policy);
+        };
+    }
+
+    /** An end as a number the arithmetic can cut at, or null where it stops at a value there is no
+     *  number for — a text position has a floor and nothing for the arithmetic to relate. */
     private static RationalCut asCut(Endpoint end) {
         return end == null || !(end.at() instanceof Count at) ? null
                 : new RationalCut(Rational.of(at.at()), end.inclusive());

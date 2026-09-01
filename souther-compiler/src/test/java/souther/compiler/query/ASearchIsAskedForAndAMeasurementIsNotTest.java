@@ -12,7 +12,6 @@ import java.util.TreeSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -121,12 +120,13 @@ class ASearchIsAskedForAndAMeasurementIsNotTest {
                 assertEquals(owed.coverage(), now.coverage(), "what the rows came to");
                 assertEquals(owed.projection(), now.projection(),
                         "what reading the rules established on its own");
-                assertNull(owed.attempt(), "nothing was searched for while measuring");
+                assertFalse(owed.searches().ran(), "nothing was searched for while measuring");
                 if (owed.worthSearching()) {
-                    assertNotNull(now.attempt(), "and a point worth searching was searched");
+                    assertTrue(now.searches().ran(), "and a point worth searching was searched");
                     anySearched = true;
                 } else {
-                    assertNull(now.attempt(), "a point not worth searching was left alone");
+                    assertFalse(now.searches().ran(),
+                            "a point not worth searching was left alone");
                 }
                 // Nothing a search does is evidence against a point, so the grounds can only be
                 // added to. A superset and not a rank: the grounds are not alternatives, so there is
