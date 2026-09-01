@@ -17,7 +17,11 @@ import souther.compiler.query.ArmExclusion;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.types.CoverageConstruct;
@@ -450,10 +454,13 @@ class EverySchemaWordIsAccountedForTest {
         return List.of(
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
-                new ObligationDisposition.Undecided(
-                        Set.of(ObligationDisposition.Uncertainty.COVERAGE)),
-                new ObligationDisposition.Undecided(
-                        Set.of(ObligationDisposition.Uncertainty.WRITABILITY)),
+                new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere(
+                                new ReadingReasons(List.of(ReadingGap.NO_VALUE))))),
+                new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
+                                WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
+                                        Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
                 new ObligationDisposition.NotCounted(
                         Set.of(ObligationDisposition.Reason.NOTHING_WAS_READ)));
     }
