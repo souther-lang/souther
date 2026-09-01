@@ -4,7 +4,6 @@ import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.types.Type;
 
 import java.util.List;
 
@@ -34,19 +33,17 @@ import java.util.List;
  * beside the report rather than taken out of the count — a claim the rules bear out has already
  * left, because the reading these classes come from is what took it out.
  *
+ * <p>Where the number is measured, and nothing about what stands there. What a value at the
+ * position looks like and what order its number is counted on are two questions the reading of the
+ * input answers, and every reader of a measure can reach that reading. Held here as well, the two
+ * would be answers a reader could take from either place, and the day they part is the day a row is
+ * composed at a place one of them says nothing is written.
+ *
  * @param term    the number this axis is of: a location's own content, or something taken of it.
  *                Answered by one input position and held as such, because that is what an axis is:
  *                a run of classes over the values of a number a row can be asked for somewhere. A
  *                number read from a run of a sequence has no such place, so it draws a line without
  *                dividing anything and never arrives here
- * @param type    what stands at the position the number is read from, which is what a value read
- *                here is of. Not the term's: a string is measured at how long it is, and what
- *                stands at the location is still a string. The one thing about the location a
- *                measure needs, and nothing else about it is here — where the walk stopped, what
- *                the reading left standing and what the location is if nothing answers are true of
- *                it once however many numbers measure it, and a measure that answered them would
- *                let any reader ask a location's question through whichever number it happens to
- *                hold ({@link PositionMeasurements})
  * @param classes exclusive and exhaustive over the term's values, or empty where the model does
  *                not divide them
  * @param cuts    the values the classes meet at, each carrying every rule that drew it there
@@ -57,7 +54,7 @@ import java.util.List;
  *                away from its line is a run of what these leave together, and the cuts alone are
  *                short of the lines that have no value
  */
-public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
+public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                    List<PartitionClass> classes,
                    List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
 
@@ -65,9 +62,6 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
-        if (type == null) {
-            throw new IllegalArgumentException("an axis of a value of nothing");
-        }
         // A measure is what the rules divided a number into, cut on it, or parted it at, and one
         // with none of the three measured nothing. Such a one used to stand for a position still to
         // be answered for — which is a fact about the location and is held there
@@ -128,9 +122,9 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
         }
     }
 
-    public Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
+    public Axis(AxisId id, NumericTerm.FromOnePosition term,
                 List<PartitionClass> classes, List<Cut> cuts) {
-        this(id, term, type, classes, cuts, List.of(), NarrowedBounds.NOTHING);
+        this(id, term, classes, cuts, List.of(), NarrowedBounds.NOTHING);
     }
 
     /**
@@ -141,10 +135,10 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term, Type type,
      * the constructor a second answer to refuse — so this is the way in, and passing a name is for
      * a reader rebuilding a measure it already has.
      */
-    public static Axis of(String behavior, NumericTerm.FromOnePosition term, Type type,
+    public static Axis of(String behavior, NumericTerm.FromOnePosition term,
                           List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted,
                           NarrowedBounds narrowed) {
-        return new Axis(AxisId.of(behavior, term), term, type, classes, cuts, parted, narrowed);
+        return new Axis(AxisId.of(behavior, term), term, classes, cuts, parted, narrowed);
     }
 
 

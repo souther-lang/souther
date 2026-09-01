@@ -9,7 +9,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.Type;
 
 import java.util.List;
 
@@ -81,8 +80,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
         NumericTerm.ValueOf term = new NumericTerm.ValueOf(at);
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new Axis(AxisId.of("gate", term), term, Type.STRING,
-                        List.of(), List.of()));
+                () -> new Axis(AxisId.of("gate", term), term, List.of(), List.of()));
 
         assertTrue(refused.getMessage().contains("measures a number of no")
                         || refused.getMessage().contains("at nothing"),
@@ -132,7 +130,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
         PositionMeasurements n = at("slot.n");
         Axis reading = n.axes().get(0);
         Carrier whole = new Carrier.Whole();
-        Axis partsOnly = new Axis(reading.id(), reading.term(), reading.type(), List.of(),
+        Axis partsOnly = new Axis(reading.id(), reading.term(), List.of(),
                 List.of(),
                 List.of(Parting.by(
                         Seam.of(LevelSpace.onACarrier(whole),
@@ -163,28 +161,14 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
     void aMeasureOfAnotherLocationIsNotHeldUnderThisOne() {
         PositionMeasurements n = at("slot.n");
         Axis ofAnother = at("slot.m").axes().get(0);
-        assertEquals(n.position().type(), ofAnother.type(), "the two hold the same type");
+        assertEquals(n.position().type(), at("slot.m").position().type(),
+                "the two locations hold the same type, so what refuses this is the path");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new PositionMeasurements(n.position(), List.of(ofAnother), READ_TO_THE_END));
 
         assertTrue(refused.getMessage().contains("slot.m")
                 && refused.getMessage().contains("slot.n"), refused.getMessage());
-    }
-
-    /** Nor a measure that reads a value of another type, whatever it is called. */
-    @Test
-    void aMeasureThatReadsAnotherTypeIsNotHeldHere() {
-        PositionMeasurements n = at("slot.n");
-        Axis reading = n.axes().get(0);
-        Axis ofAString = new Axis(reading.id(), reading.term(), Type.STRING,
-                List.of(), reading.cuts());
-
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new PositionMeasurements(n.position(), List.of(ofAString), READ_TO_THE_END));
-
-        assertTrue(refused.getMessage().contains(Type.STRING.toString())
-                && refused.getMessage().contains(Type.INT.toString()), refused.getMessage());
     }
 
     /**
@@ -201,7 +185,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new Axis(AxisId.of("gate", at("slot.m").axes().get(0).term()),
-                        reading.term(), reading.type(), reading.classes(), reading.cuts()));
+                        reading.term(), reading.classes(), reading.cuts()));
 
         assertTrue(refused.getMessage().contains("slot.m")
                 && refused.getMessage().contains("slot.n"), refused.getMessage());
@@ -237,7 +221,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
         PositionMeasurements n = at("slot.n");
         Axis reading = n.axes().get(0);
         Axis elsewhere = new Axis(AxisId.of("other", reading.term()), reading.term(),
-                reading.type(), reading.classes(), reading.cuts());
+                reading.classes(), reading.cuts());
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new PositionMeasurements(n.position(), List.of(elsewhere), READ_TO_THE_END));

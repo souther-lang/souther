@@ -196,8 +196,8 @@ class GeneratorTest {
                                                 List<PartitionClass> right) {
         NumericTerm.ValueOf atA = new NumericTerm.ValueOf(TermPath.of("a"));
         NumericTerm.ValueOf atB = new NumericTerm.ValueOf(TermPath.of("b"));
-        Axis a = new Axis(new AxisId("f", "a"), atA, Type.INT, classesOf(left, atA), List.of());
-        Axis b = new Axis(new AxisId("f", "b"), atB, Type.INT, classesOf(right, atB), List.of());
+        Axis a = new Axis(new AxisId("f", "a"), atA, classesOf(left, atA), List.of());
+        Axis b = new Axis(new AxisId("f", "b"), atB, classesOf(right, atB), List.of());
         // Axes written here rather than read off a model, so nothing counts a container of this
         // input. The reading is still the input's own: what a number at one of these positions is
         // measured on is what the declarations say, and the subject asks it for that.
@@ -403,7 +403,7 @@ class GeneratorTest {
     void onePositionHasNoPairsAndItsClassesStillOweRows() {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         NumericTerm.ValueOf atA = new NumericTerm.ValueOf(TermPath.of("a"));
-        Axis only = new Axis(new AxisId("f", "a"), atA, Type.INT,
+        Axis only = new Axis(new AxisId("f", "a"), atA,
                 classesOf(List.of(number("low", 1), number("high", 9)), atA), List.of());
         MeasuredInput subject = MeasuredInput.of("f", readingOf(symbols, "a"), List.of(only));
 

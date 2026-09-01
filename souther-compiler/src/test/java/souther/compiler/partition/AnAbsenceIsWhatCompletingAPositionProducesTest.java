@@ -53,7 +53,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     private static final BodyCutInspection READ_TO_THE_END = new BodyCutInspection.Exhausted();
 
     private static PositionMeasurements measured() {
-        return at(new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
+        return at(new Axis(ID, new NumericTerm.ValueOf(AT),
                 List.of(PartitionClass.of("true", "true", new Recognition.Nothing(),
                                 RepresentativeSource.of(FixtureTemplate.bool(true)))
                         .ofTheNumber(new NumericTerm.ValueOf(AT))),

@@ -85,8 +85,8 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
             }
             """;
 
-    /** A model's one measure, with the symbols its carrier is read against. */
-    private record Measured(Axis axis, Symbols symbols) {
+    /** A model's one measure, with the orders the reading of its input came to for that number. */
+    private record Measured(Axis axis, souther.compiler.inputs.TermOrders orders) {
 
         Cut line() {
             assertEquals(1, axis.cuts().size(), "the model draws the one line");
@@ -94,7 +94,7 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
         }
 
         Carrier carrier() {
-            return axis.term().answeredOn(axis.type(), symbols);
+            return orders.answered();
         }
 
         List<PartitionClass> holding(Cut line) {
@@ -115,7 +115,11 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
                 .findFirst().orElse(null);
         assertNotNull(axis, "the model is measured at " + id + ", among "
                 + read.axes().stream().map(each -> each.id().toString()).toList());
-        return new Measured(axis, Scopes.derived(compilation.db(), module).value());
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        souther.compiler.inputs.InputDomain domain = compilation.db()
+                .ask(new Adequacy.Inputs(module)).value().get("gate");
+        assertNotNull(domain, "the input of the behavior under test was read");
+        return new Measured(axis, domain.quantities(symbols).ordersOf(axis.term()));
     }
 
     /** The line the rules drew on a number taken of a location falls in one of that number's runs. */
@@ -143,7 +147,7 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
         Measured minute = measured(TAKEN, "gate/Time.minute(slot.at)");
         Cut line = minute.line();
 
-        assertNotEquals(minute.carrier(), minute.axis().type(),
+        assertNotEquals(minute.orders().answered(), minute.orders().observed(),
                 "the number is counted on an order of its own");
         assertTrue(minute.axis().classes().stream().allMatch(each ->
                         !(each.classifier().membershipOf(minute.carrier().valueOf(line.at()))

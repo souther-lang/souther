@@ -568,7 +568,7 @@ public final class Partitions {
         if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
             return cameTo(term, at.position().path(), rules);
         }
-        out.add(Axis.of(behavior, term, type, classes, cuts, parted, narrowed));
+        out.add(Axis.of(behavior, term, classes, cuts, parted, narrowed));
         return drew != null ? drew : cameTo(term, at.position().path(), rules);
     }
 
@@ -1082,7 +1082,7 @@ public final class Partitions {
                 // (issue #1084).
                 PositionAccount at = PositionAccount.of(behavior, position, null, null);
                 drawn.add(new Drawn(at,
-                        List.of(Axis.of(behavior, term, at.type(), divided.classes(),
+                        List.of(Axis.of(behavior, term, divided.classes(),
                                 divided.cuts().cuts(), List.of(), position.narrowedEnds()))));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.

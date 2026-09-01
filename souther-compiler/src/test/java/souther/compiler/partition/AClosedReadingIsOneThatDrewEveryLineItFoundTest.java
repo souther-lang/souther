@@ -156,7 +156,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
     }
 
     private static Axis anAxis() {
-        return new Axis(AT, new NumericTerm.ValueOf(TermPath.of("h").then("a")), Type.INT,
+        return new Axis(AT, new NumericTerm.ValueOf(TermPath.of("h").then("a")),
                 List.of(), List.of(Cut.at(Carrier.WHOLE, Count.of(5), bound("cap"))));
     }
 
