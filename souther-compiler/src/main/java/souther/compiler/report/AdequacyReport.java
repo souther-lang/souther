@@ -1876,17 +1876,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** What the search for a value at an edge came to, where it ran and found none. */
     private static String whatWasTried(ItemAssessment.Attempt attempt, SourceNameResolver names,
                                        SourceId declaredIn) {
-        if (!(attempt instanceof ItemAssessment.Attempt.Unresolved left)) {
+        // One opening per outcome, and not one for everything that came back without a row. A
+        // search this compiler stopped and a search that had everything and reached nothing are
+        // different news, and a proof is not a failure at all — read under one opening, an author
+        // is sent looking for a row nothing can write, or told nothing was composed for a point
+        // where the composing never started.
+        if (attempt == null) {
             return "";   // nothing ran, and what a run would have said is not this line's to guess
         }
-        // A proof is not a failure, and the sentence in front of the reason may not say it is.
-        // Every other word here is this compiler saying what it did not manage; one of them is the
-        // model settling the point, and reading them under one opening sends an author looking for
-        // a row nothing can write. Asked of the reason, which is where that decision is written.
-        String opening = left.why().reason().provesInfeasible()
-                ? " — " : " — nothing composed one: ";
-        return opening + left.why().said().orElseGet(() -> whyUnresolved(left.why()))
-                + whatTheRegionLeftOut(left.unaccountedFor(), names, declaredIn);
+        return switch (attempt) {
+            case ItemAssessment.Attempt.Certified _, ItemAssessment.Attempt.Unverified _,
+                 ItemAssessment.Attempt.Unavailable _ -> "";
+            case ItemAssessment.Attempt.Stopped it ->
+                    " — this compiler stopped at " + said(it.stoppedBy().budgets()) + ": "
+                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+            case ItemAssessment.Attempt.Unresolved it ->
+                    (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
+                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+        };
     }
 
     /**

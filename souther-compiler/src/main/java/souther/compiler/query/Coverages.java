@@ -597,29 +597,6 @@ final class Coverages {
     }
 
     /**
-     * The readings of one behavior's lines, one entry per line.
-     *
-     * <p>What each reading saw, kept whole: a point one reading found a row at is found, and no
-     * other reading of the line takes that back.
-     *
-     * <p><b>After everything that is a reading's own.</b> Which conditions a row has to satisfy to
-     * reach the comparison is one of those, so a search is made per reading and merged here rather
-     * than made once against whichever reading this kept. Merged first, the region a row is composed
-     * in is one reading's, chosen by the order a walk took.
-     *
-     * <p><b>And never across two debts.</b> A line holds the authored line and where it was read;
-     * a debt holds the authored line and the value it is at — so two readings under one line are one
-     * debt by construction, and a pair that is not says the two identities have come apart.
-     */
-    static List<BorderAssessment> merged(LineReadings readings) {
-        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        for (BorderAssessment each : readings.each()) {
-            out.merge(BoundaryLine.of(each.border()), each, Coverages::whicheverSawMore);
-        }
-        return List.copyOf(out.values());
-    }
-
-    /**
      * The same lines, with what building a value at each point that is worth one came to.
      *
      * <p>Takes what was measured rather than measuring again. A search is evidence added to an
@@ -785,6 +762,29 @@ final class Coverages {
     }
 
     /**
+     * The readings of one behavior's lines, one entry per line.
+     *
+     * <p>What each reading saw, kept whole: a point one reading found a row at is found, and no
+     * other reading of the line takes that back.
+     *
+     * <p><b>After everything that is a reading's own.</b> Which conditions a row has to satisfy to
+     * reach the comparison is one of those, so a search is made per reading and merged here rather
+     * than made once against whichever reading this kept. Merged first, the region a row is composed
+     * in is one reading's, chosen by the order a walk took.
+     *
+     * <p><b>And never across two debts.</b> A line holds the authored line and where it was read;
+     * a debt holds the authored line and the value it is at — so two readings under one line are one
+     * debt by construction, and a pair that is not says the two identities have come apart.
+     */
+    static List<BorderAssessment> merged(LineReadings readings) {
+        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
+        for (BorderAssessment each : readings.each()) {
+            out.merge(BoundaryLine.of(each.border()), each, Coverages::whicheverSawMore);
+        }
+        return List.copyOf(out.values());
+    }
+
+    /**
      * How a row is looked for at one border, on whatever it was drawn on.
      *
      * <p>Beside {@link #reading} rather than inside it. Both are about one border and neither is the
@@ -911,21 +911,21 @@ final class Coverages {
     /**
      * How much the search of this reading's own region came back with.
      *
-     * <p>A row read back where it was built for outranks one nothing could place, which outranks
-     * none at all. The first is grounds that a row can be written at the point and the second is
-     * not, so a reading holding the second cannot be the one that is kept where another holds the
-     * first — the grounds are read off whichever reading this keeps, and taking them from the
-     * reading that happened to come first would lose them to the order two call sites of one helper
-     * were walked in.
+     * <p>A row read back where it was built for outranks one nothing could place, which outranks a
+     * search a budget of this compiler's stopped, which outranks none at all. The first is grounds
+     * that a row can be written at the point; the third is not grounds and is still the point's
+     * question left open for a reason somebody could act on, and a reading holding it cannot be
+     * dropped for one that holds nothing.
      */
     private static int composed(ItemAssessment item) {
-        if (!(item instanceof ItemAssessment.Owed owed)) {
+        if (!(item instanceof ItemAssessment.Owed owed) || owed.attempt() == null) {
             return 0;
         }
         return switch (owed.attempt()) {
-            case ItemAssessment.Attempt.Certified _ -> 2;
-            case ItemAssessment.Attempt.Unverified _ -> 1;
-            case null, default -> 0;
+            case ItemAssessment.Attempt.Certified _ -> 3;
+            case ItemAssessment.Attempt.Unverified _ -> 2;
+            case ItemAssessment.Attempt.Stopped _ -> 1;
+            case ItemAssessment.Attempt.Unresolved _, ItemAssessment.Attempt.Unavailable _ -> 0;
         };
     }
 
