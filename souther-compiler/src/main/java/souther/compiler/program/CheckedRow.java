@@ -6,9 +6,11 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowStatement;
+import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.observe.Verdict;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -137,14 +139,20 @@ public final class CheckedRow {
         private final Asking asking;
         private final List<StandsIn> standIns;
 
-        WithStandIns(RowStatement.Stated stated, ValueTypes types, Position answers,
-                     List<StandsIn> standIns) {
+        WithStandIns(RowStatement.Stated stated, ValueTypes types, Position answers) {
             this.asking = new Asking(stated, types, answers);
-            this.standIns = List.copyOf(standIns);
-            if (this.standIns.isEmpty()) {
+            if (stated.standIns().isEmpty()) {
                 throw new IllegalArgumentException("a row with nothing stood in for is one an"
                         + " output can run on its own");
             }
+            // Made here rather than handed in. What the row states of its stand-ins and what a
+            // reader asks them are one fact, and taking the second as an argument would let a row
+            // answer one thing about a dependency through `states` and another through `standsIn`.
+            List<StandsIn> standIns = new ArrayList<>();
+            for (StoodIn stoodIn : stated.standIns()) {
+                standIns.add(new StandsIn(stoodIn, types));
+            }
+            this.standIns = List.copyOf(standIns);
         }
 
         /** The values it hands over and what it states of the answer. */

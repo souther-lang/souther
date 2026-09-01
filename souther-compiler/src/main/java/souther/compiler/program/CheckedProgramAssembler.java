@@ -19,7 +19,6 @@ import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
-import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
@@ -83,18 +82,9 @@ final class CheckedProgramAssembler {
         }
         ValueTypes types =
                 ValueTypes.over(FieldTypes.over(DeclaredFields.over(everyDeclaration)));
-        // What every behavior of this program declares, before any row is written down. A row states
-        // what stood in for the behaviors its own depends on, and where each of a dependency's
-        // arguments stands is what that dependency declares — which is not always something the
-        // module the row is written in declares.
-        Map<ValueName.Behavior, CheckedSignature> declared = new LinkedHashMap<>();
-        for (ModuleReading module : read) {
-            module.signatures().forEach((name, signature) -> declared.put(
-                    new ValueName.Behavior(module.name(), name), signatureOf(signature)));
-        }
         List<CheckedModule> modules = new ArrayList<>();
         for (ModuleReading module : read) {
-            modules.add(moduleOf(module, types, declared));
+            modules.add(moduleOf(module, types));
         }
         return new CheckedProgram(modules, language, onThePath,
                 libraryOf(db).kernelSignatures());
@@ -272,8 +262,7 @@ final class CheckedProgramAssembler {
      * program's rather than this module's: a row written here may state a value of a data declared
      * elsewhere.
      */
-    private static CheckedModule moduleOf(ModuleReading read, ValueTypes types,
-                                          Map<ValueName.Behavior, CheckedSignature> signatures) {
+    private static CheckedModule moduleOf(ModuleReading read, ValueTypes types) {
         List<CheckedBehavior> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef declared : read.bodies().behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(read.name(), declared.name());
@@ -282,8 +271,8 @@ final class CheckedProgramAssembler {
                     implementationOf(named, declared, read.bodies(), read.implementations(),
                             read.checked(), read.compositions()),
                     EnsuresEnforcement.in(read.checks(), read.name(), named),
-                    rowsOf(read.rows().getOrDefault(declared.name(), List.of()), types, signature,
-                            signatures)));
+                    rowsOf(read.rows().getOrDefault(declared.name(), List.of()), types,
+                            signature)));
         }
         return new CheckedModule(read.name(), behaviors,
                 helpersOf(read.name(), read.bodies(), read.checked()), read.data());
@@ -299,12 +288,11 @@ final class CheckedProgramAssembler {
      * from.
      */
     private static List<CheckedRow> rowsOf(List<Output.RowsRead.ReadRow> read, ValueTypes types,
-                                           CheckedSignature signature,
-                                           Map<ValueName.Behavior, CheckedSignature> signatures) {
+                                           CheckedSignature signature) {
         List<CheckedRow> rows = new ArrayList<>();
         for (Output.RowsRead.ReadRow row : read) {
             rows.add(new CheckedRow(row.identity(), row.at(),
-                    statementOf(row, types, signature, signatures)));
+                    statementOf(row, types, signature)));
         }
         return rows;
     }
@@ -322,9 +310,7 @@ final class CheckedProgramAssembler {
      * into whichever arm it happens to reach.
      */
     private static CheckedRow.Statement statementOf(Output.RowsRead.ReadRow row, ValueTypes types,
-                                                    CheckedSignature signature,
-                                                    Map<ValueName.Behavior,
-                                                            CheckedSignature> signatures) {
+                                                    CheckedSignature signature) {
         // A switch over both sums, so a row nothing came back for is written down here rather than
         // being whatever falls out of reading a list of the ones that did — which is a row an output
         // would never hear of, and a behavior reading as having said nothing about an input someone
@@ -335,8 +321,7 @@ final class CheckedProgramAssembler {
                         ? new CheckedRow.SelfContained(stated, types,
                                 Position.at(signature.answers()))
                         : new CheckedRow.WithStandIns(stated, types,
-                                Position.at(signature.answers()),
-                                standingIn(stated, types, signatures));
+                                Position.at(signature.answers()));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
                 // What acceptance guarantees, asserted where the guarantee is relied on. A row an
                 // evaluation stopped before the values of is one the language refuses the program
@@ -351,36 +336,6 @@ final class CheckedProgramAssembler {
             case Output.RowsRead.ReadRow.NotRun notRun ->
                     new CheckedRow.NotReproducible(new RowStatement.NotRead(notRun.why()));
         };
-    }
-
-    /**
-     * What answers each of the behavior's dependencies, as a reader may ask it.
-     *
-     * <p>Each is given where the dependency's own arguments stand, which is what says whether an
-     * argument that is a sequence is answered for in order. Read off what that behavior declares
-     * here — the same reading the program publishes for it — so a stand-in and the behavior it
-     * stands in for cannot come to disagree about what the dependency takes.
-     */
-    private static List<StandsIn> standingIn(RowStatement.Stated stated, ValueTypes types,
-                                             Map<ValueName.Behavior, CheckedSignature> signatures) {
-        List<StandsIn> standIns = new ArrayList<>();
-        for (StoodIn stoodIn : stated.standIns()) {
-            CheckedSignature declared = signatures.get(stoodIn.dependency());
-            if (declared == null) {
-                // The row states what stood in for this behavior, so this compile read the clause
-                // that required it and the signature it was built against. Handing the row over
-                // without one would hand an output a stand-in it cannot ask anything of.
-                throw new IllegalStateException("`" + stoodIn.dependency().module() + "."
-                        + stoodIn.dependency().name() + "` was stood in for and this program says"
-                        + " nothing about what it takes");
-            }
-            List<Position> arguments = new ArrayList<>();
-            for (Type takes : declared.takes()) {
-                arguments.add(Position.at(takes));
-            }
-            standIns.add(new StandsIn(stoodIn, types, arguments));
-        }
-        return standIns;
     }
 
     /**

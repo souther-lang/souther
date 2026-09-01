@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -54,6 +55,9 @@ class WhatARowStatesDoesNotDependOnWhatAppliedTheBehaviorTest {
             }
             takes.add(method.getName() + parameters);
         }
+        // Sorted, because what order the methods come back in is not answered for: a second one
+        // added here would make the list depend on the run rather than on what was declared.
+        takes.sort(Comparator.naturalOrder());
 
         assertEquals(List.of("read[List, List, Expectation]"), takes,
                 "what a row states is made of what was read of the row");

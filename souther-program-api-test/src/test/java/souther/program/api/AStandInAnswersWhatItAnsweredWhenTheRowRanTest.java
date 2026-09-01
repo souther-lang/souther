@@ -104,6 +104,33 @@ class AStandInAnswersWhatItAnsweredWhenTheRowRanTest {
     }
 
     /**
+     * What a stand-in states the dependency takes is what this program says it takes.
+     *
+     * <p>A stand-in carries it because that is what its entries were built and compared against, and
+     * because a dependency another compile declared has nothing here to be asked. Where this program
+     * does declare it, the two are the same declaration — and a stand-in comparing arguments at a
+     * type the behavior does not take would be answering for a call nothing can make.
+     */
+    @Test
+    void whatAStandInStatesADependencyTakesIsWhatTheProgramDeclares() {
+        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
+
+        List<String> checked = new ArrayList<>();
+        for (CheckedRow row : rowsOf(program)) {
+            for (StandsIn standsIn : assertInstanceOf(CheckedRow.WithStandIns.class,
+                    row.statement()).standsIn()) {
+                CheckedBehavior dependency = program.module("demo").behavior(standsIn.dependency());
+                assertEquals(dependency.signature().takes(), standsIn.stated().takes(),
+                        () -> "what " + standsIn.dependency() + " takes");
+                checked.add(standsIn.dependency().name());
+            }
+        }
+
+        assertEquals(List.of("rateFor", "rateFor", "rateFor", "labelFor"), checked,
+                "every dependency stood in for by a row of this program");
+    }
+
+    /**
      * A table asked something it does not list, and does not answer for, states no answer.
      *
      * <p>The table's own rule and not the reader's. A stand-in that answered anything here would

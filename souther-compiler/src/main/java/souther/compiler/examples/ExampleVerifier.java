@@ -1984,9 +1984,9 @@ public final class ExampleVerifier {
                     // to ask of either.
                     yield new StoodInFor.Read(
                             new DependencyStandin(dependency, depSig.ins().size(), _ -> value),
-                            RowStatements.StandInRead.of(dependency, w.pos(), List.of(),
-                                    new StoodIn.Otherwise.Answer(fixtures.observed(value),
-                                            w.value().pos())));
+                            RowStatements.StandInRead.of(dependency, w.pos(), takes(depSig),
+                                    List.of(), new StoodIn.Otherwise.Answer(
+                                            fixtures.observed(value), w.value().pos())));
                 } catch (FixtureException fe) {
                     // The row does supply a fake. What failed is building its value, which is a
                     // different problem from a dependency nothing stands in for.
@@ -2005,6 +2005,23 @@ public final class ExampleVerifier {
                                 + "` table"));
             }
         };
+    }
+
+    /**
+     * What the dependency declares it takes, as the row states it.
+     *
+     * <p>Off the signature the stand-in's values were built and compared against, which is the one
+     * the table's rows were held to. What a reader of the row compares an argument at has to be
+     * that one: read again from wherever a reader can reach the declaration, it would be a second
+     * reading of the same declaration and would answer for a dependency this program does not
+     * publish at all.
+     */
+    private static List<Type> takes(Sig signature) {
+        List<Type> takes = new ArrayList<>();
+        for (BoundaryInput input : signature.ins()) {
+            takes.add(input.type());
+        }
+        return takes;
     }
 
     /** A dependency nothing was read for, and what a run that needed it is told. */
@@ -2099,7 +2116,8 @@ public final class ExampleVerifier {
                 : new StoodIn.Otherwise.Answer(fixtures.observed(fallback.answer().value()),
                         fallback.row().pos());
         return new StoodInFor.Read(new DependencyStandin(dependency, arity, body),
-                RowStatements.StandInRead.of(dependency, fk.pos(), entries, otherwise));
+                RowStatements.StandInRead.of(dependency, fk.pos(), takes(depSig), entries,
+                        otherwise));
     }
 
     /**

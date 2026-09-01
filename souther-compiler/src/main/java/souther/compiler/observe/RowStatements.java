@@ -1,6 +1,7 @@
 package souther.compiler.observe;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -87,10 +88,12 @@ public final class RowStatements {
          * states what it is asked. The first that could not be carried is what comes back, so what
          * is said is what stopped the stand-in being handed over rather than everything about it.
          *
-         * @param at where what stands in is written, which is what the stand-in is quoted at; where
-         *           a value of it could not be carried, the place said is that value's own
+         * @param at    where what stands in is written, which is what the stand-in is quoted at;
+         *              where a value of it could not be carried, the place said is that value's own
+         * @param takes what the dependency declares it takes, read where this stand-in's values were
+         *              built and compared against
          */
-        static StandInRead of(ValueName.Behavior dependency, SourcePos at,
+        static StandInRead of(ValueName.Behavior dependency, SourcePos at, List<Type> takes,
                               List<StoodIn.Entry> entries, StoodIn.Otherwise otherwise) {
             if (dependency == null || at == null || otherwise == null) {
                 throw new IllegalArgumentException("a stand-in is one dependency's, written"
@@ -114,7 +117,7 @@ public final class RowStatements {
                     return unavailable(dependency, where, stopped);
                 }
             }
-            return new Available(StoodIn.of(dependency, at, entries, otherwise));
+            return new Available(StoodIn.of(dependency, at, takes, entries, otherwise));
         }
 
         private static StandInRead unavailable(ValueName.Behavior dependency, SourcePos at,
