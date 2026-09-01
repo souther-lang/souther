@@ -277,6 +277,56 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
     }
 
     /**
+     * And a value a limit stopped inside a stand-in leaves the row unavailable too.
+     *
+     * <p>A stand-in's values are values. A row crossing with a shortened one would have an output
+     * answer the dependency with something nobody wrote, which is the row running against a fake
+     * this program does not hold — so the row states nothing, and says which value and where it is
+     * written.
+     */
+    @Test
+    void andSoDoesAValueAStandInStatesThatWasNotKept() {
+        StringBuilder elements = new StringBuilder();
+        for (int i = 0; i < 65; i++) {
+            elements.append(i == 0 ? "" : ", ").append(i);
+        }
+        CheckedProgram program = CheckedProgram.of(List.of("""
+                module demo
+
+                data Count = Int
+
+                behavior everyTag : () -> List<Int>
+
+                behavior countOf : () -> Count
+                    depends on everyTag
+                    constructs Count
+
+                let countOf (everyTag) = Count(List.length(everyTag()))
+
+                fake everyTag
+                    | _ -> [ %s ]
+
+                example countOf
+                    | "a long list stood in" : () -> Count(65)
+                """.formatted(elements)));
+
+        CheckedRow row = behavior(program, "demo", "countOf").rows().get(0);
+        CheckedRow.NotReproducible states =
+                assertInstanceOf(CheckedRow.NotReproducible.class, row.statement());
+        RowStatement.StandInUnavailable why =
+                assertInstanceOf(RowStatement.StandInUnavailable.class, states.why());
+        assertEquals(new ValueName.Behavior("demo", "everyTag"), why.dependency());
+        assertEquals(new RowStatement.StandInUnavailable.Why.AValueOfIt(
+                        souther.compiler.observe.Incompleteness.Code.VALUE_TRUNCATED), why.why());
+        // The table's row and not the table: a table states a value on each of its rows and one
+        // more where it answers what it does not list, so naming the table would leave a reader to
+        // find which of them nothing could be made of. Line 13 is `fake everyTag` and line 17 is
+        // the example row; 14 is the value.
+        assertEquals(14, why.at().line(),
+                "quoted at the value that was not kept, which is where it is written");
+    }
+
+    /**
      * What a field holds is read from what declares it, all the way from the program.
      *
      * <p>A row writing {@code [ 1, 2 ]} says which elements and not which order they are in, and

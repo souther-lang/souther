@@ -154,7 +154,7 @@ public sealed interface RowStatement {
          * there is no value in it for anything to be said about. One reason covering both would
          * have a reader that wants to quote the value ask first whether there is one.
          */
-        sealed interface Why {
+        public sealed interface Why {
 
             /**
              * It states a value that could not be carried: larger than what is kept, or not one

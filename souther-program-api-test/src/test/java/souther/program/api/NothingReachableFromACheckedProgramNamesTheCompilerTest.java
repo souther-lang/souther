@@ -89,6 +89,13 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
                 () -> "nothing a row stated in " + reached);
         assertTrue(reached.contains("souther.compiler.observe.Mismatch"),
                 () -> "nowhere two values part in " + reached);
+        // And what stood in for what the behavior depends on, which is the rest of what makes a row
+        // runnable — reached through the arm for a row that needs one, so the walk goes down into
+        // what an output has to put behind its imports rather than stopping at the row.
+        assertTrue(reached.contains("souther.compiler.program.StandsIn"),
+                () -> "nothing standing in for a dependency in " + reached);
+        assertTrue(reached.contains("souther.compiler.observe.StoodIn$Entry"),
+                () -> "nothing a stand-in states in " + reached);
         assertTrue(reached.size() > 50, () -> "the walk reached only " + reached.size());
     }
 
