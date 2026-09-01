@@ -127,10 +127,12 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         // answer the disequality gets when it is written directly.
         ComparisonClaim said = positive ? claim : claim.denied();
         return switch (said) {
-            // A value singled out is a range with that one value in it where the rule holds there,
-            // and a set rather than a range where it does not.
-            case ComparisonClaim.Singled singled -> onlyTheValue(position, carrier,
-                    singled.holdsAtTheValue() ? written : null);
+            // The value the rule is met at, which is a range with one value in it. What a denial
+            // leaves is every other value, and that is a set rather than a range, so this says
+            // nothing about it.
+            case ComparisonClaim.Singled singled -> singled.holdsAtTheValue()
+                    ? onlyTheValue(position, carrier, written)
+                    : OrderedIntervals.top();
             case ComparisonClaim.Cut cut -> ends(position, carrier,
                     InvariantBound.at(cut, written, carrier));
         };

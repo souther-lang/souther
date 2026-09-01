@@ -37,7 +37,8 @@ class AnEndPastWhereAnOrderStopsIsNotAnEndNobodyReadTest {
      *  the operator rather than written out, so the reading is asked what the language says the
      *  comparison places. */
     private static ComparisonClaim.Cut ordering(BinOp op) {
-        return (ComparisonClaim.Cut) ComparisonPlacement.of(op);
+        return assertInstanceOf(ComparisonClaim.Cut.class, ComparisonPlacement.of(op),
+                () -> op + " orders the values either side of what it names");
     }
 
     /** The ordinary reading, which sharpens a strict end onto the count beside it. */

@@ -1384,9 +1384,11 @@ public final class InvariantChecker {
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
         }
-        // An ordering, or an equality naming one of the values. A disequality states neither end
-        // and an operator that compares nothing states no rule about the values at all, so what
-        // either of them says about where the values stop is nothing.
+        // A rule that orders the values, or one that says which value they take. A rule that only
+        // rules a value out is read no further here, and neither is an operator that compares
+        // nothing: what is below reads a clause for the end it places on a position and for which
+        // declarations narrowed that position, and neither of those is a thing a denial of one
+        // value states.
         ComparisonClaim asWritten = Comparison.of(bin).map(Comparison::claim).orElse(null);
         if (asWritten == null
                 || asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
@@ -1471,7 +1473,7 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            noLineDrawn(bin, said, from, part, at, byName, noLines, read);
+            noLineDrawn(bin, asWritten, from, part, at, byName, noLines, read);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.

@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * The algebra of what an operator places, which is what lets a reader stop holding the operator.
@@ -209,10 +210,12 @@ class WhatAnOperatorPlacesIsOneAnswerTest {
     }
 
     private static ComparisonClaim claim(BinOp op) {
-        return (ComparisonClaim) ComparisonPlacement.of(op);
+        return assertInstanceOf(ComparisonClaim.class, ComparisonPlacement.of(op),
+                () -> op + " compares its two sides, so it placed something");
     }
 
     private static ComparisonClaim.Cut cut(BinOp op) {
-        return (ComparisonClaim.Cut) ComparisonPlacement.of(op);
+        return assertInstanceOf(ComparisonClaim.Cut.class, ComparisonPlacement.of(op),
+                () -> op + " orders the values either side of what it names");
     }
 }
