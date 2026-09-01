@@ -26,11 +26,16 @@ import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.ReadingGap;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * What an obligation nobody can decide says about itself, and what it leaves to the readings.
@@ -165,6 +170,59 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
     }
 
     /**
+     * The order holds every reason a reading can meet, and nothing twice.
+     *
+     * <p>The one property a written sequence cannot say for itself, and so the only one here a
+     * check has to carry: a reason the order leaves out is one an obligation could be undecided
+     * for and no report anywhere would name. Repeats, pairs out of order and two reasons in one
+     * place are all impossible in a sequence and are not what this is about.
+     *
+     * <p>The population is read off the types rather than written beside them. A list written here
+     * would be a copy of the order, agreeing with it exactly when nothing has changed.
+     */
+    @Test
+    void theOrderHoldsEveryReasonAReadingCanMeet() {
+        Set<ReadingGap> everyReason = new LinkedHashSet<>();
+        for (Class<?> arm : ReadingGap.class.getPermittedSubclasses()) {
+            if (arm.equals(ReadingGap.Observation.class)) {
+                for (Incompleteness.Code code : Incompleteness.Code.values()) {
+                    everyReason.add(ReadingGap.of(code));
+                }
+            } else if (arm.equals(ReadingGap.NoValue.class)) {
+                everyReason.add(ReadingGap.NO_VALUE);
+            } else {
+                fail(arm.getSimpleName() + " is a reason a reading can meet, and this check does"
+                        + " not know what values it has: say them here and place them in the order");
+            }
+        }
+
+        assertEquals(new ArrayList<>(everyReason).size(), ReadingReasons.everyReason().size(),
+                "the order says every reason and says none of them twice");
+        assertTrue(ReadingReasons.everyReason().containsAll(everyReason),
+                () -> "and a reason the order leaves out is one nothing would report: "
+                        + everyReason.stream()
+                                .filter(each -> !ReadingReasons.everyReason().contains(each))
+                                .toList());
+    }
+
+    /**
+     * A value that was put in order by whoever built it is refused rather than mended.
+     *
+     * <p>What keeps the projection the one place a canonical value is made. A constructor that
+     * repaired what it was handed would pass every test above while the boundary moved to whoever
+     * called it, so the refusals are held here directly and not through the fold.
+     */
+    @Test
+    void aListNobodyPutInOrderIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingReasons(List.of(ReadingGap.of(A_LIMIT), ReadingGap.of(A_LIMIT))),
+                "a reason said twice is the thing this exists to stop");
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingReasons(List.of(ReadingGap.NO_VALUE, ReadingGap.of(A_LIMIT))),
+                "and an order of somebody's own is not the order a report says them in");
+    }
+
+    /**
      * A reason said where it happened is not said here.
      *
      * <p>A row nothing read at all leaves every line of the module short and is reported where the
@@ -180,6 +238,39 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
 
         assertEquals(List.of(), met.eachKindOnce(),
                 "a row that never ran bears on every line, and is said where the row stopped");
+    }
+
+    /**
+     * The open questions are held to the same order, and to holding every question there is.
+     *
+     * <p>The other place an order was written, and the same three refusals. Said of one of them
+     * and not the other, the rule would be half a rule and the next order written would be a
+     * number again.
+     */
+    @Test
+    void theOpenQuestionsAreHeldToTheirOwnOrder() {
+        assertEquals(Set.of(ObligationDisposition.Uncertainty.class.getPermittedSubclasses()),
+                Set.copyOf(ObligationDisposition.Undecided.everyQuestion()),
+                "the order says every question that can be open about an obligation");
+
+        ObligationDisposition.Uncertainty there =
+                new ObligationDisposition.Uncertainty.WhetherARowIsThere(
+                        new ReadingReasons(List.of(ReadingGap.NO_VALUE)));
+        ObligationDisposition.Uncertainty written =
+                new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(prevented());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new ObligationDisposition.Undecided(List.of(written, there)),
+                "the question an author can act on is said first");
+        assertThrows(IllegalArgumentException.class,
+                () -> new ObligationDisposition.Undecided(List.of(there, there)),
+                "and one question is one entry, whatever left it open");
+    }
+
+    /** A showing this compiler was stopped from making, for the second of the two questions. */
+    private static WritabilityKnowledge.Prevented prevented() {
+        return WritabilityKnowledge.Prevented.by(
+                new EstablishmentGap.Observation(Set.of(A_LIMIT)));
     }
 
     /** What the point says about whether a row is at it, out of what its readings went without. */

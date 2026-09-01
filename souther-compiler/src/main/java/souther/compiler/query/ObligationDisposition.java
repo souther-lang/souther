@@ -61,18 +61,46 @@ public sealed interface ObligationDisposition {
      */
     record Undecided(List<Uncertainty> because) implements Counted {
 
+        /**
+         * Every question that can be open about an obligation, in the order they are said in.
+         *
+         * <p>A sequence and not a rank apiece, for the reason {@link ReadingReasons} gives: a
+         * number per question is a carrier wider than an order, and two questions given one number
+         * come out in whichever order a fold put them.
+         *
+         * <p>What a reader does about the two differs — the first is answered by reading more of
+         * what is written and the second is not work an author can do — and the first is said
+         * first because it is the one they can act on.
+         */
+        private static final List<Class<? extends Uncertainty>> EVERY_QUESTION = List.of(
+                Uncertainty.WhetherARowIsThere.class,
+                Uncertainty.WhetherARowCanBeWritten.class);
+
         public Undecided {
             if (because == null || because.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an obligation nobody can decide says which question is open");
             }
             because = List.copyOf(because);
-            for (int i = 1; i < because.size(); i++) {
-                if (orderOf(because.get(i - 1)) >= orderOf(because.get(i))) {
+            int last = -1;
+            for (Uncertainty each : because) {
+                int here = EVERY_QUESTION.indexOf(each.getClass());
+                if (here < 0) {
                     throw new IllegalArgumentException(
-                            "the open questions are said once each and in order: " + because);
+                            "a question with no place in the order they are said in: " + each);
                 }
+                if (here <= last) {
+                    throw new IllegalArgumentException(
+                            "the open questions are said once each, in the order they are said"
+                                    + " in: " + because);
+                }
+                last = here;
             }
+        }
+
+        /** The order itself, for the check that it holds every question there is. */
+        static List<Class<? extends Uncertainty>> everyQuestion() {
+            return EVERY_QUESTION;
         }
     }
 
@@ -151,20 +179,6 @@ public sealed interface ObligationDisposition {
         return ReadingReasons.of(met);
     }
 
-    /**
-     * Where one open question sits in the order they are said in.
-     *
-     * <p>Exhaustive, so a question added is a compile error here rather than one that arrives
-     * wherever a fold put it. What a reader does about the two differs — the first is answered by
-     * reading more of what is written and the second is not work an author can do — and the first
-     * is said first because it is the one they can act on.
-     */
-    private static int orderOf(Uncertainty question) {
-        return switch (question) {
-            case Uncertainty.WhetherARowIsThere _ -> 0;
-            case Uncertainty.WhetherARowCanBeWritten _ -> 1;
-        };
-    }
 
     /** One this account does not count, with every reason it does not. */
     record NotCounted(Set<Reason> because) implements ObligationDisposition {
