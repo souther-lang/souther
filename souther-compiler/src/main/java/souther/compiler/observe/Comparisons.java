@@ -34,4 +34,27 @@ public final class Comparisons {
         }
         return new ValueMatch(types).verdict(stated, answered, answers);
     }
+
+    /**
+     * Whether {@code left} and {@code right} are the same value, read with {@code types} and at
+     * {@code position}.
+     *
+     * <p>The other question, and it is not the one above with a statement made up for one side. A
+     * statement is what a text wrote and carries what it wrote it as; two values that were both
+     * arrived at wrote nothing, and holding one of them up as what was expected would answer a
+     * question about a text where there is no text — a value with parts, offered as a value with
+     * none, is read as a value of no type at all and is the same as nothing.
+     *
+     * <p>Yes or no, and the same walk. What being the same value means — a set is its elements, a
+     * decimal is the amount it stands for, a value is of its type first — is answered for both
+     * questions in one place, so a fake's table picks the row an execution picks.
+     */
+    public static boolean same(ObservedValue left, ObservedValue right, ValueTypes types,
+                               Position position) {
+        if (left == null || right == null || types == null || position == null) {
+            throw new IllegalArgumentException("two values are the same or not, read with what the"
+                    + " declarations say and where they stand");
+        }
+        return new ValueMatch(types).same(left, right, position);
+    }
 }
