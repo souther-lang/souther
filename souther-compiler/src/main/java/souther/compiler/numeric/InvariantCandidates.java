@@ -1,4 +1,4 @@
-package souther.compiler.check;
+package souther.compiler.numeric;
 
 import souther.compiler.numeric.NumericDomain.Bounds;
 
@@ -10,7 +10,7 @@ import java.util.List;
  * Ranges worth asking whether a reduction stays inside.
  *
  * <p>Guesses, and nothing here is sound or is meant to be. What makes a range an answer is
- * {@link InductiveBounds} proving the seed lies in it and the step never leaves it; this only says
+ * {@link Induction} proving the seed lies in it and the step never leaves it; this only says
  * which ranges are worth putting through that. A guess that is wrong costs a check and is thrown
  * away, so the list may be as incomplete as it likes and may be lengthened without anything about
  * soundness being reconsidered — which is the whole reason it is not written inside the proof.
@@ -45,7 +45,7 @@ final class InvariantCandidates {
      * step does with what it was handed.
      *
      * <p>Then the seed joined with each of the inputs, which is the symmetry the proof already has.
-     * {@link InductiveBounds} reads what holds of everything the step is handed while checking that
+     * {@link Induction} reads what holds of everything the step is handed while checking that
      * the step stays inside a range, and nothing was reading it while deciding which ranges to put
      * through that — so a product of elements at or above nought, started at one, was proved by no
      * candidate anybody proposed. A walk carries its accumulator through what it was handed, so
