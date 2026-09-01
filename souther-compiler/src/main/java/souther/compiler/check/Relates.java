@@ -1,9 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 
-import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -24,16 +22,6 @@ import java.util.function.Function;
 final class Relates {
 
     /**
-     * The comparisons a rule relating two positions is written with.
-     *
-     * <p>Everything else is read as whatever else it is, since what a call or a pattern says about
-     * the positions in it is what a reading could not work out. Counting the positions instead reads
-     * {@code validPair(left, right)} as a relation, which it may not be.
-     */
-    private static final Set<BinOp> COMPARES = Set.of(BinOp.EQ, BinOp.NE,
-            BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE);
-
-    /**
      * Whether {@code e} compares one of the positions being read with another of them.
      *
      * @param positionIn what a side of the comparison is a position of, or null where it is not one
@@ -41,7 +29,11 @@ final class Relates {
      *                   position is looked up is a fact about the reading and not about the shape
      */
     static boolean twoPositions(Core e, Function<Core, Object> positionIn) {
-        if (!(e instanceof Core.Binary b) || !COMPARES.contains(b.op())) {
+        // Which operators compare is the one place that says so. Everything else is read as
+        // whatever else it is, since what a call or a pattern says about the positions in it is
+        // what a reading could not work out — counting the positions instead reads
+        // `validPair(left, right)` as a relation, which it may not be.
+        if (!(e instanceof Core.Binary b) || !b.op().compares()) {
             return false;
         }
         Object left = positionIn.apply(b.left());

@@ -21,25 +21,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Everything that still carries an operator, and what each of them wants it for.
+ * Everywhere an operator can still reach, and what each of them wants it for.
  *
  * <p>Beside {@link AnOperatorIsAskedWhatItPlacesInOnePlaceTest}, which says how often an operator
- * may be read for what it places. That one holds the crossings between how a comparison is written
- * and what it means to one call each; this one is the list of everywhere an operator can still
- * reach, so that somewhere new is a line that has to be written down and given a reason.
+ * may be read for what it places and how often a relation may be written as one. That one holds the
+ * two crossings between how a comparison is written and what it means to one call each; this one is
+ * the ground they stand on, so that an operator reaching somewhere new is a line that has to be
+ * written down and given a reason.
  *
- * <p><b>A list and not a count.</b> A number stays right while one hold goes and another arrives,
- * and the arriving one is exactly what this is for.
+ * <p>Three lists, because there are three ways to have one. A declaration can carry an operator,
+ * which is what a descriptor says. A reading can take one out of a tree, which is an instruction and
+ * is where every reading of an operator begins. And a comparison hands out the node it was
+ * recognised from, which puts the operator one call away from every reader holding one.
  *
- * <p>Read off the compiled classes, so what a method or a field carries is what the class file
- * says. Which of them read the operator for what it <em>means</em> is not something a descriptor
- * shows, and the reasons below are where that is said.
+ * <p><b>Lists and not counts.</b> A number stays right while one line goes and another arrives, and
+ * the arriving one is exactly what these are for.
+ *
+ * <p>What none of them does is work out whether a reading <em>decided</em> anything on what it took.
+ * A switch, a constant compared against, a set asked for membership and a map asked for an answer
+ * are four spellings of one act, and a check that knew three of them would be a check somebody could
+ * write the fourth past. So what is fixed is the taking, and what each taker does with it is the
+ * reason written beside it.
  */
 class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     private static final String BIN_OP = "Lsouther/compiler/types/BinOp;";
-
-    private static final String OPERATOR = "souther/compiler/types/BinOp";
 
     private static final String COMPARISON = "souther/compiler/check/Comparison";
 
@@ -125,32 +131,77 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     + " and nothing asks it for an operator.");
 
     /**
-     * Everything that reaches into a tree for an operator and decides on what it finds.
+     * Everywhere an operator is taken out of a tree, which is where a reading of one can begin.
      *
      * <p>What the descriptor list beside this cannot see. A reading that takes the operator out of
-     * a node and switches on it there and then puts one in no signature and holds one in no field,
-     * so a new table written that way arrives in nothing that is declared — which is the shape this
-     * whole change is about, and the one it would have been least able to stop.
+     * a node and answers from it there and then puts one in no signature and holds one in no field
+     * — a table it looks the answer up in is a {@code Map} once the types are erased — so a reading
+     * written that way arrives in nothing that is declared. That is the shape this whole change is
+     * about, and the one it would have been least able to stop.
      *
-     * <p><b>Taking is not deciding.</b> A pass that copies a tree reads every operator it meets and
-     * writes each one back into the node it is rebuilding, and there is nothing to say about that.
-     * What is here is a method that both gets hold of an operator and asks it something: names one
-     * of the constants, or switches over them, or puts a question to the enum.
+     * <p><b>Every taking, and not the ones that look like decisions.</b> Whether a method decides
+     * anything on what it took is not something a class file says: a switch, a constant compared
+     * against, a set asked for membership and a map asked for an answer are four spellings of one
+     * act, and a check that knew three of them would be a check somebody could write the fourth
+     * past. So what is fixed here is the taking, which is one instruction and has no fourth
+     * spelling, and what each taker does with it is written beside it.
      *
-     * <p>Asking the enum its own questions is in the list rather than out of it. {@code compares}
-     * and {@code rightRunsWhenLeftIs} are where those memberships live, so a reader consulting them
-     * is doing the right thing — and a reader that stops consulting them and spells the set out
-     * again is a line here that changes rather than one that appears.
+     * <p>Which puts the copiers in the list. A pass that rebuilds a tree reads every operator it
+     * meets and writes each one back into the node it is making, and there is nothing to say about
+     * that beyond saying it — a line that reads "copies it into the node it is rebuilding" is a
+     * line that would have to be edited by anyone who made it do more.
      */
     @Test
     void everyOperatorTakenOutOfATreeIsWrittenDown() {
         assertEquals(declared(TAKEN_FROM_A_TREE), declaredFrom(takesAnOperator()),
-                "a reading that takes an operator out of a node and decides on it is a line here"
-                        + " with what it decides. What each of these decides: "
-                        + why(TAKEN_FROM_A_TREE));
+                "an operator taken out of a node is a line here with what is done with it."
+                        + " What each of these takes one for: " + why(TAKEN_FROM_A_TREE));
     }
 
     private static final List<Held> TAKEN_FROM_A_TREE = List.of(
+            // Recognising a comparison, which is what carries the claim to everything below.
+            new Held("souther.compiler.check.Comparison.of",
+                    "asks what the operator places, for a binary of a checked body"),
+            new Held("souther.compiler.check.ClauseComparison.of",
+                    "the same, for a clause of a data"),
+            new Held("souther.compiler.inputs.ComparedNumber.of",
+                    "the same, for any binary a walk over the input space met"),
+
+            // Rebuilding a tree, which carries the operator across unchanged.
+            new Held("souther.compiler.ast.Hir.atSlots",
+                    "copies it into the node it is rebuilding"),
+            new Held("souther.compiler.ast.Hir.withRegion", "the same, under a region"),
+            new Held("souther.compiler.core.Core.atSlots",
+                    "copies it into the node it is rebuilding"),
+            new Held("souther.compiler.core.Core.withoutItsPlace",
+                    "the same, with what said where a node stood taken off"),
+            new Held("souther.compiler.check.HelperInliner.inline",
+                    "copies it into the node a spliced helper becomes"),
+            new Held("souther.compiler.check.HelperInliner.rename",
+                    "the same, under a renaming of what the body bound"),
+            new Held("souther.compiler.check.NewtypeDesugar.go",
+                    "copies it into the node a newtype's rule becomes"),
+            new Held("souther.compiler.check.BinaryElaborator.arithmetic",
+                    "writes it into the checked node, and into the one inside a construction where"
+                            + " the answer is a newtype"),
+            new Held("souther.compiler.check.Terms.asWrittenValue",
+                    "writes it back into the syntax a value is rendered as"),
+
+            // Handing it on to something that answers about it.
+            new Held("souther.compiler.check.HelperParams.BodyTyping.visit",
+                    "hands it to what types an operand standing beside it"),
+            new Held("souther.compiler.check.Terms.numericMeaningOf",
+                    "asks whether it computes a number, and keys the meaning by it"),
+            new Held("souther.compiler.check.Terms.namedByRule", "asks whether it computes a number"),
+            new Held("souther.compiler.check.Terms.lambda$naming$1",
+                    "hands it to the interner, which says which canonical term the comparison is"),
+            new Held("souther.compiler.coverage.CoverageSites.Walk.number",
+                    "records the operator an outcome was written with, which is what a report shows"),
+            new Held("souther.compiler.reading.Meetings.run",
+                    "gathers the operands one operator reaches, which is what it is asked about"),
+            new Held("souther.compiler.check.PathReachability.unanswered",
+                    "names the operator in what it says went unanswered"),
+
             // Which operators put conditions together, and what each says about its two halves.
             new Held("souther.compiler.check.ClauseExpr.of",
                     "a conjunction asserted true and a disjunction asserted false each state both"
@@ -191,8 +242,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks the enum whether the right operand runs on every run"),
             new Held("souther.compiler.reading.CoverageRead.rightOf", "and which way it runs under"),
             new Held("souther.compiler.reading.Meetings.meetingAt",
-                    "asks the enum whether the operator stops early, and groups the operands one"
-                            + " operator reaches"),
+                    "asks the enum whether the operator stops early"),
 
             // What the operator computes, is typed as, or is emitted as.
             new Held("souther.compiler.check.AffineForms.composed",
@@ -218,36 +268,32 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " membership the enum does not own, beside the two others spelled"
                             + " outside it"),
 
-            // And the comparisons.
+            // And whether it compares at all, asked of the one place that says so.
             new Held("souther.compiler.check.InvariantChecker.arithmeticOf",
                     "asks the enum whether the operator compares, which its caller has now"
                             + " recognised the comparison for as well"),
             new Held("souther.compiler.check.Predicates.atomsNamedBy",
                     "asks the enum whether the operator compares: both sides of a comparison are"
-                            + " named whatever it states, and anything else is the one value it is"));
+                            + " named whatever it states, and anything else is the one value it is"),
+            new Held("souther.compiler.check.Relates.twoPositions",
+                    "asks the enum whether the operator compares, for a rule that stands one"
+                            + " position against another"));
 
-    /** Every method that takes an operator out of a tree and decides on what it took. */
+    /** Every method that takes an operator out of a tree. */
     private static List<String> takesAnOperator() {
         List<String> out = new ArrayList<>();
         forEachClass((owner, model) -> {
             for (MethodModel method : model.methods()) {
                 boolean takes = false;
-                boolean decides = false;
                 for (java.lang.classfile.CodeElement element
                         : method.code().map(code -> code.elementList()).orElse(List.of())) {
                     if (element instanceof InvokeInstruction call) {
                         takes |= call.typeSymbol().returnType().descriptorString().equals(BIN_OP)
                                 && (call.owner().asInternalName().equals(BINARY)
                                         || call.owner().asInternalName().equals(HIR_BINARY));
-                        decides |= call.owner().asInternalName().equals(OPERATOR);
-                    }
-                    if (element instanceof java.lang.classfile.instruction.FieldInstruction field
-                            && field.typeSymbol().descriptorString().equals(BIN_OP)
-                            && field.opcode() == java.lang.classfile.Opcode.GETSTATIC) {
-                        decides = true;
                     }
                 }
-                if (takes && decides && !method.methodName().stringValue().startsWith("<")) {
+                if (takes && !method.methodName().stringValue().startsWith("<")) {
                     out.add(owner + "." + method.methodName().stringValue());
                 }
             }
