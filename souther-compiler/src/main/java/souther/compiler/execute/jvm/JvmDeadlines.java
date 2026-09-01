@@ -105,6 +105,12 @@ public final class JvmDeadlines {
                     // worker rather than on the thread that asked — so the caller's code would run
                     // somewhere the caller never called from, and the time it took would be spent
                     // out of the wait the outer row is being held to.
+                    //
+                    // Asked here and not where the hand-off is installed, which is where the thread
+                    // this reads is that hand-off's own. Refused there, the refusal would be on a
+                    // worker that already exists and would leave that run with a phase nothing
+                    // moves, so the thread that asked would wait out the whole wait for a run that
+                    // was never going to happen.
                     throw new IllegalStateException("a row's worker cannot start a second run:"
                             + " what a run within a run is held to, and where its applications go,"
                             + " is not decided");
