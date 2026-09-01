@@ -26,7 +26,7 @@ public final class ArmVocabulary {
      * The short word a table prints and a document writes under {@code label}.
      *
      * <p>One function for both, because the document's {@code subject} joins a finding to the entry
-     * in {@code branch.unreached} that names the same arm: spelled twice, the two would join to
+     * in {@code branch.obligations} that names the same arm: spelled twice, the two would join to
      * nothing the day one of them was reworded.
      */
     public static String label(CoverageSites.Site arm) {

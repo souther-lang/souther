@@ -24,8 +24,15 @@ import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.OutputCaseEvidence;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.DecidedBy;
+import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmDisposition;
+import souther.compiler.query.ArmExclusion;
+import souther.compiler.query.ArmObligation;
+import souther.compiler.query.ArmSummary;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.ItemAssessment;
@@ -88,7 +95,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 10;
+    public static final int SCHEMA_VERSION = 11;
 
     /**
      * Where the schema this writes documents ships.
@@ -1532,8 +1539,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (branch == null) {
             return;
         }
-        ReportMeasurement<Adequacy.BranchEvidence.Arms> measured =
-                ReportMeasurement.of(branch.measured());
+        ReportMeasurement<ArmSummary> measured = ReportMeasurement.of(branch.measured());
         if (!measured.counted()) {
             // The measure's own answer, translated. Nothing here works out why from the row count or
             // the kind of behavior: those correlate with the reason and are not it, and the line an
@@ -1571,47 +1577,51 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             return;
         }
-        // Two questions and two answers. Whether every row could be read is what says an arm
-        // nothing was seen to reach may still be reached; whether the numbers are a whole measure
-        // falls for that and for a fork whose rule could not be worked out as well. Read as one, a
-        // build whose rows all ran was told a row was not read, and every arm it certainly does not
-        // reach went unsaid.
-        //
-        // The same two answers this document's JSON is written from, and not the same decision
-        // about what to show: a person reading a line has room for a number and a word qualifying
-        // it, so the counts are printed under a reading that did not finish and the qualification
-        // is printed beside them. What is shared is where the numbers come from (issue #997).
-        //
-        // Asked of the one thing that answers it. This surface prints the arms out of the findings,
-        // which carry the places to send a reader, so what it needs here is whether the claim stands
-        // at all — and that is the same question, put to the same measure, as the one whose answer
-        // the findings and the JSON are made of. A capability accessor beside the arms would be a
-        // second thing to keep in step with them.
-        boolean observed = branch.unreached().isPresent();
-        Adequacy.BranchEvidence.Arms arms = measured.get();
-        out.append(String.format("    branch      %d/%d%s%n", arms.coveredObligations(),
-                arms.obligations(), observed ? "" : "   (undecided: a row was not read)"));
-        // The position alone where the arm is in the module's own source, which the section this is
-        // under already names. It is not always: a body is spliced into whatever calls it, so an arm
-        // written in a helper another module declares is in that module's file, and there the file is
-        // named with it. Named only where every row was read: an arm a row that never finished might
-        // have gone through is undecided, and calling it unreached sends the author after a row that
-        // exists.
-        // Arms this counts as one that it cannot show are one. Said before the arms nothing
-        // reaches, since it qualifies the number above rather than adding to what is missing from
-        // it: a count holding two predicates where it says one is what would otherwise report a
-        // behavior complete over something nothing ran.
-        for (souther.compiler.types.CoverageOrigin together : branch.unsettledDecisions()) {
+        // The two numbers, and nothing beside them qualifying every arm at once. What is uncertain
+        // about the arms is uncertain of particular ones, and each of those is said under this line
+        // by the arm it is about: the difference between the numbers is walked here rather than
+        // summarised. A word for the whole measure said "a row was not read" over a behavior whose
+        // rows all ran and a fork nobody could tell apart, and the arms it certainly does not reach
+        // went unnamed under it.
+        ArmSummary arms = measured.get();
+        out.append(String.format("    branch      %d/%d%n", arms.covered(), arms.counted()));
+        // What the numbers are counted out of, where something has shown that set to be short of an
+        // arm. Said before the arms themselves, since it qualifies the denominator rather than
+        // adding to what is missing from it, and it says what it is: the model is not wrong here,
+        // an analysis this compiler made is.
+        if (!arms.census().settled()) {
+            out.append("      · a row went through an arm this compiler had proven nothing reaches,"
+                    + " so what these arms are counted out of may be short of one\n");
+        }
+        // Arms this counts as one that it cannot show are one, said once per fork rather than once
+        // per arm of it: a count holding two predicates where it says one is what would otherwise
+        // report a behavior complete over something nothing ran.
+        for (ArmExclusion left : arms.exclusions()) {
             out.append(String.format(
                     "      · a fork `%s` wrote decides by a rule its caller supplies, and which"
                             + " rule decides here could not be worked out: what its arms come to is"
                             + " read over however many rules that is%n",
-                    together.module()));
+                    left.fork().module()));
+        }
+        // Every arm the count holds and no row goes through, said here or under the findings below.
+        // An arm a row that never finished might have gone through is a question and not a gap, so
+        // it is named as one: told to write a row for it, an author may be told to write one they
+        // have written, and left to the number alone a reader is shown a difference with nothing
+        // under it to act on.
+        for (ArmObligation.Counted open : arms.undecided()) {
+            out.append(String.format("      ? undecided whether a row goes through `%s` (%s)%n",
+                    ArmVocabulary.label(open.display()),
+                    open.display().at().said(names, declaredIn)));
         }
         // Whatever findings there are, and no second opinion about whether there may be any. Which
-        // arms may be named is settled where they are collected, so a measure that cannot make the
-        // claim produces none of these — and a condition repeated here would be the same rule kept
-        // in two places, which is how the reading and the numbers came to disagree before.
+        // arms may be named is settled where they are collected, so a condition repeated here would
+        // be the same rule kept in two places, which is how the reading and the numbers came to
+        // disagree before.
+        //
+        // The position alone where the arm is in the module's own source, which the section this is
+        // under already names. It is not always: a body is spliced into whatever calls it, so an arm
+        // written in a helper another module declares is in that module's file, and there the file
+        // is named with it.
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
                 out.append(String.format("      %s no row goes through `%s` (%s)%n",
@@ -2148,6 +2158,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * at one place and they are two lines. Which declarations took an end in is
      * {@code narrowedWithin}: a bound another type narrowed is not the bound it narrows.
      */
+    private static void obligationId(ObjectNode into, About.ObligationIdentity identity) {
+        switch (identity) {
+            case About.ObligationIdentity.OfALine(var point) -> obligationId(into, point);
+            case About.ObligationIdentity.OfAnArm(var arm) -> armId(into, arm);
+        }
+    }
+
     private static void obligationId(ObjectNode into,
                                      souther.compiler.partition.BorderObligationPoint point) {
         authoredLineId(into.putObject("line"), point.line().line());
@@ -2830,44 +2847,80 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         ObjectNode out = behavior.putObject("branch");
         measured(out, branch.measured(), (node, arms) -> {
-            node.put("arms", arms.obligations());
-            node.put("covered", arms.coveredObligations());
-            // Arms counted as one that nothing can show are one, which qualifies the two numbers
-            // above. Said here as well as in the prose, since a count that quietly holds two
-            // predicates where it says one is the shape a consumer would read as a behavior
-            // complete over something nothing ran — and a consumer reads this and not the prose.
-            //
-            // Inside the gate although it is the measurement's own answer rather than this value's,
-            // because what it qualifies is the two counts. Where they are not written there is
-            // nothing for it to qualify, and an empty array beside no numbers is an empty set
-            // standing in for a measurement nobody made (issue #997).
-            ArrayNode together = node.putArray("unsettledDecisions");
-            for (souther.compiler.types.CoverageOrigin each : branch.unsettledDecisions()) {
-                together.add(each.module());
-            }
-            // A second question, and the measure answers it rather than this deciding. The first is
-            // whether there is a value; this is whether a negative claim over it stands, and the
-            // measure hands the arms over only where it does. Written here as a condition on the
-            // value, this line would be a rule kept by whoever wrote the next surface.
-            //
-            // Absent rather than empty where it does not. `[]` reads as "no arm goes unreached",
-            // which is a finding, and writing it for a reading that found nothing out is the same
-            // substitution as the counts this measure used to write for a measurement nobody made.
-            branch.unreached().ifPresent(missed -> {
-                ArrayNode unreached = node.putArray("unreached");
-                for (souther.compiler.coverage.CoverageSites.Site arm : missed) {
-                    ObjectNode a = unreached.addObject();
-                    a.put("label", ArmVocabulary.label(arm));
-                    a.put("kind", word(arm.name()));
-                    // What the arm is an outcome of. Two fields because the meaning is the pair: an
-                    // `else` an author wrote under an `if` and one written under a `guard` are the
-                    // same outcome of two constructs, and a consumer told only the outcome cannot
-                    // tell them apart.
-                    a.put("construct", word(arm.construct()));
-                    at(a, arm.at(), sources);
+            // One entry per arm the author wrote, and the numbers are not written beside them. A
+            // count of arms and a count of covered arms are both a fold of this array, and written
+            // out as well they would be two answers about one body — which is what a consumer had
+            // before: two numbers, a list of the ones nothing reached that was absent for either of
+            // two reasons, and a list of forks, out of which the state of any one arm had to be
+            // reassembled.
+            ArrayNode all = node.putArray("obligations");
+            for (ArmObligation arm : arms.all()) {
+                ObjectNode a = all.addObject();
+                armId(a.putObject("obligationId"), arm.id());
+                a.put("label", ArmVocabulary.label(arm.display()));
+                a.put("kind", word(arm.display().name()));
+                // What the arm is an outcome of. Two fields because the meaning is the pair: an
+                // `else` an author wrote under an `if` and one written under a `guard` are the
+                // same outcome of two constructs, and a consumer told only the outcome cannot
+                // tell them apart.
+                a.put("construct", word(arm.display().construct()));
+                at(a, arm.display().at(), sources);
+                // Where the arm stands, once. What the rows came to and how far the reading got are
+                // what the account read to decide it, and an arm's reading is one reading — so a
+                // status and a hit beside this would be the same answer in a second encoding, with
+                // nothing holding the two in step. That is what a consumer would reimplement, and
+                // what this measure stopped doing internally.
+                a.put("disposition", wire(arm.disposition()));
+                switch (arm) {
+                    // And what left it open, where something did. Provenance and not a second
+                    // answer: an arm a row that did not come back may have gone through is
+                    // undecided, and which reading stopped is what a reader acts on.
+                    case ArmObligation.Counted it -> weakening(a, it.coverage().weakening());
+                    case ArmObligation.NotCounted it ->
+                            a.put("notCountedBecause", wire(it.because()));
                 }
-            });
+            }
+            // What the arms above are counted out of, where something has shown that set to be
+            // short of an arm. A row through an arm this compiler had proven nothing reaches
+            // leaves every arm standing where it stands and the denominator in doubt, so it is
+            // said of the account and never of an entry.
+            node.put("denominatorSettled", arms.census().settled());
         });
+    }
+
+    /**
+     * What tells one arm of a behavior from every other, which is not what a reader is shown.
+     *
+     * <p>A key within this document: a consumer joins the entries of one behavior's {@code branch}
+     * against another run of the same source on it. What a reader is shown is {@code label} and
+     * {@code at}, and neither is an identity — a body spliced in from out of sight has its copies at
+     * as many places as there are call sites, and two arms of two forks are both spelled
+     * {@code else}.
+     *
+     * <p>Which rule a fork decides by is part of it. A fork whose declaration decides is one arm
+     * however many bodies it was spliced into; one whose caller decides is one per rule a caller
+     * handed in, and two of those are the same construct at the same place.
+     */
+    private static void armId(ObjectNode into, CoverageSites.Obligation arm) {
+        into.put("module", arm.origin().module());
+        into.put("construct", arm.origin().ordinal());
+        into.put("lowered", arm.origin().lowered());
+        into.put("part", arm.part());
+        into.put("decidedBy", wire(arm.decided()));
+        if (arm.decided() instanceof DecidedBy.BySupplied supplied) {
+            ArrayNode rules = into.putArray("rules");
+            for (SuppliedRules.RuleIdentity rule : supplied.rules()) {
+                ObjectNode one = rules.addObject();
+                switch (rule) {
+                    case SuppliedRules.RuleIdentity.Named it ->
+                            one.put("declaration", it.declaration().toString());
+                    case SuppliedRules.RuleIdentity.Written it -> {
+                        one.put("module", it.rule().module());
+                        one.put("block", it.rule().ordinal());
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -2881,7 +2934,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * place would be the same field written in five, and a sixth kind would have been written the way
      * the five were.
      *
-     * <p>Nothing here is a second reading of what is above it. {@code branch.unreached} and
+     * <p>Nothing here is a second reading of what is above it. {@code branch.obligations} and
      * {@code boundaries} keep saying what they say, in their own words and about their own measure;
      * this says which findings there are and what a build does about each, which is neither
      * measure's question and was nobody's.
@@ -3039,10 +3092,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             // And which thing a row is owed for, where the finding is about one. The words in
             // `subject` do not tell two of them apart — a rule read at one level in one role owes
-            // two points where two cases stop the run in different places — so a consumer joining
-            // a finding to its `partition.obligations` entry joins on this.
-            if (finding.about() instanceof About.ABorderObligation owed) {
-                obligationId(f.putObject("obligationId"), owed.obligation().point());
+            // two points where two cases stop the run in different places, and a fork whose caller
+            // supplies the rule owes one arm per rule at one place — so a consumer joining a
+            // finding to the account's entry joins on this.
+            //
+            // Asked of the subject, for the reason the rule above is: the accounts that keep such
+            // things are not a list this holds, and one written here would leave a finding about
+            // the next of them named by words that tell two of its obligations apart nowhere.
+            if (finding.about() instanceof About.OfAnObligation owed) {
+                obligationId(f.putObject("obligationId"), owed.obligationIdentity());
             }
             // And which limit stopped it, where the finding is about one being in the way. Two
             // conjuncts of one clause about one position can stop for two different limits, so
@@ -3068,8 +3126,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>An arm's, and no other's. A behavior with two {@code guard}s writes two arms labelled
      * {@code else}, and the label is what a finding's subject is — so two findings of one behavior
      * came out identical in every field, and which of them a reader was being told about could not be
-     * worked out from the document at all. The place is what {@code branch.unreached} already tells
-     * them apart by, and it is written here in the same shape, so the two join.
+     * worked out from the document at all. The place is what {@code branch.obligations} already
+     * tells them apart by, and it is written here in the same shape, so the two join.
      *
      * <p>The other eight are cited at the declaration the entry sits under. Writing that coordinate
      * would say where the behavior is, under a finding about a line the model draws or a class of an
@@ -3102,7 +3160,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the sentence is reworded, and says nothing about which of the fields is the subject.
      *
      * <p>Written to join what is already in the document: a class name and its position are one of
-     * an axis's {@code classes} under that axis, an arm's label is one in {@code branch.unreached},
+     * an axis's {@code classes} under that axis, an arm's label is one in
+     * {@code branch.obligations},
      * and an axis and a value name a {@code boundaries} entry. An input's case carries its position
      * with it, because two parameters of one type give two findings a class name alone cannot tell
      * apart — and a class of a position carries its position for exactly that reason, which this
@@ -3110,7 +3169,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String subject(Adequacy.Finding finding, DocumentSources sources) {
         return switch (finding.about()) {
-            // The label and not the arm, and the same label `branch.unreached` writes: this field
+            // The label and not the arm, and the same label `branch.obligations` writes: this field
             // exists to join to that entry, and a value spelled a second way here would join to
             // nothing.
             case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
@@ -3376,6 +3435,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (reason) {
             case NOTHING_WAS_READ -> "nothing_was_read";
             case NOT_KNOWN_TO_BE_WRITABLE -> "not_known_to_be_writable";
+        };
+    }
+
+    /**
+     * How the arm account treats one arm, in the document's word for it.
+     *
+     * <p>Its own words beside {@link #wire(ObligationDisposition)} although three of the four are
+     * spelled the same. The two accounts answer for different things and are told apart by what
+     * takes something out of the count, so a word shared between them would be one string standing
+     * for two propositions the day either account grows a state.
+     */
+    public static String wire(ArmDisposition disposition) {
+        return switch (disposition) {
+            case MET -> "met";
+            case UNMET -> "unmet";
+            case UNDECIDED -> "undecided";
+            case NOT_COUNTED -> "not_counted";
+        };
+    }
+
+    /** Why the arm account leaves an arm out, likewise exhaustive. */
+    public static String wire(ArmExclusion because) {
+        return switch (because) {
+            case ArmExclusion.OccurrencesNotToldApart _ -> "occurrences_not_told_apart";
+        };
+    }
+
+    /** What settles which rule one occurrence of a fork decides by, as a word. An arm out of the
+     *  count is the third of these, so all three are reachable in a document. */
+    public static String wire(DecidedBy decided) {
+        return switch (decided) {
+            case DecidedBy.ByTheDeclaration _ -> "the_declaration";
+            case DecidedBy.BySupplied _ -> "the_caller";
+            case DecidedBy.NotSaid _ -> "not_said";
         };
     }
 

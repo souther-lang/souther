@@ -129,13 +129,17 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " means, in a table nothing recognises a comparison out of"),
 
             new Held("souther.compiler.check.NumericMeaning.Operator#op",
-                    "an arithmetic expression keyed by the operator written in it"),
+                    "an arithmetic expression keyed by the operator written in it — an operator"
+                            + " answering no number is refused where one of these is made, so a"
+                            + " comparison is not among the operators this holds"),
             new Held("souther.compiler.check.Terms.written",
-                    "makes the term a written binary is, off the operator it was written with"),
+                    "makes the term a written binary is, off the operator it was written with,"
+                            + " which is an arithmetic one: what reaches it is a divide it names"
+                            + " itself and the operator a NumericMeaning.Operator was made with"),
             new Held("souther.compiler.check.Term.Interner.operator",
-                    "which of the canonical terms a comparison is: the same six-into-three the"
-                            + " reading of a guard now takes from what was placed, kept here in the"
-                            + " operator's own words"),
+                    "makes the term an operator over two operands is, and refuses a comparison:"
+                            + " what a comparison of two values comes to is decided from what it"
+                            + " placed and arrives already stated"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared#op",
                     "the operator an outcome was written with, which is what a report shows"),
 
@@ -146,11 +150,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.core.Core.Binary.<init>",
                     "makes the node a check produces"),
             new Held("souther.compiler.check.NumericMeaning.Operator.<init>",
-                    "makes the arithmetic meaning keyed by an operator"),
+                    "makes the arithmetic meaning keyed by an operator, and is what limits which"
+                            + " operators one of them may be keyed by to those answering a number"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared.<init>",
                     "makes the outcome a report shows an operator for"),
             new Held("souther.compiler.semantics.Arithmetic.TheOperator.<init>",
-                    "makes the fact that a library operation computes what an operator computes"),
+                    "makes the fact that a library operation computes what an operator computes,"
+                            + " and is what limits that to the operators answering a number"),
             new Held("souther.compiler.semantics.NumericResult.TheOtherCaseWhen.<init>",
                     "makes the fact stating an operation's other case as a comparison"));
 
@@ -195,8 +201,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.numericMeaningOf",
                     "asks whether it computes a number, and keys the meaning by it"),
             new Held("souther.compiler.check.Terms.namedByRule", "asks whether it computes a number"),
-            new Held("souther.compiler.check.Terms.lambda$naming$1",
-                    "hands it to the interner, which says which canonical term the comparison is"),
+            new Held("souther.compiler.check.Terms.lambda$binary$1",
+                    "hands it to the interner, for a binary the recognition beside it found to be"
+                            + " no comparison"),
             new Held("souther.compiler.check.Terms.asOperator",
                     "reads the operator an arithmetic meaning was keyed by"),
             new Held("souther.compiler.check.Terms.theOneOf", "the same, for the meaning it interns"),
@@ -330,9 +337,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " composed comparison is said in the language's own operators"),
             new Held("souther.compiler.check.Conditions.asSizeComparison",
                     "writes the equality an emptiness check means: a size stood against nought"),
-            new Held("souther.compiler.check.Conditions.canonical",
-                    "writes the two comparisons a fact is keyed by, which what was placed says"
-                            + " which of and which way round"),
+            new Held("souther.compiler.check.Conditions.AsPolar.theSameValue",
+                    "writes the equality a fact is keyed by, which the claim said this comparison"
+                            + " states"),
+            new Held("souther.compiler.check.Conditions.AsPolar.below",
+                    "writes the order a fact is keyed by, with the sides the way the claim wanted"
+                            + " them"),
+            new Held("souther.compiler.check.Term.Interner.AsTerms.below",
+                    "the one order a term is written in, which the claim exchanged the sides for"),
             new Held("souther.compiler.check.Terms.repeating",
                     "writes the multiplication a repeated accumulation comes to"),
             new Held("souther.compiler.semantics.OperationFacts.declared",

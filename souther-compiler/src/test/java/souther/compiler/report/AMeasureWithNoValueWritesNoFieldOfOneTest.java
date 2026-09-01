@@ -10,6 +10,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -78,6 +79,54 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
 
             behavior record : (of: Submitted) -> Receipt
             """;
+
+    /**
+     * A report holding an arm a row goes through, an arm nothing goes through, and an arm nobody
+     * could decide.
+     *
+     * <p>The third takes a row that does not come back, so this model is measured with one said to
+     * overrun. The first two are the same behavior's, which is what makes the three fit in one
+     * document: a reading that stopped leaves the arm it lit alight.
+     */
+    private static JsonNode armAccounts() {
+        Compilation compilation = Compilation.ofSource("""
+                module example.arms
+
+                data Draft = { n: Int }
+                data Done = { n: Int }
+                data Small = { n: Int }
+
+                partial let spin (n: Int): Int = spin(n)
+
+                behavior go : (request: Draft) -> Done | Small
+                    constructs Done, Small
+
+                let go (request) = {
+                    guard request.n <= 0 else Done { n = spin(request.n) }
+                    Small { n = request.n }
+                }
+
+                behavior gate : (request: Draft) -> Done | Small
+                    constructs Done, Small
+
+                let gate (request) = {
+                    guard request.n <= 0 else Done { n = 1 }
+                    Small { n = request.n }
+                }
+
+                example go
+                    | (Draft { n = 1 }) -> Done { n = 1 }
+
+                example gate
+                    | (Draft { n = 0 }) -> Small { n = 0 }
+                """, "Main");
+        compilation.withJvmExampleDeadlines(souther.compiler.DoesNotComeBack.overrunningOn(
+                souther.compiler.DoesNotComeBack.everythingAboutRowsOf("go")));
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return JsonMapper.builder().build().readTree(
+                AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
+    }
 
     private static JsonNode reportOf(String source, Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -176,11 +225,11 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
     }
 
     /**
-     * A behavior with no body writes no arm count, and none of the three fields read beside one.
+     * A behavior with no body writes no arms, and nothing that is read beside them.
      *
-     * <p>{@code unsettledDecisions} goes with them although it is the measurement's own answer
-     * rather than the value's: what it qualifies is {@code arms} and {@code covered}, and an empty
-     * array beside no numbers is an empty set standing in for a measurement nobody made.
+     * <p>{@code denominatorSettled} goes with them although it is the account's answer about the
+     * set rather than about any arm: what it qualifies is the arms, and a word beside no arms is an
+     * answer standing in for a measurement nobody made.
      */
     @Test
     void aBehaviorWithNoBodyWritesNoArmCount() {
@@ -188,20 +237,64 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
 
         assertEquals("unavailable", branch.get("status").asString());
         assertEquals("no_body", branch.get("reason").asString());
-        for (String key : new String[] {"arms", "covered", "unsettledDecisions", "unreached"}) {
+        for (String key : new String[] {"obligations", "denominatorSettled"}) {
             assertNull(branch.get(key), () -> key + " is a measurement nobody made: " + branch);
         }
     }
 
-    /** And a behavior whose arms were counted writes all four. */
+    /** And a behavior whose arms were counted writes each of them, with what it came to. */
     @Test
     void aBehaviorWhoseArmsWereCountedWritesThem() {
         JsonNode branch = behavior(reportOf(INJECTED, Adequacy.Level.ALL), "submit").get("branch");
 
         assertEquals("complete", branch.get("status").asString());
-        assertEquals(2, branch.get("arms").asInt());
-        assertFalse(branch.get("unreached").isEmpty(),
+        assertEquals(2, branch.get("obligations").size());
+        assertTrue(branch.get("denominatorSettled").asBoolean(),
+                () -> "nothing has shown the arms to be short of one: " + branch);
+        List<String> dispositions = new java.util.ArrayList<>();
+        branch.get("obligations")
+                .forEach(arm -> dispositions.add(arm.get("disposition").asString()));
+        assertEquals(List.of("met", "unmet"), dispositions,
                 () -> "the one row takes the guard's continued arm and not its else: " + branch);
+    }
+
+    /**
+     * What an arm of the document is made of, and nothing else.
+     *
+     * <p>Four things and no fifth: what tells the arm from every other, what a reader is shown of
+     * it, where it stands, and what left it open. A key that is none of those is one of them said a
+     * second time — which is what the two this change removed were. {@code status} and {@code hit}
+     * determined the disposition and sat beside it with nothing holding them in step, so a
+     * schema-valid document could say an arm was met by a row that was never seen, and a consumer
+     * could reimplement the account rather than read it.
+     *
+     * <p>The vocabulary and not a condition on it. Where each key may appear is the schema's own
+     * business and is held beside this; that a key exists at all is the decision, and one added on
+     * both sides of the writer and the schema together is exactly the return this is here to stop.
+     * So the set is written out: there is nothing to derive it from, because it is the thing being
+     * decided.
+     */
+    @Test
+    void anArmOfTheDocumentIsIdentityDisplayStateAndProvenance() {
+        Set<String> identity = Set.of("obligationId");
+        Set<String> shown = Set.of("label", "kind", "construct", "at");
+        Set<String> state = Set.of("disposition");
+        Set<String> provenance = Set.of("weakening", "notCountedBecause");
+
+        Set<String> vocabulary = new java.util.LinkedHashSet<>();
+        vocabulary.addAll(identity);
+        vocabulary.addAll(shown);
+        vocabulary.addAll(state);
+        vocabulary.addAll(provenance);
+
+        JsonNode arms = schema().get("$defs").get("branch").get("properties").get("obligations")
+                .get("items");
+        Set<String> written = new java.util.LinkedHashSet<>();
+        arms.get("properties").propertyNames().forEach(written::add);
+
+        assertEquals(vocabulary, written,
+                "an arm says what it is, what it is shown as, where it stands, and what left it"
+                        + " open");
     }
 
     /**
@@ -234,6 +327,32 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
             }
         }
         assertTrue(checked >= 2, "both a measured branch and an unmeasured one are in this report");
+
+        // And what each arm of a measured branch says. The conditions here are what keeps the
+        // document's normal form the account's: an arm says where it stands once, and beside it
+        // whatever left it open — so `undecided` carries what the reading went without and the two
+        // settled states carry nothing. Applied over a report holding all three.
+        JsonNode arms = schema.get("$defs").get("branch").get("properties").get("obligations")
+                .get("items");
+        Set<String> reached = new java.util.LinkedHashSet<>();
+        for (JsonNode module : armAccounts().get("modules")) {
+            for (JsonNode each : module.get("behaviors")) {
+                if (!each.get("branch").has("obligations")) {
+                    continue;
+                }
+                for (JsonNode arm : each.get("branch").get("obligations")) {
+                    for (JsonNode condition : arms.get("allOf")) {
+                        holds(condition, arm);
+                    }
+                    reached.add(arm.get("disposition").asString());
+                }
+            }
+        }
+        // An arm out of the count is not among them: a fork whose rule nothing worked out has no
+        // rows to read at all, so no model reaches one. What the document says of such an arm is
+        // held where the account is made.
+        assertEquals(Set.of("met", "unmet", "undecided"), reached,
+                "every state a model reaches is in the document this was applied to");
 
         JsonNode items = schema.get("$defs").get("partition").get("properties").get("boundaries")
                 .get("items").get("properties").get("items").get("items");
@@ -271,8 +390,15 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
     private static void holds(JsonNode declared, JsonNode written) {
         boolean guard = true;
         for (String key : declared.get("if").get("properties").propertyNames()) {
-            JsonNode words = declared.get("if").get("properties").get(key).get("enum");
-            boolean here = written.has(key) && anyIs(words, written.get(key).asString());
+            JsonNode said = declared.get("if").get("properties").get(key);
+            // A condition on one word and a condition on several are the same question spelled two
+            // ways. Reading only the second would step over a condition rather than fail on it,
+            // which is what this test exists not to do.
+            assertTrue(said.has("enum") || said.has("const"),
+                    () -> "a condition spelled a way this does not read: " + said);
+            boolean here = written.has(key) && (said.has("const")
+                    ? said.get("const").asString().equals(written.get(key).asString())
+                    : anyIs(said.get("enum"), written.get(key).asString()));
             guard &= here;
         }
         for (String required : declared.get("if").has("required")

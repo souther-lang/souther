@@ -86,7 +86,7 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
         assertNull(compilation.db().ask(new Bodies.Checked("example.rooms")).value(),
                 "and stops before the bodies are elaborated, which is what this is about");
 
-        Measure<Adequacy.BranchEvidence.Arms> measured =
+        Measure<ArmSummary> measured =
                 branchOf(compilation, "example.rooms", "pick").measured();
 
         Measurement.FailedToMeasure<?> failed = assertInstanceOf(
@@ -171,7 +171,7 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
 
         assertTrue(compilation.errors().isEmpty(), () -> "this one compiles: "
                 + compilation.errors());
-        Measure<Adequacy.BranchEvidence.Arms> measured =
+        Measure<ArmSummary> measured =
                 branchOf(compilation, "example.comp", "both").measured();
 
         Measure.NotApplicable<?> none = assertInstanceOf(Measure.NotApplicable.class, measured,
@@ -260,7 +260,7 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
 
         assertTrue(compilation.errors().isEmpty(), () -> "this one compiles: "
                 + compilation.errors());
-        Measure<Adequacy.BranchEvidence.Arms> measured =
+        Measure<ArmSummary> measured =
                 branchOf(compilation, "example.ok", "pick").measured();
 
         Measure.NotApplicable<?> none = assertInstanceOf(Measure.NotApplicable.class, measured,

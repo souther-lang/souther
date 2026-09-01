@@ -10,8 +10,10 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmCensus;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Weakening;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -363,11 +365,18 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 List.of(arm(UNREACHED), arm(TAKEN)), Set.of(TAKEN),
                 proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none());
 
-        assertEquals(List.of(TAKEN),
-                measured.arms().all().stream().map(CoverageSites.Site::index).toList());
-        assertEquals(Set.of(TAKEN), measured.arms().covered());
-        assertTrue(measured.contradicted().isEmpty());
-        assertTrue(measured.unreached().orElseThrow().isEmpty());
+        assertEquals(List.of(TAKEN), probesOf(measured));
+        assertEquals(1, measured.arms().covered());
+        assertTrue(measured.arms().census().settled(),
+                "nothing has shown the arms it is counted out of to be short of one");
+        assertEquals(List.of(), measured.arms().unmet());
+    }
+
+    /** The probes of the arms this account holds, in the order the body holds them. */
+    private static List<Integer> probesOf(Adequacy.BranchEvidence measured) {
+        return measured.arms().all().stream()
+                .flatMap(arm -> arm.occurrences().stream())
+                .map(CoverageSites.Site::index).toList();
     }
 
     /**
@@ -386,19 +395,46 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 List.of(arm(UNREACHED), arm(TAKEN)), Set.of(UNREACHED, TAKEN), asRun,
                 WeakeningSet.none());
 
-        assertEquals(Set.of(UNREACHED), measured.contradicted(),
+        // What a disproved proof bears on is the set of arms and not any one of them. Which arms
+        // there are is what the proofs decided, so a proof shown wrong leaves that set in doubt;
+        // where each arm stands is what the rows said, and a row through an arm went through it
+        // however wrong a proof about the arm beside it turned out to be.
+        assertEquals(new ArmCensus.Undecided(
+                        WeakeningSet.of(new Weakening.ProofContradicted("b", UNREACHED))),
+                measured.arms().census(),
                 "the arm nothing reaches was proven unreachable and a row went through it");
-        assertEquals(List.of(UNREACHED, TAKEN),
-                measured.arms().all().stream().map(CoverageSites.Site::index).toList(),
+        assertEquals(List.of(UNREACHED, TAKEN), probesOf(measured),
                 "so it is still an arm this behavior has");
-        assertEquals(Set.of(UNREACHED, TAKEN), measured.arms().covered());
+        assertEquals(2, measured.arms().covered());
         assertEquals(MeasurementStatus.PARTIAL,
                 AdequacyReport.statusOf(measured.measured()),
                 "and no number here is given as though nothing had happened");
-        assertEquals(WeakeningSet.of(new souther.compiler.query.Weakening.ProofContradicted(
-                        "b", UNREACHED)),
+        assertEquals(WeakeningSet.of(new Weakening.ProofContradicted("b", UNREACHED)),
                 measured.measured().weakening(),
                 "and the measurement says which proof a row went against");
+    }
+
+    /**
+     * And the arms themselves are answered for as usual.
+     *
+     * <p>What the third of these says is the point. The rows here all ran, so an arm nothing lit is
+     * an arm nothing reaches — and while the claim over the arms was the measurement's to make, this
+     * one was withheld: the measurement was weakened by the contradicted proof, and the arms went
+     * unnamed under a line that said a row had not been read. No row had gone unread.
+     */
+    @Test
+    void andAnArmIsStillAnsweredForBesideADisprovedProof() {
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED));
+        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
+                List.of(arm(UNREACHED), arm(TAKEN)), Set.of(UNREACHED), asRun,
+                WeakeningSet.none());
+
+        assertEquals(1, measured.arms().covered(), "the row went through the arm it went through");
+        assertEquals(List.of(TAKEN), measured.arms().unmet().stream()
+                        .map(arm -> arm.display().index()).toList(),
+                "and nothing goes through the other, which every row was read against");
+        assertEquals(List.of(), measured.arms().undecided(),
+                "a proof shown wrong is not a row nobody read");
     }
 
     /** The same fact both measures read. Taking the arm back for one of them and not the other is how

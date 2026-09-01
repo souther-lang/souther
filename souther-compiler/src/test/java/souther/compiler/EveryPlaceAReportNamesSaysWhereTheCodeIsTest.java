@@ -400,6 +400,18 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
      */
     private static final Map<String, Said> SAID = new ConcurrentHashMap<>();
 
+    /** The entries of one behavior's arm account that no row goes through, which is what the
+     *  disposition of each says. */
+    private static List<JsonNode> armsNoRowGoesThrough(JsonNode behavior) {
+        List<JsonNode> out = new ArrayList<>();
+        for (JsonNode arm : behavior.get("branch").get("obligations")) {
+            if ("unmet".equals(arm.get("disposition").asString())) {
+                out.add(arm);
+            }
+        }
+        return out;
+    }
+
     private static Said saidAbout(String model) {
         return SAID.computeIfAbsent(model,
                 EveryPlaceAReportNamesSaysWhereTheCodeIsTest::readEveryRenderingOnce);
@@ -439,7 +451,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
 
         JsonNode document = JSON.readTree(report.json(SourceNameResolver.identity()));
         JsonNode behavior = document.get("modules").get(0).get("behaviors").get(0);
-        JsonNode unreached = behavior.get("branch").get("unreached");
+        List<JsonNode> unreached = armsNoRowGoesThrough(behavior);
         assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
         List<String> origins = new ArrayList<>();
         behavior.get("partition").get("boundaries")
@@ -492,7 +504,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
             }
         }
         assertNotNull(down, "the module the row names is reported");
-        JsonNode unreached = down.get("behaviors").get(0).get("branch").get("unreached");
+        List<JsonNode> unreached = armsNoRowGoesThrough(down.get("behaviors").get(0));
         assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
         JsonNode at = unreached.get(0).get("at");
         List<String> edges = report.human(names).lines().map(String::strip)

@@ -6,7 +6,6 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
-import souther.compiler.numeric.Towards;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
@@ -308,29 +307,47 @@ final class Conditions {
     /**
      * The one of the two canonical comparisons {@code placed} is, and which way it is asserted.
      *
-     * <p>Two independent things are done to get there, each of them one fact of what was placed.
-     * Which sides the canonical form wants is which class the value named is in: the canonical
-     * order names it above, so a comparison that names it below is the same statement with its
-     * sides exchanged. Whether the assertion turns over is whether the comparison holds at the
-     * value: the canonical order does not hold there and the canonical equality does, which is why
-     * the two shapes read that fact opposite ways.
-     *
-     * <p>Written as the two rather than as the four comparisons it comes to, because the four are
-     * a table of what these two facts say together — and a table is a thing to keep in step with
-     * the classification it was copied from.
+     * <p>Which of the two it is, which side of it each value goes on and whether it is denied are
+     * what {@code placed} states ({@link ComparisonClaim#canonical}). What is here is the rest:
+     * that a canonical comparison of this compiler's own is written as an operator between the two
+     * sides, and that its denial is carried by the polarity beside it rather than by a node.
      */
     private static Polar canonical(Core.Binary b, ComparisonClaim placed, boolean positive) {
-        return switch (placed) {
-            case ComparisonClaim.Singled singled ->
-                    new Polar(comparison(BinOp.EQ, b.left(), b.right(), b),
-                            singled.holdsAtTheValue() == positive);
-            case ComparisonClaim.Cut cut -> {
-                boolean exchanged = cut.valueBelongs() == Towards.BELOW;
-                yield new Polar(comparison(BinOp.LT,
-                        exchanged ? b.right() : b.left(), exchanged ? b.left() : b.right(), b),
-                        cut.holdsAtTheValue() != positive);
-            }
-        };
+        AsPolar as = new AsPolar(b);
+        Polar stated = placed.canonical(b.left(), b.right()).expressedAs(as);
+        return positive ? stated : as.denied(stated);
+    }
+
+    /**
+     * A canonical comparison, written as a node standing where {@code of} did with what is asserted
+     * of it held beside it.
+     *
+     * <p>{@code of} is here because a node is more than its two sides and its operator: where it
+     * came from, what it answers and where it stands are what the readings below it file the fact
+     * under, and a comparison put in its place that said any of them differently would be a fact
+     * about somewhere else. What is written is the reader's own business and is no part of what the
+     * comparison states, which is why the node is held here and not carried in the statement.
+     */
+    private record AsPolar(Core.Binary of)
+            implements CanonicalComparison.Expression<Core, Polar> {
+
+        @Override
+        public Polar theSameValue(Core left, Core right) {
+            return new Polar(comparison(BinOp.EQ, left, right, of), true);
+        }
+
+        @Override
+        public Polar below(Core left, Core right) {
+            return new Polar(comparison(BinOp.LT, left, right, of), true);
+        }
+
+        /** Carried beside the node, which is what a polarity is for: a denial written as a node
+         *  would be a second shape for the readings below to take apart before they could read the
+         *  comparison under it. */
+        @Override
+        public Polar denied(Polar statement) {
+            return new Polar(statement.expr(), !statement.positive());
+        }
     }
 
     static Core.Binary comparison(BinOp op, Core left, Core right, Core.Binary of) {

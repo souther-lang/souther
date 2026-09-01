@@ -24,13 +24,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a report may name about the arms turns on what was observed, not on what the numbers came to.
+ * What a report may name about the arms turns on what was observed of each arm, not on what the
+ * measure over all of them came to.
  *
- * <p>Two questions and two answers. Whether every row could be read says whether an arm nothing was
- * seen to reach may still be reached; whether the numbers are a whole measure falls for that and for
- * a fork whose rule could not be worked out as well. Read as one, a build whose rows all ran is told
- * a row was not read, and every arm it certainly does not reach goes unsaid — which is the defect
- * the two were split apart over, arriving one layer later.
+ * <p>The measure here is short of something and every arm of it is answered for: the rows were all
+ * read, so the arm no row goes through is a gap and is named, and the fork whose rule could not be
+ * worked out takes its own arms out of the count and is said under it. Read as one word, a build
+ * whose rows all ran was told a row was not read, and every arm it certainly does not reach went
+ * unsaid.
  */
 class WhatWasObservedDecidesWhatAReportMayNameTest {
 
@@ -65,8 +66,12 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
         AdequacyReport.branch(behavior, read(),
                 new DocumentSources(SourceNameResolver.identity()));
 
-        assertEquals(1, behavior.get("branch").get("unreached").size(),
-                () -> "the settled fork's other arm: " + behavior.get("branch"));
+        List<String> dispositions = new java.util.ArrayList<>();
+        behavior.get("branch").get("obligations")
+                .forEach(arm -> dispositions.add(arm.get("disposition").asString()));
+        assertEquals(List.of("met", "unmet", "not_counted", "not_counted"), dispositions,
+                () -> "the settled fork's other arm, and the fork nothing tells apart: "
+                        + behavior.get("branch"));
         assertEquals("partial", behavior.get("branch").get("status").asString(),
                 "and the numbers still say they are not a whole measure");
     }
@@ -85,8 +90,14 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                         null, List.of()),
                 null, SourceNameResolver.identity());
 
-        assertTrue(out.toString().contains("branch      1/4"),
+        // Two arms and not four. What the count holds is what a row can be owed for, and a fork
+        // standing for however many rules nobody could work out is not that — it is said under the
+        // number instead. Held in the denominator, the difference between the numbers was two arms
+        // a reader had no way to walk to.
+        assertTrue(out.toString().contains("branch      1/2"),
                 () -> "what the arms came to: " + out);
+        assertTrue(out.toString().contains("could not be worked out"),
+                () -> "and the arms it does not hold are said under it: " + out);
         assertFalse(out.toString().contains("a row was not read"),
                 () -> "every row was read: " + out);
     }

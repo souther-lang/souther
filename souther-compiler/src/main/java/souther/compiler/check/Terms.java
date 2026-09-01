@@ -2098,8 +2098,7 @@ final class Terms {
             case Core.UnitValue u -> new Naming.Named(interned.unit(u.data()));
             case Core.Neg n -> over(List.of(n.operand()), at, bound, depth, leaf,
                     ps -> interned.negated(ps.get(0)));
-            case Core.Binary b -> over(List.of(b.left(), b.right()), at, bound, depth, leaf,
-                    ps -> interned.operator(b.op(), ps.get(0), ps.get(1)));
+            case Core.Binary b -> binary(b, at, bound, depth, leaf);
             case Core.ListLit l -> over(l.elements(), at, bound, depth, leaf, interned::list);
             case Core.Tuple t -> over(t.elements(), at, bound, depth, leaf, interned::tuple);
             case Core.TupleGet g -> over(List.of(g.tuple()), at, bound, depth, leaf,
@@ -2245,6 +2244,28 @@ final class Terms {
     private Naming named(Naming naming, java.util.function.UnaryOperator<Term> made) {
         return naming instanceof Naming.Unnamed absent ? absent
                 : new Naming.Named(made.apply(naming.term()));
+    }
+
+    /**
+     * What a binary is named by: what the comparison it is states, or the operator over its two
+     * operands.
+     *
+     * <p>Recognised here, where the node is. A comparison of two values is named by what it placed
+     * ({@link ComparisonClaim#canonical}), so the six ways to write one come to what they state and
+     * two clauses comparing the same two values meet as one term. Handed the
+     * operator instead, what a comparison states would be read a second time below the point where
+     * it was already settled. What is left is an operator the interner takes as written.
+     */
+    private Naming binary(Core.Binary b, Denotations at, Map<BindingId, Term> bound, int depth,
+                          Leaf leaf) {
+        List<Core> sides = List.of(b.left(), b.right());
+        ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+        if (placed != null) {
+            return over(sides, at, bound, depth, leaf,
+                    ps -> interned.comparison(placed.canonical(ps.get(0), ps.get(1))));
+        }
+        return over(sides, at, bound, depth, leaf,
+                ps -> interned.operator(b.op(), ps.get(0), ps.get(1)));
     }
 
     /** {@code made} of the terms {@code parts} are, or null where any of them is named by nothing. */
