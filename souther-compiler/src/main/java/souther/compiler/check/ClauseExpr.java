@@ -96,8 +96,7 @@ sealed interface ClauseExpr {
         if (under != null) {
             return of(under, !positive, spelled);
         }
-        if (clause instanceof Core.Binary bin
-                && (bin.op() == BinOp.AND || bin.op() == BinOp.OR)) {
+        if (clause instanceof Core.Binary bin && bin.op().joinsTwoConditions()) {
             // Stated, a conjunction gives both sides; denied, it gives the choice between their
             // denials. And the same the other way round, which is the whole of what a denial does
             // to a connective.

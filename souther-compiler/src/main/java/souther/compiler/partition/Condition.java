@@ -116,7 +116,7 @@ sealed interface Condition {
                 && reads.meaningOf(name, symbols) instanceof ReadMeaning.Through through) {
             return of(through.denotes().value(), through.denotes().at(), symbols);
         }
-        if (e instanceof Core.Binary binary && combines(binary.op())) {
+        if (e instanceof Core.Binary binary && binary.op().joinsTwoConditions()) {
             Condition left = of(binary.left(), reads, symbols);
             Condition right = of(binary.right(), reads, symbols);
             return binary.op() == BinOp.AND
@@ -129,11 +129,6 @@ sealed interface Condition {
             }
         }
         return new NotRead(e);
-    }
-
-    /** Whether an operator joins two conditions rather than comparing two values. */
-    static boolean combines(BinOp op) {
-        return op == BinOp.AND || op == BinOp.OR;
     }
 
     // Which binaries are comparisons is `Comparison#of`'s answer and is asked rather than spelled
