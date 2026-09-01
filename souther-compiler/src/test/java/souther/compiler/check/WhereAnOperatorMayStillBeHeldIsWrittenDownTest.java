@@ -141,6 +141,54 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                 WALKS_TO_A_COMPARISON.why());
     }
 
+    /**
+     * And who takes the node out of a comparison, which is how the operator stays one call away.
+     *
+     * <p>Two things are asked of it and neither is what the comparison placed: which two sides the
+     * rule names, and which occurrence of a comparison in the tree this is. The second is why the
+     * node is held at all — a body is at a place, and a place is a question about the tree — and it
+     * is what keeps the list from being closed by handing out the sides instead.
+     */
+    @Test
+    void whoTakesTheNodeOutOfAComparisonIsWrittenDown() {
+        assertEquals(TAKES_THE_NODE, callersOfTheNode(),
+                "a reader taking the node has both sides and the operator; what it wants is one of"
+                        + " the first two, and this is where that is said");
+    }
+
+    /** Everything that asks a comparison for its node: some for the two sides it names, some for
+     *  which occurrence in the tree it is, and none for the operator. */
+    private static final List<String> TAKES_THE_NODE = List.of(
+            "souther.compiler.coverage.ComparisonCatalog.Catalogued.node",
+            "souther.compiler.coverage.CoverageSites.Plan.requireIsACatalogued",
+            "souther.compiler.inputs.ComparedNumber.lineOf",
+            "souther.compiler.partition.AffineReading.read",
+            "souther.compiler.partition.ComparedTerms.asWritten",
+            "souther.compiler.partition.ComparisonAssessment.of",
+            "souther.compiler.partition.ComparisonReadings.Reading.at",
+            "souther.compiler.partition.Condition.Compares.at",
+            "souther.compiler.partition.Cutting.asWritten",
+            "souther.compiler.partition.EnsuresThresholds.stated");
+
+    private static List<String> callersOfTheNode() {
+        List<String> out = new ArrayList<>();
+        forEachClass((owner, model) -> {
+            for (MethodModel method : model.methods()) {
+                for (java.lang.classfile.CodeElement element
+                        : method.code().map(code -> code.elementList()).orElse(List.of())) {
+                    if (element instanceof InvokeInstruction call
+                            && call.owner().asInternalName().equals(COMPARISON)
+                            && call.name().stringValue().equals("at")) {
+                        out.add(owner + "." + method.methodName().stringValue());
+                        break;
+                    }
+                }
+            }
+        });
+        out.sort(String::compareTo);
+        return out;
+    }
+
     private static Map<String, String> declared() {
         Map<String, String> out = new TreeMap<>();
         MAY_HOLD.forEach(each -> out.put(each.what(), ""));
