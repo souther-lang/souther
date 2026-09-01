@@ -28,9 +28,15 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * The one reading of a behavior's input, asked about a quantity over several of its positions.
  *
- * <p>What {@link Quantities} says, made. The declarations reaching each parameter are read when one
- * of these is made, and not again: a question with several positions in it, and the same question
- * with some of them settled, are both answered from what that reading came to.
+ * <p>What {@link Quantities} says, made. The declarations reaching this input are read under what a
+ * question assumes stands ({@link StructuralContext}) — which values turned out to be which cases,
+ * and which containers hold something — because a reading opened at a case says what it says of the
+ * rows that are that case and of no others. A question with several positions in it, and the same
+ * question with some of them settled, are answered from the same reading of the same context.
+ *
+ * <p>Read once per context and kept, which is a memo and not a second answer: what the rules leave
+ * under a context is a function of this value and that context, so the table may be dropped without
+ * changing anything this says.
  */
 final class ReadQuantities implements Quantities {
 
