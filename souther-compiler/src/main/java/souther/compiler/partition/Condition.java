@@ -5,7 +5,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
-import souther.compiler.types.BinOp;
+import souther.compiler.semantics.ConditionJoin;
 
 /**
  * What a condition of a body is made of.
@@ -26,11 +26,10 @@ import souther.compiler.types.BinOp;
  * establishes. All from moving a comparison into a {@code let}, which changes nothing about what the
  * model says.
  *
- * <p>So the vocabulary is here and the readers fold over it. Four shapes:
+ * <p>So the vocabulary is here and the readers fold over it. Three shapes:
  *
  * <ul>
- *   <li>{@link Both} and {@link Either} — the two operators a condition is built from, each of
- *       which stops as soon as it is settled;
+ *   <li>{@link Joined} — two conditions put together, with what their connective makes of them;
  *   <li>{@link Compares} — one comparison, with the reading of the names in force where it stands;
  *   <li>{@link NotRead} — where this stops. A condition can be anything a {@code Bool} is, and what
  *       is not one of the shapes above says nothing here rather than being guessed at.
@@ -62,11 +61,16 @@ sealed interface Condition {
      */
     Core at();
 
-    /** Both, and the right one runs only where the left held. */
-    record Both(Core.Binary at, Condition left, Condition right) implements Condition {}
-
-    /** Either, and the right one runs only where the left did not hold. */
-    record Either(Core.Binary at, Condition left, Condition right) implements Condition {}
+    /**
+     * Two conditions put together, and what the connective makes of them.
+     *
+     * @param how what the connective composes, which is read off the operator where this is made
+     *            and is what a reader asks rather than the operator: a reader holding the operator
+     *            reads it again for the same answer, and the two readings can be taught different
+     *            ones
+     */
+    record Joined(Core.Binary at, ConditionJoin how, Condition left, Condition right)
+            implements Condition {}
 
     /**
      * One comparison, and where the names in it point.
@@ -116,13 +120,12 @@ sealed interface Condition {
                 && reads.meaningOf(name, symbols) instanceof ReadMeaning.Through through) {
             return of(through.denotes().value(), through.denotes().at(), symbols);
         }
-        if (e instanceof Core.Binary binary && binary.op().joinsTwoConditions()) {
-            Condition left = of(binary.left(), reads, symbols);
-            Condition right = of(binary.right(), reads, symbols);
-            return binary.op() == BinOp.AND
-                    ? new Both(binary, left, right) : new Either(binary, left, right);
-        }
         if (e instanceof Core.Binary binary) {
+            ConditionJoin joined = ConditionJoin.of(binary.op()).orElse(null);
+            if (joined != null) {
+                return new Joined(binary, joined, of(binary.left(), reads, symbols),
+                        of(binary.right(), reads, symbols));
+            }
             Comparison comparison = Comparison.of(binary).orElse(null);
             if (comparison != null) {
                 return new Compares(comparison, reads);

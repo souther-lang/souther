@@ -13,6 +13,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.semantics.ConditionJoin;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -92,31 +93,27 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * derived alike, and the day one of them learned to read a new shape of condition would be the
      * day they stopped agreeing.
      *
-     * <p>A conjunction coming out true is both its operands true, and a disjunction coming out false
-     * is both false. The other two ways round say a disjunction of things, which is not a list of
-     * cuts and is not approximated into one: {@code A && B} being false says one of them failed and
-     * names neither, and narrowing on either would exclude rows that arrive. So those two are
-     * declined whole, at the condition rather than at an operand — neither operand is what could
+     * <p>A joined condition that came out the way its connective gives both halves is both halves
+     * having come out that way, and which way that is comes from the composition under the outcome
+     * rather than from the operator. The other composition says a disjunction of things, which is
+     * not a list of cuts and is not approximated into one: {@code A && B} being false says one of
+     * them failed and names neither, and narrowing on either would exclude rows that arrive. So it
+     * is declined whole, at the condition rather than at an operand — neither operand is what could
      * not be carried.
      */
     static List<OnTheWay> stating(Condition node, InputDomain inputs, boolean holding,
                                   Symbols symbols) {
         return switch (node) {
-            // A conjunction coming out true is both its operands true, and a disjunction coming out
-            // false is both false. The other two ways round say a disjunction of things, which is
-            // not a list of cuts and is not approximated into one: `A && B` being false says one of
-            // them failed and names neither, and narrowing on either would exclude rows that arrive.
-            // So the whole node is declined, at the whole node's place.
-            case Condition.Both both -> holding
-                    ? and(stating(both.left(), inputs, true, symbols),
-                            stating(both.right(), inputs, true, symbols))
-                    : List.of(new OnTheWay.Declined(Citation.of(both.at().pos()),
+            // Coming out the way that gives both halves, each of them came out that way too. The
+            // other composition says a disjunction of things, which is not a list of cuts and is
+            // not approximated into one: `A && B` being false says one of them failed and names
+            // neither, and narrowing on either would exclude rows that arrive. So the whole node is
+            // declined, at the whole node's place.
+            case Condition.Joined joined -> joined.how().under(holding) == ConditionJoin.BOTH
+                    ? and(stating(joined.left(), inputs, holding, symbols),
+                            stating(joined.right(), inputs, holding, symbols))
+                    : List.of(new OnTheWay.Declined(Citation.of(joined.at().pos()),
                             new OnTheWay.Why.OneOfTwoThings()));
-            case Condition.Either either -> holding
-                    ? List.of(new OnTheWay.Declined(Citation.of(either.at().pos()),
-                            new OnTheWay.Why.OneOfTwoThings()))
-                    : and(stating(either.left(), inputs, false, symbols),
-                            stating(either.right(), inputs, false, symbols));
             case Condition.Compares one -> List.of(of(one, inputs, holding, symbols));
             case Condition.NotRead not -> List.of(new OnTheWay.Declined(
                     Citation.of(not.at().pos()), new OnTheWay.Why.NoWordsForTheShape()));

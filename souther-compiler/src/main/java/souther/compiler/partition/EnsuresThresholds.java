@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
@@ -172,11 +172,6 @@ public final class EnsuresThresholds {
                               InputReading read, InputReads reads,
                               Drawn out) {
         Symbols symbols = read.symbols();
-        if (e instanceof Core.Binary both && both.op() == BinOp.AND) {
-            return stated(both.right(), rule, clause,
-                    stated(both.left(), rule, clause, line, read, reads, out),
-                    read, reads, out);
-        }
         // Through what a `let` binds, which is not a choice: what the expression comes to is its
         // body, so the body states whatever the rule states. This is the shape a helper called from
         // a clause arrives in — the call is expanded and its argument bound to the helper's own
@@ -186,11 +181,22 @@ public final class EnsuresThresholds {
             return stated(let.body(), rule, clause, line, read,
                     reads.and(let.binder(), let.value()), out);
         }
-        // A disjunction was read, and what it states is not what either side of it states. Said as
-        // nothing rather than as a rule this could not read: reporting it would send an author after
-        // a limit of this compiler that is not there.
-        if (e instanceof Core.Binary or && or.op() == BinOp.OR) {
-            return line + 1;
+        if (e instanceof Core.Binary binary) {
+            // Asked once of the connective this is, and both answers read off that. Asked again
+            // below for the other one, the second question would be free to come to a different
+            // answer about the very operator the first one has already been read for.
+            ConditionJoin joined = ConditionJoin.of(binary.op()).orElse(null);
+            if (joined == ConditionJoin.BOTH) {
+                return stated(binary.right(), rule, clause,
+                        stated(binary.left(), rule, clause, line, read, reads, out),
+                        read, reads, out);
+            }
+            if (joined == ConditionJoin.EITHER) {
+                // What such a rule states is not what either side of it states. Said as nothing
+                // rather than as a rule this could not read: reporting it would send an author
+                // after a limit of this compiler that is not there.
+                return line + 1;
+            }
         }
         // Anything else is a form this walk does not read. Which positions it is about is still
         // said, because a position left out of every answer is reported as one the model draws no

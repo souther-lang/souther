@@ -7,6 +7,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.numeric.Towards;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.BinOp;
@@ -148,7 +149,8 @@ final class Conditions {
             return;
         }
         if (cond instanceof Core.Binary b
-                && (b.op() == BinOp.AND && positive || b.op() == BinOp.OR && !positive)) {
+                && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
+                        == ConditionJoin.BOTH) {
             stating(terms, b.left(), at, positive, out);
             stating(terms, b.right(), at, positive, out);
             return;
