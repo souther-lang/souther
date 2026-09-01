@@ -3811,6 +3811,19 @@ public final class Adequacy {
             return debt.against(axis);
         }
 
+        /**
+         * Whether the declaration has a quantity to say the point on.
+         *
+         * <p>Asked rather than read back off {@link #said()}. A line between two positions writes
+         * its level as a distance from the other one, which is a reading's name for it and not the
+         * declaration's, so there is no quantity here and the point is the rule's line and the role
+         * on it. A report comparing the sentence with the rule's name to work that out would be
+         * deciding from the words what the account already answers.
+         */
+        public boolean namesItsQuantity() {
+            return against() != null;
+        }
+
         /** What a finding about it is about, which is every declaration that owes it. */
         public FindingSubject.OfADeclaration subject() {
             return new FindingSubject.OfADeclaration(

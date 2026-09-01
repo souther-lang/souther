@@ -776,6 +776,42 @@ public sealed interface BorderQuantity {
     String writtenAt(Level level);
 
     /**
+     * Whether {@link #writtenAt} says the same thing at every reading of one line.
+     *
+     * <p><b>What a debt may be written from.</b> A line an {@code invariant} drew is owed once for
+     * the module and is read at every position the type reaches, so a sentence about the debt may
+     * hold nothing that differs between those readings. Two of the three quantities write a level
+     * as a number or as a value of a carrier, and neither of those is a reading's; one writes it as
+     * a distance from another position, and what that position is called is the path a walk reached
+     * it by.
+     *
+     * <p>So this says whether there is a declaration-relative wording at all — not whether two
+     * readings happen to agree. The readings of a difference disagree because the answer is a
+     * reading's, which is a fact about the quantity and is known without asking any of them; a
+     * report that compared the spellings and refused where they differed was asking whether the
+     * model was written a certain way and getting an answer about which position a walk met first
+     * (issue #1251).
+     *
+     * <p>Exhaustive here, so a quantity added decides this rather than being read as one of the
+     * others by a reader that guessed. Saying yes wrongly puts one reading's position into a
+     * sentence about a line; saying no wrongly leaves a value unsaid that could have been said, and
+     * only the first of those is a report claiming something.
+     */
+    default boolean statesADeclarationRelativeLevel() {
+        return switch (this) {
+            // A carrier's own value, which the type declares. The same at every reading, since what
+            // it writes is the value and not where the value stands.
+            case OfACoordinate _ -> true;
+            // A number the form comes to, likewise the form's and not a position's.
+            case OverAForm _ -> true;
+            // How far from the other position, whose name is the path this reading reached it by.
+            // A declaration has no name for it: the rule relates two positions and places no end,
+            // so nothing about the pair is kept in the declaration's own terms (ADR-0090).
+            case Apart _ -> false;
+        };
+    }
+
+    /**
      * Which shape a border on this has, for a reader that has to tell them apart without holding
      * either.
      *

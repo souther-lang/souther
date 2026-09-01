@@ -518,8 +518,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // of a point nobody read as much as of one nothing could show writable.
         for (Adequacy.DeclaredDebt each : account.undecided()) {
             for (String said : undecidedBecause(each.debt().owed(),
-                    each.debt().role() + " point " + each.said()
-                            + " (" + each.debt().describe(names, null) + ")")) {
+                    pointOf(each, each.debt().describe(names, null)))) {
                 out.append(String.format("      ? %s%n", said));
             }
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
@@ -536,12 +535,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     // What the point asks, in its own words. A point against the line names a value
                     // and a point beside it names a run, and a sentence that wrote `=` for both said
                     // a run was one value.
-                    out.append(String.format("      %s no row is at the %s point%s %s (%s)%n",
-                            mark(f), owed.debt().role(), owed.debt().whichSide(), owed.said(),
-                            owed.debt().id().named()));
+                    out.append(String.format("      %s no row is at the %s%n",
+                            mark(f), pointOf(owed, owed.debt().id().named())));
                 }
             }
         });
+    }
+
+    /**
+     * One point of a declaration's line, as a sentence names it.
+     *
+     * <p>Two shapes, and which it is is the debt's answer rather than a reading of the words. A
+     * point on a quantity the declaration has a name for says what a row there has to do and then
+     * which rule drew the line; a point on a line between two positions has no such quantity — the
+     * level is a distance from the other position, which is a reading's name for it — so the line
+     * and the role on it is the whole of what there is to say (issue #1251).
+     */
+    private static String pointOf(Adequacy.DeclaredDebt owed, String rule) {
+        return owed.namesItsQuantity()
+                ? owed.debt().role() + " point" + owed.debt().whichSide() + " " + owed.said()
+                        + " (" + rule + ")"
+                : owed.debt().role() + " point of " + rule;
     }
 
     /** This report with only the modules and behaviors the caller asked about. A name that matches
@@ -3053,9 +3067,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // What the line is on, where the author wrote a word for it. A body's line has none,
             // and the readings below say what each position it was met at has to hold.
             String axis = axes == null ? null : axes.get(point.point());
-            if (axis != null) {
+            // Both or neither, which the schema holds them to. A line between two positions writes
+            // its level as a distance from the other one — a reading's name for it and not the
+            // declaration's — so there is nothing here in the author's words to put, and a document
+            // carrying the rule's own name under `axis` would be answering with the wrong thing
+            // (issue #1251).
+            String against = axis == null ? null : point.against(axis);
+            if (axis != null && against != null) {
                 o.put("axis", axis);
-                o.put("against", point.against(axis));
+                o.put("against", against);
             }
             owedIn(o, point.owed());
             // The readings, each as the position it met the line at and what a row there has to

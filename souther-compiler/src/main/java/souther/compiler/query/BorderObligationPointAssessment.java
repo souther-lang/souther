@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.PointRole;
@@ -533,32 +534,35 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     }
 
     /**
-     * What a row here would have to do, written on a quantity called {@code axis}.
+     * What a row here would have to do, written on a quantity called {@code axis}, or null where a
+     * declaration has no words for it.
      *
      * <p>The quantity is handed in because no reading of the point names it and this holds no name
      * of its own. What a criterion writes is the level in the terms of the order that level is on,
-     * and which order that is, is part of what a point is — the readings of one point cut one
-     * carrier at one place, which is checked where their demands are. So the order here is not one
-     * reading standing in for the rest; it is the one answer they all give.
+     * and which order that is, is part of what a point is.
+     *
+     * <p><b>Asked of the quantity and never of whether the readings agree.</b> A line an {@code
+     * invariant} drew is owed once for the module and read at every position the type reaches, so a
+     * sentence about the debt may hold nothing that differs between those readings — and whether
+     * there is such a sentence is a fact about what the quantity writes a level as
+     * ({@link BorderQuantity#statesADeclarationRelativeLevel}), known without asking any reading.
+     *
+     * <p>It used to be asked by writing the level at every reading and refusing where two of them
+     * differed. They differ exactly where the answer is a reading's: a line between two positions
+     * writes the level as a distance from the other one, and what that position is called is the
+     * path a walk reached it by. So a model with a relation on a case of a sum — read once through
+     * the case and once through the sum — was a model whose report could not be produced at all,
+     * and the sentence the check refused to write was one nothing could have written (issue #1251).
      */
     public String against(String axis) {
-        // Every reading asked, and refused where they disagree rather than resolved. What a row
-        // here has to do is the point's, so a spelling that differs between the readings is a
-        // spelling only one of them can give — and taking one would name this point after the
-        // place a walk reached first. Where they agree, which reading answered is immaterial and
-        // no representative was chosen.
-        String written = null;
         for (BorderAssessment reading : met.values()) {
-            String also = demand.criterion().written(reading.border().cut().of(), axis);
-            if (written == null) {
-                written = also;
-            } else if (!written.equals(also)) {
-                throw new IllegalStateException("a point whose readings write what it asks for"
-                        + " differently, so it has no words of its own: " + point + " is " + written
-                        + " and " + also);
-            }
+            BorderQuantity of = reading.border().cut().of();
+            // Which quantity this is is the line's and not this reading's; every reading of one
+            // point cuts one carrier at one place, which is checked where their demands are.
+            return of.statesADeclarationRelativeLevel()
+                    ? demand.criterion().written(of, axis) : null;
         }
-        return written;
+        return null;
     }
 
     /**
@@ -568,10 +572,19 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * quantity the caller has a declaration for rather than on the position a reading met it at.
      * The two are joined by a consumer against one of a border's items, so they are spelled by one
      * rule and not two.
+     *
+     * <p><b>Total.</b> Every obligation the account counts is one a report names, so a point this
+     * cannot write a level for is written as far as it goes — the quantity, and nothing invented
+     * for the other side. What is left out is a reading's spelling of another position, which is
+     * not the declaration's to give.
      */
     public String said(String axis) {
-        return role().againstTheLine() ? axis + " = " + against(axis)
-                : axis + " " + operator() + " " + against(axis);
+        String against = against(axis);
+        if (against == null) {
+            return axis;
+        }
+        return role().againstTheLine() ? axis + " = " + against
+                : axis + " " + operator() + " " + against;
     }
 
     /**
