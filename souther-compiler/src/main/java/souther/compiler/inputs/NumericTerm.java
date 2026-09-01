@@ -407,68 +407,6 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
     }
 
     /**
-     * The order the number this term names is measured on, or null where it has none.
-     *
-     * <p>What a rule about the length of a string is counted as is an {@code Int} at a position no
-     * line is drawn on, and what a rule about {@code Time.hour(t)} is counted as is a count by one at
-     * a position counting the seconds of its day. Both follow from what the operation answers and
-     * from nothing about where it was applied — asked of the position, the step of the answer was
-     * the step of the argument, and the twelfth hour was a line at the twelfth second.
-     *
-     * <p>Which is why {@code positionType} may be absent. A caller reading a term under more steps
-     * than the walk that finds an input's positions goes down has no position to ask, and what an
-     * operation answers is what it answers all the same — asked for the type first, a caller would
-     * either have nothing to pass or would write out the rule above a second time, at whichever call
-     * site noticed. What is null there is a term measured by its own values, which is the one case
-     * the position was the answer to.
-     */
-    default Carrier answeredOn(Type positionType, Symbols symbols) {
-        return switch (this) {
-            case ValueOf _ -> positionType == null ? null : Carrier.ofValue(positionType, symbols);
-            case TakenOf taken -> {
-                Type answers = NumericAnswers.typeOf(taken.operation(), positionType, symbols);
-                yield answers == null ? null : Carrier.ofValue(answers, symbols);
-            }
-            // Asked of the operation as a taking is, and asked of what it was given: a run is a
-            // container of the values standing at the place it is read from, so what the operation
-            // answers of one is what it answers of a container of them. Written out here as the
-            // element's own order instead, this would be the account of a walk that adds restated
-            // for every account, and the first one that answers something else would be read as
-            // answering what its elements are.
-            case TakenOver over -> {
-                Type answers = positionType == null ? null : NumericAnswers.typeOf(
-                        over.operation(), new Type.ListOf(positionType), symbols);
-                yield answers == null ? null : Carrier.ofValue(answers, symbols);
-            }
-        };
-    }
-
-    /**
-     * The order a value at {@link #path()} is decoded on, or null where nothing orders it.
-     *
-     * <p>The other end of the same term, and null for more than one reason. A container is not
-     * ordered and is read by what it holds rather than by a count of its own; a position whose type
-     * nothing here can follow has no order either. Both are answers a reader can act on — what is
-     * refused is silently reading the value on the order its answer is measured on, which is right
-     * for every operation whose two ends agree and wrong without a word for the first that does not.
-     */
-    default Carrier observedOn(Type positionType, Symbols symbols) {
-        return positionType == null ? null : Carrier.ofValue(positionType, symbols);
-    }
-
-    /** Both ends together, which is what every reader of a row wants and what neither end alone is
-     *  safe to stand in for. A term that is what a location holds has one order twice, and says so
-     *  here rather than by two readings that happen to agree. */
-    default TermOrders ordersAt(Type positionType, Symbols symbols) {
-        Carrier observed = observedOn(positionType, symbols);
-        return switch (this) {
-            case ValueOf _ -> TermOrders.itself(observed);
-            case TakenOf _, TakenOver _ ->
-                    new TermOrders(observed, answeredOn(positionType, symbols));
-        };
-    }
-
-    /**
      * The number this term names at an observation of {@link #path()}, or why there is none.
      *
      * <p>The one reader. What a class asks of a row, what a boundary asks of it, and what a report
@@ -673,12 +611,6 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             case MONTH -> date.getMonthValue();
             case DAY -> date.getDayOfMonth();
         }));
-    }
-
-    /** How the values beside a boundary on this term are found, which is what the number it names
-     *  is measured on and never what stands at the position it was taken of. */
-    default BoundaryDomain intervals(Type positionType, Symbols symbols) {
-        return BoundaryDomain.on(answeredOn(positionType, symbols));
     }
 
     /**

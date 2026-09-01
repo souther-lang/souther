@@ -108,7 +108,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     /** A position read and written on one order, which is every position here: what an operation
      *  answered of one is not what these tests are about. */
     private static souther.compiler.inputs.TermOrders on(Carrier carrier) {
-        return souther.compiler.inputs.TermOrders.itself(carrier);
+        return souther.compiler.inputs.TermOrdersFixtures.itself(carrier);
     }
 
     /** And a position with no number under it is one a sum has nothing to add. */

@@ -169,7 +169,7 @@ final class ReadQuantities implements Quantities {
         // absent, so a term of another input comes back with an order on one end and nothing on the
         // other — an answer about no reading, wearing this one's name.
         held(term);
-        return term.ordersAt(typeAt.apply(term.subjectPath()), symbols);
+        return TermOrdering.of(term, typeAt.apply(term.subjectPath()), symbols);
     }
 
     @Override

@@ -43,11 +43,11 @@ class ATermSaysWhyItHasNoNumberTest {
 
     /** The two orders a whole-number position stands on, which are one order. */
     private static final souther.compiler.inputs.TermOrders AS_A_NUMBER =
-            souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE);
+            souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE);
 
     /** And the two a length stands on: the string is read as text, the count as a whole number. */
     private static final souther.compiler.inputs.TermOrders AS_A_LENGTH =
-            new souther.compiler.inputs.TermOrders(Carrier.TEXT, Carrier.WHOLE);
+            souther.compiler.inputs.TermOrdersFixtures.orders(Carrier.TEXT, Carrier.WHOLE);
 
     @Test
     void anObservationThatDidNotArriveIsMissing() {

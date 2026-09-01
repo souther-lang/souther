@@ -19,15 +19,58 @@ import souther.compiler.check.Carrier;
  * with each other and with nothing else. The repair was to hold both ends of one crossing together,
  * and this holds both ends of one term together for the same reason.
  *
- * @param observed what a value at the term's path is decoded on, or null where nothing orders it —
- *                 a container has no order and is read by what it holds
- * @param answered what the number the term names is measured on, which is what a boundary on it is
- *                 drawn and written back on
+ * <p><b>Read anywhere and made in one place.</b> Which orders a term stands on follows from where
+ * the reading of an input has that term standing, so a pair put together outside this package is a
+ * pair about no reading in particular — and a pair whose halves came from two callers is one whose
+ * two ends are free to part. Neither is a class of mistake a reader can see, so neither is a state
+ * this lets anything reach: the way to one of these is {@link Quantities#ordersOf}. A test that
+ * wants a synthetic pair writes one in this package, where the source set says it is a test.
  */
-public record TermOrders(Carrier observed, Carrier answered) {
+public final class TermOrders {
+
+    private final Carrier observed;
+    private final Carrier answered;
+
+    /**
+     * @param observed what a value at the term's path is decoded on, or null where nothing orders
+     *                 it — a container has no order and is read by what it holds
+     * @param answered what the number the term names is measured on, which is what a boundary on it
+     *                 is drawn and written back on
+     */
+    TermOrders(Carrier observed, Carrier answered) {
+        this.observed = observed;
+        this.answered = answered;
+    }
 
     /** A term whose value is the number it answers, which is every {@link NumericTerm.ValueOf}. */
-    public static TermOrders itself(Carrier carrier) {
+    static TermOrders itself(Carrier carrier) {
         return new TermOrders(carrier, carrier);
+    }
+
+    /** What a value at the term's path is decoded on, or null where nothing orders it. */
+    public Carrier observed() {
+        return observed;
+    }
+
+    /** What the number the term names is measured on. */
+    public Carrier answered() {
+        return answered;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof TermOrders that
+                && java.util.Objects.equals(observed, that.observed)
+                && java.util.Objects.equals(answered, that.answered);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(observed, answered);
+    }
+
+    @Override
+    public String toString() {
+        return "TermOrders[observed=" + observed + ", answered=" + answered + "]";
     }
 }

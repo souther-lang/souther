@@ -9,7 +9,7 @@ import souther.compiler.check.ClauseName;
 import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
@@ -169,7 +169,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
         return BoundaryTarget.at(
                 new BorderQuantity.OfACoordinate(axis,
                         new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                        TermOrders.itself(WHOLE)),
+                        TermOrdersFixtures.itself(WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(value)));
     }
 

@@ -164,7 +164,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         return BoundaryTarget.at(
                 new BorderQuantity.OfACoordinate(AT,
                         new NumericTerm.ValueOf(TermPath.of("h").then("a")),
-                        souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                        souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
                 new Level.OnACarrier(Carrier.WHOLE, Count.of(5)));
     }
 

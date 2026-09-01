@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -44,7 +45,7 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
             souther.compiler.check.Symbols.none(souther.compiler.DefaultStdlib.get()));
 
     private static final TermOrders WHOLE =
-            TermOrders.itself(new Carrier.Whole());
+            TermOrdersFixtures.itself(new Carrier.Whole());
 
     /** The capability question, which is the one every reader that would act on a place asks. */
     @Test

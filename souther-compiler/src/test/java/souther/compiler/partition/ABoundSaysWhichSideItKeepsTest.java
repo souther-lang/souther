@@ -161,7 +161,7 @@ class ABoundSaysWhichSideItKeepsTest {
                 new BorderQuantity.OfACoordinate(axis,
                         new souther.compiler.inputs.NumericTerm.ValueOf(
                                 souther.compiler.inputs.TermPath.of(axis.term())),
-                        souther.compiler.inputs.TermOrders.itself(carrier)),
+                        souther.compiler.inputs.TermOrdersFixtures.itself(carrier)),
                 new Level.OnACarrier(carrier, Count.of(at)));
     }
 

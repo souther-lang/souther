@@ -10,7 +10,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
@@ -178,7 +178,7 @@ class OneBorderReadTwiceIsOneReadingTest {
         return Border.at(BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(axis,
                                 new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                                TermOrders.itself(WHOLE)),
+                                TermOrdersFixtures.itself(WHOLE)),
                         new Level.OnACarrier(WHOLE, at)),
                 aBound(),
                 new NumericDomain.Bounds(Endpoint.inclusive(at),
@@ -203,7 +203,7 @@ class OneBorderReadTwiceIsOneReadingTest {
         return BoundaryTarget.at(
                 new BorderQuantity.OfACoordinate(axis,
                         new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                        TermOrders.itself(WHOLE)),
+                        TermOrdersFixtures.itself(WHOLE)),
                 at(value));
     }
 

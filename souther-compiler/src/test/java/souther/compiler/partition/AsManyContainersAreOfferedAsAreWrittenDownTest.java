@@ -87,7 +87,8 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
                 ValueName.Stdlib.operation("List", "sum"), TermPath.of("ns"), OF_WHOLE_NUMBERS,
                 SYMBOLS);
         assertNotNull(total, "a walk that adds up a list of whole numbers is a number of it");
-        TermOrders orders = total.ordersAt(OF_WHOLE_NUMBERS, SYMBOLS);
+        TermOrders orders = souther.compiler.inputs.TermOrdersFixtures
+                .at(total, OF_WHOLE_NUMBERS, SYMBOLS);
         assertTrue(orders.answered() != null, "and the order it answers on is the elements'");
         return TermRealizations.at(new RealizationTarget.AtOnePosition(total), OF_WHOLE_NUMBERS,
                 orders, SIX, NothingTheRulesSay.REGION, SYMBOLS, POLICY);

@@ -71,7 +71,7 @@ final class AReportOfOneBorder {
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
                                 new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                                souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,
@@ -101,7 +101,7 @@ final class AReportOfOneBorder {
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
                                 new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                                souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,
@@ -119,7 +119,7 @@ final class AReportOfOneBorder {
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
                                 new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                                souther.compiler.inputs.TermOrdersFixtures.itself(Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,

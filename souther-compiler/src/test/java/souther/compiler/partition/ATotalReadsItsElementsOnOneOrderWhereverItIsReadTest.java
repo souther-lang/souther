@@ -92,7 +92,8 @@ class ATotalReadsItsElementsOnOneOrderWhereverItIsReadTest {
             Symbols.none(souther.compiler.DefaultStdlib.get()));
 
     /** A container is on no order of its own, and the total it answers is counted by one. */
-    private static final TermOrders A_CONTAINERS_ORDERS = new TermOrders(null, Carrier.WHOLE);
+    private static final TermOrders A_CONTAINERS_ORDERS =
+            souther.compiler.inputs.TermOrdersFixtures.orders(null, Carrier.WHOLE);
 
     private static Count numberOf(NumericTerm.Reading read) {
         return (Count) ((NumericTerm.Reading.Number) read).value();
