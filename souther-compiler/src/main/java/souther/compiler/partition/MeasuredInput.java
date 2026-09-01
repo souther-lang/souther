@@ -155,6 +155,22 @@ public final class MeasuredInput {
         return divided;
     }
 
+    /**
+     * What was measured at each of its positions, in the order the reading found them.
+     *
+     * <p>The shape the measurement has. A number is measured at a location and a location may be
+     * measured at several, so which location a measure is of is where the measure sits — a reader
+     * that needs both walks this rather than putting them back together from how a path is
+     * spelled. The two projections below are this flattened.
+     */
+    public List<MeasuredPosition> measurements() {
+        List<MeasuredPosition> out = new ArrayList<>(divided.measurements().size());
+        for (PositionMeasurements at : divided.measurements()) {
+            out.add(new MeasuredPosition(this, at));
+        }
+        return List.copyOf(out);
+    }
+
     /** Every measure of its positions, in the order the rules name the numbers. */
     public MeasuredAxes axes() {
         return new MeasuredAxes(this, divided.axes());
@@ -248,6 +264,56 @@ public final class MeasuredInput {
             }
         }
         return false;
+    }
+
+    /**
+     * One location of a measured input, and what the model divides it by.
+     *
+     * <p>What a reader answering about a location holds: the account of what its reading came to,
+     * and the measures made there, each of them already beside the input they were measured at. A
+     * reader walking these never has a measure in one hand and a location in the other.
+     */
+    public static final class MeasuredPosition {
+
+        private final MeasuredInput subject;
+        private final PositionMeasurements measured;
+
+        private MeasuredPosition(MeasuredInput subject, PositionMeasurements measured) {
+            this.subject = subject;
+            this.measured = measured;
+        }
+
+        /** What this location's reading came to. */
+        public PositionAccount position() {
+            return measured.position();
+        }
+
+        /** Every measure made here. */
+        public MeasuredAxes axes() {
+            return new MeasuredAxes(subject, measured.axes());
+        }
+
+        /** The measures here that divide their number into classes. */
+        public MeasuredAxes partitionAxes() {
+            return new MeasuredAxes(subject, measured.partitionAxes());
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof MeasuredPosition that
+                    && subject.equals(that.subject)
+                    && measured.equals(that.measured);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(subject, measured);
+        }
+
+        @Override
+        public String toString() {
+            return "MeasuredPosition[" + measured.position().path() + "]";
+        }
     }
 
     /**
