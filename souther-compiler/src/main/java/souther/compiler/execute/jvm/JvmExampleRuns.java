@@ -46,7 +46,7 @@ public final class JvmExampleRuns {
             throw new IllegalStateException("`" + asked.module() + "` emitted nothing to run its"
                     + " rows against");
         }
-        return ExampleVerifier.evaluating(asked.rows(), asked.symbols(), asked.fieldTypes(),
+        return ExampleVerifier.evaluating(asked.forExamples(), asked.symbols(), asked.fieldTypes(),
                 asked.signatures(),
                 image.program(), image.published(), asked.requirements(), image.around(),
                 asked.definitions(), deadline, asked.policy(), answering,

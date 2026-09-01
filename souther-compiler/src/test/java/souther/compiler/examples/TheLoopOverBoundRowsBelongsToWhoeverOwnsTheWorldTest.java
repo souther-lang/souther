@@ -95,7 +95,7 @@ class TheLoopOverBoundRowsBelongsToWhoeverOwnsTheWorldTest {
     @Test
     void oneRowEvaluatedUnderTwoWorldsIsTwoObservations() throws Exception {
         BoundExamples examples = bound();
-        RowKey key = examples.row("findTodo", "a todo that is stored");
+        RowKey key = examples.rowKey("findTodo", "a todo that is stored");
         RecordedRow stored = examples.rows().stream().filter(key::is).findFirst().orElseThrow();
 
         System.setProperty(STORED, "yes");
@@ -122,9 +122,9 @@ class TheLoopOverBoundRowsBelongsToWhoeverOwnsTheWorldTest {
     void anAddressIsResolvedAgainstTheRowsAsWritten() throws Exception {
         BoundExamples examples = bound();
 
-        assertEquals("a todo that is stored", examples.row("findTodo", "a todo that is stored").name());
+        assertEquals("a todo that is stored", examples.rowKey("findTodo", "a todo that is stored").name());
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> examples.row("findTodo", "a todo that was never written"));
+                () -> examples.rowKey("findTodo", "a todo that was never written"));
         assertTrue(refused.getMessage().contains("a todo that was never written"),
                 refused.getMessage());
     }

@@ -17,10 +17,10 @@ import java.util.List;
 public sealed interface ArmDisposition {
 
     /** A row was composed for a combination that takes it, or along the way into it. */
-    record Built(RowId row) implements ArmDisposition {
+    record Built(RowId rowId) implements ArmDisposition {
 
         public Built {
-            if (row == null) {
+            if (rowId == null) {
                 throw new IllegalArgumentException("an arm a row was composed for names the row");
             }
         }

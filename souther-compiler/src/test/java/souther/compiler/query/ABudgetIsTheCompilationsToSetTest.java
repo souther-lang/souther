@@ -112,7 +112,7 @@ class ABudgetIsTheCompilationsToSetTest {
     @Test
     void theStandardBudgetIsWhatACompilationSets() {
         assertTrue(Budgets.measures().pairSpace() > 0);
-        assertTrue(Budgets.generation().rows() > 0);
+        assertTrue(Budgets.generation().rowLimit() > 0);
         assertTrue(Budgets.generation().cellsPerGroup() > 0);
     }
 
@@ -122,7 +122,7 @@ class ABudgetIsTheCompilationsToSetTest {
         Compilation compilation = Compilation.ofSource(TWO_DECISIONS, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
                         Budgets.measures(),
-                        new AdequacyPolicy.OfTheGeneration(Budgets.generation().rows(), cells)));
+                        new AdequacyPolicy.OfTheGeneration(Budgets.generation().rowLimit(), cells)));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling =

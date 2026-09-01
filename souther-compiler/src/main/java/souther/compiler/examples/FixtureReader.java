@@ -79,7 +79,7 @@ import java.util.function.Supplier;
  */
 public final class FixtureReader {
 
-    private final souther.compiler.check.Prepared.Examples module;
+    private final souther.compiler.check.Prepared.ForExamples module;
     private final Symbols symbols;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Hir.FnDef> values;
@@ -93,7 +93,7 @@ public final class FixtureReader {
     /** The same answer as the places a comparison reads a value's parts at. */
     private final ValueTypes types;
 
-    FixtureReader(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+    FixtureReader(souther.compiler.check.Prepared.ForExamples module, Symbols symbols,
                   FieldTypes fields, Map<String, Hir.FnDef> values,
                   MemoryClassLoader loader) {
         this.module = module;
@@ -107,7 +107,7 @@ public final class FixtureReader {
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
-    public static BoundaryValues constructing(souther.compiler.check.Prepared.Examples module, Symbols symbols,
+    public static BoundaryValues constructing(souther.compiler.check.Prepared.ForExamples module, Symbols symbols,
                                             FieldTypes fields,
                                             Map<String, ClassFileImage> classes, ClassLoader parent,
                                             Map<String, Hir.FnDef> values) {

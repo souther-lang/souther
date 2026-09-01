@@ -2,6 +2,8 @@ package souther.bench;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Adequacy;
+
 import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -32,6 +34,10 @@ class WhatARowCameToIsReadInOnePlaceTest {
 
     /** Where a row's outcome becomes a reason a measure could not read everything. */
     private static final String PRODUCER = "souther.compiler.examples.ExampleVerifier";
+
+    /** What every behavior's rows came to, named by its class so that renaming it is a thing javac
+     *  says here rather than something this goes on spelling. */
+    private static final String READINGS = Adequacy.RowReadings.class.getName();
 
     /**
      * Nothing but the producer asks whether a row did not come back.
@@ -88,15 +94,15 @@ class WhatARowCameToIsReadInOnePlaceTest {
     void whatTheSourcesSawIsGatheredWhereTheAnswerIsMade() throws IOException {
         Set<String> gathering = new LinkedHashSet<>();
         for (Compiled.Site site : Compiled.sites()) {
-            if (site.owner().equals("souther.compiler.query.Adequacy")
+            if (site.owner().equals(Adequacy.class.getName())
                     && site.member().equals("rowsOf")
-                    && !site.at().startsWith("souther.compiler.query.Adequacy$Rows#compute")) {
+                    && !site.at().startsWith(READINGS + "#compute")) {
                 gathering.add(site.at());
             }
         }
         assertEquals(Set.of(), gathering,
-                "a caller reached past `Adequacy.Rows` for the gathering under it, which is where"
-                        + " what a level asked for stops being one answer");
+                "a caller reached past `" + READINGS + "` for the gathering under it, which is"
+                        + " where what a level asked for stops being one answer");
     }
 
     /**
@@ -121,7 +127,7 @@ class WhatARowCameToIsReadInOnePlaceTest {
         }
         assertEquals(Set.of(), gathering,
                 "a reader outside the queries assembled what a module's sources saw. What every"
-                        + " behavior's rows came to is `Adequacy.Rows`, and a second assembly of it"
-                        + " is a second answer to keep agreeing");
+                        + " behavior's rows came to is `" + READINGS + "`, and a second assembly"
+                        + " of it is a second answer to keep agreeing");
     }
 }

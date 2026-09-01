@@ -46,7 +46,7 @@ public final class ExampleProvisioning {
      * @param onTheRow the {@code with}s written on the row; empty for a row not written yet
      */
     public static Standin standingIn(List<Hir.With> onTheRow, ValueName.Behavior dependency,
-                                     Prepared.Examples module) {
+                                     Prepared.ForExamples module) {
         for (Hir.With written : onTheRow) {
             if (dependency.equals(written.standsInFor())) {
                 return new Standin.OnTheRow(written);
@@ -59,7 +59,7 @@ public final class ExampleProvisioning {
     /** Of {@code required}, the ones nothing stands in for, in the order they were required. */
     public static List<ValueName.Behavior> unsupplied(List<Hir.With> onTheRow,
                                                       List<ValueName.Behavior> required,
-                                                      Prepared.Examples module) {
+                                                      Prepared.ForExamples module) {
         List<ValueName.Behavior> owed = new ArrayList<>();
         for (ValueName.Behavior dependency : required) {
             if (standingIn(onTheRow, dependency, module) instanceof Standin.Nothing) {

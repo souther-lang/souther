@@ -93,11 +93,12 @@ public final class StandingAtAPoint {
      *             takes more than standing at the level. Empty where standing there is the whole
      *             of it
      */
-    public static Met met(BorderQuantity quantity, BehaviorInputs where, List<ObservedInputs> rows,
-                          Criterion criterion, Optional<ComparisonOccurrence> site) {
+    public static Met met(BorderQuantity quantity, BehaviorInputs where,
+                          List<ObservedInputs> observed, Criterion criterion,
+                          Optional<ComparisonOccurrence> site) {
         Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
         boolean unwatched = false;
-        for (ObservedInputs row : rows) {
+        for (ObservedInputs one : observed) {
             // A row has more than one value at a position inside a sequence, and standing at a point
             // is one element standing there. Asked for one value, such a row answered with none and
             // every point on such a line came back undecided — a measurement that could not look,
@@ -105,10 +106,10 @@ public final class StandingAtAPoint {
             // The first reading both answers the point and says which steps the line's positions
             // take; the rest are tried under each choice those steps allow.
             Map<TermPath, Integer> held = new LinkedHashMap<>();
-            OneReadingOfARow first = new OneReadingOfARow(where, row, Map.of(), held);
+            OneReadingOfARow first = new OneReadingOfARow(where, one, Map.of(), held);
             boolean stands = false;
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
-            for (OneReadingOfARow reading : readings(where, row, quantity, criterion, first, held)) {
+            for (OneReadingOfARow reading : readings(where, one, quantity, criterion, first, held)) {
                 switch (quantity.standsAt(criterion, reading)) {
                     // A reading that could not look, unless what it could not find was an element
                     // the row wrote none of — that is a row that was read and does not stand, and
@@ -130,7 +131,7 @@ public final class StandingAtAPoint {
                 if (site.isEmpty()) {
                     return Met.REACHED;   // writing the value is the whole of what there is to reach
                 }
-                switch (row.watched()) {
+                switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
                         if (site.stream().allMatch(account::reached)) {
                             return Met.REACHED;
@@ -171,25 +172,25 @@ public final class StandingAtAPoint {
     private static final class OneReadingOfARow implements BorderQuantity.Observation {
 
         private final BehaviorInputs where;
-        private final ObservedInputs row;
+        private final ObservedInputs observedInputs;
         /** The element chosen at each step, for this reading. */
         private final Map<TermPath, Integer> chosen;
         /** How many elements each step was found to have, over every reading so far. */
         private final Map<TermPath, Integer> held;
         private boolean wroteNothing;
 
-        OneReadingOfARow(BehaviorInputs where, ObservedInputs row,
+        OneReadingOfARow(BehaviorInputs where, ObservedInputs observedInputs,
                          Map<TermPath, Integer> chosen,
                          Map<TermPath, Integer> held) {
             this.where = where;
-            this.row = row;
+            this.observedInputs = observedInputs;
             this.chosen = chosen;
             this.held = held;
         }
 
         @Override
         public ObservedValue at(TermPath path) {
-            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(row.inputs(), path);
+            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(observedInputs.inputs(), path);
             if (values == null) {
                 return null;   // the walk and the type disagree, which is the quantity's to report
             }
@@ -229,7 +230,7 @@ public final class StandingAtAPoint {
         public List<ObservedValue> everyValueAt(TermPath path) {
             // Null where the walk and the type disagree, which is the quantity's to report, as it
             // is for the one value a place holds.
-            return where.valuesAt(row.inputs(), path);
+            return where.valuesAt(observedInputs.inputs(), path);
         }
 
         /** Whether {@code each} was reached through the elements this reading chose. */
@@ -256,14 +257,14 @@ public final class StandingAtAPoint {
      * quantity's to say as it reads them, so it says so by being asked once. Every choice those
      * steps allow follows it.
      */
-    private static List<OneReadingOfARow> readings(BehaviorInputs where, ObservedInputs row,
+    private static List<OneReadingOfARow> readings(BehaviorInputs where, ObservedInputs observed,
                                                    BorderQuantity quantity, Criterion criterion,
                                                    OneReadingOfARow first,
                                                    Map<TermPath, Integer> held) {
         quantity.standsAt(criterion, first);
         List<OneReadingOfARow> out = new ArrayList<>();
         for (Map<TermPath, Integer> choice : readingsOver(held)) {
-            out.add(new OneReadingOfARow(where, row, choice, held));
+            out.add(new OneReadingOfARow(where, observed, choice, held));
         }
         return out;
     }

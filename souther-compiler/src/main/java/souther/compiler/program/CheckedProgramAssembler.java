@@ -323,8 +323,8 @@ final class CheckedProgramAssembler {
      * <p>Read in one pass so that what a module declares is in hand before what its rows state is
      * written down: the two are made in that order and not in the order the modules were given.
      *
-     * @param rows what each of the module's behaviors' rows turned out to be, by behavior name, in
-     *             the order the sources were read and the rows written
+     * @param rowsByBehavior what each of the module's behaviors' rows turned out to be, by behavior
+     *             name, in the order the sources were read and the rows written
      */
     private record ModuleReading(String name, Hir.Module bodies, Bodies.Elaborated checked,
                                  Map<String, Sig> signatures,
@@ -332,7 +332,7 @@ final class CheckedProgramAssembler {
                                  Map<ValueName.Behavior, Composition> compositions,
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                  List<CheckedData> data,
-                                 Map<String, List<Output.RowsRead.ReadRow>> rows) {}
+                                 Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior) {}
 
     /**
      * The rows this compile read for {@code module}, by the behavior each is a row of.
@@ -411,7 +411,7 @@ final class CheckedProgramAssembler {
         module.declared().forEach((named, target) ->
                 behaviors.add(new CheckedBehavior(named, target,
                         EnsuresEnforcement.in(read.checks(), read.name(), named),
-                        rowsOf(read.rows().getOrDefault(named.name(), List.of()), types,
+                        rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
                                 target.signature(), targets))));
         return new CheckedModule(read.name(), behaviors,
                 helpersOf(read.name(), read.bodies(), read.checked()), read.data());

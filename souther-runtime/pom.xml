@@ -52,6 +52,11 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <!-- The nullness gate runs here in every build, `mvn test` included, because this is the module

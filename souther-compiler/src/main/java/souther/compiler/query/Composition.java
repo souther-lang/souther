@@ -26,17 +26,19 @@ import java.util.SequencedMap;
  * does the system answer? — and what it would settle if it were written is not something this says.
  *
  * @param request  what was asked for, which is what settles which rows are here
- * @param rows     one entry per behavior with rows, in the order they were asked about
+ * @param rowsByBehavior one entry per behavior with rows, in the order they were asked about
  * @param searched what each behavior's own search came to, keyed the way a report keys them
  * @param account every point of a line this request answers for, whosever it is — a body's own and
  *                 its declarations' alike — or null where the request asked for no boundary rows,
  *                 which is not the same as a request that asked and found none
  */
-public record Composition(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rows,
+public record Composition(OfferingRequest request,
+                          SequencedMap<String, List<OfferedRow>> rowsByBehavior,
                           SequencedMap<String, Adequacy.Filling> searched, BorderAccount account) {
 
     public Composition {
-        rows = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rows));
+        rowsByBehavior =
+                Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rowsByBehavior));
         searched = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(searched));
     }
 
@@ -123,7 +125,7 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
 
     /** How many pieces of work this holds, which is what a block says at the top of it. */
     public int count() {
-        return rows.values().stream().mapToInt(List::size).sum();
+        return rowsByBehavior.values().stream().mapToInt(List::size).sum();
     }
 
     /**
@@ -141,7 +143,7 @@ public record Composition(OfferingRequest request, SequencedMap<String, List<Off
      */
     Offering keeping(java.util.Set<RowKey> kept, java.util.Set<OfferItem> answered) {
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
-        rows.forEach((behavior, here) -> {
+        rowsByBehavior.forEach((behavior, here) -> {
             List<OfferedRow> left = here.stream().filter(row -> kept.contains(row.key())).toList();
             if (!left.isEmpty()) {
                 out.put(behavior, left);

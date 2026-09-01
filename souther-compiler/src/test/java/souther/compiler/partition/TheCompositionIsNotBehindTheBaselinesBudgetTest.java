@@ -86,7 +86,7 @@ class TheCompositionIsNotBehindTheBaselinesBudgetTest {
 
         ClassDisposition at = attemptAtTheLowerHi(filling);
         assertEquals(List.of("Request { lo = Amount(0), hi = Amount(0) }"),
-                filling.composed().rowFor(((ClassDisposition.Built) at).row()).inputs().stream()
+                filling.composed().rowFor(((ClassDisposition.Built) at).rowId()).inputs().stream()
                         .map(FixtureTemplate::text).toList(),
                 "composed from the classes, which is what a row is where none of the values the "
                         + "model states can be written for it: " + at);

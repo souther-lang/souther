@@ -146,7 +146,7 @@ public final class ExampleVerifier {
      *
      * @throws IllegalArgumentException where the artifact is of another module
      */
-    public static Observations check(souther.compiler.check.Prepared.Examples module,
+    public static Observations check(souther.compiler.check.Prepared.ForExamples module,
                                      Symbols symbols,
                                      souther.compiler.observe.FieldTypes fields,
                                      Map<ValueName.Behavior, Sig> sigs,
@@ -162,7 +162,7 @@ public final class ExampleVerifier {
                     + "`'s and the artifact is `" + artifact.implementations().module()
                     + "`'s; what applies a behavior would be looked up in the wrong module");
         }
-        if (module.rows().isEmpty()) {
+        if (module.examples().isEmpty()) {
             return Observations.NONE;
         }
         ExampleVerifier v = evaluating(module, symbols, fields, sigs, artifact, declared,
@@ -170,7 +170,7 @@ public final class ExampleVerifier {
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
-        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
+        for (souther.compiler.check.Prepared.Example block : module.examples()) {
             Hir.Example ex = block.read();
             try {
                 v.checkExample(ex, failures, rows);
@@ -206,7 +206,7 @@ public final class ExampleVerifier {
      * rows against it is what lets the loop belong to a caller — which is what it has to be when
      * what an implementation answers out of changes between one row and the next.
      */
-    public static ExampleVerifier evaluating(souther.compiler.check.Prepared.Examples module,
+    public static ExampleVerifier evaluating(souther.compiler.check.Prepared.ForExamples module,
                                       Symbols symbols,
                                       souther.compiler.observe.FieldTypes fields,
                                       Map<ValueName.Behavior, Sig> sigs,
@@ -342,7 +342,7 @@ public final class ExampleVerifier {
     private List<StatedRow> recordedRowsOf(BoundExamples of, String behavior,
                                            FixtureReader fixtures, Sig sig) {
         List<StatedRow> found = new ArrayList<>();
-        for (souther.compiler.check.Prepared.Rows block : module.rows()) {
+        for (souther.compiler.check.Prepared.Example block : module.examples()) {
             Hir.Example written = block.read();
             if (!written.target().equals(behavior)) {
                 continue;
@@ -433,7 +433,7 @@ public final class ExampleVerifier {
      * the binding meaning three things.
      */
     ContractObservation contractOnly(String behavior, Hir.ExampleRow row) {
-        switch (deadline.given(new Deadline.Work.Row(behavior, row.pos(), row.identity()),
+        switch (deadline.given(new Deadline.Work.WholeRow(behavior, row.pos(), row.identity()),
                 () -> checkingContract(behavior, row))) {
             case Deadline.Outcome.Finished(ContractObservation observed) -> {
                 return observed;
@@ -671,7 +671,7 @@ public final class ExampleVerifier {
         };
     }
 
-    private final souther.compiler.check.Prepared.Examples module;
+    private final souther.compiler.check.Prepared.ForExamples module;
     private final Symbols symbols;
     /** What a value of a declaration is made of, as the check settled it. */
     private final souther.compiler.observe.FieldTypes fields;
@@ -729,7 +729,7 @@ public final class ExampleVerifier {
     /** What holds a row's values to what the behavior declares of what it answers. */
     private final EnsuresChecks ensures;
 
-    private ExampleVerifier(souther.compiler.check.Prepared.Examples module,
+    private ExampleVerifier(souther.compiler.check.Prepared.ForExamples module,
                             Symbols symbols,
                             souther.compiler.observe.FieldTypes fields,
                             Map<ValueName.Behavior, Sig> sigs,
@@ -1338,7 +1338,7 @@ public final class ExampleVerifier {
                           List<Diagnostic> out, List<RowOutcome> rows) {
         RowWork evaluation = new RowWork(this, target, sig, outCases, row);
         switch (deadline.given(
-                new Deadline.Work.Row(target.name(), row.pos(), row.identity()),
+                new Deadline.Work.WholeRow(target.name(), row.pos(), row.identity()),
                 evaluation)) {
             case Deadline.Outcome.Finished(List<Diagnostic> found) -> {
                 out.addAll(found);

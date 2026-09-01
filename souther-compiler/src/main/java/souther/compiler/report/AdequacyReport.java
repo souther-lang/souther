@@ -321,14 +321,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
          * written, and a reader shown {@code 0} beside a source nobody evaluated is told the author
          * wrote no row — which sends them to write one that may already be there.
          */
-        public java.util.OptionalInt rows() {
+        public java.util.OptionalInt rowCount() {
             return reading().measured().made()
                     .map(seen -> java.util.OptionalInt.of(seen.rows().size()))
                     .orElseGet(java.util.OptionalInt::empty);
         }
 
         /** How many of those are recorded rather than evaluated. Absent for the reason
-         *  {@link #rows()} is. */
+         *  {@link #rowCount()} is. */
         public java.util.OptionalInt pending() {
             return reading().measured().made()
                     .map(seen -> java.util.OptionalInt.of((int) seen.rows().stream()
@@ -379,7 +379,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // it — so an absence here is this report and that query disagreeing about what a module is,
         // and there is no reading of it that is not a guess.
         Map<String, Adequacy.RowReading> readings = java.util.Objects.requireNonNull(
-                compilation.db().ask(new Adequacy.Rows(name)).value(),
+                compilation.db().ask(new Adequacy.RowReadings(name)).value(),
                 () -> "the rows of `" + name + "` were not read for or against");
         Map<String, Adequacy.SignatureEvidence> signatures =
                 compilation.db().ask(new Adequacy.Witnesses(name)).value();
@@ -407,7 +407,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // say. `NOT_ASKED` and `NONE` are both things the reading says — a build that reads no
             // rows, and a reading that finished and found none — so picking one from an absent key
             // is a reader deciding what the producer answered (issue #996).
-            Adequacy.RowReading reading = Adequacy.Rows.readingFor(readings, behavior.name());
+            Adequacy.RowReading reading =
+                    Adequacy.RowReadings.readingFor(readings, behavior.name());
             // Anything larger than a behavior holds this one: a source that could not be evaluated is
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
@@ -865,9 +866,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 out.append(String.format("  %s %s %s%n",
                         DisplayColumns.padRight(behavior.name(), 24),
                         DisplayColumns.padRight(behavior.implementation().written(), 13),
-                        behavior.rows().isPresent()
+                        behavior.rowCount().isPresent()
                                 ? String.format("rows %-4d pending %d",
-                                        behavior.rows().getAsInt(), behavior.pending().getAsInt())
+                                        behavior.rowCount().getAsInt(),
+                                        behavior.pending().getAsInt())
                                 : "rows not read"));
                 signature(out, behavior);
                 partition(out, behavior, module.declaredIn(), names);
@@ -2462,7 +2464,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // Written where the rows were read, and left out where they were not. A zero here
                 // is a behavior whose rows were read and numbered none of them, which a consumer
                 // acts on differently from rows nobody read.
-                behavior.rows().ifPresent(count -> b.put("rows", count));
+                behavior.rowCount().ifPresent(count -> b.put("rows", count));
                 behavior.pending().ifPresent(count -> b.put("pending", count));
                 b.put("status", wire(behavior.status()));
                 weakening(b, behavior.weakenedBy());

@@ -586,18 +586,6 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         }
 
         /**
-         * The numbers, where a measurement was made.
-         *
-         * <p>Throws where none was. A measure with no number has none, and an accessor that answered
-         * zero would be the thing this type was introduced to remove — a reader would get an answer
-         * and no sign that nobody measured it.
-         */
-        public Reached rows() {
-            return reached.made().orElseThrow(() -> new IllegalStateException(
-                    "a position nobody measured was read for what the rows reached: " + path));
-        }
-
-        /**
          * The classes of this position no row is in, each knowing which position it is a class of.
          *
          * <p>A bare name used to be enough because one axis was read at a time. It is not enough to

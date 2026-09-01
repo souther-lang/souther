@@ -77,7 +77,7 @@ class ARowIsEvaluatedOncePerCompileTest {
     }
 
     private static long rowsRunIn(Adequacy.Asked measure) {
-        return workOf(measure).stream().filter(w -> w instanceof Deadline.Work.Row).count();
+        return workOf(measure).stream().filter(w -> w instanceof Deadline.Work.WholeRow).count();
     }
 
     /** Two rows, two evaluations — not four. */

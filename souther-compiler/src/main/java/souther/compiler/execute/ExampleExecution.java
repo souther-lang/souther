@@ -76,13 +76,15 @@ public final class ExampleExecution {
         return prepared.name();
     }
 
-    /** Every row the module has, from its own file and from every file naming it. */
-    public Prepared.Examples rows() {
+    /** The module projected for its every example block, from its own file and from every file
+     *  naming it. */
+    public Prepared.ForExamples forExamples() {
         return prepared.forExamples();
     }
 
-    /** The rows written in one source, projected the way the preparation projects them. */
-    public Prepared.Examples rowsWrittenIn(SourceId source) {
+    /** The same over the blocks written in one source, projected the way the preparation projects
+     *  them. */
+    public Prepared.ForExamples forExamplesWrittenIn(SourceId source) {
         return prepared.forExamplesWrittenIn(source);
     }
 

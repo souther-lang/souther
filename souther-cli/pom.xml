@@ -41,6 +41,11 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Test scope, and not part of what this jar bundles. `souther init` writes a build plugin
              version into a project, and a plugin drives a Souther over a numbered protocol; this is
              the artifact that states which number this Souther speaks, so it is what the pinned

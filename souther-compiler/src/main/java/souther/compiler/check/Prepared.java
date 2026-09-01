@@ -44,7 +44,7 @@ public final class Prepared {
 
     private final Desugared.Module desugared;
     private final List<Desugared.Fn> fns;
-    private final List<Rows> examples;
+    private final List<Example> examples;
     private final List<FakeTable> fakes;
     private final List<Hir.FnDef> takenOn;
     /**
@@ -59,12 +59,12 @@ public final class Prepared {
     private final List<Hir.FnDef> rowDefs;
     /** Which method each row operand's value runs as, by the operand — the correspondence the
      *  emission constructed, held so the reader that invokes a method never counts the rows for
-     *  itself. Keyed on operand identity, over the very nodes {@link Rows#read} answers with. */
+     *  itself. Keyed on operand identity, over the very nodes {@link Example#read} answers with. */
     private final Map<Hir.Expr, String> operandMethods;
     /** Worked out once, as the rungs below work theirs out. */
     private volatile Hir.Module projected;
 
-    private Prepared(Desugared.Module desugared, List<Desugared.Fn> fns, List<Rows> examples,
+    private Prepared(Desugared.Module desugared, List<Desugared.Fn> fns, List<Example> examples,
                      List<FakeTable> fakes, List<Hir.FnDef> takenOn, List<Hir.FnDef> rowDefs,
                      Map<Hir.Expr, String> operandMethods) {
         this.desugared = desugared;
@@ -118,9 +118,9 @@ public final class Prepared {
         for (Desugared.Fn fn : desugared.fns()) {
             fns.add(Desugared.Fn.reestablish(HelperNames.qualifyImportsIn(fn.read(), self), scope));
         }
-        List<Rows> examples = new ArrayList<>();
+        List<Example> examples = new ArrayList<>();
         for (Hir.Example block : desugared.module().examples()) {
-            examples.add(new Rows(HelperNames.qualifyImportsIn(block, self)));
+            examples.add(new Example(HelperNames.qualifyImportsIn(block, self)));
         }
         List<FakeTable> fakes = new ArrayList<>();
         for (Hir.Fake table : desugared.module().fakes()) {
@@ -198,7 +198,7 @@ public final class Prepared {
 
     /** The example blocks attached to this module, from its own file and from every file naming
      * it, each of them read the way this module reaches its names. */
-    public List<Rows> rows() {
+    public List<Example> examples() {
         return examples;
     }
 
@@ -234,8 +234,8 @@ public final class Prepared {
     /**
      * This module's artifact with all of its rows — what an example run over the module is given.
      */
-    public Examples forExamples() {
-        return new Examples(this, examples);
+    public ForExamples forExamples() {
+        return new ForExamples(this, examples);
     }
 
     /**
@@ -250,14 +250,14 @@ public final class Prepared {
      * the same answer kept somewhere else, and a caller holding one that had fallen out of step had
      * no way to know.
      */
-    public Examples forExamplesWrittenIn(SourceId sourceId) {
-        List<Rows> mine = new ArrayList<>();
-        for (Rows block : examples) {
+    public ForExamples forExamplesWrittenIn(SourceId sourceId) {
+        List<Example> mine = new ArrayList<>();
+        for (Example block : examples) {
             if (block.read().pos().isIn(sourceId)) {
                 mine.add(block);
             }
         }
-        return new Examples(this, mine);
+        return new ForExamples(this, mine);
     }
 
     /**
@@ -272,11 +272,11 @@ public final class Prepared {
      *
      * <p>Reached from {@link #prepare} and from nothing else.
      */
-    public static final class Rows {
+    public static final class Example {
 
         private final Hir.Example block;
 
-        private Rows(Hir.Example block) {
+        private Example(Hir.Example block) {
             this.block = block;
         }
 
@@ -298,7 +298,7 @@ public final class Prepared {
 
         @Override
         public boolean equals(Object o) {
-            return o instanceof Rows other && block.equals(other.block);
+            return o instanceof Example other && block.equals(other.block);
         }
 
         @Override
@@ -309,7 +309,7 @@ public final class Prepared {
 
     /**
      * One fake table of this module, with every name in it that denotes another module's definition
-     * written qualified — the same claim {@link Rows} carries, about what stands in for an
+     * written qualified — the same claim {@link Example} carries, about what stands in for an
      * injected behavior while a row runs.
      */
     public static final class FakeTable {
@@ -348,24 +348,25 @@ public final class Prepared {
     }
 
     /**
-     * The rows an example run reads, and the artifact they are evaluated in.
+     * The module projected for an example run: the example blocks it reads, and the artifact their
+     * rows are evaluated in.
      *
      * <p>Its own type because that pairing is what an example run needs and neither half is enough:
-     * the rows say what to try and the artifact says what is there to try it against — a row's
-     * operand is a method because this module emitted one for it, and a run that was handed the rows
-     * alone would be looking for it in a class that does not carry it.
+     * the blocks say what to try and the artifact says what is there to try it against — a row's
+     * operand is a method because this module emitted one for it, and a run that was handed the
+     * blocks alone would be looking for it in a class that does not carry it.
      *
      * <p>What it claims is about its input and not about its outcome. Nothing here says a row
      * agreed with anything; that is what running them answers.
      */
-    public static final class Examples {
+    public static final class ForExamples {
 
         private final Prepared module;
-        private final List<Rows> rows;
+        private final List<Example> examples;
 
-        private Examples(Prepared module, List<Rows> rows) {
+        private ForExamples(Prepared module, List<Example> examples) {
             this.module = module;
-            this.rows = List.copyOf(rows);
+            this.examples = List.copyOf(examples);
         }
 
         /** What the module is called. */
@@ -403,9 +404,9 @@ public final class Prepared {
             return module.takenOn;
         }
 
-        /** The rows this run is over. */
-        public List<Rows> rows() {
-            return rows;
+        /** The example blocks this run is over. */
+        public List<Example> examples() {
+            return examples;
         }
 
         /** The fake tables its rows run against, which are the module's whole and not one file's:
@@ -479,13 +480,13 @@ public final class Prepared {
          *
          * <p>The module's, not one file's, as {@link #fakes} is: a module's stand-ins are what its
          * attached files' rows run against and the other way round, so which modules a reading has
-         * to take the rows of is a fact about the module. Read off {@link #rows} it would be one
+         * to take the rows of is a fact about the module. Read off {@link #examples} it would be one
          * file's {@code with}s wherever this is a projection of a source, and the modules the other
          * files reach would go unread — which is the reading this answer exists to complete.
          */
         public Set<ValueName.Behavior> standsInFor() {
             Set<ValueName.Behavior> named = new LinkedHashSet<>(tablesThatAnswer().keySet());
-            for (Rows block : module.examples) {
+            for (Example block : module.examples) {
                 for (Hir.ExampleRow row : block.read().rows()) {
                     for (Hir.With supplied : row.withs()) {
                         if (supplied.standsInFor() != null) {
@@ -528,7 +529,7 @@ public final class Prepared {
             definitions.add(fn.read());
         }
         List<Hir.Example> blocks = new ArrayList<>();
-        for (Rows block : examples) {
+        for (Example block : examples) {
             blocks.add(block.read());
         }
         List<Hir.Fake> tables = new ArrayList<>();

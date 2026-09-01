@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
 
     private static final Deadline.Work WORK =
-            new Deadline.Work.Row("findTodo", new SourcePos(1, 1), new RowIdentity.Unnamed(1));
+            new Deadline.Work.WholeRow("findTodo", new SourcePos(1, 1), new RowIdentity.Unnamed(1));
 
     /** The crossing arrangement, on a worker of {@code stackBytes}. What a compile says it gives a
      *  row is read and not kept here — there is no clock past the crossing — so which wait this is
