@@ -19,8 +19,10 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -156,6 +158,44 @@ class OnlyARowIsCalledARowTest {
     }
 
     /**
+     * And what the reserved name may answer is these shapes and no others.
+     *
+     * <p>The two prohibitions above say what this module holds today, so an edit that widened what
+     * counts as rows would go on passing — the population would move with it and nothing would be
+     * left to report. What the rule admits is a claim of its own, and it is made here against
+     * shapes rather than against the module: each is written out and run, so widening the rule
+     * fails on the shape it newly admits and narrowing it fails on the shape it stops admitting.
+     *
+     * <p>The refusals are the ones that cost something. A plurality of pluralities is the shape
+     * this whole rule came from: {@code rows().size()} over one is a count of groups read as a
+     * count of rows.
+     */
+    @Test
+    void andTheReservedNameAnswersTheseShapesAndNoOthers() {
+        String row = "Lsouther/compiler/ast/Hir$ExampleRow;";
+        Map<String, Boolean> shapes = new LinkedHashMap<>();
+        shapes.put(row, true);                                  // a row
+        shapes.put("Ljava/util/List<" + row + ">;", true);       // rows
+        shapes.put("[" + row, true);                            // rows, written as an array
+        shapes.put("Ljava/util/List<+" + row + ">;", true);      // rows nothing writes to
+        shapes.put("Ljava/util/List<Ljava/util/List<" + row + ">;>;", false);   // groups of rows
+        shapes.put("[[" + row, false);                          // the same, written as an array
+        shapes.put("[Ljava/util/List<" + row + ">;", false);     // and the same, mixed
+        shapes.put("Ljava/util/Map<Ljava/lang/String;Ljava/util/List<" + row + ">;>;",
+                false);                                         // rows under a key
+        shapes.put("Ljava/util/Set<" + row + ">;", false);       // a shape nobody has decided about
+        shapes.put("Ljava/util/List<-" + row + ">;", false);     // rows go in, anything comes out
+        shapes.put("Ljava/util/List<*>;", false);                // what it holds is unsaid
+        shapes.put("Lsouther/compiler/check/Prepared$ForExamples;", false);   // what holds blocks
+        shapes.put("I", false);                                 // a number of them
+
+        Map<String, Boolean> answered = new LinkedHashMap<>();
+        shapes.keySet().forEach(shape ->
+                answered.put(shape, answersARow(Signature.parseFrom(shape))));
+        assertEquals(shapes, answered, "what the reserved name may answer");
+    }
+
+    /**
      * Every declaration of one class that takes the reserved name.
      *
      * <p>One name of one class is one finding. A record component, the field it writes and the
@@ -200,25 +240,41 @@ class OnlyARowIsCalledARowTest {
     /**
      * Whether what a member answers is a row, or rows.
      *
-     * <p>An array of rows is rows for the same reason a list of them is. A number is not: what it
-     * counts is not in it, which is how a count of blocks comes to be read as a count of rows.
+     * <p>One row, or one container of rows, and no further. What holds rows does not recur: a list
+     * of lists of rows is a plurality of pluralities, and its size is a count of groups. Answered
+     * under the reserved name it would be read as a count of rows, which is the reading this whole
+     * rule exists to remove — the one that came off {@code rows().rows().size()}.
+     *
+     * <p>An array of rows is rows for the same reason a list of them is, and stops at the same
+     * place. A number is not rows: what it counts is not in it.
      */
     private static boolean answersARow(Signature answered) {
         return switch (answered) {
-            case Signature.ArrayTypeSig array -> answersARow(array.componentSignature());
-            case Signature.ClassTypeSig cls -> ROWS.contains(named(cls))
+            case Signature.ArrayTypeSig array -> isARow(array.componentSignature());
+            case Signature.ClassTypeSig cls -> isARow(cls)
                     || CONTAINERS.contains(named(cls)) && cls.typeArgs().size() == 1
                     && holdsARow(cls.typeArgs().getFirst());
             default -> false;
         };
     }
 
-    /** Whether a container's one type argument names a row. A wildcard does not: what a list of
-     *  something unsaid holds is not something this was told. */
+    /** Whether a type is one of the rows themselves. */
+    private static boolean isARow(Signature type) {
+        return type instanceof Signature.ClassTypeSig cls && ROWS.contains(named(cls));
+    }
+
+    /**
+     * Whether a container's one type argument is a row.
+     *
+     * <p>What may be read out as a row. {@code ? extends} may — every element of it is one — and
+     * {@code ? super} may not: what comes out of a list something writes rows into is whatever the
+     * bound admits. A wildcard with no bound says nothing at all.
+     */
     private static boolean holdsARow(Signature.TypeArg arg) {
         return arg instanceof Signature.TypeArg.Bounded bounded
-                && bounded.wildcardIndicator() == Signature.TypeArg.Bounded.WildcardIndicator.NONE
-                && answersARow(bounded.boundType());
+                && bounded.wildcardIndicator()
+                        != Signature.TypeArg.Bounded.WildcardIndicator.SUPER
+                && isARow(bounded.boundType());
     }
 
     private static String named(Signature.ClassTypeSig of) {
