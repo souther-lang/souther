@@ -190,7 +190,6 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();
         return Generator.probeFixing(subject, "r.cost = " + at,
-                _ -> axis.term().answeredOn(axis.type(), symbols),
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
                 Reachability.untouched(domain.quantities(symbols).region()), check);
     }
