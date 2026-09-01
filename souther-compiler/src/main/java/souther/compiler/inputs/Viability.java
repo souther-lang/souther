@@ -2,6 +2,10 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Emptiness;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Function;
+
 /**
  * What is known about whether a value stands somewhere.
  *
@@ -20,6 +24,57 @@ import souther.compiler.check.Emptiness;
  * and a count nothing has shown to be none is not a claim that a value exists.
  */
 sealed interface Viability {
+
+    /**
+     * What two things a value has at once come to.
+     *
+     * <p>A conjunction, and the connective is the whole of the difference from {@link #oneOf}: a row
+     * has every one of these, so one of them standing nowhere is the row standing nowhere, and every
+     * one of them has to be possible for the row to be. What is not known about one of them cannot
+     * hide what another was shown — so a proof wins over an unread, and an unread wins over nothing
+     * having been shown.
+     *
+     * <p>Written here rather than at each fold. The two connectives read alike and mean opposite
+     * things, and a caller working out for itself which of three answers to keep would sooner or
+     * later keep the one that reads like the other fold's.
+     */
+    default Viability with(Viability other) {
+        if (this instanceof ProvedImpossible) {
+            return this;
+        }
+        if (other instanceof ProvedImpossible) {
+            return other;
+        }
+        return this instanceof NotRead ? this : other;
+    }
+
+    /**
+     * What the alternatives of one choice come to.
+     *
+     * <p>A disjunction. A value is one of these, so one that may stand is the whole answer, and what
+     * proves there is none is every one of them at once — which is why the proofs are taken
+     * together rather than one being picked to speak for the rest. An alternative nothing is known
+     * about leaves the choice unproved however many of the others are refused.
+     *
+     * @param alternatives what became of each, in the order the model writes them
+     * @param proof        what the refusals come to where every one of them is refused, which is
+     *                     whatever kind of choice this is
+     */
+    static Viability oneOf(List<Viability> alternatives,
+                           Function<List<Emptiness>, Emptiness> proof) {
+        List<Emptiness> refused = new ArrayList<>();
+        boolean unread = false;
+        for (Viability each : alternatives) {
+            switch (each) {
+                case MayStand _ -> {
+                    return each;
+                }
+                case ProvedImpossible it -> refused.add(it.why());
+                case NotRead _ -> unread = true;
+            }
+        }
+        return unread ? new NotRead() : new ProvedImpossible(proof.apply(refused));
+    }
 
     /** Nothing showed that nothing stands here. Not a claim that something does. */
     record MayStand() implements Viability {}

@@ -695,6 +695,18 @@ public final class FieldDomains {
             atomAt.forEach((path, atom) -> at(where, atom, Coordinate.value(path)));
             countAt.forEach((path, counted) -> at(where, counted.atom(),
                     Coordinate.takenBy(path, counted.by())));
+            // And every other subject this reading knows a name for, which is what a caller can
+            // name and what these two maps are narrower than: they hold the numbers, and a name
+            // holds whatever stands there. Left to `otherwise`, a subject of a name would be
+            // carried as something to be equal to and nothing more — so a rule of one value about a
+            // name its cases share and a rule of the case about the same name would arrive as two
+            // subjects, and every reading that has no word for a number would stop meeting at the
+            // narrowing.
+            namedBy.forEach((atom, path) -> {
+                if (!where.containsKey(atom)) {
+                    at(where, atom, Coordinate.value(path));
+                }
+            });
             InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
                 Coordinate coordinate = where.get(atom);
                 return coordinate == null ? otherwise.apply(atom) : named.apply(coordinate);
@@ -1262,11 +1274,18 @@ public final class FieldDomains {
     }
 
     /**
-     * One number of one name: what stands at the name, or the count taken of it.
+     * One thing at one name: what stands at the name, or a number taken of it.
      *
      * <p>The pair {@link #leftAt} already asks by, written down so that a form over several names
      * can be. A name measured two ways is two coordinates at one name, and a form naming the other
      * one is a form about another quantity.
+     *
+     * <p><b>What stands at a name is not always a number.</b> A string is bounded on its order and
+     * admits a set of values and is at a name like anything else, and a caller that has to say what
+     * two readings of one name come to needs it under the same coordinate whichever of those the
+     * rules happened to reach. So this says where a subject sits and which of the things there it
+     * is; a reader that only has numbers to give finds nothing at a name it takes none of
+     * ({@link Settled#given}), which is the answer rather than a case to rule out.
      *
      * <p><b>A name the rules of this value write, and never a place a row writes a value at.</b>
      * The two part at a sum whose cases share a spread, and a coordinate is on the side the rules
@@ -1280,7 +1299,7 @@ public final class FieldDomains {
             if (path == null) {
                 throw new IllegalArgumentException("a coordinate is at a name of the value");
             }
-            java.util.Objects.requireNonNull(kind, "and is some number of what is there");
+            java.util.Objects.requireNonNull(kind, "and is one of the things that are there");
         }
 
         /** What stands at the name. */

@@ -481,17 +481,22 @@ final class ReadQuantities implements Quantities {
     /**
      * Where a subject of this input sits, for a proof that names a place.
      *
-     * <p>Two kinds of subject and two ways of knowing. A named one carries where it is and spells
-     * it itself, which is what keeps the place a proof names and the place a report renders one
-     * spelling. A subject this input has no term for carries only what made it, so where it sits is
-     * what the reading it came from called it, joined to the value that reading was of — it cannot
-     * be asked, so it is told.
+     * <p>Asked of the subject, which is the one thing that knows. A subject the reading it came from
+     * has a name for arrives here under a name of this input's, and that name carries the place — so
+     * the place a proof names and the place a report renders are one spelling and cannot part.
+     *
+     * <p>A subject with a name and no place is this reading disagreeing with itself: what the
+     * reading handed over as sitting somewhere would have arrived as something to be equal to and
+     * nothing more, and every rule about it would have stopped meeting the rules the value above
+     * wrote about the same place.
      */
     private static Emptiness.AtAField.Where placeOf(InputAtom atom, TermPath root, String path) {
-        return new Emptiness.AtAField.Where.In(atom instanceof InputAtom.Named named
-                ? named.place()
-                // What a newtype wraps is at no name of its own, so the place is the value.
-                : path.isEmpty() ? root.toString() : root + "." + path);
+        if (!(atom instanceof InputAtom.Named named)) {
+            throw new IllegalStateException(
+                    "`" + root + "` names a subject at `" + path + "` that arrived here with no"
+                            + " place, so nothing can say where a proof about it is");
+        }
+        return new Emptiness.AtAField.Where.In(named.place());
     }
 
     /**
@@ -773,7 +778,7 @@ final class ReadQuantities implements Quantities {
         // answers it. Every parameter's reading is in here, renamed, so there is nothing a
         // per-parameter reading could add — and a contradiction between two parameters, or between a
         // declaration and something a caller took in, can be seen nowhere else.
-        return switch (viability(asked(List.of()))) {
+        return switch (viability(asked(List.of()), null)) {
             case Viability.ProvedImpossible it ->
                     Optional.of(new EmptyInput.ProvedByTheRules(it.why()));
             // Neither of these is a proof. One says nothing showed the input empty and the other
@@ -798,37 +803,68 @@ final class ReadQuantities implements Quantities {
      * narrowing reaches the numbers under it — a clause relating a shared name of one sum to a
      * shared name of another is contradictory under some pairs of cases and not others, and each
      * pair is a context of its own.
+     *
+     * <p><b>The structures a value has at once are a conjunction, and the cases of one of them are a
+     * choice.</b> So what is folded here is {@link Viability#with} and what is folded across the
+     * cases of a sum is {@link Viability#oneOf}, and the difference is which of three answers wins.
+     * A structure this reading never finished with may not hide what the structure beside it
+     * proved — read as a choice, whichever of the two the fields happen to declare first would
+     * settle whether the input is refused at all.
      */
-    private Viability viability(StructuralContext under) {
+    private Viability viability(StructuralContext under, TermPath below) {
         Optional<Emptiness> here =
                 constraints(under).holdsNothing(positions(under));
         if (here.isPresent()) {
             return new Viability.ProvedImpossible(here.get());
         }
+        Viability standing = new Viability.MayStand();
         for (CasesRead sum : cases) {
             // A sum inside a case is a place to ask about only once the value is that case, and one
             // this context has already settled is not a choice any more.
             if (!under.covers(StructuralContext.of(sum.sum()))
-                    || under.refinements().at(sum.sum()) != null) {
+                    || under.refinements().at(sum.sum()) != null
+                    || !inside(sum.sum(), below)) {
                 continue;
             }
-            Viability across = across(sum, under);
-            if (!(across instanceof Viability.MayStand)) {
-                return across;
+            standing = standing.with(across(sum, under));
+            // Everything else it may say is already said. Kept going only for the one answer that
+            // is not yet in hand, which is a proof — what a caller is told is the first the model
+            // writes down, and the rest of the walk cannot change it.
+            if (standing instanceof Viability.ProvedImpossible) {
+                return standing;
             }
         }
         for (OpenedRules opened : byRoot.values()) {
             if (!(opened.opening() instanceof RootOpening.Inside it)
                     || under.nonEmptySequences().contains(it.sequence())
-                    || !under.covers(StructuralContext.of(it.sequence()))) {
+                    || !under.covers(StructuralContext.of(it.sequence()))
+                    || !inside(it.sequence(), below)) {
                 continue;
             }
-            Viability holding = holds(it.sequence(), under);
-            if (!(holding instanceof Viability.MayStand)) {
-                return holding;
+            standing = standing.with(holds(it.sequence(), under));
+            if (standing instanceof Viability.ProvedImpossible) {
+                return standing;
             }
         }
-        return new Viability.MayStand();
+        return standing;
+    }
+
+    /**
+     * Whether a structure is one this step of the fold answers for.
+     *
+     * <p><b>Each structure is folded where it stands and nowhere else.</b> A sum beside the one
+     * being walked is not part of what its alternatives come to: it has the same cases whichever way
+     * that one turned out, so answering for it again under each alternative would refuse the
+     * alternative for what stands beside it — and the place a proof names would be whichever of the
+     * two the fields happen to declare first.
+     *
+     * <p>What that gives up is a pair: two structures the declarations relate can be impossible
+     * together while each of them stands alone, and folded apart that is a proof nobody makes. It is
+     * the direction this may be wrong in — no proof rather than a proof of the wrong thing — and it
+     * is what keeps a walk of the alternatives from being the product of every choice in the input.
+     */
+    private static boolean inside(TermPath structure, TermPath below) {
+        return below == null || structure.isAtOrUnder(below);
     }
 
     /**
@@ -853,7 +889,7 @@ final class ReadQuantities implements Quantities {
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
             return new Viability.MayStand();
         }
-        Viability inside = viability(under.holding(sequence));
+        Viability inside = viability(under.holding(sequence), sequence);
         return inside instanceof Viability.ProvedImpossible it
                 ? new Viability.ProvedImpossible(new Emptiness.AtAField(
                         new Emptiness.AtAField.Where.In(sequence.toString()),
@@ -870,10 +906,9 @@ final class ReadQuantities implements Quantities {
      * is not the same as its having been shown to hold nothing.
      */
     private Viability across(CasesRead sum, StructuralContext under) {
-        List<Emptiness> refused = new ArrayList<>();
-        Viability unread = null;
+        List<Viability> alternatives = new ArrayList<>();
         for (Map.Entry<Refinement, CaseOutcome> each : sum.outcomes().entrySet()) {
-            Viability of = switch (each.getValue()) {
+            alternatives.add(switch (each.getValue()) {
                 // Naming the case builds it, so there is a value here whatever the rules do to the
                 // others.
                 case CaseOutcome.StandsAlone _ -> new Viability.MayStand();
@@ -886,21 +921,16 @@ final class ReadQuantities implements Quantities {
                 case CaseOutcome.RefusedByTheRules _ ->
                         new Viability.ProvedImpossible(new Emptiness.ConflictingRules());
                 case CaseOutcome.NotWalked _ -> new Viability.NotRead();
-                case CaseOutcome.Opened _ -> viability(under.and(sum.sum(), each.getKey()));
-            };
-            switch (of) {
-                case Viability.MayStand _ -> {
-                    return of;
-                }
-                case Viability.ProvedImpossible it -> refused.add(it.why());
-                case Viability.NotRead _ -> unread = of;
-            }
+                case CaseOutcome.Opened _ -> viability(under.and(sum.sum(), each.getKey()),
+                        sum.sum().refine(each.getKey()));
+            });
         }
-        return unread != null ? unread : new Viability.ProvedImpossible(
-                new Emptiness.AtAField(
-                        new Emptiness.AtAField.Where.In(
-                                sum.sum().toString()),
-                        new Emptiness.AcrossEveryCase(refused)));
+        // Where every case is refused, the sum is refused by all of them together and the place is
+        // where it stands. Which of the three answers wins is the choice's to say and not this
+        // caller's.
+        return Viability.oneOf(alternatives, refused -> new Emptiness.AtAField(
+                new Emptiness.AtAField.Where.In(sum.sum().toString()),
+                new Emptiness.AcrossEveryCase(refused)));
     }
 
     /**
