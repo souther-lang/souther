@@ -85,8 +85,9 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
      * and holds one case, and it is a reason rather than something read back off the set for exactly
      * this — a set nobody filled in and a set there was nothing to fill in with are the same bytes.
      */
-    public static OutputCaseEvidence boundaryNotDerived(String behavior) {
-        return new OutputCaseEvidence(Set.of(), BoundaryForMeasurement.failed(behavior));
+    public static OutputCaseEvidence notMeasurable(BoundaryForMeasurement.NotDerived why,
+                                                   String behavior) {
+        return new OutputCaseEvidence(Set.of(), why.failed(behavior));
     }
 
 

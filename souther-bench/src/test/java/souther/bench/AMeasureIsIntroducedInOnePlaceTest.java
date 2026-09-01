@@ -118,11 +118,13 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.PartitionEvidence$AxisCoverage#notAsked(Lsouther/compiler/partition/AxisId;Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/PartitionEvidence$AxisCoverage$Reading;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#notAsked(I)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
             Map.entry("souther.compiler.query.ItemAssessment#weakeningSource()Lsouther/compiler/query/Measurement;", 1),
-            // A behavior whose boundary could not be worked out. Every measure of it is short of
-            // the same one thing, so the state is made here and each of them hands its own type
-            // parameter to it — five factories and one introduction, which is what keeps them
-            // saying the same thing.
-            Map.entry("souther.compiler.query.BoundaryForMeasurement#failed(Ljava/lang/String;)Lsouther/compiler/query/Measurement;", 1),
+            // A behavior missing something its boundary is made of — its signature, or the reading
+            // of what it takes. Every measure of it is short of the same one thing, so the state is
+            // made here and each of them hands its own type parameter to it — five factories and
+            // one introduction, which is what keeps them saying the same thing. Asked of the reason
+            // rather than handed one, so that which fact the measure carries follows from which
+            // half was missing rather than from what a caller chose to name.
+            Map.entry("souther.compiler.query.BoundaryForMeasurement$NotDerived#failed(Ljava/lang/String;)Lsouther/compiler/query/Measurement;", 1),
             // And the positions of a signature, which are its own measure: known where something
             // wrote them down, whether that is the boundary or the declaration the boundary was to
             // be built from, and unknown where a composition takes what a stage nobody could work

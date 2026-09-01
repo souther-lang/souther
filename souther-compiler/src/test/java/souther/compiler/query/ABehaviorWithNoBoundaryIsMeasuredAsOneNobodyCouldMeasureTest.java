@@ -185,10 +185,16 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
         AdequacyReport report = AdequacyReport.of(compilation);
         for (AdequacyReport.ModuleReport module : report.modules()) {
             for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
+                // One fact per behavior, and which of the two it is follows from which half of the
+                // boundary was missing. `receipt` has a signature and an input nothing read, so it
+                // carries the other word — and it carries one, not none: a behavior in a module
+                // with a hole in it was not measured over an input it could read.
+                Class<? extends Weakening> owed = "receipt".equals(behavior.name())
+                        ? Weakening.InputNotRead.class : Weakening.BoundaryNotDerived.class;
                 long said = behavior.evidence().weakening().causes().stream()
-                        .filter(each -> each instanceof Weakening.BoundaryNotDerived)
+                        .filter(owed::isInstance)
                         .count();
-                assertEquals("receipt".equals(behavior.name()) ? 0 : 1, said,
+                assertEquals(1, said,
                         () -> "what " + behavior.name() + " went without: "
                                 + behavior.evidence().weakening());
             }
@@ -206,6 +212,11 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
     /**
      * The document says what could not be read, in the words it promises, and leaves out the
      * sections it has nothing to fill in.
+     *
+     * <p>Two words and not one, because a reader acts on them differently. {@code issue} has a name
+     * in its own declaration that resolved to nothing, and that is where the author looks;
+     * {@code receipt}'s declaration is whole and the hole is elsewhere in the module, so an author
+     * sent to {@code receipt} would find nothing wrong with it.
      */
     @Test
     void theDocumentLeavesOutWhatItCouldNotRead() {
@@ -218,21 +229,26 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
                             .filter("behavior_boundary_not_derived"::equals).count(),
                     () -> "what " + name + " went without: " + weakeningOf(behavior));
         }
-        assertTrue(behaviorOf(report, "receipt").has("signature"),
-                "and the behavior whose boundary did work out is written in full");
+        JsonNode receipt = behaviorOf(report, "receipt");
+        assertFalse(receipt.has("signature"),
+                "the boundary of `receipt` was worked out and its input was not read, so the cases"
+                        + " at its positions were never seen");
+        assertEquals(1, weakeningOf(receipt).stream()
+                        .filter("behavior_input_not_read"::equals).count(),
+                () -> "what receipt went without: " + weakeningOf(receipt));
 
         // The three states apart, in the document. `issue` has no section because nothing derived
         // what the model divides it into — the axes come off the boundary and no declaration gives
         // them, so an empty array would say the model divides none of its positions; `whole` has
         // one saying the measure has no subject, which is true of a composition whatever else is
-        // wrong with it; `receipt` has one with numbers in it.
+        // wrong with it; `receipt` has none either, and for the other reason.
         assertFalse(behaviorOf(report, "issue").has("partition"),
                 "no section where nothing derived what the model divides it into");
         assertEquals("no_subject", behaviorOf(report, "whole")
                         .get("partition").get("axesMeasure").get("reason").asString(),
                 "a composition is measured at its stages, and the document says so");
-        assertTrue(behaviorOf(report, "receipt").has("partition"),
-                "and a behavior that was measured carries its measurement");
+        assertFalse(receipt.has("partition"),
+                "nor where the input the model would divide was never read");
     }
 
     /**

@@ -23,7 +23,6 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.Realization;
-import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.EnsuresThresholds;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.BoundaryLine;
@@ -70,24 +69,22 @@ final class Coverages {
      * <p>Asked here rather than worked out again wherever it is needed. What a report says is not
      * covered and what a generator writes a row for have to be the same positions and the same classes,
      * and two derivations of them would be two chances to disagree.
+     *
+     * <p><b>Measured against the reading it is handed.</b> Which positions the input has and what
+     * its rules leave the numbers at them are the reading's to say, and the names and the policy
+     * both were read against come with it. Taken apart and handed over as a domain beside the names
+     * to read it under, the measurement would be free to be made against one reading and the
+     * behavior's rows walked by another.
      */
-    static Partitioned partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
-                                      Sig sig, Symbols symbols, ReadingPolicy policy,
+    static Partitioned partitioningOf(Hir.SpecBehavior behavior,
+                                      souther.compiler.inputs.InputReading read,
                                       Core body,
                                       souther.compiler.check.ElementBindings elements,
                                       CoverageSites.Plan plan,
                                       PathReachability.Answers arrives,
                                       souther.compiler.check.StatedContract stated) {
-        List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
-        // What a row's values are, where they sit and what they are written as, read together:
-        // a field under a name is reached by taking the name off, and a walk given the paths
-        // alone reaches nothing where the derivation reaches a field.
-        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
-        // Read once for the three below, and handed back beside what they produce. What it holds is
-        // a way of asking the declarations reaching this input a further question, and each of them
-        // asking for its own would read every rule of every parameter three times over to arrive at
-        // the same answers.
-        souther.compiler.inputs.InputReading read = inputs.reading(symbols);
+        Symbols symbols = read.symbols();
+        ReadingPolicy policy = read.domain().policy();
         souther.compiler.inputs.Quantities quantities = read.quantities();
         Partitions.Partitioning partitioning =
                 Partitions.of(behavior.name(), read, policy);

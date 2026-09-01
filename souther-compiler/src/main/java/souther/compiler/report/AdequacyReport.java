@@ -2574,7 +2574,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // that was not worked out, so a `>->` composition would publish an empty one and say that
         // it takes nothing. Which behavior it happened to and what it cost is the behavior's
         // `weakening`, where it is one fact rather than one per measure that went without it.
-        if (signature.boundaryNotDerived()) {
+        if (signature.notMeasurable()) {
             return;
         }
         ObjectNode out = behavior.putObject("signature");
@@ -3363,6 +3363,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             };
             case Weakening.BodiesNotElaborated _ -> WeakeningWord.BODIES_NOT_ELABORATED;
             case Weakening.BoundaryNotDerived _ -> WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED;
+            case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;
