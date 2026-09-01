@@ -116,7 +116,7 @@ public sealed interface WritabilityKnowledge {
      * and the order says so rather than leaving it to whichever the caller looked at.
      */
     static WritabilityKnowledge of(ItemAssessment.WritabilityEvidence evidence,
-                                   java.util.List<ItemAssessment.Attempt> attempts) {
+                                   SearchOutcomes searches) {
         if (evidence.known()) {
             return new Established(evidence);
         }
@@ -133,17 +133,7 @@ public sealed interface WritabilityKnowledge {
         // of its line, two readings can have been stopped by two different figures, and what a
         // reader is owed is everything that would have to give — so the gaps are collected and
         // never ranked.
-        Set<EstablishmentGap> stopped = new LinkedHashSet<>();
-        for (ItemAssessment.Attempt each : attempts) {
-            if (each == null) {
-                continue;   // nobody asked for a value to be built under that reading
-            }
-            switch (each) {
-                case ItemAssessment.Attempt.Prevented it -> stopped.add(it.by());
-                case ItemAssessment.Attempt.Certified _, ItemAssessment.Attempt.Unresolved _,
-                     ItemAssessment.Attempt.Unavailable _ -> { }
-            }
-        }
+        Set<EstablishmentGap> stopped = searches.prevented();
         return stopped.isEmpty() ? new NoEvidence() : new Prevented(stopped);
     }
 }

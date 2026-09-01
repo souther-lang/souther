@@ -17,7 +17,7 @@ import souther.compiler.partition.Criterion;
  *
  * @param projection what reading the rules reaching the value this point sits in established about a
  *                   value being there
- * @param attempts   what building a value here came to under each reading of the line, and empty
+ * @param searches   what building a value here came to under each reading of the line, and empty
  *                   where nobody asked for one. Every one of them and not the strongest: what a
  *                   search of one reading came to is a fact about this point, two readings can have
  *                   come to two different things, and neither takes the other back. Kept as one, the
@@ -25,15 +25,15 @@ import souther.compiler.partition.Criterion;
  */
 public record ObligationAssessment(Criterion criterion, ObligationCoverage coverage,
                                    ItemAssessment.WritabilityProjection projection,
-                                   java.util.List<ItemAssessment.Attempt> attempts) {
+                                   SearchOutcomes searches) {
 
     public ObligationAssessment {
-        if (criterion == null || coverage == null || projection == null) {
+        if (criterion == null || coverage == null || projection == null || searches == null) {
             throw new IllegalArgumentException(
-                    "an obligation is a criterion, what the readings came to, and what the rules"
-                            + " prove: " + criterion + " " + coverage + " " + projection);
+                    "an obligation is a criterion, what the readings came to, what the rules prove"
+                            + " and what was searched for: " + criterion + " " + coverage + " "
+                            + projection + " " + searches);
         }
-        attempts = java.util.List.copyOf(attempts);
     }
 
     /** Whether a row this compilation observed stands at the point. */
@@ -59,9 +59,8 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
 
     /** The same point, with what one more search of it came to. */
     public ObligationAssessment settledBy(ItemAssessment.Attempt searched) {
-        java.util.List<ItemAssessment.Attempt> out = new java.util.ArrayList<>(attempts);
-        out.add(searched);
-        return new ObligationAssessment(criterion, coverage, projection, out);
+        return new ObligationAssessment(criterion, coverage, projection,
+                searches.plus(SearchOutcomes.of(searched)));
     }
 
     /**
@@ -75,7 +74,7 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
         // written at the point whichever reading of the line composed it — the readings owe the one
         // row between them, so what one of them showed the point, they all showed it.
         return ItemAssessment.WritabilityEvidence.of(projection, hasRowWitness(),
-                attempts.stream().anyMatch(each -> each instanceof ItemAssessment.Attempt.Certified));
+                searches.certified());
     }
 
     /**
@@ -90,7 +89,7 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
      * told about whichever the readings happened to be walked in front of.
      */
     public WritabilityKnowledge writabilityKnowledge() {
-        return WritabilityKnowledge.of(writabilityEvidence(), attempts);
+        return WritabilityKnowledge.of(writabilityEvidence(), searches);
     }
 
     /** What the readings behind this went without. */

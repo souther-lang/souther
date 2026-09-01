@@ -379,7 +379,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         // of this compiler's, one finding nothing — and every one of those is a fact about this
         // point. Kept as the strongest, whatever the others found out was dropped, and the answer a
         // reader got depended on the order the readings were walked in.
-        List<ItemAssessment.Attempt> attempts = new ArrayList<>();
+        SearchOutcomes searched = SearchOutcomes.none();
         // Whether a value at the point exists is a fact about the point and not about the reading
         // that reached it: one reading proving it proves it. The other two states are what a reading
         // says about itself, so the weaker of them stands only where nothing proved anything.
@@ -392,7 +392,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                         "a reading owing nothing at a point it owes one at: " + role);
             }
             coverage.add(owed.coverage());
-            attempts.addAll(owed.searches().each());
+            searched = searched.plus(owed.searches());
             if (owed.projection().proves()) {
                 projection = ItemAssessment.WritabilityProjection.PROVEN;
             } else if (projection != ItemAssessment.WritabilityProjection.PROVEN
@@ -401,7 +401,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             }
         }
         return new ObligationAssessment(asked.criterion(),
-                ObligationCoverage.acrossTheReadings(coverage), projection, attempts);
+                ObligationCoverage.acrossTheReadings(coverage), projection, searched);
     }
 
     /** The measured half, which a point owed a row always has. */
