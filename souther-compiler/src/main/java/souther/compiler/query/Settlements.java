@@ -497,11 +497,13 @@ public record Settlements(List<OfferItem> requested,
                 Settlement said = switch (StandingAtAPoint.met(one.line().cut().of(), where,
                         List.of(observed), one.criterion(),
                         one.line().origin().comparisonAt())) {
-                    case YES -> new Settlement.Settles();
-                    case NO -> new Settlement.DoesNotSettle();
-                    case NOT_WATCHED ->
+                    case StandingAtAPoint.Met.Reached _ -> new Settlement.Settles();
+                    case StandingAtAPoint.Met.NotAtPoint _ -> new Settlement.DoesNotSettle();
+                    case StandingAtAPoint.Met.NotWatched _ ->
                             new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
-                    case UNREADABLE -> new Settlement.Undetermined(
+                    // Whichever reason there was none, this reader is deciding whether the row
+                    // before it answers the point, and none of them lets it say so.
+                    case StandingAtAPoint.Met.CouldNotTell _ -> new Settlement.Undetermined(
                             Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
                 };
                 if (said.settles()) {

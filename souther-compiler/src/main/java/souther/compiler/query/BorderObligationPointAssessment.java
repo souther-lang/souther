@@ -387,7 +387,11 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                         "a reading owing nothing at a point it owes one at: " + role);
             }
             coverage.add(owed.coverage());
-            if (built == null && owed.attempt() instanceof ItemAssessment.Attempt.Built) {
+            // The strongest of them and not the first. A row read back where it was built for is
+            // grounds that a row can be written at the point; one nothing could place is not, and
+            // taking whichever reading came first would let the second stand in for the first and
+            // decide what the account says by the order the readings were walked in.
+            if (outranks(owed.attempt(), built)) {
                 built = owed.attempt();
             }
             if (owed.projection().proves()) {
@@ -399,6 +403,26 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         }
         return new ObligationAssessment(asked.criterion(),
                 ObligationCoverage.acrossTheReadings(coverage), projection, built);
+    }
+
+    /**
+     * Whether {@code made} says more about a row at the point than {@code held} does.
+     *
+     * <p>Existential over the readings, the way a row that was found is: what one reading of a line
+     * established, another reading of the same line does not take back. Which leaves an order among
+     * what a search may come back with — a row that was placed, a row nothing could place, and
+     * nothing — and it is the same order everywhere the readings of one line are folded.
+     */
+    private static boolean outranks(ItemAssessment.Attempt made, ItemAssessment.Attempt held) {
+        return says(made) > says(held);
+    }
+
+    private static int says(ItemAssessment.Attempt attempt) {
+        return switch (attempt) {
+            case ItemAssessment.Attempt.Certified _ -> 2;
+            case ItemAssessment.Attempt.Unverified _ -> 1;
+            case null, default -> 0;
+        };
     }
 
     /** The measured half, which a point owed a row always has. */

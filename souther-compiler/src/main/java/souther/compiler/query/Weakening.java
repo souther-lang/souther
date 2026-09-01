@@ -64,9 +64,20 @@ public sealed interface Weakening {
     /** The same at one of a behavior's inputs, counted from zero. */
     record InputCasesUnreadable(String behavior, int at) implements Weakening {}
 
-    /** A row's value at one border could not be read, so what is not found at that border is
-     *  undecided rather than absent. */
-    record BorderValueUnreadable(souther.compiler.partition.Border border) implements Weakening {}
+    /**
+     * A row's value at one border could not be read, so what is not found at that border is
+     * undecided rather than absent.
+     *
+     * <p>With what stopped the reading, one of these per reason, so that a border stopped in two
+     * ways says both — which a set does for free, and a record holding the reasons would leave to
+     * whoever wrote the sentence. The reasons are the reading's own ({@link
+     * souther.compiler.partition.ReadingGap}) and are carried rather than folded: a value a limit
+     * shortened, a value nothing could decode and a place the walk never reached leave the same
+     * hole and are three different pieces of news.
+     */
+    record BorderValueUnreadable(souther.compiler.partition.Border border,
+                                 souther.compiler.partition.ReadingGap why)
+            implements Weakening {}
 
     /** The reading of the model that a measure depends on did not run out. */
     record ModelReadingIncomplete(ClosureGap cause) implements Weakening {}

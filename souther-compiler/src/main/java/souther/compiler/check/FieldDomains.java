@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Endpoint;
@@ -1464,7 +1464,8 @@ public final class FieldDomains {
                 // the conjunction as well, a rule whose halves are each held in a language of their
                 // own — a date bounded at both ends, read by the comparison rather than by the
                 // interval algebra — answers for neither half and fails on the node above them.
-                if (part instanceof Core.Binary b && b.op() == BinOp.AND
+                if (part instanceof Core.Binary b
+                        && ConditionJoin.of(b.op()).orElse(null) == ConditionJoin.BOTH
                         && byPart.containsKey(b.left()) && byPart.containsKey(b.right())) {
                     return;
                 }

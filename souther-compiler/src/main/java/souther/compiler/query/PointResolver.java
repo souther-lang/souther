@@ -97,6 +97,7 @@ public final class PointResolver {
                     : PointResolution.Cause.NOTHING_MEASURED);
         }
         SequencedMap<Reading, SearchCoverage.ReadingSearch> walked = new LinkedHashMap<>();
+        PointResolution.Generated offered = null;
         for (Reading reading : readings) {
             switch (held.apply(reading)) {
                 case ReadingEvidence.OutOfScope _ ->
@@ -105,11 +106,21 @@ public final class PointResolver {
                         walked.put(reading, new SearchCoverage.ReadingSearch.Unavailable());
                 case ReadingEvidence.Searched(ItemAssessment.Attempt attempt) -> {
                     switch (attempt) {
-                        case ItemAssessment.Attempt.Built(var row, var _, var _) ->
-                                // The line is answered. Which reading answered it is where the row
-                                // goes, and what a reader asking about one coordinate compares
-                                // against — so the position is carried and not the behavior alone.
-                                { return new PointResolution.Generated(reading, row); }
+                        // A row read back where it was built for. Which reading composed it is
+                        // where the row goes, and what a reader asking about one coordinate
+                        // compares against — so the position is carried and not the behavior alone.
+                        case ItemAssessment.Attempt.Certified made ->
+                                { return new PointResolution.Generated(reading, made.row()); }
+                        // And one nothing could place, which is a row an author may still want and
+                        // is not one this settles the point with. Kept in case no reading of the
+                        // line has better, and answered only after every one of them has been
+                        // asked: taken as soon as it is met, a reading that could not read its
+                        // candidate back would stand in for one that could.
+                        case ItemAssessment.Attempt.Unverified made -> {
+                            if (offered == null) {
+                                offered = new PointResolution.Generated(reading, made.row());
+                            }
+                        }
                         case ItemAssessment.Attempt.Unresolved(var why, var _, var _) ->
                                 walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));
@@ -137,7 +148,11 @@ public final class PointResolver {
                 }
             }
         }
-        return new PointResolution.Unresolved(new SearchCoverage(readings, walked));
+        // A row nothing placed, where no reading of the line placed one. It is what a search came
+        // back with and an author asked for a row is owed it; what it is not is the point settled,
+        // and nothing here says it is.
+        return offered != null ? offered
+                : new PointResolution.Unresolved(new SearchCoverage(readings, walked));
     }
 
     private PointResolver() {}

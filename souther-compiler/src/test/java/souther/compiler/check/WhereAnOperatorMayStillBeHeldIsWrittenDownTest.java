@@ -103,6 +103,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
             new Held("souther.compiler.check.ComparisonPlacement.of",
                     "the one reading of an operator for what it places"),
+            new Held("souther.compiler.semantics.ConditionJoin.of",
+                    "the one reading of an operator for what a connective composes"),
 
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "which operands an operator takes and what it answers, which is a question"
@@ -185,9 +187,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.asWrittenValue",
                     "writes it back into the syntax a value is rendered as"),
             new Held("souther.compiler.check.Resolve.expr",
-                    "translates the parsed tree's own operator into this one, by the name each is"
-                            + " spelled with: two enums held together by a string rather than by"
-                            + " anything that would fail to compile"),
+                    "writes what that answered into the node the resolved tree holds"),
 
             // Handing it on to something that answers about it.
             new Held("souther.compiler.check.HelperParams.BodyTyping.visit",
@@ -219,33 +219,38 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " operator that fact holds: what is written there is read back as a"
                             + " comparison by everything downstream, and nothing recognised it"),
 
-            // Which operators put conditions together, and what each says about its two halves.
+            // Handing the operator to the one reading of what a connective composes. Each of these
+            // has the operator only as far as that call: what it asks afterwards is of the
+            // composition, and where a polarity is carried it is applied to the composition.
             new Held("souther.compiler.check.ClauseExpr.of",
-                    "a conjunction asserted true and a disjunction asserted false each state both"
-                            + " halves"),
+                    "the composition under the polarity the tree is read with, which the shape it"
+                            + " makes carries so that nothing below it holds the operator"),
             new Held("souther.compiler.check.ClauseHelpers.conjunctsOf",
-                    "the conjuncts of a clause, which is walking into a conjunction"),
+                    "the conjuncts of a clause, which is walking into what composes both halves"),
             new Held("souther.compiler.check.Conditions.stating",
-                    "the same, for what a condition states on its own"),
+                    "the same under a polarity, for what a condition states on its own"),
             new Held("souther.compiler.check.FieldDomains.lambda$projection$2",
-                    "walks into a conjunction for the clause that bounds a field"),
+                    "walks into both halves for the clause that bounds a field"),
             new Held("souther.compiler.check.InvariantChecker.direct",
-                    "walks into a conjunction for the clauses an invariant states"),
+                    "walks into both halves for the clauses an invariant states"),
             new Held("souther.compiler.check.Predicates.assumeCond",
-                    "a conjunction asserted true gives both sides, a disjunction asserted false"
-                            + " gives both denied"),
+                    "walks into both halves under the polarity in force, for what a condition"
+                            + " taken in makes known"),
             new Held("souther.compiler.check.Predicates.quantifiedBy",
-                    "walks into a conjunction for what it quantifies over"),
+                    "the same, for what it quantifies over"),
             new Held("souther.compiler.check.Predicates.read",
-                    "walks into a conjunction for the clauses a rule owes"),
+                    "the same, for the clauses a rule owes"),
+            new Held("souther.compiler.partition.Condition.of",
+                    "the composition, which the shape it makes carries"),
+            new Held("souther.compiler.partition.EnsuresThresholds.stated",
+                    "walks into both halves, and stops where the connective composes either of"
+                            + " them because what such a rule states is neither of its sides"),
+
+            // Which operand runs when, asked of the operator itself rather than of what it
+            // composes: the two are answered by the same two operators and are not one question.
             new Held("souther.compiler.partition.ComparisonReadings.walk",
                     "walks both sides of a conjunction and of a disjunction, each under what the"
                             + " other side leaves"),
-            new Held("souther.compiler.partition.Condition.of",
-                    "whether the operator joins two conditions, and which of the two it is"),
-            new Held("souther.compiler.partition.EnsuresThresholds.stated",
-                    "walks into a conjunction, and stops at a disjunction because what one states"
-                            + " is neither of its sides"),
 
             // Which operand runs when, which is the enum's own answer.
             new Held("souther.compiler.core.Evaluated.inOrder",
@@ -315,6 +320,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "reads the operator a library operation is declared to compute"),
 
             // Naming a constant, which is the other way to come by one.
+            new Held("souther.compiler.check.Resolve.binOp",
+                    "names the constant the parsed tree's own operator denotes, which is the one"
+                            + " place the two vocabularies are held together: both sides written"
+                            + " out, so an operator added to what may be written stops the compile"
+                            + " until somebody says what it means here"),
             new Held("souther.compiler.check.ComparisonWriting.operatorStating",
                     "names the constant a relation is written as, which is the one place a"
                             + " composed comparison is said in the language's own operators"),

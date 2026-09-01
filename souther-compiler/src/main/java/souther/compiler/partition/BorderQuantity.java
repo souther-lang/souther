@@ -11,6 +11,7 @@ import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a border is a border <em>of</em>: the quantity a rule cuts.
@@ -91,7 +92,9 @@ public sealed interface BorderQuantity {
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
             return switch (of.read(observation.at(term.position()))) {
-                case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
+                case NumericTerm.Reading.Missing missing ->
+                        Stands.couldNotTell(ReadingGap.of(missing.code()));
+                case NumericTerm.Reading.NoValue _ -> Stands.couldNotTell(ReadingGap.NO_VALUE);
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
                         where.holds(new Level.OnACarrier(of.answered(), number.value()))
@@ -302,10 +305,23 @@ public sealed interface BorderQuantity {
             // differently from the other was read as a value it does not hold — a date read as a
             // whole number is no number at all, and the row stood at nothing (#1018).
             NumericTerm.Reading here = on.read(observation.at(on.term().subjectPath()));
-            NumericTerm.Reading there = against.read(observation.at(against.term().subjectPath()));
-            if (here instanceof NumericTerm.Reading.Missing
-                    || there instanceof NumericTerm.Reading.Missing) {
-                return Stands.UNREADABLE;
+            NumericTerm.Reading there =
+                    against.read(observation.at(against.term().subjectPath()));
+            // Both sides, and not the first of them. The pair is unreadable for whatever stopped
+            // either, and a reader told about one end is being told which end this happened to
+            // look at first.
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
+            for (NumericTerm.Reading end : List.of(here, there)) {
+                if (end instanceof NumericTerm.Reading.Missing missing) {
+                    stopped.add(ReadingGap.of(missing.code()));
+                }
+                if (end instanceof NumericTerm.Reading.NoValue) {
+                    stopped.add(ReadingGap.NO_VALUE);
+                }
+            }
+            Stands unread = Stands.couldNotTell(stopped);
+            if (unread != null) {
+                return unread;
             }
             if (!(here instanceof NumericTerm.Reading.Number onAt)
                     || !(there instanceof NumericTerm.Reading.Number againstAt)) {
@@ -521,6 +537,15 @@ public sealed interface BorderQuantity {
         @Override
         public Stands standsAt(Criterion where, Observation observation) {
             java.math.BigDecimal at = java.math.BigDecimal.ZERO;
+            // Every term before anything is concluded. What stopped a reading is collected over the
+            // whole form rather than taken from whichever term the map handed over first: the form
+            // is unreadable for whatever stopped any of it, and stopping at the first said which
+            // term this walk happened to begin with. A term that read as no number at all is held
+            // until then for the same reason — a form with one of each is one nothing could read,
+            // and answering that it does not stand would be this compiler's own gap said as the
+            // model's answer.
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
+            boolean noNumber = false;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
                 // Each on its own order. Read on one order for the whole form, a position written
                 // back differently from its neighbour was read as a value it does not hold.
@@ -534,13 +559,26 @@ public sealed interface BorderQuantity {
                     case NumericTerm.TakenOver over ->
                             orders.readOver(observation.everyValueAt(over.subjectPath()));
                 };
-                if (read instanceof NumericTerm.Reading.Missing) {
-                    return Stands.UNREADABLE;
+                if (read instanceof NumericTerm.Reading.Missing missing) {
+                    stopped.add(ReadingGap.of(missing.code()));
+                    continue;
+                }
+                if (read instanceof NumericTerm.Reading.NoValue) {
+                    stopped.add(ReadingGap.NO_VALUE);
+                    continue;
                 }
                 if (!(read instanceof NumericTerm.Reading.Number number)) {
-                    return Stands.NO;
+                    noNumber = true;
+                    continue;
                 }
                 at = at.add(Count.number(number.value()).at().multiply(each.getValue()));
+            }
+            Stands unread = Stands.couldNotTell(stopped);
+            if (unread != null) {
+                return unread;
+            }
+            if (noNumber) {
+                return Stands.NO;
             }
             return where.holds(new Level.ACount(new Count(at)))
                     ? Stands.YES : Stands.NO;
@@ -748,11 +786,57 @@ public sealed interface BorderQuantity {
      */
     BoundaryTarget.Shape shape();
 
-    /** Whether a row is at an item, where a row that could not be read is neither. */
-    enum Stands {
-        YES,
-        NO,
-        UNREADABLE
+    /**
+     * Whether a row is at an item, where a row that could not be read is neither.
+     *
+     * <p>The third carries what stopped the reading, because that is a fact about this compiler's
+     * observation and never one about the model. Answered without it, a reader is left to work out
+     * from what it has why there was nothing to compare — and what it has is the absence of a
+     * number, which reads exactly like a number that did not match.
+     */
+    sealed interface Stands {
+
+        /** The values stand at the item. */
+        record Yes() implements Stands {}
+
+        /** They were read, and they do not. */
+        record No() implements Stands {}
+
+        /**
+         * There was no number to compare, and this is every reason there was none.
+         *
+         * <p>More than one where the quantity reads more than one term: a rule relating two
+         * positions and a form over several come to nothing for whatever stopped any of them, and
+         * naming one would be picking which of them a reader is told about. Which is as true of the
+         * two kinds of reason as it is of two observations, so both kinds are in the set and
+         * neither is chosen over the other ({@link ReadingGap}).
+         */
+        record CouldNotTell(Set<ReadingGap> why) implements Stands {
+
+            public CouldNotTell {
+                if (why == null || why.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a reading nothing could be made of says what stopped it");
+                }
+                // In the order they were met, because a report prints them and a report that
+                // changes between runs cannot be compared between runs.
+                why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
+            }
+        }
+
+        Stands YES = new Yes();
+
+        Stands NO = new No();
+
+        /** Come to nothing for one reason, which is what a quantity reading one term has. */
+        static Stands couldNotTell(ReadingGap why) {
+            return new CouldNotTell(Set.of(why));
+        }
+
+        /** The same over several terms, or null where nothing stopped any of them. */
+        static Stands couldNotTell(Set<ReadingGap> why) {
+            return why.isEmpty() ? null : new CouldNotTell(why);
+        }
     }
 
     /** What one row holds at each of a behavior's positions, for a quantity reading its own value

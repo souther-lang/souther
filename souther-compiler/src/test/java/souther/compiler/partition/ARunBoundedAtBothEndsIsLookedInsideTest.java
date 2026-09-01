@@ -66,11 +66,14 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
      */
     @Test
     void aRunHoldingNoWholeMultipleOfTheGeneratorIsStillLookedIn() {
-        assertEquals(souther.compiler.query.ItemAssessment.Attempt.Built.class,
-                attemptAt(cut("10"), "3 * n = 1", PointRole.IN).getClass(),
+        // A row was offered, which is what looking inside the run produces. Which of the ways of
+        // having been built it is is a second question and not this one's: the run is looked in or
+        // it is not, and a candidate that came out of it settles that either way.
+        assertInstanceOf(souther.compiler.query.ItemAssessment.Attempt.Built.class,
+                attemptAt(cut("10"), "3 * n = 1", PointRole.IN),
                 "a run from one to ten holds three, which anything could name");
-        assertEquals(souther.compiler.query.ItemAssessment.Attempt.Built.class,
-                attemptAt(cut("2"), "3 * n = 1", PointRole.IN).getClass(),
+        assertInstanceOf(souther.compiler.query.ItemAssessment.Attempt.Built.class,
+                attemptAt(cut("2"), "3 * n = 1", PointRole.IN),
                 "and one from one to two holds 1.5, which only looking inside it finds");
     }
 

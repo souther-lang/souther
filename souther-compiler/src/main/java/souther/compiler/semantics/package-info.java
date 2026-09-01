@@ -1,11 +1,12 @@
 /**
- * What the language's own operations are, as propositions about the operations.
+ * What the language's own constructs are, as propositions about them.
  *
  * <p>Nothing here is about a reader. What {@code Date.daysBetween} answers, that
  * {@code Int.abs} is never negative, that {@code Date.addMonths} moves a date by no
- * fixed number of days: each is true of the operation whether or not anything in this
- * compiler asks. This package holds those, once, and the checks that hold each of them
- * to the declaration it was written for.
+ * fixed number of days, that a conjunction states both of the conditions it joins: each
+ * is true of the construct whether or not anything in this compiler asks. This package
+ * holds those, once, and the checks that hold each of them to the declaration it was
+ * written for.
  *
  * <h2>Why it is not owned by whoever asks first</h2>
  *
@@ -21,8 +22,8 @@
  * needed it second, so the same repair is owed again every time. What removes the repair
  * is the ownership rule, held from the first reader rather than the second:
  *
- * <p><b>An intrinsic fact about an operation never belongs to a consumer.</b> A
- * proposition true of the operation is declared here. A rule about what a procedure does
+ * <p><b>An intrinsic fact about a construct never belongs to a consumer.</b> A
+ * proposition true of the construct is declared here. A rule about what a procedure does
  * with such a proposition — which of them it enforces, what it reports when it cannot —
  * belongs to that procedure.
  *

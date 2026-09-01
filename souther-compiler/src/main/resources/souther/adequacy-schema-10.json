@@ -69,6 +69,7 @@
           "input_cases_unreadable",
           "row_did_not_finish",
           "border_value_unreadable",
+          "border_value_absent",
           "rule_unread",
           "position_not_read",
           "question_unanswered",

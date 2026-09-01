@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
@@ -91,14 +91,17 @@ final class Predicates {
     }
 
     /** What {@code e}, asserted with polarity {@code positive}, says of every element of a container.
-     * Mirrors {@link #obligations}: a conjunction states each of its sides, and a negation flips the
-     * polarity. Only a stated quantifier is recorded — denying one says some element fails the
-     * predicate, and which one is not something this check can name. */
+     * Mirrors {@link #obligations}: a connective that composes both halves under the polarity in
+     * force states each of them under it, and a negation turns the polarity over. Only a stated
+     * quantifier is recorded — denying one says some element fails the predicate, and which one is
+     * not something this check can name. */
     void quantifiedBy(Core raw, Denotations at, boolean positive, List<Quantified> out) {
         Core e = Conditions.asSizeComparison(raw);
-        if (e instanceof Core.Binary b && b.op() == BinOp.AND && positive) {
-            quantifiedBy(b.left(), at, true, out);
-            quantifiedBy(b.right(), at, true, out);
+        if (e instanceof Core.Binary b
+                && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
+                        == ConditionJoin.BOTH) {
+            quantifiedBy(b.left(), at, positive, out);
+            quantifiedBy(b.right(), at, positive, out);
             return;
         }
         Core under = Conditions.negated(e);
@@ -615,13 +618,16 @@ final class Predicates {
     private Owed read(Core inv, Denotations at, Set<Core> unnamed,
                       boolean positive, boolean decidesFalse, Discharge discharge,
                       PerPart per) {
-        if (inv instanceof Core.Binary b && b.op() == BinOp.AND && positive) {
-            // Each conjunct on its own: an invariant is a set of things that hold, and one the check
+        if (inv instanceof Core.Binary b
+                && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
+                        == ConditionJoin.BOTH) {
+            // Each half on its own: an invariant is a set of things that hold, and one the check
             // cannot read leaves its own run-time check standing without costing the others theirs.
-            // That it stands is carried rather than dropped — the other conjunct being discharged is
+            // That it stands is carried rather than dropped — the other half being discharged is
             // not the invariant proven.
-            return obligations(b.left(), at, unnamed, true, decidesFalse, discharge, per)
-                    .and(obligations(b.right(), at, unnamed, true, decidesFalse, discharge, per));
+            return obligations(b.left(), at, unnamed, positive, decidesFalse, discharge, per)
+                    .and(obligations(b.right(), at, unnamed, positive, decidesFalse, discharge,
+                            per));
         }
         Core under = Conditions.negated(inv);
         if (under != null) {
@@ -792,9 +798,11 @@ final class Predicates {
             taken = first.taken();
             shapeRead = first.shapeRead();
         }
-        // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
+        // A connective composing both halves under the polarity in force gives each of them under
+        // that polarity.
         if (cond instanceof Core.Binary b
-                && (b.op() == BinOp.AND && positive || b.op() == BinOp.OR && !positive)) {
+                && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
+                        == ConditionJoin.BOTH) {
             Assumed left = assumeCond(b.left(), k, at, positive);
             // Either side taken in is the condition taken in. A conjunction one half of which reads
             // is not one nothing was read of, and calling it that would name this compiler's limit

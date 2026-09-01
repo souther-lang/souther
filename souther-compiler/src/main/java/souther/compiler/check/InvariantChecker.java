@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
@@ -1361,7 +1361,8 @@ public final class InvariantChecker {
                         Map<RuleRef, Map<Core, Required>> raisedByPart,
                         Map<FieldDomains.BoundaryQuestion,
                                 FieldDomains.BoundaryStanding> standing) {
-        if (clause instanceof Core.Binary and && and.op() == BinOp.AND) {
+        if (clause instanceof Core.Binary and
+                && ConditionJoin.of(and.op()).orElse(null) == ConditionJoin.BOTH) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
             // Left before right, which is the order the clause was written in and the order
             // {@code ClauseHelpers.conjunctsOf} reads it in: the two readings of one clause number
