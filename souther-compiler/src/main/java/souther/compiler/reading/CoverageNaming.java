@@ -128,7 +128,7 @@ final class CoverageNaming implements Naming<Outcome> {
         // which is also what a scrutinee this reading did not follow leaves to name it with.
         TermPath at = switch (reads.pathOf(match.scrutinee(), symbols)) {
             case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            case PathResolution.NotAPosition _ -> null;
         };
         if (at == null) {
             Condition fork = forkOf(match, part);
@@ -158,7 +158,7 @@ final class CoverageNaming implements Naming<Outcome> {
         if (fork instanceof Core.If iff) {
             TermPath read = switch (reads.pathOf(iff.cond(), symbols)) {
                 case PathResolution.At(var stands) -> stands;
-                case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+                case PathResolution.NotAPosition _ -> null;
             };
             Condition what = read == null ? forkOf(fork, part)
                     : new Condition.Case(read, part == 0 ? "true" : "false");

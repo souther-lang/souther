@@ -53,24 +53,38 @@ sealed interface InputAtom {
      * held in the name, one number arriving from the declaration's reading and from a caller's form
      * would be two, and a rule about it would say nothing about the form that names it.
      *
-     * @param parameter which of the behavior's inputs this sits under
-     * @param path      what that parameter's own rules call the place
-     * @param measured  whether this is the count taken of the place rather than its own value. Two
-     *                  numbers at one place, and a rule about one says nothing about the other
+     * @param root     the value whose rules name the place, which is the parameter where no
+     *                 narrowing was taken and the case where one was. A field the cases of a sum
+     *                 share is one place named by two of those, and it is this one — the nearest,
+     *                 whose rules can name it — so that the rules of both arrive about one subject
+     * @param path     what that value's own rules call the place
+     * @param kind     whether this is the count taken of the place rather than its own value. Two
+     *                 numbers at one place, and a rule about one says nothing about the other
      */
-    record Named(String parameter, RuleKey path,
+    record Named(String root, RuleKey path,
                  souther.compiler.check.FieldDomains.CoordinateKind kind) implements InputAtom {
 
         public Named {
-            if (parameter == null || path == null) {
+            if (root == null || path == null) {
                 throw new IllegalArgumentException("a named number sits somewhere");
             }
             java.util.Objects.requireNonNull(kind, "and is some number of what is there");
         }
 
+        /**
+         * Where the number sits, as a reader of this input spells a place.
+         *
+         * <p>Read here and not assembled by whoever needs it. A proof that names a place and the
+         * rendering of a subject are the same spelling, and two of them would be one place written
+         * two ways the day a step wears something.
+         */
+        String place() {
+            return path.isTheValueItself() ? root : root + "." + path;
+        }
+
         @Override
         public String toString() {
-            String at = path.isTheValueItself() ? parameter : parameter + "." + path;
+            String at = place();
             return switch (kind) {
                 case souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue _ -> at;
                 case souther.compiler.check.FieldDomains.CoordinateKind
@@ -94,18 +108,18 @@ sealed interface InputAtom {
      * from two readings is two numbers, and without the parameter their rules would be put together
      * as rules about one.
      */
-    record Anonymous(String parameter, Object subject) implements InputAtom {
+    record Anonymous(String root, Object subject) implements InputAtom {
 
         public Anonymous {
-            if (parameter == null || subject == null) {
+            if (root == null || subject == null) {
                 throw new IllegalArgumentException(
-                        "a number with no term of this input is still one parameter's");
+                        "a number with no term of this input is still one reading's");
             }
         }
 
         @Override
         public String toString() {
-            return parameter + ":<" + subject + ">";
+            return root + ":<" + subject + ">";
         }
     }
 }

@@ -152,7 +152,7 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
         // this reading did not follow it to one.
         TermPath scrutinee = switch (reads.pathOf(match.scrutinee(), symbols)) {
             case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            case PathResolution.NotAPosition _ -> null;
         };
         // The position that is narrowed, and not the narrowed one. A case declaring no field has
         // nothing under it and this reading holds no position there, which is what it is for; what

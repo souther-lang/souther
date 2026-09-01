@@ -44,62 +44,25 @@ import java.util.Map;
  * into — and changes at every step of a walk. The reading is one value for a whole analysis. Held
  * in here it would be copied at every step, and a reader would ask whichever copy it had in hand.
  *
- * @param roots        which bindings name which parameter, in the tree being walked
- * @param alternatives which bindings stand for one of several values, and which values those are.
- *                     Written where an arm narrows what it was handed and read nowhere else: an
- *                     element's own alternatives are worked out from the container it came from, and
- *                     what an arm leaves of them is a fact about this walk's position in the tree
- *                     that nothing under the arm could recover
- * @param callsStand   whether an operation the language defines the meaning of is left standing in
- *                     this tree. It is in the representation a declaration's own rules are read in
- *                     and it is not in the one that runs, and the difference is not a detail of the
- *                     walk: a call left standing names no location, which is an answer where such a
- *                     tree is what was handed over and a bug in the caller where it is not
+ * <p><b>What is known of the names is held and not published.</b> The environment answers the
+ * questions a walk asks of it ({@link BindingEnvironment}), and which of its facts wins where a
+ * binding is more than one of them is settled inside it — so a caller that reached the tables could
+ * settle it again, in an order of its own, which is the whole of what that type is for. Nothing here
+ * hands them out, and what a name comes to is asked rather than assembled.
+ *
+ * <p>What an arm narrowed is this reading's own and not the environment's. It is a fact about where
+ * a walk is in the tree rather than about where a binding came from — read under one arm and not
+ * under the next — so it is held beside the environment and put to it here.
  */
-public record InputReads(Map<BindingId, TermPath> roots,
-                         Map<BindingId, Core> bound,
-                         souther.compiler.check.ElementBindings elements,
-                         Map<BindingId, java.util.List<Denotation>> alternatives,
-                         boolean callsStand) implements BindingEnvironment {
+public final class InputReads {
 
-    public InputReads {
-        roots = Map.copyOf(roots);
-        bound = Map.copyOf(bound);
-        alternatives = Map.copyOf(alternatives);
-    }
+    private final BindingEnvironment names;
+    private final Map<BindingId, java.util.List<Denotation>> alternatives;
 
-    @Override
-    public TermPath rootOf(BindingId binding) {
-        return roots.get(binding);
-    }
-
-    @Override
-    public Core boundValueOf(BindingId binding) {
-        return bound.get(binding);
-    }
-
-    @Override
-    public Core heldAnywhereBy(BindingId binding) {
-        // What is bound on the way here first, and what the body bound anywhere after it. No
-        // binding holds nothing — this environment refuses a null value — so what is not here is
-        // absent rather than bound to nothing, and one lookup says so.
-        Core here = bound.get(binding);
-        return here != null ? here : elements.boundTo(binding);
-    }
-
-    @Override
-    public Core containerOf(BindingId binding) {
-        return elements.containerOf(binding);
-    }
-
-    @Override
-    public BindingId sameElementsAs(BindingId binding) {
-        return elements.provenance().sameElementsAs(binding);
-    }
-
-    @Override
-    public BindingId madeFrom(BindingId binding) {
-        return elements.provenance().madeFrom(binding);
+    private InputReads(BindingEnvironment names,
+                       Map<BindingId, java.util.List<Denotation>> alternatives) {
+        this.names = names;
+        this.alternatives = Map.copyOf(alternatives);
     }
 
     /**
@@ -116,14 +79,8 @@ public record InputReads(Map<BindingId, TermPath> roots,
      */
     public static InputReads ofParameters(Map<BindingId, String> parameters,
                                           souther.compiler.check.ElementBindings elements) {
-        return new InputReads(rooted(parameters), Map.of(), elements, Map.of(), false);
-    }
-
-    /** The parameters as positions, which is what a name in a tree stands for. */
-    private static Map<BindingId, TermPath> rooted(Map<BindingId, String> named) {
-        Map<BindingId, TermPath> out = new LinkedHashMap<>();
-        named.forEach((binding, name) -> out.put(binding, TermPath.of(name)));
-        return out;
+        return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
+                Map.of(), elements, false), Map.of());
     }
 
     /**
@@ -134,8 +91,8 @@ public record InputReads(Map<BindingId, TermPath> roots,
      * parameters nowhere a body could, and its clauses still name them.
      */
     public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
-        return new InputReads(rooted(roots), Map.of(),
-                souther.compiler.check.ElementBindings.NONE, Map.of(), true);
+        return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(roots), Map.of(),
+                souther.compiler.check.ElementBindings.NONE, true), Map.of());
     }
 
     /**
@@ -152,8 +109,21 @@ public record InputReads(Map<BindingId, TermPath> roots,
      * held in, and a clause read in the one that runs would have the calls in it gone.
      */
     public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots) {
-        return new InputReads(roots, Map.of(),
-                souther.compiler.check.ElementBindings.NONE, Map.of(), true);
+        return new InputReads(new BindingEnvironment(roots, Map.of(),
+                souther.compiler.check.ElementBindings.NONE, true), Map.of());
+    }
+
+    /**
+     * An environment written out rather than read off a body.
+     *
+     * <p>For holding this reading to what it does over environments no source produces. A binding
+     * that holds a value and is also what an operation handed an element on, or a run of names that
+     * comes round to itself, are states of the environment rather than of a model, and what this
+     * reading does with one is a rule it keeps whatever a body can be written to say.
+     */
+    static InputReads written(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
+                              souther.compiler.check.ElementBindings elements) {
+        return new InputReads(new BindingEnvironment(roots, bound, elements, false), Map.of());
     }
 
     /**
@@ -184,11 +154,11 @@ public record InputReads(Map<BindingId, TermPath> roots,
         if (arm.caseTypes().size() != 1) {
             return admitting(match, arm, symbols);
         }
-        // What the arm narrows is a position of the input, and a scrutinee that is not one narrows
-        // nothing — whether because it stands nowhere or because this reading did not follow it.
+        // What the arm narrows is a position of the input, and a scrutinee that stands at none
+        // narrows nothing.
         TermPath scrutinee = switch (pathOf(match.scrutinee(), symbols)) {
             case PathResolution.At(var at) -> at;
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            case PathResolution.NotAPosition _ -> null;
         };
         if (scrutinee == null) {
             return admitting(match, arm, symbols);
@@ -204,9 +174,7 @@ public record InputReads(Map<BindingId, TermPath> roots,
         // can be asked, and it cannot be built without knowing which paths the body names. Asking
         // only the first here is what breaks that circle, and the cost of asking it alone is a name
         // that stands for a place no row reaches — which the reading refuses when it is asked.
-        Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
-        wider.put(arm.binder().binding(), narrowed);
-        return new InputReads(wider, bound, elements, alternatives, callsStand);
+        return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives);
     }
 
     /**
@@ -258,7 +226,7 @@ public record InputReads(Map<BindingId, TermPath> roots,
         }
         Map<BindingId, java.util.List<Denotation>> wider = new LinkedHashMap<>(alternatives);
         wider.put(arm.binder().binding(), left);
-        return new InputReads(roots, bound, elements, wider, callsStand);
+        return new InputReads(names, wider);
     }
 
     /**
@@ -297,18 +265,19 @@ public record InputReads(Map<BindingId, TermPath> roots,
 
     /** The same, inside what {@code binder} binds. */
     public InputReads and(Core.Binder binder, Core value) {
-        if (binder == null || binder.binding() == null || value == null) {
-            return this;
-        }
-        Map<BindingId, Core> wider = new LinkedHashMap<>(bound);
-        // The nearest binding wins, which is what being inside it means.
-        wider.put(binder.binding(), value);
-        return new InputReads(roots, wider, elements, alternatives, callsStand);
+        BindingEnvironment inside = names.inside(binder, value);
+        return inside == names ? this : new InputReads(inside, alternatives);
     }
 
     /** Where {@code e} stands, read here ({@link PathResolution}). */
     public PathResolution pathOf(Core e, Symbols symbols) {
-        return InputPath.of(e, this, symbols);
+        return InputPath.of(e, names, symbols);
+    }
+
+    /** Where in the element handed to {@code binding} the value a walk answered stands, or null
+     *  where the walk answered no place of it ({@link ElementProjection}). */
+    ElementProjection projectionAt(BindingId binding) {
+        return names.projectionAt(binding);
     }
 
     /**
@@ -319,19 +288,24 @@ public record InputReads(Map<BindingId, TermPath> roots,
      * a rule draws, and the walk that says which positions a rule mentions — so the two agree about
      * what a name is rather than each working out what a missing position meant.
      *
-     * <p>A position first, wherever there is one. A name an operation handed an element on is a
-     * position where the container is at one, and only where it is not does what the binding holds
-     * matter — which is the order the position walk already reads them in, said here so a caller
-     * does not have to know it.
+     * <p>A position first, and by whichever road reaches one. That is not the same as asking whether
+     * the binding is a parameter: a name an operation handed an element on stands at a position
+     * wherever its container does, and so does one bound to something that names a position. So what
+     * is asked first is the whole walk after a position ({@link InputPath}) rather than one of the
+     * facts it is built from.
+     *
+     * <p>Then a set the arms already narrowed, which is the same order as everywhere else: what is in
+     * force where the name is read wins over what was true of it further out.
+     *
+     * <p>And what is left is read from where the binding came from ({@link BindingRole}), which is
+     * the one place those facts are ordered. Nothing is re-ordered here — the walk after a position
+     * reads the same ordering, so a name that got past it is one no road placed, and what remains is
+     * to say which kind of value it has.
      *
      * <p>What it holds is answered last and only as the expression. Whether that expression may
      * stand where the name does is the caller's question, asked of the fact rather than of a
      * permission recorded here: an arithmetic reader substitutes it, and a reader collecting
      * positions walks into it, and neither is the other's rule.
-     *
-     * <p>A set the arms already narrowed stands before an element's own, which is the same order as
-     * everywhere else: what is in force where the name is read wins over what was true of it
-     * further out.
      */
     public ReadMeaning meaningOf(Core.Read read, Symbols symbols) {
         return meaningOf(read, symbols, new java.util.HashSet<>());
@@ -347,32 +321,40 @@ public record InputReads(Map<BindingId, TermPath> roots,
      */
     private ReadMeaning meaningOf(Core.Read read, Symbols symbols,
                                   java.util.Set<BindingId> met) {
-        // A name is what it stands at where it stands at one. The two other answers are alike here:
-        // a name this reading did not follow to a position is one whose meaning the answers below
-        // are asked for, as a name that stands at none is.
+        // A name is what it stands at where it stands at one, and where it stands at none the
+        // answers below say what else it is.
         switch (pathOf(read, symbols)) {
             case PathResolution.At(var at) -> {
                 return new ReadMeaning.Position(at);
             }
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
+            case PathResolution.NotAPosition _ -> { }
         }
         java.util.List<Denotation> narrowed = alternatives.get(read.binding());
         if (narrowed != null) {
             return new ReadMeaning.OneOf(narrowed);
         }
-        Core container = elements.containerOf(read.binding());
-        if (container != null) {
-            java.util.List<Denotation> written =
-                    writtenElementsOf(new Denotation(container, this), symbols, met);
-            return written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
-        }
-        Core held = bound.get(read.binding());
-        // Read in this environment. Bindings are added on the way down and each tells itself from
-        // every other, so what was bound after this name does not answer for what it holds — which
-        // is why the environment at the binder and the one at the read cannot be told apart yet.
-        // Said once here rather than by each reader, so the day they can be, one place changes.
-        return held == null || held == read ? new ReadMeaning.Unknown()
-                : new ReadMeaning.Through(new Denotation(held, this));
+        return switch (names.roleOf(read.binding())) {
+            case BindingRole.Element(var container) -> {
+                java.util.List<Denotation> written =
+                        writtenElementsOf(new Denotation(container, this), symbols, met);
+                yield written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
+            }
+            // Read in this environment. Bindings are added on the way down and each tells itself
+            // from every other, so what was bound after this name does not answer for what it holds
+            // — which is why the environment at the binder and the one at the read cannot be told
+            // apart yet. Said once here rather than by each reader, so the day they can be, one
+            // place changes.
+            //
+            // A name bound to the very read being answered is a name this knows nothing about: the
+            // value would be the question, and a reader handed it would ask it again.
+            case BindingRole.Alias(var value) -> value == read ? new ReadMeaning.Unknown()
+                    : new ReadMeaning.Through(new Denotation(value, this));
+            case BindingRole.Unknown _ -> new ReadMeaning.Unknown();
+            // A parameter is the position it is the name of. The walk above reaches it by the same
+            // fact, so nothing gets here — and what would be said if anything did is what is said
+            // there, rather than a failure invented to fill the arm.
+            case BindingRole.Root(var at) -> new ReadMeaning.Position(at);
+        };
     }
 
     /**
@@ -418,11 +400,11 @@ public record InputReads(Map<BindingId, TermPath> roots,
      *
      * <p><b>Which names those are is {@link #meaningOf}'s answer and is not read off the bindings
      * here.</b> A name is a position, or one of several values, or an element, before it is what it
-     * was bound to, and reading {@code bound} would be this walk deciding that order for itself —
-     * beside the one place that decides it, and free to differ. No model here comes out differently
-     * for it: what would tell them apart is a binding that both holds a value and is what an
-     * operation handed an element on, which is a shape a fused pair of walks can leave
-     * ({@link InputPath}) and which none of these tests writes.
+     * was bound to, and there is no way to read a binding's value here without that order having
+     * been applied: the environment answers what a name is ({@link BindingRole}) and hands out
+     * nothing to put in a different order. What would have told a second order apart is a binding
+     * that both holds a value and is what an operation handed an element on, which is the shape
+     * joining two walks leaves.
      *
      * <p>By the bindings met, which is what makes it stop. Each tells itself from every other, so a
      * name that came round to itself is one already answered for.
@@ -451,12 +433,37 @@ public record InputReads(Map<BindingId, TermPath> roots,
 
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}). */
     public PathResolution elementAt(BindingId binding, Symbols symbols) {
-        return InputPath.elementAt(binding, this, symbols);
+        return InputPath.elementAt(binding, names, symbols);
     }
 
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, Symbols symbols) {
-        return InputPath.cameFrom(e, this, symbols);
+        return InputPath.cameFrom(e, names, symbols);
+    }
+
+    /**
+     * Two readings are one where they hold the same facts and stand under the same arms.
+     *
+     * <p>A value and not an identity, because it travels inside one: a name stands for a value in
+     * the environment its binding was made in, and the two are carried together ({@link Denotation}).
+     * Told apart by which copy a caller had, one value read in two equal environments would be two
+     * values wherever a reader compares what it was answered.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return this == other
+                || other instanceof InputReads that && names.equals(that.names)
+                        && alternatives.equals(that.alternatives);
+    }
+
+    @Override
+    public int hashCode() {
+        return names.hashCode() * 31 + alternatives.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "InputReads[names=" + names + ", alternatives=" + alternatives + "]";
     }
 }

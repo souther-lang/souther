@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.ElementQuestion;
+import souther.compiler.inputs.ElementStep;
 import souther.compiler.types.BindingId;
 
-import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Where the elements of what a binding holds came from, for the bindings an expansion wrote.
@@ -14,27 +16,19 @@ import java.util.Map;
  * name on it — so what its answer held the elements of is a fact only the expansion had, and
  * recognising it again from the walk would read the shape a splice happens to leave.
  *
- * <p>Three facts and not one, because they license different things. Where an operation answers
- * the elements it was given — a {@code filter}, a {@code distinct} — the two bindings hold the same
- * values, so a rule about one is a rule about the other and a reading may walk through. Where it
- * answers what a closure made of them, the values came from there and are not those values: what a
- * rule about them means for the position they came from is not settled by knowing where they came
- * from, and a reading that walked through would put a line at a position whose values are not the
- * ones the rule is about.
- *
- * <p>And where the operation answers exactly one of those per element, the closure's own parameter
- * is named beside the container it walks. That is a stronger statement than where the values came
- * from and a narrower one: it says the answers and the elements correspond, which is what a number
- * over the whole run needs and what a walk keeping some of what it was given does not have.
+ * <p>Two kinds of fact, because they are about different things. One binding's elements stand to
+ * another's as the same values or as values made from them ({@link ElementEdge}), and that is one
+ * edge per binding. Beside it and not among them, a walk answering exactly one value per element
+ * names its closure's own parameter against the container walked: that is a stronger statement and a
+ * narrower one — it says the answers and the elements correspond, which is what a number over the
+ * whole run needs and what a walk keeping some of what it was given does not have.
  * {@link #projectedFrom} is that, and the operation it was proved of is gone by the time anything
- * reads the tree — so it is proved where the operation stands and carried by binding.
+ * reads the tree, so it too is proved where the operation stands and carried by binding.
  *
- * <p><b>Asked one fact at a time, and never as a table.</b> The three are kept in one place because
- * they obey one law where a body is copied ({@link CopyableFactKind}), and that is a reason for the
- * shape inside and for nothing outside: a reader wants to know what one binding's elements came
- * from, and the question it asks is that. Nothing here hands out the table, so no reader can come to
- * depend on this being a table — which is what would make a fact obeying a different law hard to add
- * beside these, exactly the thing the kinds were named narrowly to keep possible.
+ * <p><b>An edge is never handed out.</b> What one licenses is not a property of the edge but of the
+ * question being asked, and a reader holding one could answer that for itself — beside the one place
+ * that answers it, and free to differ. So the only way to read an edge is to name a question, and
+ * {@link #stepFrom} is the whole of what comes back.
  *
  * <p>Bindings and not expressions. A binding tells one occurrence from another, which is what two
  * calls of one operation need, where an expression does not survive being copied, renamed or
@@ -63,10 +57,11 @@ public final class ElementProvenance {
      * {@code m}, the copy has the same fact of the bindings it made: {@code a R b} with both ends in
      * {@code m} induces {@code m(a) R m(b)}.
      *
-     * <p>Named for what the facts have in common rather than for their being relations between
-     * bindings. A fact from one binding to several, or one a copy moves only one end of, obeys
-     * nothing said here and does not belong among these however much it reads like one — put here,
-     * it would be carried by a law it does not keep.
+     * <p>Named for what the facts have in common rather than for how they are held. Two of them are
+     * one binding's edge to another and are kept as one edge; the third is kept beside it. What puts
+     * all three here is that a copy carries them alike, and a fact from one binding to several, or
+     * one a copy moves only one end of, obeys nothing said here and does not belong among these
+     * however much it reads like one — put here, it would be carried by a law it does not keep.
      */
     enum CopyableFactKind {
         /** The two bindings hold the same values. */
@@ -79,42 +74,55 @@ public final class ElementProvenance {
     }
 
     /** Nothing was expanded, which is what a body calling no such operation comes to. */
-    public static final ElementProvenance NONE = new ElementProvenance(Map.of());
+    public static final ElementProvenance NONE =
+            new ElementProvenance(Map.of(), Map.of());
 
-    private final Map<CopyableFactKind, Map<BindingId, BindingId>> byKind;
+    private final Map<BindingId, ElementEdge> edges;
+    private final Map<BindingId, BindingId> projections;
 
-    /** Every kind is present, so a reader of one never meets an absence standing for an empty
-     *  table, and the tables are this value's rather than any caller's. */
-    private ElementProvenance(Map<CopyableFactKind, Map<BindingId, BindingId>> facts) {
-        Map<CopyableFactKind, Map<BindingId, BindingId>> held =
-                new EnumMap<>(CopyableFactKind.class);
-        for (CopyableFactKind kind : CopyableFactKind.values()) {
-            held.put(kind, Map.copyOf(facts.getOrDefault(kind, Map.of())));
-        }
-        this.byKind = Map.copyOf(held);
+    private ElementProvenance(Map<BindingId, ElementEdge> edges,
+                              Map<BindingId, BindingId> projections) {
+        this.edges = Map.copyOf(edges);
+        this.projections = Map.copyOf(projections);
     }
 
-    /** What one kind of fact this holds, as the bindings it is said of against the bindings it says
-     *  them of. Here for what is written beside it and for what holds the law; a reader asks about
-     *  one binding. */
-    Map<BindingId, BindingId> of(CopyableFactKind kind) {
-        return byKind.get(kind);
+    /**
+     * What a walk asking {@code question} may do at {@code binding} ({@link ElementStep}).
+     *
+     * <p>The one place an edge is read. Answered per question and never by asking whether this is
+     * one of them: a question added here is one nobody has said what the edges mean for, and read as
+     * "not that one" it would follow whichever edges the last question happened to leave — the
+     * answer arrived at by not being asked.
+     *
+     * <p>And an edge this question does not cross is told from an edge nobody wrote. Both leave the
+     * walk with no binding to go on to and they license opposite things, so what comes back says
+     * which of the two it is rather than leaving a caller to read a missing binding as leave to look
+     * elsewhere.
+     */
+    public ElementStep stepFrom(BindingId binding, ElementQuestion question) {
+        // Asked before the edge is looked up, so that reading one without naming a question is
+        // refused whatever was written there. Read after, the two edges that answer alike would go
+        // through without a question having been asked, and only the one that consults it would
+        // notice — which is the licence being decided by which edge happened to be there.
+        Objects.requireNonNull(question, "an edge is read for a question");
+        return switch (binding == null ? null : edges.get(binding)) {
+            case null -> new ElementStep.NoEdge();
+            // The two bindings hold the same values, so either question goes on through.
+            case ElementEdge.TheSameAs(var container) -> new ElementStep.Through(container);
+            // What is made from a position came from it and is not it, so the walk after which
+            // position an expression names stops where the elements stop being the same ones —
+            // stops, rather than arrives at a binding it does not have.
+            case ElementEdge.MadeFrom(var container) -> switch (question) {
+                case NAMED_POSITION -> new ElementStep.Refused();
+                case VALUE_ORIGIN -> new ElementStep.Through(container);
+            };
+        };
     }
 
     /** Every closure parameter of a one-per-element walk, against the container walked. The one
      *  kind a reader beside this asks about as a whole, to say how many such walks a body has. */
     Map<BindingId, BindingId> projectedFrom() {
-        return of(CopyableFactKind.PROJECTS_EACH_ELEMENT_OF);
-    }
-
-    /** The binding whose elements {@code binding} holds too, or null where none does. */
-    public BindingId sameElementsAs(BindingId binding) {
-        return binding == null ? null : of(CopyableFactKind.HOLDS_THE_SAME_AS).get(binding);
-    }
-
-    /** The binding whose elements {@code binding}'s were made from, or null where none was. */
-    public BindingId madeFrom(BindingId binding) {
-        return binding == null ? null : of(CopyableFactKind.DERIVES_FROM).get(binding);
+        return projections;
     }
 
     /**
@@ -127,54 +135,64 @@ public final class ElementProvenance {
      * about this.
      */
     public BindingId projectedFrom(BindingId parameter) {
-        return parameter == null ? null
-                : of(CopyableFactKind.PROJECTS_EACH_ELEMENT_OF).get(parameter);
+        return parameter == null ? null : projections.get(parameter);
     }
 
     public boolean isEmpty() {
-        return byKind.values().stream().allMatch(Map::isEmpty);
+        return edges.isEmpty() && projections.isEmpty();
     }
 
     @Override
     public boolean equals(Object other) {
         return this == other
-                || other instanceof ElementProvenance that && byKind.equals(that.byKind);
+                || other instanceof ElementProvenance that && edges.equals(that.edges)
+                        && projections.equals(that.projections);
     }
 
     @Override
     public int hashCode() {
-        return byKind.hashCode();
+        return edges.hashCode() * 31 + projections.hashCode();
     }
 
     @Override
     public String toString() {
-        return "ElementProvenance" + byKind;
+        return "ElementProvenance[edges=" + edges + ", projections=" + projections + "]";
     }
 
     /** What an expansion writes down as it goes. */
     static final class Builder {
 
-        private final Map<CopyableFactKind, Map<BindingId, BindingId>> byKind =
-                new EnumMap<>(CopyableFactKind.class);
-
-        Builder() {
-            for (CopyableFactKind kind : CopyableFactKind.values()) {
-                byKind.put(kind, new LinkedHashMap<>());
-            }
-        }
+        private final Map<BindingId, ElementEdge> edges = new LinkedHashMap<>();
+        private final Map<BindingId, BindingId> projections = new LinkedHashMap<>();
 
         void holdsTheSameAs(BindingId binding, BindingId container) {
-            byKind.get(CopyableFactKind.HOLDS_THE_SAME_AS).putIfAbsent(binding, container);
+            putEdge(binding, new ElementEdge.TheSameAs(container));
         }
 
         void derivesFrom(BindingId binding, BindingId container) {
-            byKind.get(CopyableFactKind.DERIVES_FROM).putIfAbsent(binding, container);
+            putEdge(binding, new ElementEdge.MadeFrom(container));
         }
 
         /** {@code parameter} is the closure parameter of a walk answering one per element of
          *  {@code container}. */
         void projectsEachElementOf(BindingId parameter, BindingId container) {
-            byKind.get(CopyableFactKind.PROJECTS_EACH_ELEMENT_OF).putIfAbsent(parameter, container);
+            projections.putIfAbsent(parameter, container);
+        }
+
+        /**
+         * The one place an edge is written, which is what makes a binding have at most one.
+         *
+         * <p>Writing the same edge again is the same fact and changes nothing. A different one is a
+         * binding whose elements are said to be two things at once, and there is no reading of that
+         * — kept, one of the two would be dropped by whichever arrived second, and a walk would go
+         * on through an edge nobody wrote.
+         */
+        private void putEdge(BindingId binding, ElementEdge edge) {
+            ElementEdge already = edges.putIfAbsent(binding, edge);
+            if (already != null && !already.equals(edge)) {
+                throw new IllegalStateException("the elements of " + binding + " are " + already
+                        + " and " + edge);
+            }
         }
 
         /**
@@ -195,9 +213,11 @@ public final class ElementProvenance {
          * <p><b>No two facts of one kind land on one binding.</b> A binding a copy minted is one
          * nothing has said anything of, so meeting one already answered is not a fact arriving twice
          * — it is two bindings given one name, whether the other came from this copy or from a copy
-         * before it. Asked once against both, because it is one thing that must not happen and a
-         * question asked of the table alone would let a renaming carrying two names for one binding
-         * through.
+         * before it. Which is stricter than what an edge is written under: there, the same fact
+         * twice is the same fact, and here the binding was to have been new.
+         *
+         * <p>Asked once against both, because it is one thing that must not happen and a question
+         * asked of the table alone would let a renaming carrying two names for one binding through.
          *
          * <p>Refused where it would be written and not by walking the whole renaming, which would
          * be a claim about renamings this does not need and does not make: what must not happen is
@@ -215,29 +235,42 @@ public final class ElementProvenance {
             if (renaming.isEmpty()) {
                 return;
             }
-            for (Map<BindingId, BindingId> facts : byKind.values()) {
-                Map<BindingId, BindingId> induced = new LinkedHashMap<>();
-                renaming.forEach((of, here) -> {
-                    BindingId from = facts.get(of);
-                    BindingId there = from == null ? null : renaming.get(from);
-                    if (there == null) {
-                        return;
-                    }
-                    BindingId already =
-                            induced.containsKey(here) ? induced.get(here) : facts.get(here);
-                    if (already != null) {
-                        throw new IllegalStateException(
-                                "two facts landed on one binding: " + here + " was said of "
-                                        + already + " before this copy said " + there);
-                    }
-                    induced.put(here, there);
-                });
-                facts.putAll(induced);
+            Map<BindingId, ElementEdge> inducedEdges = new LinkedHashMap<>();
+            Map<BindingId, BindingId> inducedProjections = new LinkedHashMap<>();
+            renaming.forEach((of, here) -> {
+                ElementEdge edge = edges.get(of);
+                BindingId movedEnd = edge == null ? null : renaming.get(edge.container());
+                if (movedEnd != null) {
+                    refuseSecond(here, inducedEdges.containsKey(here)
+                            ? inducedEdges.get(here) : edges.get(here), movedEnd);
+                    // An edge added is one this has to say how a copy carries, which is with the
+                    // kind it was: the two ends move and what stands between them does not.
+                    inducedEdges.put(here, switch (edge) {
+                        case ElementEdge.TheSameAs _ -> new ElementEdge.TheSameAs(movedEnd);
+                        case ElementEdge.MadeFrom _ -> new ElementEdge.MadeFrom(movedEnd);
+                    });
+                }
+                BindingId walked = projections.get(of);
+                BindingId movedWalked = walked == null ? null : renaming.get(walked);
+                if (movedWalked != null) {
+                    refuseSecond(here, inducedProjections.containsKey(here)
+                            ? inducedProjections.get(here) : projections.get(here), movedWalked);
+                    inducedProjections.put(here, movedWalked);
+                }
+            });
+            inducedEdges.forEach(this::putEdge);
+            projections.putAll(inducedProjections);
+        }
+
+        private static void refuseSecond(BindingId here, Object already, Object saying) {
+            if (already != null) {
+                throw new IllegalStateException("two facts landed on one binding: " + here
+                        + " was said of " + already + " before this copy said " + saying);
             }
         }
 
         ElementProvenance built() {
-            ElementProvenance built = new ElementProvenance(byKind);
+            ElementProvenance built = new ElementProvenance(edges, projections);
             return built.isEmpty() ? NONE : built;
         }
     }

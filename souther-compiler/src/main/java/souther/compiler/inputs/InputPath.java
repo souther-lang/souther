@@ -9,8 +9,8 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.types.BindingId;
 
 /**
- * Which position of a behavior's input an expression names, where it names none, or where this did
- * not read far enough to say ({@link PathResolution}).
+ * Which position of a behavior's input an expression names, and that it names none where it names
+ * none ({@link PathResolution}).
  *
  * <p>One answer, for every reader of a body that has something to say about a position. A
  * {@code guard} comparing a field, a {@code match} on a parameter and an arm declaring a case
@@ -33,12 +33,22 @@ import souther.compiler.types.BindingId;
  * a count of how many names a reading may pass through is a count of how a model was written, and
  * one name more than it allows is a position this reports as one nothing names.
  *
- * <p>Which is about what stops the steps and not about how many shapes are taken. Not every shape
- * is descended — an expression that binds a name of its own is one this does not go under, and it
- * comes back said rather than answered ({@link PathResolution.Reason}).
+ * <p><b>What a name is decides which step is taken, and one step is taken.</b> A binding is a
+ * parameter, or what an operation handed an element of a container on, or what a name was given, in
+ * that order and asked once ({@link BindingRole}). A binding can be more than one: two walks over one
+ * collection joined into one leave the second walk's element bound to what the first walk's closure
+ * made. Tried as roads and raced, the winner is whichever reaches a position, and there it is the
+ * value the rewrite left under the name — a rule about a value <em>made from</em> a position read as
+ * a rule about the position. So an element is answered by its container and by nothing beside it,
+ * whatever that answer comes to.
  *
- * <p>What is known of the names comes in as facts and nothing else ({@link BindingEnvironment}).
- * How many of them there are is not a fact about how far a value's provenance runs — a name bound in
+ * <p>An expression that binds a name of its own is descended under that name. That is what a
+ * {@code let} means, and it is what a helper applied to an argument is left as; a shape a splice
+ * happens to leave is not a reason to stop, and stopping there left every claim inside an expanded
+ * helper about a position nothing here could name.
+ *
+ * <p>What is known of the names comes in as answers and nothing else ({@link BindingEnvironment}).
+ * How many names there are is not a fact about how far a value's provenance runs — a name bound in
  * an arm is read under bindings written elsewhere — and a reading of what a name means is built on
  * this one rather than beside it, so neither is something a walk here can reach for.
  *
@@ -46,56 +56,15 @@ import souther.compiler.types.BindingId;
  * can hold is read from the declarations ({@link InputDomain}), and this only says which position an
  * expression is pointing at.
  */
-public final class InputPath {
+final class InputPath {
 
     private final Symbols symbols;
-    private final Lineage asked;
+    private final ElementQuestion asked;
     private final BindingTrail trail = new BindingTrail();
 
-    private InputPath(Symbols symbols, Lineage asked) {
+    private InputPath(Symbols symbols, ElementQuestion asked) {
         this.symbols = symbols;
         this.asked = asked;
-    }
-
-    /**
-     * Which question a walk is answering, which decides which steps it is entitled to take.
-     *
-     * <p>Two questions and not one flag. Where a value <em>is</em> and where a value <em>came
-     * from</em> are answered by the same steps until a binding holds what an operation made of
-     * another's elements: what is made from a position came from it and is not it, so a walk after
-     * the position an expression names stops there and a walk after provenance goes on.
-     */
-    private enum Lineage {
-
-        /** Which position an expression names, so that a rule about it is a rule about the values
-         *  a row writes there. */
-        NAMED_POSITION,
-
-        /** Which position a value came from, which is what says a rule was written at all where the
-         *  rule is about something made from those values. */
-        VALUE_ORIGIN;
-
-        /**
-         * The binding whose elements {@code binding}'s are, or null where this question is not
-         * entitled to one.
-         *
-         * <p>Answered per question and never by asking whether this is one of them. A question added
-         * here is one nobody has said what these edges mean for, and read as "not that one" it would
-         * follow whichever edges the last question happened to leave — the answer arrived at by not
-         * being asked.
-         */
-        BindingId predecessorOf(BindingId binding, BindingEnvironment names) {
-            BindingId same = names.sameElementsAs(binding);
-            if (same != null) {
-                return same;
-            }
-            return switch (this) {
-                // What is made from a position came from it and is not it, so the walk after which
-                // position an expression names stops where the elements stop being the same ones.
-                case NAMED_POSITION -> null;
-                case VALUE_ORIGIN -> names.madeFrom(binding);
-            };
-        }
     }
 
     /**
@@ -117,16 +86,18 @@ public final class InputPath {
      * only the outermost name would leave every claim inside an expanded helper about a position
      * nothing here can name.
      */
-    public static PathResolution of(Core e, BindingEnvironment names, Symbols symbols) {
-        return new InputPath(symbols, Lineage.NAMED_POSITION).named(e, names);
+    static PathResolution of(Core e, BindingEnvironment names, Symbols symbols) {
+        return new InputPath(symbols, ElementQuestion.NAMED_POSITION).named(e, names);
     }
 
     /**
      * Where {@code e}'s value came from, and that it came from none where it did.
      *
-     * <p>Beside {@link #of} and licensing less. That one answers which position an expression names,
-     * and what a row writes at a position is what a rule about it is about; this answers where a
-     * value came from, and a value made from a position is not that position — a rule about it is
+     * <p>Beside {@link #of} and a different question, not a wider or a narrower one. That one
+     * answers which position an expression names, and what a row writes at a position is what a rule
+     * about it is about; this answers where a value came from. So the two cross different edges: an
+     * edge saying these elements were made from another binding's is one this goes on through and
+     * one that must stop, and a value made from a position is not that position — a rule about it is
      * not a rule about the values there, and nothing here says what it comes to for them.
      *
      * <p>So what this is for is saying that a rule was written. An author who filters what a
@@ -134,8 +105,8 @@ public final class InputPath {
      * nothing at all — which reads as a model with no rule there rather than a rule this could not
      * follow.
      */
-    public static PathResolution cameFrom(Core e, BindingEnvironment names, Symbols symbols) {
-        return new InputPath(symbols, Lineage.VALUE_ORIGIN).named(e, names);
+    static PathResolution cameFrom(Core e, BindingEnvironment names, Symbols symbols) {
+        return new InputPath(symbols, ElementQuestion.VALUE_ORIGIN).named(e, names);
     }
 
     /**
@@ -146,48 +117,36 @@ public final class InputPath {
      * the binding rather than of the container's expression: a container built by one operation and
      * handed to the next names no position of its own, and the elements are the same elements.
      */
-    public static PathResolution elementAt(BindingId binding, BindingEnvironment names,
-                                           Symbols symbols) {
-        return new InputPath(symbols, Lineage.NAMED_POSITION).elementOf(binding, names);
+    static PathResolution elementAt(BindingId binding, BindingEnvironment names,
+                                    Symbols symbols) {
+        return new InputPath(symbols, ElementQuestion.NAMED_POSITION).elementOf(binding, names);
     }
 
     private PathResolution named(Core e, BindingEnvironment names) {
         return switch (e) {
-            case Core.Read r -> {
-                TermPath stands = names.rootOf(r.binding());
-                if (stands != null) {
-                    yield new PathResolution.At(stands);
-                }
-                // Three ways a name reaches a position and no more. It is a parameter; or it holds
-                // what something else was, which is followed; or an operation of the language handed
-                // it an element of a container, and then it is at the container's position, inside
-                // it. The third is the one no walk over the tree that runs could work out — what
-                // handed it is gone by then — and it is read from what was recorded where the
-                // operation still stood.
-                Core held = names.boundValueOf(r.binding());
-                PathResolution holds = held == null ? new PathResolution.NotAPosition()
-                        : trail.through(r.binding(), () -> named(held, names));
-                if (holds instanceof PathResolution.At) {
-                    yield holds;
-                }
-                // What it holds names no position, and it may still be an element of one. Two
-                // walks over one collection joined into one leave a binding that is both: it
-                // holds what the first walk made, and it is what the second was handed. Stopping
-                // at the first left every rule inside the second reading as being about nothing.
-                yield either(holds, elementOf(r.binding(), names));
-            }
+            // What the name is, asked once, and the step that answers is the answer. An element is
+            // answered by the container it came from even where that container is at no position:
+            // the value a rewrite left under such a name is what the walk before it made of an
+            // element, and reaching a position through it would put a line at a place whose values
+            // are not the ones a rule about the name is about.
+            case Core.Read r -> switch (names.roleOf(r.binding())) {
+                case BindingRole.Root(var stands) -> new PathResolution.At(stands);
+                case BindingRole.Element _ -> elementOf(r.binding(), names);
+                case BindingRole.Alias(var held) ->
+                        trail.through(r.binding(), () -> named(held, names));
+                case BindingRole.Unknown _ -> new PathResolution.NotAPosition();
+            };
             case Core.FieldAccess fa -> switch (named(fa.target(), names)) {
                 case PathResolution.At(var base) -> new PathResolution.At(
                         Location.isStep(fa.target().type(), fa.field(), symbols)
                                 ? base.then(fa.field()) : base);
                 case PathResolution other -> other;
             };
-            // A name bound inside the expression handed over, which this reading does not go under.
-            // What it comes to is what its body comes to under that name, and whether the name may
-            // stand for the position its value names is a question about the model rather than
-            // about the shape — so what is said is that this was not read.
-            case Core.LetIn _ -> new PathResolution.Unread(
-                    PathResolution.Reason.A_NAME_BOUND_INSIDE_THE_EXPRESSION);
+            // What an expression that binds a name comes to is what its body comes to, under that
+            // name. Whether the name may stand for the position its value names is not asked here
+            // and is not a question about this shape: it is asked where the name is read, of what
+            // the name is.
+            case Core.LetIn let -> named(let.body(), names.inside(let.binder(), let.value()));
             // A call kept standing names no location. Where the walk is over a tree that keeps them
             // that is the answer, and where it is not, its presence says this walk was handed a
             // representation it does not read — said rather than answered with "no path", which
@@ -198,13 +157,39 @@ public final class InputPath {
                 }
                 yield new PathResolution.NotAPosition();
             }
-            case null, default -> new PathResolution.NotAPosition();
+            // And every other shape names no position, said one at a time. A shape swallowed by a
+            // default would come back as a model that states nothing, which is what a reader acts
+            // on — so a shape added to the language is one this does not compile without.
+            //
+            // A value written out. The input holds it nowhere; it is what a body put beside what the
+            // input holds.
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                 Core.UnitValue _, Core.ListLit _, Core.Tuple _, Core.OptionSome _,
+                 Core.OptionNone _, Core.Construct _ -> new PathResolution.NotAPosition();
+            // A value made from others. What arithmetic and what an operation answered came from
+            // positions and are not positions, which is a reading of its own
+            // ({@link #cameFrom}).
+            case Core.Neg _, Core.Binary _, Core.Call _, Core.Apply _ ->
+                    new PathResolution.NotAPosition();
+            // A choice between values, which stands at no one place.
+            case Core.If _, Core.IfConstructed _, Core.Match _ -> new PathResolution.NotAPosition();
+            // A place inside a tuple, which is no position of an input: what a path is made of is a
+            // field, an element of a sequence and a case ({@link TermPath.Step}), and a tuple's
+            // places are none of the three. This is what the model says and not what this walk
+            // declined to follow — there is nothing here to name.
+            case Core.TupleGet _ -> new PathResolution.NotAPosition();
+            // A closure is a value the language hands an operation, and what it answers about an
+            // element is read where the operation stood ({@link ElementProjection}).
+            case Core.Block _ -> new PathResolution.NotAPosition();
+            // A place no row arrives at holds no value to be about.
+            case Core.Unreachable _ -> new PathResolution.NotAPosition();
+            // Nothing at all, which a caller may hand over where a body has no expression there.
+            case null -> new PathResolution.NotAPosition();
         };
     }
 
     private PathResolution elementOf(BindingId binding, BindingEnvironment names) {
-        Core container = names.containerOf(binding);
-        if (container == null) {
+        if (!(names.roleOf(binding) instanceof BindingRole.Element(var container))) {
             return new PathResolution.NotAPosition();
         }
         // The container names no position of this behavior's input — it is what another operation
@@ -231,38 +216,13 @@ public final class InputPath {
      * from a line their model states.
      */
     private PathResolution containerPath(Core e, BindingEnvironment names) {
-        PathResolution named = named(e, names);
-        if (named instanceof PathResolution.At) {
-            return named;
-        }
         // And where the expression names no position, its elements may still be at one, so the ways
         // an operation's answer holds them are tried beside it.
-        return either(named, elementsOf(e, names));
-    }
-
-    /**
-     * The answer of two readings of one expression.
-     *
-     * <p>A position wherever either reached one, since each is a way to the same place and neither
-     * is asked unless the other came back without it. Where neither did, what this compiler did not
-     * read stands over what the model does not hold: one of the two says the answer is not known
-     * here, and an absence that has that in it is not an absence.
-     *
-     * <p>The one place the three are ordered. Written at each meeting of two readings instead, the
-     * orderings drift apart, and the one that forgets turns a reading that stopped into a model
-     * that states nothing — which is the whole of what this type is for.
-     */
-    private static PathResolution either(PathResolution one, PathResolution other) {
-        return switch (one) {
-            case PathResolution.At _ -> one;
-            case PathResolution.Unread _ -> switch (other) {
-                case PathResolution.At _ -> other;
-                case PathResolution.NotAPosition _, PathResolution.Unread _ -> one;
-            };
-            case PathResolution.NotAPosition _ -> switch (other) {
-                case PathResolution.At _, PathResolution.NotAPosition _,
-                     PathResolution.Unread _ -> other;
-            };
+        return switch (named(e, names)) {
+            case PathResolution.At at -> at;
+            // Each is a way to the same place, and neither is asked unless the other came back
+            // without it, so whichever reached a position is the answer.
+            case PathResolution.NotAPosition _ -> elementsOf(e, names);
         };
     }
 
@@ -270,20 +230,27 @@ public final class InputPath {
      *  where the expression is not one of them. */
     private PathResolution elementsOf(Core e, BindingEnvironment names) {
         if (e instanceof Core.Read r) {
-            // Through a binding an expansion wrote, where the operation it removed answered the
-            // elements it was given. The operation is gone from this tree, so what says so was
-            // written where it still stood.
-            BindingId same = asked.predecessorOf(r.binding(), names);
-            if (same != null) {
-                return trail.through(r.binding(), () -> containerPath(
-                        new Core.Read(r.name(), same, r.type(), r.pos()), names));
-            }
-            // Or through what the binding holds. Looked up over the whole body and not down the
-            // path to here: a container built by one operation and handed to the next is bound
-            // beside the closure that reads it rather than above it.
-            Core held = names.heldAnywhereBy(r.binding());
-            return held == null ? new PathResolution.NotAPosition()
-                    : trail.through(r.binding(), () -> containerPath(held, names));
+            return switch (names.stepFrom(r.binding(), asked)) {
+                // Through a binding an expansion wrote, where the operation it removed answered the
+                // elements it was given. The operation is gone from this tree, so what says so was
+                // written where it still stood.
+                case ElementStep.Through(var same) -> trail.through(r.binding(),
+                        () -> containerPath(new Core.Read(r.name(), same, r.type(), r.pos()),
+                                names));
+                // The question this walk is asking does not cross what was written here, which is
+                // an answer and not a road not taken. What the binding holds is what the walk on
+                // the other side of that edge made, so reading it is the crossing said another way.
+                case ElementStep.Refused _ -> new PathResolution.NotAPosition();
+                // And where nothing says where these elements came from, what the binding holds is
+                // all there is. Looked up over the whole body and not down the path to here: a
+                // container built by one operation and handed to the next is bound beside the
+                // closure that reads it rather than above it.
+                case ElementStep.NoEdge _ -> {
+                    Core held = names.heldAnywhereBy(r.binding());
+                    yield held == null ? new PathResolution.NotAPosition()
+                            : trail.through(r.binding(), () -> containerPath(held, names));
+                }
+            };
         }
         // Or through an operation the language keeps standing that answers what it was given.
         if (!(e instanceof Core.Call call) || !(call.fn() instanceof Core.Reached reached)) {

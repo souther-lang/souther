@@ -201,9 +201,13 @@ class TheInputsEmptinessHasOneOwnerTest {
      */
     private static List<?> factorsOf(Quantities asked) {
         try {
-            java.lang.reflect.Method held = asked.getClass().getDeclaredMethod("constraints");
+            java.lang.reflect.Method held = asked.getClass()
+                    .getDeclaredMethod("constraints", StructuralContext.class);
             held.setAccessible(true);
-            Object values = ((souther.compiler.check.ConstraintState<?>) held.invoke(asked)).values();
+            // Asked assuming nothing, which is every parameter: what is being measured is that the
+            // readings of thirteen of them are held apart, and no narrowing is involved in it.
+            Object values = ((souther.compiler.check.ConstraintState<?>)
+                    held.invoke(asked, StructuralContext.NONE)).values();
             java.lang.reflect.Method factors = values.getClass().getDeclaredMethod("factors");
             factors.setAccessible(true);
             return (List<?>) factors.invoke(values);

@@ -46,40 +46,17 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * something has a rule of that name, a clause of a case would answer for the same field of every
      * other.
      *
-     * @param outer  the rules of the value the narrowing was taken from
-     * @param sum    where that value's sum stands, which is where the narrowing was taken
-     * @param branch which case was taken
-     * @param shared the names the cases share, which are the only ones that cross
+     * @param outer    the rules of the value the narrowing was taken from
+     * @param crossing the narrowing, and which of the value above's names reach across it. Held and
+     *                 not spelled out again here: where a name written above stands is one fact,
+     *                 and this reading is one of the two that ask it
      */
-    record Reaching(PlacedRules outer, TermPath sum, Refinement branch, java.util.Set<String> shared) {
+    record Reaching(PlacedRules outer, SharedNames crossing) {
 
-        Reaching {
-            shared = java.util.Set.copyOf(shared);
-        }
-
-        /**
-         * What the value above calls the position at {@code here}, or null where it calls it
-         * nothing.
-         *
-         * <p>The narrowing taken back out, which is what a name written above means down here: a row
-         * at {@code h.q@A.limit} writes the {@code limit} a clause of {@code h} called
-         * {@code q.limit}, and the two differ by the step that says which case the value turned out
-         * to be. Null for the case itself and for anything under a name the cases do not share,
-         * which is every position the value above cannot name.
-         */
+        /** What the value above calls the position at {@code here}, or null where it calls it
+         *  nothing. */
         TermPath outerPathOf(TermPath here) {
-            List<TermPath.Step> steps = here.steps();
-            int narrowing = sum.steps().size();
-            if (steps.size() <= narrowing + 1
-                    || !(steps.get(narrowing) instanceof TermPath.Step.Refine taken)
-                    || !taken.refinement().equals(branch)
-                    || !(steps.get(narrowing + 1) instanceof TermPath.Step.Field field)
-                    || !shared.contains(field.name())) {
-                return null;
-            }
-            List<TermPath.Step> without = new ArrayList<>(steps.subList(0, narrowing));
-            without.addAll(steps.subList(narrowing + 1, steps.size()));
-            return new TermPath(here.head(), without);
+            return crossing.outerPathOf(here);
         }
     }
 

@@ -180,16 +180,14 @@ public final class GuardThresholds {
     static void cameFrom(Core.Binary comparison, InputReads reads, Symbols symbols,
                                  List<TermPath> out) {
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            // Where a side's values came from, and nothing where that was not reached. A side this
-            // reading did not follow came from somewhere it cannot name, which is as much use here
-            // as a side that came from nowhere.
+            // Where a side's values came from, and nothing where they came from nowhere.
             switch (reads.cameFrom(side, symbols)) {
                 case PathResolution.At(var at) -> {
                     if (!out.contains(at)) {
                         out.add(at);
                     }
                 }
-                case PathResolution.NotAPosition _, PathResolution.Unread _ -> { }
+                case PathResolution.NotAPosition _ -> { }
             }
         }
     }
@@ -249,12 +247,11 @@ public final class GuardThresholds {
                 if (here instanceof Core.PreservedCall) {
                     return null;
                 }
-                // Which position the expression is, and none where the reading did not arrive at
-                // one: the walk this answers for reads through what names nothing, and a shape it
-                // did not follow is one it has nothing to read through with either.
+                // Which position the expression is, and none where it is none: the walk this
+                // answers for reads through what names nothing.
                 return switch (at.pathOf(here, symbols)) {
                     case PathResolution.At(var stands) -> stands;
-                    case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+                    case PathResolution.NotAPosition _ -> null;
                 };
             }
 
@@ -262,7 +259,7 @@ public final class GuardThresholds {
             public TermPath madeFrom(Core here, InputReads at) {
                 return switch (at.cameFrom(here, symbols)) {
                     case PathResolution.At(var from) -> from;
-                    case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+                    case PathResolution.NotAPosition _ -> null;
                 };
             }
 

@@ -72,6 +72,23 @@ import java.util.Optional;
  * is in that space, so a reading kept beside it could answer the same question over the same rules
  * renamed, and which of the two spoke would be settled by the order they were asked in — with the
  * one that cannot see across two parameters asked first.
+ *
+ * <p><b>And one space per question and not one for the input, because a position exists under
+ * conditions.</b> A field of a case is there where the value turned out to be that case, and a
+ * field of an element where the sequence holds one — so a question naming such a position is asked
+ * of the rows that meet those conditions, and the rules that reach it are the ones about those
+ * rows. Every reading met into one space instead, the cases of a sum would be rules that hold
+ * together, and one case its own rules refuse would refuse an input whose other cases are rows an
+ * author can write.
+ *
+ * <p>What those conditions come to is part of what a question is answered against and not only part
+ * of deciding whose rules to read: a question that names a position inside a container is a
+ * question about rows whose container holds something, which is a fact the rules have a word for.
+ *
+ * <p>Which leaves {@link #emptiness} asking something no one context answers. Whether a value of
+ * this input exists at all is quantified over the alternatives a value has — a sum has one wherever
+ * any case does, a container that may be empty has one whatever it would hold — so it is a fold
+ * over those and not a projection out of a space.
  */
 public sealed interface Quantities permits ReadQuantities {
 

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A parameter-rooted location: a parameter, and the steps taken from it.
@@ -93,6 +94,9 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     public TermPath {
+        // A path is rooted somewhere. Rooted at nothing it is a place with no parameter to be a
+        // place of, and every answer that carries one says a position was reached.
+        Objects.requireNonNull(head, "a path is rooted at a parameter");
         steps = List.copyOf(steps);
     }
 
