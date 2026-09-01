@@ -24,8 +24,8 @@ import java.util.Map;
  * apply the behavior — and what it can do with it is apply its own emission and ask whether the row
  * holds.
  *
- * <p>Asking is {@link Reproducible#holds}, and it is asked of the language rather than answered by
- * the reader. Whether an answer is the value a row states is a decision the language makes — a
+ * <p>Asking is {@link SelfContained#holds}, or {@link WithStandIns#holds} for a row that needed
+ * something stood in for, and it is asked of the language rather than answered by the reader. Whether an answer is the value a row states is a decision the language makes — a
  * written {@code Set.fromList([1])} at a {@code List} is not the sequence a list is, and two values
  * differ when their types differ as much as when their contents do. An output free to answer it for
  * itself would be a second reading of what a row means, and two outputs of one program would then

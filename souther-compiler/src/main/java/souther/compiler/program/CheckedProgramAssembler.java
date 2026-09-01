@@ -293,9 +293,10 @@ final class CheckedProgramAssembler {
      *
      * <p>Written down rather than worked out: what each row states was read where the row was read,
      * and what is made here is the handle a reader holds it by. Each is given what answering
-     * {@link CheckedRow.Reproducible#holds} takes — how a value's parts are read, and where this
+     * {@link CheckedRow.SelfContained#holds} takes — how a value's parts are read, and where this
      * behavior's answer stands — so that asking is not a question about the program the row came
-     * from.
+     * from. A row that stands something in for a dependency is given where that dependency's
+     * arguments stand as well, for the same reason.
      */
     private static List<CheckedRow> rowsOf(List<Output.RowsRead.ReadRow> read, ValueTypes types,
                                            CheckedSignature signature,
