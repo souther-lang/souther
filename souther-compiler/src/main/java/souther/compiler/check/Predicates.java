@@ -104,9 +104,9 @@ final class Predicates {
             quantifiedBy(b.right(), at, positive, out);
             return;
         }
-        Core under = Conditions.negated(e);
+        Conditions.Restated under = Conditions.restated(e);
         if (under != null) {
-            quantifiedBy(under, at, !positive, out);
+            quantifiedBy(under.condition(), at, under.denied() != positive, out);
             return;
         }
         if (!positive || !(e instanceof Core.PreservedCall call)
@@ -629,9 +629,10 @@ final class Predicates {
                     .and(obligations(b.right(), at, unnamed, positive, decidesFalse, discharge,
                             per));
         }
-        Core under = Conditions.negated(inv);
+        Conditions.Restated under = Conditions.restated(inv);
         if (under != null) {
-            return obligations(under, at, unnamed, !positive, decidesFalse, discharge, per);
+            return obligations(under.condition(), at, unnamed, under.denied() != positive,
+                    decidesFalse, discharge, per);
         }
         Boolean folded = decidedAt(inv);
         if (folded != null) {
@@ -810,9 +811,10 @@ final class Predicates {
             return assumeCond(b.right(), left.known(), at, positive)
                     .alsoRead(left.taken() || taken, left.shapeRead() || shapeRead);
         }
-        Core under = Conditions.negated(cond);
+        Conditions.Restated under = Conditions.restated(cond);
         if (under != null) {
-            return assumeCond(under, k, at, !positive).alsoRead(taken, shapeRead);
+            return assumeCond(under.condition(), k, at, under.denied() != positive)
+                    .alsoRead(taken, shapeRead);
         }
         Known out = k;
         // What the values this condition names carry, whichever way the condition itself is read.

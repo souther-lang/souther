@@ -112,6 +112,11 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * call. What {@code String.matches} says about a position is which strings stand there, which
      * is the question this reading asks — read as a call nobody follows, the rule said nothing and
      * a position an author had written a format for came out admitting every string there is.
+     *
+     * <p>And a position of two values is read as itself. Naming one is stating it, which is the
+     * one value it then holds, and the polarity above says which — the reading of the clause has
+     * already turned {@code p == false} and {@code p /= true} into this leaf denied
+     * ({@link Conditions#restated}), so nothing here asks how the author spelled it.
      */
     @Override
     public PlannedValues<FactSubject> leaf(Core e, boolean positive) {
@@ -122,8 +127,22 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
             // comparison holds at the value it names, turned over by each denial it stands under.
             return comparison(b, singled.holdsAtTheValue() == positive);
         }
+        PlannedValues<FactSubject> truth = truthValued(e, positive);
+        if (truth != null) {
+            return truth;
+        }
         PlannedValues<FactSubject> matched = pattern(e, positive);
         return matched != null ? matched : unreadable(e);
+    }
+
+    /** What naming a position of two values says about it, or null where {@code e} is not one. */
+    private PlannedValues<FactSubject> truthValued(Core e, boolean states) {
+        FactSubject position = positionIn(e);
+        Type type = position == null ? null : byName.get(position);
+        return type == Type.BOOL
+                ? PlannedValues.at(position,
+                        AdmittedPlan.of(admits(Value.truth(true), states, type)))
+                : null;
     }
 
     /**

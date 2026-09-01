@@ -337,6 +337,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " composed comparison is said in the language's own operators"),
             new Held("souther.compiler.check.Conditions.asSizeComparison",
                     "writes the equality an emptiness check means: a size stood against nought"),
+            new Held("souther.compiler.check.Conditions.againstATruthValue",
+                    "asks whether the operator is the equality or the disequality, for a comparison"
+                            + " one side of which is a written truth value: which of the two it is"
+                            + " and which value was written are together what says whether such a"
+                            + " comparison states the other side or denies it"),
             new Held("souther.compiler.check.Conditions.AsPolar.theSameValue",
                     "writes the equality a fact is keyed by, which the claim said this comparison"
                             + " states"),

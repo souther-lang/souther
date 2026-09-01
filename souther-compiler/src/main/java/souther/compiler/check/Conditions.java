@@ -142,9 +142,9 @@ final class Conditions {
         if (ordered != cond) {
             stating(terms, ordered, at, positive, out);
         }
-        Core under = negated(cond);
+        Restated under = restated(cond);
         if (under != null) {
-            stating(terms, under, at, !positive, out);
+            stating(terms, under.condition(), at, under.denied() != positive, out);
             return;
         }
         if (cond instanceof Core.Binary b
@@ -354,24 +354,74 @@ final class Conditions {
         return new Core.Binary(op, left, right, of.origin(), of.type(), of.pos());
     }
 
-    /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an
-     * ordinary helper: the analysis representation keeps it as a call, and a clause read off an
+    /**
+     * One condition written in terms of another, and whether it states it or denies it.
+     *
+     * <p>What every walk over a clause carries is a pair — the part being read and whether the
+     * denials above it came out even — and this is the step that pair is moved by. Written as
+     * "what a negation is applied to", the step could only ever flip, so the ways of stating a
+     * condition without flipping were not steps at all and a walk stopped at them.
+     *
+     * @param condition what is written under, which the walk goes on with
+     * @param denied    whether holding this one is denying that one
+     */
+    record Restated(Core condition, boolean denied) {}
+
+    /**
+     * What {@code e} is written in terms of, or {@code null} where it is written in terms of
+     * nothing.
+     *
+     * <p>Four spellings of a denial and two of an assertion, read as one thing. {@code Bool.not} is
+     * an ordinary helper: the analysis representation keeps it as a call, and a clause read off an
      * imported declaration is the body it expands to — {@code if b then false else true} over a
-     * binding holding the argument. Both are read. */
-    static Core negated(Core e) {
+     * binding holding the argument. A comparison against a written {@code true} or {@code false} is
+     * the sixth: {@code p == false} and {@code p /= true} deny what {@code p} states, and the other
+     * two state it.
+     *
+     * <p>The equivalence class and not the spellings. What a reader below is given is an atom and a
+     * polarity, so {@code not (p == false)} and {@code p} arrive as the same pair — and a reader
+     * that learned one spelling at a time would answer for the ones somebody had got to.
+     */
+    static Restated restated(Core e) {
         if (e instanceof Core.PreservedCall call && call.operation().equals(DischargeRules.NOT)
                 && call.args().size() == 1) {
-            return call.args().get(0);
+            return new Restated(call.args().get(0), true);
         }
         if (e instanceof Core.LetIn li) {
-            Core inner = negated(li.body());
-            return inner instanceof Core.Read r && r.binding().equals(li.binder().binding())
-                    ? li.value() : null;
+            Restated inner = restated(li.body());
+            return inner != null && inner.denied()
+                    && inner.condition() instanceof Core.Read r
+                    && r.binding().equals(li.binder().binding())
+                    ? new Restated(li.value(), true) : null;
         }
-        return e instanceof Core.If iff
+        if (e instanceof Core.If iff
                 && iff.then() instanceof Core.Bool t && !t.value()
-                && iff.els() instanceof Core.Bool f && f.value()
-                ? iff.cond() : null;
+                && iff.els() instanceof Core.Bool f && f.value()) {
+            return new Restated(iff.cond(), true);
+        }
+        return againstATruthValue(e);
+    }
+
+    /**
+     * The same of a comparison one side of which is a written {@code true} or {@code false}.
+     *
+     * <p>Whether it denies is whether the two disagree: an equality against {@code true} and a
+     * disequality against {@code false} state what the other side states, and the other pair deny
+     * it. Read off the operator and the literal rather than written out as four cases, so a fifth
+     * way to write the same thing arrives here as one of the two answers and not as a case nobody
+     * added.
+     */
+    private static Restated againstATruthValue(Core e) {
+        if (!(e instanceof Core.Binary bin)
+                || (bin.op() != BinOp.EQ && bin.op() != BinOp.NE)) {
+            return null;
+        }
+        boolean holds = bin.op() == BinOp.EQ;
+        if (bin.right() instanceof Core.Bool truth) {
+            return new Restated(bin.left(), truth.value() != holds);
+        }
+        return bin.left() instanceof Core.Bool truth
+                ? new Restated(bin.right(), truth.value() != holds) : null;
     }
 
 }
