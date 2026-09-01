@@ -259,6 +259,45 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
     }
 
     /**
+     * What an arm of the document is made of, and nothing else.
+     *
+     * <p>Four things and no fifth: what tells the arm from every other, what a reader is shown of
+     * it, where it stands, and what left it open. A key that is none of those is one of them said a
+     * second time — which is what the two this change removed were. {@code status} and {@code hit}
+     * determined the disposition and sat beside it with nothing holding them in step, so a
+     * schema-valid document could say an arm was met by a row that was never seen, and a consumer
+     * could reimplement the account rather than read it.
+     *
+     * <p>The vocabulary and not a condition on it. Where each key may appear is the schema's own
+     * business and is held beside this; that a key exists at all is the decision, and one added on
+     * both sides of the writer and the schema together is exactly the return this is here to stop.
+     * So the set is written out: there is nothing to derive it from, because it is the thing being
+     * decided.
+     */
+    @Test
+    void anArmOfTheDocumentIsIdentityDisplayStateAndProvenance() {
+        Set<String> identity = Set.of("obligationId");
+        Set<String> shown = Set.of("label", "kind", "construct", "at");
+        Set<String> state = Set.of("disposition");
+        Set<String> provenance = Set.of("weakening", "notCountedBecause");
+
+        Set<String> vocabulary = new java.util.LinkedHashSet<>();
+        vocabulary.addAll(identity);
+        vocabulary.addAll(shown);
+        vocabulary.addAll(state);
+        vocabulary.addAll(provenance);
+
+        JsonNode arms = schema().get("$defs").get("branch").get("properties").get("obligations")
+                .get("items");
+        Set<String> written = new java.util.LinkedHashSet<>();
+        arms.get("properties").propertyNames().forEach(written::add);
+
+        assertEquals(vocabulary, written,
+                "an arm says what it is, what it is shown as, where it stands, and what left it"
+                        + " open");
+    }
+
+    /**
      * And what the shipped schema says about all this is true of what the writer writes.
      *
      * <p>Its own test because nothing else checks it. The walk that holds the schema and the writer
