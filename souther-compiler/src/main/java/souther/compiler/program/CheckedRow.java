@@ -9,9 +9,11 @@ import souther.compiler.observe.RowStatement;
 import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.observe.Verdict;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * One {@code example} row of a behavior, for an output that lives outside this compiler.
@@ -139,18 +141,27 @@ public final class CheckedRow {
         private final Asking asking;
         private final List<StandsIn> standIns;
 
-        WithStandIns(RowStatement.Stated stated, ValueTypes types, Position answers) {
+        WithStandIns(RowStatement.Stated stated, ValueTypes types, Position answers,
+                     Map<ValueName.Behavior, List<Position>> arguments) {
             this.asking = new Asking(stated, types, answers);
             if (stated.standIns().isEmpty()) {
                 throw new IllegalArgumentException("a row with nothing stood in for is one an"
                         + " output can run on its own");
             }
-            // Made here rather than handed in. What the row states of its stand-ins and what a
-            // reader asks them are one fact, and taking the second as an argument would let a row
-            // answer one thing about a dependency through `states` and another through `standsIn`.
+            // One per stand-in the row states, made here rather than handed in. What the row states
+            // of its stand-ins and what a reader asks them are one fact, and taking the second as a
+            // list would let a row answer one thing about a dependency through `states` and another
+            // through `standsIn`. What comes from outside is where each dependency's arguments
+            // stand, which is what its declaration says and not what the row states.
             List<StandsIn> standIns = new ArrayList<>();
             for (StoodIn stoodIn : stated.standIns()) {
-                standIns.add(new StandsIn(stoodIn, types));
+                List<Position> stands = arguments.get(stoodIn.dependency());
+                if (stands == null) {
+                    throw new IllegalArgumentException("nothing says where the arguments of `"
+                            + stoodIn.dependency() + "` stand, which is what its stand-in is asked"
+                            + " at");
+                }
+                standIns.add(new StandsIn(stoodIn, types, stands));
             }
             this.standIns = List.copyOf(standIns);
         }

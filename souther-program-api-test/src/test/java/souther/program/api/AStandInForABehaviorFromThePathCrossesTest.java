@@ -76,11 +76,11 @@ class AStandInForABehaviorFromThePathCrossesTest {
             StandsIn rateFor = states.standsIn().get(0);
             assertEquals(new ValueName.Behavior("lib.rates", "rateFor"), rateFor.dependency(),
                     "the dependency is the declaration it is, in the module that declares it");
-            assertEquals(1, rateFor.stated().takes().size(),
-                    "and what it takes came from the signature the table was built against");
 
             // The behavior hands the number inside its input straight on, so what the stand-in
-            // answers for that number is what the row was held against when it ran.
+            // answers for that number is what the row was held against when it ran. Asking at all
+            // takes where the dependency's arguments stand, which this program has because the
+            // module the row is written in can name the behavior.
             ObservedValue price = states.states().inputs().get(0);
             StandsIn.Answer answered = rateFor.answering(
                     List.of(assertInstanceOf(ObservedValue.Constructed.class, price).field("value")));

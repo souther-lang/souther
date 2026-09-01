@@ -7,10 +7,8 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -39,21 +37,14 @@ public final class StandsIn {
     private final ValueTypes types;
     private final List<Position> arguments;
 
-    StandsIn(StoodIn stated, ValueTypes types) {
-        if (stated == null || types == null) {
+    StandsIn(StoodIn stated, ValueTypes types, List<Position> arguments) {
+        if (stated == null || types == null || arguments == null) {
             throw new IllegalArgumentException("what stands in for a dependency is what the row"
-                    + " states of it, read with what the declarations say");
+                    + " states of it, read with what the declarations say and where the dependency's"
+                    + " arguments stand");
         }
         this.stated = stated;
         this.types = types;
-        List<Position> arguments = new ArrayList<>();
-        // Where each of the dependency's arguments stands, off what the stand-in states the
-        // dependency takes. Read off the declaration a second time — through whatever this program
-        // publishes for that behavior — it could be a reading the entries were never built against,
-        // and a dependency declared in a module this compile only read would have none here at all.
-        for (Type takes : stated.takes()) {
-            arguments.add(Position.at(takes));
-        }
         this.arguments = List.copyOf(arguments);
     }
 

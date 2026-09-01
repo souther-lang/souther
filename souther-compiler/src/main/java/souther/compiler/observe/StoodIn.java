@@ -1,7 +1,6 @@
 package souther.compiler.observe;
 
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -40,23 +39,21 @@ public final class StoodIn {
 
     private final ValueName.Behavior dependency;
     private final SourcePos at;
-    private final List<Type> takes;
     private final List<Entry> entries;
     private final Otherwise otherwise;
 
-    private StoodIn(ValueName.Behavior dependency, SourcePos at, List<Type> takes,
-                    List<Entry> entries, Otherwise otherwise) {
+    private StoodIn(ValueName.Behavior dependency, SourcePos at, List<Entry> entries,
+                    Otherwise otherwise) {
         this.dependency = dependency;
         this.at = at;
-        this.takes = List.copyOf(takes);
         this.entries = List.copyOf(entries);
         this.otherwise = otherwise;
     }
 
     /** For the reading that decides whether a stand-in can be handed over, having decided it. */
-    static StoodIn of(ValueName.Behavior dependency, SourcePos at, List<Type> takes,
-                      List<Entry> entries, Otherwise otherwise) {
-        return new StoodIn(dependency, at, takes, entries, otherwise);
+    static StoodIn of(ValueName.Behavior dependency, SourcePos at, List<Entry> entries,
+                      Otherwise otherwise) {
+        return new StoodIn(dependency, at, entries, otherwise);
     }
 
     /**
@@ -73,22 +70,6 @@ public final class StoodIn {
     /** Where what stands in is written: the {@code with} on the row, or the table beside the rows. */
     public SourcePos at() {
         return at;
-    }
-
-    /**
-     * What the dependency declares it takes, in the order it takes them.
-     *
-     * <p>Here rather than looked up. What an entry's arguments were built and compared against is
-     * this, read where the stand-in was read; asked again of whatever a reader can reach the
-     * dependency's declaration through, it would be a second reading of one declaration — and a
-     * dependency this program does not declare, which is one another compile handed over, could not
-     * be asked at all.
-     *
-     * <p>What a comparison is made at as well as how many are made: whether an argument that is a
-     * sequence is the same one in another order is what the type reading it says.
-     */
-    public List<Type> takes() {
-        return takes;
     }
 
     /**
@@ -115,14 +96,13 @@ public final class StoodIn {
     @Override
     public boolean equals(Object other) {
         return other instanceof StoodIn it && dependency.equals(it.dependency) && at.equals(it.at)
-                && takes.equals(it.takes) && entries.equals(it.entries)
-                && otherwise.equals(it.otherwise);
+                && entries.equals(it.entries) && otherwise.equals(it.otherwise);
     }
 
     @Override
     public int hashCode() {
-        return (((dependency.hashCode() * 31 + at.hashCode()) * 31 + takes.hashCode()) * 31
-                + entries.hashCode()) * 31 + otherwise.hashCode();
+        return ((dependency.hashCode() * 31 + at.hashCode()) * 31 + entries.hashCode()) * 31
+                + otherwise.hashCode();
     }
 
     @Override

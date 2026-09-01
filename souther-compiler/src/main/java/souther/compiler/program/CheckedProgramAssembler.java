@@ -3,6 +3,7 @@ package souther.compiler.program;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Derived;
 import souther.compiler.check.Lower;
@@ -19,6 +20,7 @@ import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
+import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
@@ -187,6 +189,7 @@ final class CheckedProgramAssembler {
      */
     private record ModuleReading(String name, Hir.Module bodies, Bodies.Elaborated checked,
                                  Map<String, Sig> signatures,
+                                 Map<ValueName.Behavior, Sig> reachable,
                                  Map<String, BehaviorImplementation> implementations,
                                  Map<ValueName.Behavior, Composition> compositions,
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
@@ -220,6 +223,12 @@ final class CheckedProgramAssembler {
         Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
         Lower.Lowered lowering = db.ask(new Bodies.Lowering(module)).value();
         Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
+        // What every behavior this module can name declares — its own and the ones it borrows, each
+        // under the declaration it belongs to. The same answer the run that read this module's rows
+        // was given, so what a stand-in's arguments were built and compared against and what a
+        // reader compares them at are one reading; and a dependency another compile declared is
+        // among them, which is what this module names it by.
+        Map<ValueName.Behavior, Sig> reachable = db.ask(new Bodies.Reachable(module)).value();
         Map<String, BehaviorImplementation> implementations =
                 db.ask(new Bodies.Implementation(module)).value();
         Map<ValueName.Behavior, Composition> compositions =
@@ -238,7 +247,8 @@ final class CheckedProgramAssembler {
         // read here and dropped here, and nothing it was reached through is carried into what is
         // made.
         Symbols symbols = Names.derivedSymbols(db, module).value();
-        if (checked == null || lowering == null || signatures == null || implementations == null
+        if (checked == null || lowering == null || signatures == null || reachable == null
+                || implementations == null
                 || compositions == null || symbols == null || shapes == null || checks == null) {
             // Not a report: the failure above is what a caller is told, and reaching here past it
             // means the two readings of whether this program checked have come apart.
@@ -251,8 +261,8 @@ final class CheckedProgramAssembler {
         // agree with the checker only for as long as lowering left declarations alone.
         Hir.Module declarations = lowering.settled();
         Hir.Module bodies = lowering.lowered();
-        return new ModuleReading(module, bodies, checked, signatures, implementations, compositions,
-                checks, dataOf(declarations, symbols, shapes), rowsOf(db, module));
+        return new ModuleReading(module, bodies, checked, signatures, reachable, implementations,
+                compositions, checks, dataOf(declarations, symbols, shapes), rowsOf(db, module));
     }
 
     /**
@@ -271,8 +281,8 @@ final class CheckedProgramAssembler {
                     implementationOf(named, declared, read.bodies(), read.implementations(),
                             read.checked(), read.compositions()),
                     EnsuresEnforcement.in(read.checks(), read.name(), named),
-                    rowsOf(read.rows().getOrDefault(declared.name(), List.of()), types,
-                            signature)));
+                    rowsOf(read.rows().getOrDefault(declared.name(), List.of()), types, signature,
+                            read.reachable())));
         }
         return new CheckedModule(read.name(), behaviors,
                 helpersOf(read.name(), read.bodies(), read.checked()), read.data());
@@ -288,11 +298,12 @@ final class CheckedProgramAssembler {
      * from.
      */
     private static List<CheckedRow> rowsOf(List<Output.RowsRead.ReadRow> read, ValueTypes types,
-                                           CheckedSignature signature) {
+                                           CheckedSignature signature,
+                                           Map<ValueName.Behavior, Sig> reachable) {
         List<CheckedRow> rows = new ArrayList<>();
         for (Output.RowsRead.ReadRow row : read) {
             rows.add(new CheckedRow(row.identity(), row.at(),
-                    statementOf(row, types, signature)));
+                    statementOf(row, types, signature, reachable)));
         }
         return rows;
     }
@@ -310,7 +321,8 @@ final class CheckedProgramAssembler {
      * into whichever arm it happens to reach.
      */
     private static CheckedRow.Statement statementOf(Output.RowsRead.ReadRow row, ValueTypes types,
-                                                    CheckedSignature signature) {
+                                                    CheckedSignature signature,
+                                                    Map<ValueName.Behavior, Sig> reachable) {
         // A switch over both sums, so a row nothing came back for is written down here rather than
         // being whatever falls out of reading a list of the ones that did — which is a row an output
         // would never hear of, and a behavior reading as having said nothing about an input someone
@@ -321,7 +333,8 @@ final class CheckedProgramAssembler {
                         ? new CheckedRow.SelfContained(stated, types,
                                 Position.at(signature.answers()))
                         : new CheckedRow.WithStandIns(stated, types,
-                                Position.at(signature.answers()));
+                                Position.at(signature.answers()),
+                                whereArgumentsStand(stated, reachable));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
                 // What acceptance guarantees, asserted where the guarantee is relied on. A row an
                 // evaluation stopped before the values of is one the language refuses the program
@@ -336,6 +349,38 @@ final class CheckedProgramAssembler {
             case Output.RowsRead.ReadRow.NotRun notRun ->
                     new CheckedRow.NotReproducible(new RowStatement.NotRead(notRun.why()));
         };
+    }
+
+    /**
+     * Where the arguments of each dependency the row stood in for stand.
+     *
+     * <p>Off what this module can name, which is the answer the run that read the row was given —
+     * so what a stand-in's entries were built against and what a reader compares an argument at are
+     * one reading of one declaration, rather than the same declaration written down twice and held
+     * to itself by a law.
+     *
+     * <p>It is what says how a comparison is made as well as how many are: whether an argument that
+     * is a sequence is the same one written in another order is what the type reading it says.
+     */
+    private static Map<ValueName.Behavior, List<Position>> whereArgumentsStand(
+            RowStatement.Stated stated, Map<ValueName.Behavior, Sig> reachable) {
+        Map<ValueName.Behavior, List<Position>> stands = new LinkedHashMap<>();
+        for (StoodIn stoodIn : stated.standIns()) {
+            Sig declared = reachable.get(stoodIn.dependency());
+            if (declared == null) {
+                // The row stood in for it, so this compile read the clause that required it against
+                // this module's own reading of what it can name. Reaching here is that reading and
+                // this one having come apart.
+                throw new IllegalStateException("`" + stoodIn.dependency() + "` was stood in for by"
+                        + " a row of a module that cannot name it");
+            }
+            List<Position> arguments = new ArrayList<>();
+            for (BoundaryInput takes : declared.ins()) {
+                arguments.add(Position.at(takes.type()));
+            }
+            stands.put(stoodIn.dependency(), arguments);
+        }
+        return stands;
     }
 
     /**

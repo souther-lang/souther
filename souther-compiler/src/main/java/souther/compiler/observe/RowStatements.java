@@ -121,8 +121,10 @@ public final class RowStatements {
          *
          * @param at    where what stands in is written, which is what the stand-in is quoted at;
          *              where a value of it could not be carried, the place said is that value's own
-         * @param takes what the dependency declares it takes, read where this stand-in's values were
-         *              built and compared against
+         * @param takes what the dependency declares it takes, for the entries to be held to. Read
+         *              and not carried: what a reader compares an argument at is the same
+         *              declaration, bound where a reading of the declarations already is, and a
+         *              stand-in carrying it would be that declaration written down twice
          */
         static StandInRead of(ValueName.Behavior dependency, SourcePos at, List<Type> takes,
                               List<EntryRead> entries, StoodIn.Otherwise otherwise) {
@@ -160,7 +162,7 @@ public final class RowStatements {
                     return unavailable(dependency, where, stopped);
                 }
             }
-            return new Available(StoodIn.of(dependency, at, takes, carried, otherwise));
+            return new Available(StoodIn.of(dependency, at, carried, otherwise));
         }
 
         private static StandInRead unavailable(ValueName.Behavior dependency, SourcePos at,
