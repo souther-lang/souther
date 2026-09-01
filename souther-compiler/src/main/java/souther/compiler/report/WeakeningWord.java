@@ -60,6 +60,17 @@ public enum WeakeningWord {
      *  measure nobody asked for. */
     BEHAVIOR_BOUNDARY_NOT_DERIVED,
 
+    /**
+     * The input of the behavior was not read, so no measure that reads a position of it could be
+     * finished.
+     *
+     * <p>Its own word beside the one above. Both leave every measure that reads the boundary
+     * unfinished and they send a reader to different places: the first is a name in this
+     * behavior's own declaration that resolved to nothing, and this is a module holding a type
+     * nobody could name, which refuses the reading of what any of its behaviors take.
+     */
+    BEHAVIOR_INPUT_NOT_READ,
+
 
     /** The space of combinations was too large to walk to the end of. */
     PAIR_SPACE_TRUNCATED,

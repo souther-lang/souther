@@ -63,7 +63,8 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
 
     /** One arm the reading has an answer for, over a behavior whose position nothing divides. */
     private static FillResult filledOverOneArm() {
-        MeasuredInput subject = MeasuredInput.of("fee", readingOf("days", Type.INT), List.of());
+        MeasuredInput subject = MeasuredInput.of("fee", readingOf("days", Type.INT),
+                AxesATestWrote.asAMeasurement("fee", List.of()));
         java.util.SequencedMap<Integer, PathAccess> ways = new java.util.LinkedHashMap<>();
         ways.put(1, NOT_ENUMERABLE);
         CoverageRead.Read read = new CoverageRead.Read(List.of(), ways);

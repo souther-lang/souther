@@ -172,6 +172,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
         List<String> names = new ArrayList<>();
         spec().params().forEach(each -> names.add(each.name()));
         assertTrue(names.contains("n"), "the model takes the position the row is fixed at");
-        return MeasuredInput.of(spec().name(), domain().reading(symbols()), axes());
+        return MeasuredInput.of(spec().name(), domain().reading(symbols()),
+                AxesATestWrote.asAMeasurement(spec().name(), axes()));
     }
 }

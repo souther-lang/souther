@@ -87,15 +87,16 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * positions. Nothing reads the number — the measurement beside it says none could be finished,
      * and a document leaves the whole section out rather than writing a size nobody worked out.
      */
-    public static PartitionEvidence boundaryNotDerived(String behavior) {
+    public static PartitionEvidence notMeasurable(BoundaryForMeasurement.NotDerived why,
+                                                  String behavior) {
         return new PartitionEvidence(
-                BoundaryForMeasurement.failed(behavior),
-                PairSpace.boundaryNotDerived(behavior), List.of(), List.of(), List.of(), List.of(),
+                why.failed(behavior),
+                PairSpace.notMeasurable(why, behavior), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of());
     }
 
-    /** Whether this is what a behavior whose boundary could not be worked out comes to. */
-    public boolean boundaryNotDerived() {
+    /** Whether this is what a behavior missing something its boundary is made of comes to. */
+    public boolean notMeasurable() {
         return BoundaryForMeasurement.wasNotDerived(partitioned);
     }
 
@@ -425,8 +426,9 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
 
         /** A space whose size was never worked out, because the positions it is a product over
          *  were not. What it is short of is what every measure of that behavior is short of. */
-        public static PairSpace boundaryNotDerived(String behavior) {
-            return new PairSpace(0, BoundaryForMeasurement.failed(behavior));
+        public static PairSpace notMeasurable(BoundaryForMeasurement.NotDerived why,
+                                              String behavior) {
+            return new PairSpace(0, why.failed(behavior));
         }
 
         /** A space too large to walk to the end of. What it is measured in part by is the fact that

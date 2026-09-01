@@ -103,7 +103,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));
-        MeasuredInput subject = MeasuredInput.of(spec.name(), domain.reading(symbols), p.axes());
+        MeasuredInput subject = MeasuredInput.of(spec.name(), domain.reading(symbols), p);
 
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {

@@ -70,7 +70,12 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
 
     private static final String POSITION = "request.interval.startsAt";
 
-    private record Read(List<Axis> axes, BehaviorInputs inputs, RowOutcome row) {}
+    private record Read(MeasuredInput subject, RowOutcome row) {
+
+        MeasuredInput.MeasuredAxes axes() {
+            return subject.axes();
+        }
+    }
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
@@ -98,8 +103,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        return new Read(partitioning.axes(),
-                new BehaviorInputs(parameters, sigs.get("book").inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        return new Read(MeasuredInput.of("book", read.reading(symbols), partitioning),
                 observed.rows().get(0));
     }
 
@@ -142,7 +146,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     }
 
     private static Incompleteness.Code why(Read read, RowOutcome row) {
-        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.inputs(), read.axes());
+        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.axes());
         Classification where = classes.entrySet().stream()
                 .filter(e -> e.getKey().term().equals(POSITION))
                 .map(Map.Entry::getValue).findFirst()
@@ -151,7 +155,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     }
 
     private static TermPath position(Read read) {
-        return read.axes().stream().filter(a -> a.path().toString().equals(POSITION))
+        return read.axes().axes().stream().filter(a -> a.path().toString().equals(POSITION))
                 .findFirst().orElseThrow().path();
     }
 
@@ -218,11 +222,11 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Read read = read();
 
         assertInstanceOf(ObservedValue.Truncated.class,
-                read.inputs().valueAt(givingInterval(read, intervalHolding(read,
+                read.subject().inputs().valueAt(givingInterval(read, intervalHolding(read,
                         new ObservedValue.Truncated())).inputs(), position(read)),
                 "the limit was reached at the position");
         assertInstanceOf(ObservedValue.Truncated.class,
-                read.inputs().valueAt(
+                read.subject().inputs().valueAt(
                         givingInterval(read, new ObservedValue.Truncated()).inputs(), position(read)),
                 "the limit was reached one field above the position");
     }

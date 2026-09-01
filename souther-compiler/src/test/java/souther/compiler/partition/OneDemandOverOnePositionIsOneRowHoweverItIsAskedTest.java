@@ -81,7 +81,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
     @Test
     void anArmOnePositionSettlesIsOfferedTheRowThatPositionsClassIs() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        List<Axis> axes = model.subject().axes();
+        List<Axis> axes = model.subject().axes().axes();
         int asked = 0;
         for (int probe : model.read().arms().keySet()) {
             for (Map.Entry<Integer, Integer> pin : onePinWaysInto(probe, model, axes)) {
@@ -161,7 +161,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             assertNotNull(body, "the behavior under test has a body");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
                     Partitions.of(spec.name(), inputs, symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes()),
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
                             CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()), inputs,

@@ -71,7 +71,12 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 | (Request { kind = Domestic, cost = Amount(50), plain = 1 }) -> Submitted
             """;
 
-    private record Read(List<Axis> axes, BehaviorInputs inputs, RowOutcome row) {}
+    private record Read(MeasuredInput subject, RowOutcome row) {
+
+        MeasuredInput.MeasuredAxes axes() {
+            return subject.axes();
+        }
+    }
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
@@ -99,8 +104,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        return new Read(partitioning.axes(),
-                new BehaviorInputs(parameters, sigs.get("submit").inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        return new Read(MeasuredInput.of("submit", read.reading(symbols), partitioning),
                 observed.rows().get(0));
     }
 
@@ -142,7 +146,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     }
 
     private static Classification at(Read read, RowOutcome row, String path) {
-        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.inputs(), read.axes());
+        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.axes());
         return classes.entrySet().stream().filter(e -> e.getKey().term().equals(path))
                 .map(Map.Entry::getValue).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path));
@@ -215,7 +219,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         RowOutcome row = giving(read, "plain", new ObservedValue.Text("x"));
 
         assertThrows(IllegalStateException.class,
-                () -> InputClassifications.of(row.inputs(), read.inputs(), read.axes()));
+                () -> InputClassifications.of(row.inputs(), read.axes()));
     }
 
     /** And a value every class could read still lands where it did. */

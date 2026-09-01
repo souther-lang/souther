@@ -177,7 +177,7 @@ class OneBorderReadTwiceIsOneReadingTest {
         AxisId axis = new AxisId("weigh", "w.a");
         NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return Border.at(BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(axis, term,
+                        new BorderQuantity.OfACoordinate(axis.behavior(), term,
                                 TermOrdersFixtures.itself(term, WHOLE)),
                         new Level.OnACarrier(WHOLE, at)),
                 aBound(),
@@ -202,7 +202,7 @@ class OneBorderReadTwiceIsOneReadingTest {
         AxisId axis = new AxisId("weigh", path);
         NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis, term,
+                new BorderQuantity.OfACoordinate(axis.behavior(), term,
                         TermOrdersFixtures.itself(term, WHOLE)),
                 at(value));
     }

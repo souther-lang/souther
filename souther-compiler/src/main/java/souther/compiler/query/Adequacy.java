@@ -511,7 +511,7 @@ public final class Adequacy {
         }
 
         /**
-         * The boundary this measures was not worked out, so no case of it was read.
+         * Something the boundary this measures is made of was missing, so no case of it was read.
          *
          * <p><b>The positions are answered for where the declaration says how many there are, and
          * not otherwise.</b> A declared behavior writes its parameters, so they are known and each
@@ -523,7 +523,8 @@ public final class Adequacy {
          * states are a behavior that takes nothing and a behavior nobody could count the positions
          * of, and as a list they are the same empty one.
          */
-        public static SignatureEvidence boundaryNotDerived(Hir.BehaviorDef behavior) {
+        public static SignatureEvidence notMeasurable(Hir.BehaviorDef behavior,
+                                                      BoundaryForMeasurement.NotDerived why) {
             String name = behavior.name();
             // The positions themselves, where the declaration writes them. They are read off the
             // declaration and nothing about them went short — what could not be read is the cases
@@ -532,18 +533,20 @@ public final class Adequacy {
             // states this measure exists to tell apart would be three.
             Measure<List<InputCaseEvidence>> positions =
                     behavior instanceof Hir.SpecBehavior spec
-                            ? at(declaredPositions(name, spec))
-                            : BoundaryForMeasurement.failed(name);
-            return new SignatureEvidence(OutputCaseEvidence.boundaryNotDerived(name), positions,
-                    BoundaryForMeasurement.failed(name));
+                            ? at(declaredPositions(name, spec, why))
+                            : why.failed(name);
+            return new SignatureEvidence(OutputCaseEvidence.notMeasurable(why, name), positions,
+                    why.failed(name));
         }
 
         /** One entry per parameter the declaration writes, each saying its cases were not read. */
         private static List<InputCaseEvidence> declaredPositions(String behavior,
-                                                                 Hir.SpecBehavior spec) {
+                                                                 Hir.SpecBehavior spec,
+                                                                 BoundaryForMeasurement.NotDerived
+                                                                         why) {
             List<InputCaseEvidence> out = new ArrayList<>(spec.params().size());
             for (int at = 0; at < spec.params().size(); at++) {
-                out.add(InputCaseEvidence.boundaryNotDerived(at, behavior));
+                out.add(InputCaseEvidence.notMeasurable(at, why, behavior));
             }
             return out;
         }
@@ -584,8 +587,8 @@ public final class Adequacy {
             return counted.weakening();
         }
 
-        /** Whether this is what a behavior whose boundary could not be worked out comes to. */
-        public boolean boundaryNotDerived() {
+        /** Whether this is what a behavior missing something its boundary is made of comes to. */
+        public boolean notMeasurable() {
             return BoundaryForMeasurement.wasNotDerived(counted);
         }
 
@@ -818,7 +821,7 @@ public final class Adequacy {
         }
         InputDomain domain = domainOf(db.ask(new Inputs(module)).value(), spec);
         return souther.compiler.partition.MeasuredInput.of(spec.name(),
-                domain.reading(scope.value()), divided.axes());
+                domain.reading(scope.value()), divided);
     }
 
     /** What one behavior states about its answer, or nothing where it states none. A behavior
@@ -1212,18 +1215,16 @@ public final class Adequacy {
                     // out of this map reads as a measure nobody asked for, and a measure nobody
                     // asked for goes without nothing — so a behavior nothing could be established
                     // about would be held to no bar at all, and say nothing about it.
-                    switch (BoundaryForMeasurement.of(sigs.value(), behavior.name())) {
-                        case BoundaryForMeasurement.NotDerived _ ->
-                                SignatureEvidence.boundaryNotDerived(behavior);
-                        case BoundaryForMeasurement.Derived(Sig sig) ->
+                    switch (BoundaryForMeasurement.of(sigs.value(), readInputs, behavior)) {
+                        case BoundaryForMeasurement.NotDerived why ->
+                                SignatureEvidence.notMeasurable(behavior, why);
+                        case BoundaryForMeasurement.Derived(Sig sig, InputDomain read) ->
                                 evidenceOf(behavior.name(), sig, scope.value(), asked,
                                         RowReadings.readingFor(byTarget, behavior.name()),
                                         behavior instanceof Hir.SpecBehavior spec
                                                 ? spec.params().stream().map(Hir.Param::name).toList()
                                                 : List.of(),
-                                        readInputs == null ? InputDomain.NONE
-                                                : readInputs.getOrDefault(behavior.name(),
-                                                        InputDomain.NONE),
+                                        read,
                                         producing.get(behavior.name()), producingPlan,
                                         reachableArms == null ? NOTHING_PROVEN
                                                 : reachableArms.getOrDefault(behavior.name(),
@@ -1296,11 +1297,11 @@ public final class Adequacy {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     return PartitionEvidence.NONE;   // measured at its stages, not here
                 }
-                return switch (BoundaryForMeasurement.of(sigs.value(), spec.name())) {
-                    case BoundaryForMeasurement.NotDerived _ ->
-                            PartitionEvidence.boundaryNotDerived(spec.name());
-                    case BoundaryForMeasurement.Derived(Sig sig) ->
-                            measured(db, name, spec, sig, level, scope.value(), readInputs,
+                return switch (BoundaryForMeasurement.of(sigs.value(), readInputs, spec)) {
+                    case BoundaryForMeasurement.NotDerived why ->
+                            PartitionEvidence.notMeasurable(why, spec.name());
+                    case BoundaryForMeasurement.Derived(Sig sig, InputDomain _) ->
+                            measured(db, name, spec, sig, level, scope.value(),
                                     byTarget, lines.get(spec.name()));
                 };
             });
@@ -1310,17 +1311,26 @@ public final class Adequacy {
          *  into. */
         private PartitionEvidence measured(Db db, String name, Hir.SpecBehavior spec, Sig sig,
                                            Level level, Symbols scope,
-                                           Map<String, InputDomain> readInputs,
                                            Map<String, RowReading> byTarget,
                                            Measure<List<BorderAssessment>> lines) {
-            // A behavior with a signature is one the model divides somewhere or nowhere, and
-            // either is an answer. Nothing is a compile that stopped after this had already
-            // read the signature, which is the two disagreeing rather than a behavior to skip.
+            // A behavior whose signature and input were both read is one the model divides
+            // somewhere or nowhere, and either is an answer. Nothing is a compile that stopped
+            // after this had already read both, which is the two disagreeing rather than a
+            // behavior to skip.
             souther.compiler.partition.Partitions.Partitioning divided =
                     db.ask(new Divided(name, spec.name())).value();
             if (divided == null) {
-                throw new IllegalStateException("`" + spec.name() + "` has a signature and no"
-                        + " reading of what the model divides it into");
+                throw new IllegalStateException("`" + spec.name() + "` has a signature and a"
+                        + " reading of its input, and no reading of what the model divides it"
+                        + " into");
+            }
+            // The measurement itself, which is the partitioning above beside the reading it was
+            // made against. What a row is placed by comes off it, so nothing here pairs a walk
+            // with classes.
+            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
+            if (subject == null) {
+                throw new IllegalStateException("`" + spec.name() + "` has a reading of what the"
+                        + " model divides it into, and no measurement of the input it divides");
             }
             RowReading seen = RowReadings.readingFor(byTarget, spec.name());
             if (lines == null) {
@@ -1334,8 +1344,7 @@ public final class Adequacy {
             // Counted with nothing a body claims in scope. What was claimed travels beside the
             // numbers rather than into them ({@link Claimed}), and the two meet where a report
             // is written.
-            return Coverages.of(spec, sig, scope,
-                    db.ask(new Front.Reading()).value(), divided, seen, level,
+            return Coverages.of(subject, seen, level,
                     db.ask(new Front.Adequacy()).value().measures());
         }
     }
@@ -1379,6 +1388,16 @@ public final class Adequacy {
                 // divides nowhere.
                 return Answer.absent();
             }
+            // The reading the measurement is made against, which is what makes it a measurement of
+            // this behavior's input rather than of nothing. A module holding a type nobody could
+            // name has none, and a measurement made without one divides an input with no positions:
+            // what comes back is a partitioning that divides nothing, which is what a behavior
+            // whose rules part nothing comes back with. Absent here, so the two are not one answer.
+            Map<String, InputDomain> read = db.ask(new Inputs(name)).value();
+            InputDomain domain = read == null ? null : read.get(spec.name());
+            if (domain == null) {
+                return Answer.absent();
+            }
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
@@ -1391,8 +1410,7 @@ public final class Adequacy {
                             checked == null ? souther.compiler.coverage.SuppliedRules.NONE
                                     : checked.supplied());
             return Answer.of(Coverages.partitioningOf(spec,
-                    domainOf(db.ask(new Inputs(name)).value(), spec), sig, scope.value(),
-                    db.ask(new Front.Reading()).value(), bodies.get(behavior),
+                    domain.reading(scope.value()), bodies.get(behavior),
                     checked == null ? souther.compiler.check.ElementBindings.NONE
                             : checked.elementBindings().getOrDefault(behavior,
                                     souther.compiler.check.ElementBindings.NONE),
@@ -1824,65 +1842,25 @@ public final class Adequacy {
     }
 
     /**
-     * How a row of one behavior is read: where its positions are, and what the model divides them
-     * into.
-     *
-     * <p>What it takes to read a row, and nothing about what anybody was asked to compose. The two
-     * arrived together while the only reader was the search that composes rows — so a row composed
-     * by a behavior nothing else was asked of could not be read at all, and every question put to it
-     * came back as one nothing could tell about.
-     *
-     * @param axes empty where the model divides this behavior's positions into nothing, or where
-     *             what it divides them into could not be read. A row still has values and still
-     *             stands where it stands; what is missing is the classes to place them in
-     */
-    record HowARowIsRead(souther.compiler.partition.BehaviorInputs where, List<Axis> axes) {
-
-        HowARowIsRead {
-            axes = List.copyOf(axes);
-        }
-    }
-
-    /**
-     * The reading, from the pieces a caller already holds.
-     *
-     * <p>The one place a {@link souther.compiler.partition.BehaviorInputs} is made for a generation.
-     * A second assembly of the same four things is a second answer to where a row's values are, and
-     * the two would agree until one of them moved.
-     */
-    static HowARowIsRead readingOf(Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                                   souther.compiler.check.ReadingPolicy policy,
-                                   souther.compiler.partition.Partitions.Partitioning divided) {
-        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        return new HowARowIsRead(
-                new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                        symbols, policy),
-                divided == null ? List.of() : divided.axes());
-    }
-
-    /**
-     * The same, asked of the store for any behavior of a module.
+     * The measurement a row of one behavior is read against, asked of the store by name.
      *
      * <p>For a reader that holds a row and not a search. A row a declaration's line is owed is
      * composed by whichever reading could compose it, and that behavior need not be one anything
      * else was asked about — so what it takes to read the row is asked for here rather than taken
      * off an answer about generating rows, which such a behavior has none of.
+     *
+     * <p>Null where the behavior is not one this module declares with an input of its own, or
+     * where its input has no reading — which is a behavior nothing measured rather than one
+     * measured into nothing.
      */
-    static HowARowIsRead readingOf(Db db, String module, String behavior) {
+    static souther.compiler.partition.MeasuredInput subjectOf(Db db, String module,
+                                                              String behavior) {
         souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
-        Answer<Symbols> symbols = Names.derivedSymbols(db, module);
-        souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
-        if (prepared == null || sigs == null || !symbols.present() || policy == null) {
+        if (prepared == null) {
             return null;
         }
         Hir.SpecBehavior spec = specOf(prepared, behavior);
-        Sig sig = sigs.get(behavior);
-        if (spec == null || sig == null) {
-            return null;
-        }
-        return readingOf(spec, sig, symbols.value(), policy,
-                db.ask(new Divided(module, behavior)).value());
+        return spec == null ? null : subjectOf(db, module, spec);
     }
 
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
@@ -1926,8 +1904,9 @@ public final class Adequacy {
                 return Answer.absent();
             }
             Level level = levelOf(db);
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             return answerEveryBehavior(prepared.value(),
-                    behavior -> linesReadIn(db, name, behavior, sigs.value(),
+                    behavior -> linesReadIn(db, name, behavior, sigs.value(), readInputs,
                             level.composesValues()));
         }
     }
@@ -1946,21 +1925,21 @@ public final class Adequacy {
      * told the point has one reading and that its walk of it saw everything.
      */
     static Measure<List<BorderAssessment>> linesReadIn(Db db, String name, Hir.BehaviorDef behavior,
-            Map<String, Sig> sigs, boolean composes) {
+            Map<String, Sig> sigs, Map<String, InputDomain> readInputs, boolean composes) {
         if (!(behavior instanceof Hir.SpecBehavior spec)) {
             return BoundaryDerivation.noSubject();   // measured at its stages, not here
         }
-        if (BoundaryForMeasurement.of(sigs, spec.name())
-                instanceof BoundaryForMeasurement.NotDerived) {
+        if (BoundaryForMeasurement.of(sigs, readInputs, spec)
+                instanceof BoundaryForMeasurement.NotDerived why) {
             // No boundary to read the rules at, so the lines are a measure that was asked for and
             // could not be finished rather than a model that draws none.
-            return BoundaryForMeasurement.failed(spec.name());
+            return why.failed(spec.name());
         }
         souther.compiler.partition.Partitions.Partitioning divided =
                 db.ask(new Divided(name, spec.name())).value();
         if (divided == null) {
-            throw new IllegalStateException("`" + spec.name() + "` has a signature and no"
-                    + " reading of what the model divides it into");
+            throw new IllegalStateException("`" + spec.name() + "` has a signature and a reading"
+                    + " of its input, and no reading of what the model divides it into");
         }
         List<BorderAssessment> read = composes
                 ? db.ask(new BoundarySearch(name, spec.name())).value()
@@ -2027,39 +2006,25 @@ public final class Adequacy {
 
         @Override
         public Answer<LineReadings> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
-                return Answer.absent();
-            }
-            Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
-            Sig sig = sigs.value().get(behavior);
-            souther.compiler.partition.Partitions.Partitioning divided =
-                    db.ask(new Divided(name, behavior)).value();
-            if (spec == null || sig == null || divided == null) {
+            // What the lines are read against, which is the whole of what this needs: a behavior
+            // this module declares with an input of its own, read, and measured. Every question
+            // that has to have been answered for one to exist is asked where it is made.
+            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);
+            if (subject == null) {
                 return Answer.absent();
             }
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say. And whether anything was
             // measured against the rows at all, which is what `off` answers.
             Level level = levelOf(db);
-            Symbols symbols = scope.value();
-            return Answer.of(assess(spec, sig, symbols, db.ask(new Front.Reading()).value(),
-                    divided, RowReadings.readingFor(db.ask(new RowReadings(name)).value(), behavior), level));
+            return Answer.of(assess(subject,
+                    RowReadings.readingFor(db.ask(new RowReadings(name)).value(), behavior), level));
         }
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
-        private static LineReadings assess(
-                Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                souther.compiler.check.ReadingPolicy policy,
-                souther.compiler.partition.Partitions.Partitioning divided, RowReading observed,
-                Level level) {
-            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-            souther.compiler.partition.BehaviorInputs inputs =
-                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy);
-            souther.compiler.partition.Partitions.Partitioning partitioning = divided;
+        private static LineReadings assess(souther.compiler.partition.MeasuredInput subject,
+                                           RowReading observed, Level level) {
+            souther.compiler.partition.Partitions.Partitioning partitioning = subject.partitioning();
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
             // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
@@ -2071,11 +2036,11 @@ public final class Adequacy {
                 // state belongs to the lines between two positions, where the question is not put at
                 // all, and is spelled there rather than here — a boolean lifted at the boundary it
                 // is answered at cannot arrive somewhere as the wrong one of the three.
-                out.addAll(Coverages.assess(partitioning.along(axis), inputs, observed, level,
+                out.addAll(Coverages.assess(partitioning.along(axis), subject, observed, level,
                         ItemAssessment.WritabilityProjection.ofReading(
                                 partitioning.edgeIsKnownWritable(axis.term()))));
             }
-            out.addAll(Coverages.assessBetween(partitioning, inputs, observed, level));
+            out.addAll(Coverages.assessBetween(subject, observed, level));
             return new LineReadings(out);
         }
 
@@ -3303,7 +3268,8 @@ public final class Adequacy {
                                 spec.name(), observed.gaps())));
             }
             List<RowOutcome> rows = observed.rowsSeen();
-            souther.compiler.partition.BehaviorInputs inputs = asked.subject().inputs();
+            // The measurement's own axes, so that a row is placed by the walk it was measured at.
+            souther.compiler.partition.MeasuredInput.MeasuredAxes axes = asked.subject().axes();
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
 
@@ -3312,7 +3278,7 @@ public final class Adequacy {
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> new Generator.ObservedRow(
-                            InputClassifications.of(row.inputs(), inputs, partitioning.axes()),
+                            InputClassifications.of(row.inputs(), axes),
                             watched(row, recording)))
                     .toList();
             return Generator.fill(asked, existing, check,
@@ -4101,8 +4067,9 @@ public final class Adequacy {
             //
             // How far finding them got is carried by whoever keeps an account, not here: what is
             // gathered is the points, and being short of some of them is a fact about the reading.
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                readings.addAll(linesReadIn(db, name, behavior, sigs.value(),
+                readings.addAll(linesReadIn(db, name, behavior, sigs.value(), readInputs,
                         level.composesValues() && scope.admits(behavior.name()))
                         .made().orElseGet(List::of));
             }

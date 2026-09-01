@@ -44,7 +44,8 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
     /** A behavior with no divided position, which is where reading the name off an axis ran out. */
     @Test
     void theNameHoldsWhereNothingIsDivided() {
-        MeasuredInput subject = MeasuredInput.of("fee", readingOf("days"), List.of());
+        MeasuredInput subject = MeasuredInput.of("fee", readingOf("days"),
+                AxesATestWrote.asAMeasurement("fee", List.of()));
 
         assertEquals("fee", subject.behavior(),
                 "the behavior is named whether or not anything divided its positions");
@@ -55,7 +56,8 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
     void anAxisOfAnotherBehaviorIsRefused() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> MeasuredInput.of("fee", readingOf("days"),
-                        List.of(axisOf("charge", "days"))));
+                        AxesATestWrote.asAMeasurement("fee",
+                                List.of(axisOf("charge", "days")))));
 
         assertEquals(true, refused.getMessage().contains("charge"),
                 "the refusal names the axis that disagrees: " + refused.getMessage());
@@ -66,7 +68,8 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
     void everyAxisIsAsked() {
         assertThrows(IllegalArgumentException.class,
                 () -> MeasuredInput.of("fee", readingOf("days", "cap"),
-                        List.of(axisOf("fee", "days"), axisOf("charge", "cap"))),
+                        AxesATestWrote.asAMeasurement("fee",
+                                List.of(axisOf("fee", "days"), axisOf("charge", "cap")))),
                 "an axis of another behavior standing second is still one");
     }
 

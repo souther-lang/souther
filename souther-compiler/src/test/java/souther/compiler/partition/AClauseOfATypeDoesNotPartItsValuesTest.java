@@ -168,7 +168,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
         AxisId axis = new AxisId("weigh", "w.a");
         NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis, term,
+                new BorderQuantity.OfACoordinate(axis.behavior(), term,
                         TermOrdersFixtures.itself(term, WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(value)));
     }

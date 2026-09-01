@@ -97,14 +97,14 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                 checked.supplied());
         Partitions.Partitioning axes =
                 Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols), axes.axes()),
+        return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols), axes),
                 CoverageRead.of(spec.name(), body, plan, inputs, symbols));
     }
 
     /** The positions under two cases are both axes, which is what the assignments have to hold. */
     @Test
     void bothCasesPutAPositionOnTheList() {
-        List<String> at = model().subject().axes().stream()
+        List<String> at = model().subject().axes().axes().stream()
                 .map(each -> each.path().toString()).toList();
         assertTrue(at.contains("e@Left.a") && at.contains("e@Right.b"), at.toString());
     }
