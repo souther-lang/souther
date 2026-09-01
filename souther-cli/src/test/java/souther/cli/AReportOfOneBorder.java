@@ -12,7 +12,6 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
@@ -73,8 +72,7 @@ final class AReportOfOneBorder {
                 souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                AT_W_A,
+                        new BorderQuantity.OfACoordinate("weigh", AT_W_A,
                                 souther.compiler.inputs.TermOrdersFixtures
                                         .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
@@ -104,8 +102,7 @@ final class AReportOfOneBorder {
                         new ComparisonClaim.Cut(souther.compiler.numeric.Towards.BELOW, true)));
         return Border.at(
                 BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                AT_W_A,
+                        new BorderQuantity.OfACoordinate("weigh", AT_W_A,
                                 souther.compiler.inputs.TermOrdersFixtures
                                         .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
@@ -123,8 +120,7 @@ final class AReportOfOneBorder {
                 souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                AT_W_A,
+                        new BorderQuantity.OfACoordinate("weigh", AT_W_A,
                                 souther.compiler.inputs.TermOrdersFixtures
                                         .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,

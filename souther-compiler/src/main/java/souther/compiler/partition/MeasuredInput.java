@@ -216,7 +216,29 @@ public final class MeasuredInput {
         for (NumericTerm term : quantity.terms()) {
             quantities.ordersOf(term);
         }
+        // A line on one position's own number is a line on a position this measurement divides.
+        // The two questions above are about the reading; this one is about what was measured
+        // against it, and a term the reading answers for is not by itself a place the model
+        // measures — a position the rules part nowhere and bound nowhere has no measure at all.
+        //
+        // Asked of every measure and not of the ones that divide their number into classes: a
+        // measure may be a bound and no partition, and a line is exactly what such a one has.
+        AxisId cuts = quantity.onAPosition();
+        if (cuts != null && !measures(cuts)) {
+            throw new IllegalArgumentException("a line at " + cuts
+                    + ", which is no position this measurement measures: " + behavior);
+        }
         return new BorderReading(this, border);
+    }
+
+    /** Whether some measure of this input is of that position's number. */
+    private boolean measures(AxisId at) {
+        for (Axis axis : divided.axes()) {
+            if (axis.id().equals(at)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -1002,7 +1002,7 @@ public final class Partitions {
         List<Parting> parted = new ArrayList<>(axis.parted());
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), orders),
+                    new BorderQuantity.OfACoordinate(axis.id().behavior(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // Every rule that drew a line here, as it was read. Which of them fall in one place
@@ -1017,7 +1017,7 @@ public final class Partitions {
             // drawn on a count taken of a position would otherwise be written back as a value of
             // the position.
             BoundaryTarget target = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), orders),
+                    new BorderQuantity.OfACoordinate(axis.id().behavior(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // One cut, one border. Whether the quantity reaches the line is settled where the

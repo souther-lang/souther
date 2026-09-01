@@ -7,7 +7,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Criterion;
@@ -307,7 +306,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     private static BoundaryTarget aLineAt(String behavior, String path) {
         NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(path));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(new AxisId(behavior, path), term,
+                new BorderQuantity.OfACoordinate(behavior, term,
                         TermOrdersFixtures.itself(term, WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(1)));
     }

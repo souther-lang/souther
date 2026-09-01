@@ -44,18 +44,36 @@ public sealed interface BorderQuantity {
      * values. A line here divides the position into classes, which is why this one has an axis and
      * the others do not.
      */
-    record OfACoordinate(AxisId axis, NumericTerm.FromOnePosition term, TermOrders of)
+    record OfACoordinate(String behavior, NumericTerm.FromOnePosition term, TermOrders of)
             implements BorderQuantity {
 
         public OfACoordinate {
-            if (axis == null || term == null || of == null) {
-                throw new IllegalArgumentException("a coordinate quantity names a position and an "
-                        + "order: " + axis + " " + term + " " + of);
+            if (behavior == null || behavior.isEmpty() || term == null || of == null) {
+                throw new IllegalArgumentException("a coordinate quantity is a behavior's number "
+                        + "on an order: " + behavior + " " + term + " " + of);
             }
-            // The position is here because a coordinate is a position's own number, which is the
-            // narrower kind of term; the orders say which number they are of. The second spelling
-            // is refused rather than carried into a document.
+            // The orders say which number they are of. The second spelling is refused rather than
+            // carried into a document.
             of.areOf(term);
+        }
+
+        /**
+         * What a report calls the position this cuts.
+         *
+         * <p>Worked out from the number rather than handed in beside it, which is what
+         * {@link Axis} holds a measure to for the same reason: a name a caller chooses is a name
+         * that can be one number's while the cut is on another, and every reader that goes by it —
+         * which behavior the line is of, what a document calls it, whether a measurement divides
+         * there — would then be answering about a position this line is not on.
+         */
+        public AxisId axis() {
+            return AxisId.of(behavior, term);
+        }
+
+        /** Its own position's, which is what a coordinate is. */
+        @Override
+        public AxisId onAPosition() {
+            return axis();
         }
 
         @Override
@@ -75,7 +93,7 @@ public sealed interface BorderQuantity {
         public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
             NumericTerm.FromOnePosition landed = to.term().atOnePosition();
             return term.equals(from) && landed != null
-                    ? new OfACoordinate(new AxisId(axis.behavior(), landed.toString()), landed, to)
+                    ? new OfACoordinate(behavior, landed, to)
                     : null;
         }
 
@@ -108,18 +126,13 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public String behavior() {
-            return axis.behavior();
-        }
-
-        @Override
         public String named() {
-            return axis.toString();
+            return axis().toString();
         }
 
         @Override
         public String left() {
-            return axis.term();
+            return term.toString();
         }
 
         /** The carrier's own spelling. A day count is a date here and nowhere else. */
@@ -381,6 +394,12 @@ public sealed interface BorderQuantity {
                     levels(), where);
         }
 
+        /** None. How far two positions stand apart is a number neither of them has a value at. */
+        @Override
+        public AxisId onAPosition() {
+            return null;
+        }
+
         @Override
         public String named() {
             return new AxisId(behavior, onTerm().toString()).toString();
@@ -589,6 +608,13 @@ public sealed interface BorderQuantity {
             return new Standing.OfAForm(form, answeredOn(on), levels(), where);
         }
 
+        /** None. What an arithmetic form over several positions comes to is a number none of them
+         *  holds. */
+        @Override
+        public AxisId onAPosition() {
+            return null;
+        }
+
         @Override
         public String named() {
             return new AxisId(behavior, left()).toString();
@@ -735,6 +761,18 @@ public sealed interface BorderQuantity {
      * agrees with it.
      */
     String behavior();
+
+    /**
+     * The position whose own number this cuts, or null where what it cuts is no one position's.
+     *
+     * <p>Asked of the quantity because only it knows: a coordinate is a position's own values and
+     * a line on it is a line on that position, while a distance between two of them and a form
+     * over several are cut nowhere any position has a value. A reader working it out by asking
+     * which of the three it holds is a reader deciding for itself what the variants are, and the
+     * one that needed this — whether a measurement measures the place a line is on — is not the
+     * quantity's question to answer.
+     */
+    AxisId onAPosition();
 
     /** The left of the {@code left = right} a report names a border on this by, qualified by the
      *  behavior it is an input of ({@link #behavior}). */
