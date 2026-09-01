@@ -84,8 +84,8 @@ public record InputDemand(List<TermPath> paths) {
     }
 
     private static void walk(Core e, InputReads names, Symbols symbols, Set<TermPath> found) {
-        // What is demanded are the positions named. One that stands nowhere and one this reading
-        // did not follow are alike in demanding none: what a walk cannot name, nothing asks for.
+        // What is demanded are the positions named, so an expression that stands nowhere demands
+        // none: what the model puts at no position, nothing asks for.
         switch (names.pathOf(e, symbols)) {
             case PathResolution.At(var at) -> found.add(at);
             case PathResolution.NotAPosition _ -> { }

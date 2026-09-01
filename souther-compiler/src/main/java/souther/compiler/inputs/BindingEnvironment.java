@@ -99,15 +99,14 @@ final class BindingEnvironment {
     }
 
     /**
-     * The binding a walk asking {@code question} may go on to from {@code binding}, or null where
-     * this question is not entitled to one and where nothing was recorded.
+     * What a walk asking {@code question} may do at {@code binding} ({@link ElementStep}).
      *
      * <p>The edge itself does not come back. What one licenses depends on what is being asked, and a
      * walk that held an edge would be answering that for itself beside the one place that answers it
-     * ({@link souther.compiler.check.ElementProvenance#predecessorOf}).
+     * ({@link souther.compiler.check.ElementProvenance#stepFrom}).
      */
-    BindingId predecessorOf(BindingId binding, ElementQuestion question) {
-        return elements.provenance().predecessorOf(binding, question);
+    ElementStep stepFrom(BindingId binding, ElementQuestion question) {
+        return elements.provenance().stepFrom(binding, question);
     }
 
     /**

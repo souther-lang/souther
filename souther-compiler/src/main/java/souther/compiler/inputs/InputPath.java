@@ -93,9 +93,11 @@ final class InputPath {
     /**
      * Where {@code e}'s value came from, and that it came from none where it did.
      *
-     * <p>Beside {@link #of} and licensing less. That one answers which position an expression names,
-     * and what a row writes at a position is what a rule about it is about; this answers where a
-     * value came from, and a value made from a position is not that position — a rule about it is
+     * <p>Beside {@link #of} and a different question, not a wider or a narrower one. That one
+     * answers which position an expression names, and what a row writes at a position is what a rule
+     * about it is about; this answers where a value came from. So the two cross different edges: an
+     * edge saying these elements were made from another binding's is one this goes on through and
+     * one that must stop, and a value made from a position is not that position — a rule about it is
      * not a rule about the values there, and nothing here says what it comes to for them.
      *
      * <p>So what this is for is saying that a rule was written. An author who filters what a
@@ -228,20 +230,27 @@ final class InputPath {
      *  where the expression is not one of them. */
     private PathResolution elementsOf(Core e, BindingEnvironment names) {
         if (e instanceof Core.Read r) {
-            // Through a binding an expansion wrote, where the operation it removed answered the
-            // elements it was given. The operation is gone from this tree, so what says so was
-            // written where it still stood.
-            BindingId same = names.predecessorOf(r.binding(), asked);
-            if (same != null) {
-                return trail.through(r.binding(), () -> containerPath(
-                        new Core.Read(r.name(), same, r.type(), r.pos()), names));
-            }
-            // Or through what the binding holds. Looked up over the whole body and not down the
-            // path to here: a container built by one operation and handed to the next is bound
-            // beside the closure that reads it rather than above it.
-            Core held = names.heldAnywhereBy(r.binding());
-            return held == null ? new PathResolution.NotAPosition()
-                    : trail.through(r.binding(), () -> containerPath(held, names));
+            return switch (names.stepFrom(r.binding(), asked)) {
+                // Through a binding an expansion wrote, where the operation it removed answered the
+                // elements it was given. The operation is gone from this tree, so what says so was
+                // written where it still stood.
+                case ElementStep.Through(var same) -> trail.through(r.binding(),
+                        () -> containerPath(new Core.Read(r.name(), same, r.type(), r.pos()),
+                                names));
+                // The question this walk is asking does not cross what was written here, which is
+                // an answer and not a road not taken. What the binding holds is what the walk on
+                // the other side of that edge made, so reading it is the crossing said another way.
+                case ElementStep.Refused _ -> new PathResolution.NotAPosition();
+                // And where nothing says where these elements came from, what the binding holds is
+                // all there is. Looked up over the whole body and not down the path to here: a
+                // container built by one operation and handed to the next is bound beside the
+                // closure that reads it rather than above it.
+                case ElementStep.NoEdge _ -> {
+                    Core held = names.heldAnywhereBy(r.binding());
+                    yield held == null ? new PathResolution.NotAPosition()
+                            : trail.through(r.binding(), () -> containerPath(held, names));
+                }
+            };
         }
         // Or through an operation the language keeps standing that answers what it was given.
         if (!(e instanceof Core.Call call) || !(call.fn() instanceof Core.Reached reached)) {

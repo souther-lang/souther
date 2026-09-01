@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.inputs.ElementQuestion;
+import souther.compiler.inputs.ElementStep;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
@@ -85,24 +86,29 @@ public final class ElementProvenance {
     }
 
     /**
-     * The binding a walk asking {@code question} may go on to from {@code binding}, or null where
-     * this question is not entitled to one and where nothing was recorded.
+     * What a walk asking {@code question} may do at {@code binding} ({@link ElementStep}).
      *
      * <p>The one place an edge is read. Answered per question and never by asking whether this is
      * one of them: a question added here is one nobody has said what the edges mean for, and read as
      * "not that one" it would follow whichever edges the last question happened to leave — the
      * answer arrived at by not being asked.
+     *
+     * <p>And an edge this question does not cross is told from an edge nobody wrote. Both leave the
+     * walk with no binding to go on to and they license opposite things, so what comes back says
+     * which of the two it is rather than leaving a caller to read a missing binding as leave to look
+     * elsewhere.
      */
-    public BindingId predecessorOf(BindingId binding, ElementQuestion question) {
+    public ElementStep stepFrom(BindingId binding, ElementQuestion question) {
         return switch (binding == null ? null : edges.get(binding)) {
-            case null -> null;
+            case null -> new ElementStep.NoEdge();
             // The two bindings hold the same values, so either question goes on through.
-            case ElementEdge.TheSameAs(var container) -> container;
+            case ElementEdge.TheSameAs(var container) -> new ElementStep.Through(container);
             // What is made from a position came from it and is not it, so the walk after which
-            // position an expression names stops where the elements stop being the same ones.
+            // position an expression names stops where the elements stop being the same ones —
+            // stops, rather than arrives at a binding it does not have.
             case ElementEdge.MadeFrom(var container) -> switch (question) {
-                case NAMED_POSITION -> null;
-                case VALUE_ORIGIN -> container;
+                case NAMED_POSITION -> new ElementStep.Refused();
+                case VALUE_ORIGIN -> new ElementStep.Through(container);
             };
         };
     }

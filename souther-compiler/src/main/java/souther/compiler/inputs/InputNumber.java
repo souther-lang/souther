@@ -54,8 +54,7 @@ public final class InputNumber {
             return overARun(measured, inputs, reads, symbols);
         }
         // And a number of the input is the value at a position, so an expression naming none names
-        // no number here — the same answer for a value the input does not hold and for one this
-        // reading did not follow.
+        // no number here.
         return switch (reads.pathOf(e, symbols)) {
             case PathResolution.At(var at) -> new NumericTerm.ValueOf(at);
             case PathResolution.NotAPosition _ -> null;

@@ -3,11 +3,11 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.ElementQuestion;
+import souther.compiler.inputs.ElementStep;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -100,21 +100,32 @@ class TheElementsOfOneBindingStandOneWayToAnothersTest {
         builder.derivesFrom(ANOTHER, CONTAINER);
         ElementProvenance provenance = builder.built();
 
-        assertEquals(CONTAINER, provenance.predecessorOf(ELEMENTS, ElementQuestion.NAMED_POSITION),
+        assertEquals(new ElementStep.Through(CONTAINER),
+                provenance.stepFrom(ELEMENTS, ElementQuestion.NAMED_POSITION),
                 "the two hold the same values, so a rule about one is a rule about the other");
-        assertEquals(CONTAINER, provenance.predecessorOf(ELEMENTS, ElementQuestion.VALUE_ORIGIN),
+        assertEquals(new ElementStep.Through(CONTAINER),
+                provenance.stepFrom(ELEMENTS, ElementQuestion.VALUE_ORIGIN),
                 "and they came from there as well");
 
-        assertNull(provenance.predecessorOf(ANOTHER, ElementQuestion.NAMED_POSITION),
-                "what is made from a position is not that position");
-        assertEquals(CONTAINER, provenance.predecessorOf(ANOTHER, ElementQuestion.VALUE_ORIGIN),
+        assertEquals(new ElementStep.Refused(),
+                provenance.stepFrom(ANOTHER, ElementQuestion.NAMED_POSITION),
+                "what is made from a position is not that position, and there is no way round it");
+        assertEquals(new ElementStep.Through(CONTAINER),
+                provenance.stepFrom(ANOTHER, ElementQuestion.VALUE_ORIGIN),
                 "and it is where it came from");
     }
 
-    /** A binding nothing was said of is answered for neither question. */
+    /**
+     * A binding nothing was said of is told from one whose edge a question refuses.
+     *
+     * <p>Both leave a walk with nowhere to go on to, and only this one leaves what the binding
+     * holds to be read.
+     */
     @Test
-    void aBindingNothingWasSaidOfHasNoPredecessor() {
-        assertNull(ElementProvenance.NONE.predecessorOf(ELEMENTS, ElementQuestion.NAMED_POSITION));
-        assertNull(ElementProvenance.NONE.predecessorOf(ELEMENTS, ElementQuestion.VALUE_ORIGIN));
+    void aBindingNothingWasSaidOfIsNotOneThatWasRefused() {
+        assertEquals(new ElementStep.NoEdge(),
+                ElementProvenance.NONE.stepFrom(ELEMENTS, ElementQuestion.NAMED_POSITION));
+        assertEquals(new ElementStep.NoEdge(),
+                ElementProvenance.NONE.stepFrom(ELEMENTS, ElementQuestion.VALUE_ORIGIN));
     }
 }
