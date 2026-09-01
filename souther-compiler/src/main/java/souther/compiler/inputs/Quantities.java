@@ -31,10 +31,18 @@ import java.util.Optional;
  * A form is added up out of parts, and a part is the finest unit a relation survives in: the terms
  * of one parameter the reading of its declarations has a coordinate for, and the terms it has none
  * for. What a part comes to is what its terms are on their own — where each stands if it has been
- * fixed, what its own position was read to hold, and what the term guarantees of itself — and,
- * where the reading can be asked at all, those facts solved together with the rules that relate
- * them and the form projected out of that. Parts are added, and adding only ever makes an answer
- * out of answers, so a border can go away for being asked about properly and can never appear.
+ * fixed, where the values it is answered from leave it, and what the term guarantees of itself —
+ * and, where the reading can be asked at all, those facts solved together with the rules that
+ * relate them and the form projected out of that. Parts are added, and adding only ever makes an
+ * answer out of answers, so a border can go away for being asked about properly and can never
+ * appear.
+ *
+ * <p><b>Where a term's values come from is what says who answers for it, and there are two.</b> A
+ * number one position answers is answered by that position's own reading. A number taken over a run
+ * stands at no position, and is answered by what every value the run walks guarantees, put through
+ * the step the operation repeats from the value it starts at. Read as one — as a position's answer,
+ * because that was the only publisher there was — a total came back with nothing said about it, and
+ * a border on it was owed a row at a value the model admits nothing at.
  *
  * <p>Composed that way because neither meeting nor projecting distributes. Everything each term is
  * on its own, met against everything the relations leave the whole form, is wider than the sum of
