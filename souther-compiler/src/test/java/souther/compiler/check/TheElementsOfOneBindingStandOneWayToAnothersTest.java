@@ -2,12 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.ElementProvenance.CopyableFactKind;
 import souther.compiler.inputs.ElementQuestion;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -42,13 +39,24 @@ class TheElementsOfOneBindingStandOneWayToAnothersTest {
     /** The same fact written twice is the same fact. */
     @Test
     void oneEdgeWrittenTwiceIsOneEdge() {
-        ElementProvenance.Builder builder = new ElementProvenance.Builder();
-        builder.derivesFrom(ELEMENTS, CONTAINER);
-        builder.derivesFrom(ELEMENTS, CONTAINER);
+        ElementProvenance.Builder twice = new ElementProvenance.Builder();
+        twice.derivesFrom(ELEMENTS, CONTAINER);
+        twice.derivesFrom(ELEMENTS, CONTAINER);
 
-        assertEquals(Map.of(ELEMENTS, CONTAINER),
-                builder.built().of(CopyableFactKind.DERIVES_FROM),
+        ElementProvenance.Builder once = new ElementProvenance.Builder();
+        once.derivesFrom(ELEMENTS, CONTAINER);
+
+        assertEquals(once.built(), twice.built(),
                 "writing down what is already written down says nothing new");
+    }
+
+    /** An edge with no binding at the far end is not an edge. */
+    @Test
+    void anEdgeRunsToABinding() {
+        assertThrows(NullPointerException.class, () -> new ElementEdge.MadeFrom(null),
+                "answered, it would be the answer a binding with no edge gets");
+        assertThrows(NullPointerException.class, () -> new ElementEdge.TheSameAs(null),
+                "and the same of the other one");
     }
 
     /** Two ways at once is a binding whose elements are two things, and there is no reading of it. */

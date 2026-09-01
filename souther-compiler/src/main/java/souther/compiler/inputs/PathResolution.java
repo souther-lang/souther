@@ -23,8 +23,8 @@ package souther.compiler.inputs;
  * and there is nothing here to say it with — a method that answered "the position, or nothing" would
  * be that decision made once for every caller, and an answer added later would arrive at all of them
  * as nothing without one of them being asked. What the arms cost a reader is that every one of those
- * decisions is visible, which is what they are: an answer added here is fifteen places that do not
- * compile until each has said what it means there.
+ * decisions is visible, which is what they are: an answer added here does not compile until every
+ * place that reads one has said what it means there.
  */
 public sealed interface PathResolution {
 

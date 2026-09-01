@@ -30,8 +30,20 @@ import souther.compiler.core.Core;
  */
 sealed interface BindingRole {
 
-    /** The binding is a parameter of the behavior, which is a place a row writes at. */
-    record Root(TermPath path) implements BindingRole {}
+    /**
+     * The binding is a parameter of the behavior, which is a place a row writes at.
+     *
+     * <p>Each of these carries what makes it the answer it is, and refuses to be made without it.
+     * Held as a shape that may be empty, the answer "this is a parameter" and the answer "nothing
+     * here says where it came from" would be two values a reader cannot tell apart — which is the
+     * absence this ordering exists to have none of.
+     */
+    record Root(TermPath path) implements BindingRole {
+
+        public Root {
+            java.util.Objects.requireNonNull(path, "a parameter is the name of a position");
+        }
+    }
 
     /**
      * An operation of the language handed the binding an element of {@code container}.
@@ -41,7 +53,12 @@ sealed interface BindingRole {
      * that worked it out from the shape a rewrite happens to leave would answer for whichever shapes
      * that rewrite currently produces.
      */
-    record Element(Core container) implements BindingRole {}
+    record Element(Core container) implements BindingRole {
+
+        public Element {
+            java.util.Objects.requireNonNull(container, "an element came from a container");
+        }
+    }
 
     /**
      * The binding was given {@code value} on the way to where it is read.
@@ -57,7 +74,12 @@ sealed interface BindingRole {
      * from the reading built on it — after which what a name means could be asked of the answer to
      * what a name means.
      */
-    record Alias(Core value) implements BindingRole {}
+    record Alias(Core value) implements BindingRole {
+
+        public Alias {
+            java.util.Objects.requireNonNull(value, "a name was given something");
+        }
+    }
 
     /** Nothing here says where the binding came from. */
     record Unknown() implements BindingRole {}

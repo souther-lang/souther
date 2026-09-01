@@ -127,6 +127,48 @@ class HowAWrapperIsTakenApartDoesNotChangeWhatIsReadTest {
                         + measured(TAKEN_APART_BY_A_HELPER).rulesWithoutALine());
     }
 
+    /**
+     * And the threshold on the total is asked for, at the number the model wrote.
+     *
+     * <p>What the equalities above hold is that the two spellings answer alike, and two silences
+     * are alike. This says what the answer is: the model compares a total against a hundred
+     * thousand, so the reading reaches that comparison, cuts there, and plans a row that puts the
+     * total exactly on it.
+     *
+     * <p>Asserted of the model taken apart by a helper, which is the one that used to say nothing.
+     * Read from what the measure carries rather than from the report's text, since what is being
+     * held is that the question was asked and not how it is printed.
+     */
+    @Test
+    void andTheThresholdOnTheTotalIsAskedForAtTheNumberTheModelWrote() {
+        String said = whatWasMeasured(TAKEN_APART_BY_A_HELPER + ROWS);
+
+        assertTrue(said.contains("QuantityCut[at=100000]"),
+                () -> "the total is cut at the number the model compares against: " + said);
+        assertTrue(said.contains("AtTheLevel[at=100000]"),
+                () -> "and the point on the line is met by a total of exactly that: " + said);
+        assertTrue(said.contains("List.sum(batch[*].amount) = 100000"),
+                () -> "which is a point about the total of what the elements hold: " + said);
+        assertTrue(said.contains("Line { amount = 100000 }"),
+                () -> "and a row is planned that puts it there: " + said);
+    }
+
+    /** An example, so the offering is worked out and the row planned for the point is in it. */
+    private static final String ROWS = """
+
+            example judge
+                | "small" : (Batch([ Line { amount = 1 } ])) -> Small
+            """;
+
+    /** The whole of what one behavior's measure came to, as it stands. */
+    private static String whatWasMeasured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return souther.compiler.report.AdequacyReport.of(compilation)
+                .modules().get(0).behaviors().get(0).evidence().toString();
+    }
+
     /** Which positions a model is measured over, in the order the reading answers them. */
     private static java.util.List<String> positionsOf(String source) {
         return measured(source).notDerivable().stream()

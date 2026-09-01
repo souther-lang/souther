@@ -107,31 +107,6 @@ public final class ElementProvenance {
         };
     }
 
-    /**
-     * What one kind of fact this holds, as the bindings it is said of against the bindings it says
-     * them of. Here for what holds the law; a reader asks about one binding.
-     */
-    Map<BindingId, BindingId> of(CopyableFactKind kind) {
-        if (kind == CopyableFactKind.PROJECTS_EACH_ELEMENT_OF) {
-            return projections;
-        }
-        Map<BindingId, BindingId> out = new LinkedHashMap<>();
-        edges.forEach((binding, edge) -> {
-            if (kindOf(edge) == kind) {
-                out.put(binding, edge.container());
-            }
-        });
-        return Map.copyOf(out);
-    }
-
-    /** Which kind an edge is, said once so that an edge added is a kind the law has to place. */
-    private static CopyableFactKind kindOf(ElementEdge edge) {
-        return switch (edge) {
-            case ElementEdge.TheSameAs _ -> CopyableFactKind.HOLDS_THE_SAME_AS;
-            case ElementEdge.MadeFrom _ -> CopyableFactKind.DERIVES_FROM;
-        };
-    }
-
     /** Every closure parameter of a one-per-element walk, against the container walked. The one
      *  kind a reader beside this asks about as a whole, to say how many such walks a body has. */
     Map<BindingId, BindingId> projectedFrom() {

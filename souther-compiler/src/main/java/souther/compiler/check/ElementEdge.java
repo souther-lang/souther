@@ -22,10 +22,27 @@ sealed interface ElementEdge {
     /** The binding at the other end. */
     BindingId container();
 
-    /** The two bindings hold the same values, so a rule about one is a rule about the other. */
-    record TheSameAs(BindingId container) implements ElementEdge {}
+    /**
+     * The two bindings hold the same values, so a rule about one is a rule about the other.
+     *
+     * <p>An edge with no binding at the far end is refused here rather than where one is written.
+     * What such a value would come to is a walk answered "nothing to go on to", which is what a
+     * binding with no edge at all comes to — so the two would be one answer, and an edge that lost
+     * its end would read as a binding nothing was said of.
+     */
+    record TheSameAs(BindingId container) implements ElementEdge {
+
+        public TheSameAs {
+            java.util.Objects.requireNonNull(container, "an edge runs to a binding");
+        }
+    }
 
     /** The elements were made from the other binding's, so they came from there and are not
-     *  those values. */
-    record MadeFrom(BindingId container) implements ElementEdge {}
+     *  those values. Likewise no edge without a binding at the far end. */
+    record MadeFrom(BindingId container) implements ElementEdge {
+
+        public MadeFrom {
+            java.util.Objects.requireNonNull(container, "an edge runs to a binding");
+        }
+    }
 }

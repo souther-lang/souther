@@ -112,8 +112,7 @@ public final class UnreachableClaims {
     private static void claimedIn(Core.Match match, InputReads reads, Symbols symbols,
                                   souther.compiler.coverage.CoverageSites.Plan plan,
                                   NormalReturn answering, List<Claim> found) {
-        // A claim is about a position, so a scrutinee that names none carries none — and one this
-        // reading did not follow carries none it could name either.
+        // A claim is about a position, so a scrutinee that names none carries none.
         TermPath path = switch (reads.pathOf(match.scrutinee(), symbols)) {
             case PathResolution.At(var at) -> at;
             case PathResolution.NotAPosition _ -> null;

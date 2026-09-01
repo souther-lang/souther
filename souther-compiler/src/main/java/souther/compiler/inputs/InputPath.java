@@ -9,8 +9,8 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.types.BindingId;
 
 /**
- * Which position of a behavior's input an expression names, where it names none, or where this did
- * not read far enough to say ({@link PathResolution}).
+ * Which position of a behavior's input an expression names, and that it names none where it names
+ * none ({@link PathResolution}).
  *
  * <p>One answer, for every reader of a body that has something to say about a position. A
  * {@code guard} comparing a field, a {@code match} on a parameter and an arm declaring a case
