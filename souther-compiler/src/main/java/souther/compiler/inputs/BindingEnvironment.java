@@ -22,7 +22,7 @@ import java.util.Map;
  *
  * <p><b>And the facts themselves do not come back.</b> Which of them wins where a binding is more
  * than one of them, and what an edge between two bindings' elements licenses, are decisions with one
- * place each ({@link BindingRole}, {@link souther.compiler.check.ElementProvenance#predecessorOf}) —
+ * place each ({@link BindingRole}, {@link souther.compiler.check.ElementProvenance#stepFrom}) —
  * and a caller holding the tables would be free to make them again, in an order or with a licence of
  * its own. So what is published is the questions, and the tables are not among them.
  *

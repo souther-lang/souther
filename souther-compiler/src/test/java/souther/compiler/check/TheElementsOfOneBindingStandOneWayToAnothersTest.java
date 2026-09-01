@@ -116,6 +116,31 @@ class TheElementsOfOneBindingStandOneWayToAnothersTest {
     }
 
     /**
+     * And an edge is read for a question, never for none.
+     *
+     * <p>The same rule where a value is taken in rather than given out. What licenses crossing an
+     * edge is which question is being asked, so reading one without naming a question is the
+     * decision made by nobody. Asked of all three states, because only one of them consults the
+     * question at all: read after the edge, the other two would go through with no question having
+     * been asked, and the licence would be decided by which edge happened to be there.
+     */
+    @Test
+    void anEdgeIsReadForAQuestionAndNotForNone() {
+        ElementProvenance.Builder same = new ElementProvenance.Builder();
+        same.holdsTheSameAs(ELEMENTS, CONTAINER);
+        ElementProvenance.Builder made = new ElementProvenance.Builder();
+        made.derivesFrom(ELEMENTS, CONTAINER);
+
+        assertThrows(NullPointerException.class,
+                () -> ElementProvenance.NONE.stepFrom(ELEMENTS, null),
+                "a binding nothing was said of is still read for a question");
+        assertThrows(NullPointerException.class, () -> same.built().stepFrom(ELEMENTS, null),
+                "and an edge either question crosses is not one no question reads");
+        assertThrows(NullPointerException.class, () -> made.built().stepFrom(ELEMENTS, null),
+                "and the one that consults the question is not the only one that must have it");
+    }
+
+    /**
      * A binding nothing was said of is told from one whose edge a question refuses.
      *
      * <p>Both leave a walk with nowhere to go on to, and only this one leaves what the binding

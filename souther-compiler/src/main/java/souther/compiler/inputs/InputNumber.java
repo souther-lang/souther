@@ -38,8 +38,8 @@ public final class InputNumber {
     public static NumericTerm of(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
-            // A taking is of a location, and a walk that named none is a walk with no location to
-            // take it of — whether the argument stands nowhere or was not read to the end.
+            // A taking is of a location, so an argument that stands at none is one there is no
+            // location to take it of.
             TermPath of = switch (reads.pathOf(measured.of(), symbols)) {
                 case PathResolution.At(var at) -> at;
                 case PathResolution.NotAPosition _ -> null;

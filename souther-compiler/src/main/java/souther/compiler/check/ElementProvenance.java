@@ -27,7 +27,7 @@ import java.util.Map;
  * <p><b>An edge is never handed out.</b> What one licenses is not a property of the edge but of the
  * question being asked, and a reader holding one could answer that for itself — beside the one place
  * that answers it, and free to differ. So the only way to read an edge is to name a question, and
- * {@link #predecessorOf} is the whole of what comes back.
+ * {@link #stepFrom} is the whole of what comes back.
  *
  * <p>Bindings and not expressions. A binding tells one occurrence from another, which is what two
  * calls of one operation need, where an expression does not survive being copied, renamed or
@@ -99,6 +99,11 @@ public final class ElementProvenance {
      * elsewhere.
      */
     public ElementStep stepFrom(BindingId binding, ElementQuestion question) {
+        // Asked before the edge is looked up, so that reading one without naming a question is
+        // refused whatever was written there. Read after, the two edges that answer alike would go
+        // through without a question having been asked, and only the one that consults it would
+        // notice — which is the licence being decided by which edge happened to be there.
+        java.util.Objects.requireNonNull(question, "an edge is read for a question");
         return switch (binding == null ? null : edges.get(binding)) {
             case null -> new ElementStep.NoEdge();
             // The two bindings hold the same values, so either question goes on through.

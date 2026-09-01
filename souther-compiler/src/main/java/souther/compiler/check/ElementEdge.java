@@ -15,7 +15,7 @@ import souther.compiler.types.BindingId;
  * ({@link souther.compiler.inputs.ElementQuestion}), and a reader that could hold one would be free
  * to answer that for itself — which is the same defect as reading the two tables in an order of its
  * own, one step further in. So this is read where it is interpreted
- * ({@link ElementProvenance#predecessorOf}) and nowhere else.
+ * ({@link ElementProvenance#stepFrom}) and nowhere else.
  */
 sealed interface ElementEdge {
 

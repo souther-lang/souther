@@ -23,8 +23,19 @@ package souther.compiler.inputs;
  */
 public sealed interface ReadMeaning {
 
-    /** The name is a position of the behavior's input: a place a row writes at. */
-    record Position(TermPath path) implements ReadMeaning {}
+    /**
+     * The name is a position of the behavior's input: a place a row writes at.
+     *
+     * <p>A place, and refusing to be made without one. What this says of a name is exactly that
+     * there is somewhere a row writes, and one made with nowhere would say it of no place while
+     * every reader went on believing there was one.
+     */
+    record Position(TermPath path) implements ReadMeaning {
+
+        public Position {
+            java.util.Objects.requireNonNull(path, "a name at a position is at one");
+        }
+    }
 
     /**
      * The name and {@code denotes} are one value, which is what the name was given.

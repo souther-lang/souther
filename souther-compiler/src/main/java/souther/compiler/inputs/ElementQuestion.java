@@ -12,7 +12,7 @@ package souther.compiler.inputs;
  * <p><b>A closed set, and that is what it is for.</b> The edges are not handed out, so the only way
  * to read one is to name one of these; a caller cannot take an edge and decide later what it
  * licenses, and cannot invent a third licence beside these two. What each edge comes to for each
- * question is written in one place ({@link souther.compiler.check.ElementProvenance#predecessorOf}),
+ * question is written in one place ({@link souther.compiler.check.ElementProvenance#stepFrom}),
  * and adding either a question or an edge is a compile error there until somebody says what the pair
  * means.
  */

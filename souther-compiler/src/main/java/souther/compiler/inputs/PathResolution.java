@@ -28,8 +28,19 @@ package souther.compiler.inputs;
  */
 public sealed interface PathResolution {
 
-    /** Where the expression stands. */
-    record At(TermPath path) implements PathResolution {}
+    /**
+     * Where the expression stands.
+     *
+     * <p>Somewhere, and refusing to be made without it. A position that is no position is what the
+     * answer beside this one says, so a reader given one would be told a place was reached and find
+     * the absence it is held apart from.
+     */
+    record At(TermPath path) implements PathResolution {
+
+        public At {
+            java.util.Objects.requireNonNull(path, "a position reached is somewhere");
+        }
+    }
 
     /**
      * The expression names no position of the input, which is a fact about the model.
