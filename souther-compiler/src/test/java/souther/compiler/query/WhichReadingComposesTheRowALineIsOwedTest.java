@@ -70,6 +70,40 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                 "and the reading past it was never asked: a row anywhere settles the line");
     }
 
+    /**
+     * A row read back where it was built for outranks one nothing could place.
+     *
+     * <p>Both are rows a search composed and an author may be handed either, so a walk stopping at
+     * the first of them stops at whichever reading the module happened to declare first. What tells
+     * them apart is that only one has been seen at the point — which is what a reader asking
+     * whether a row can be written there is asking about, and it is not something the order of two
+     * call sites of one helper may decide.
+     */
+    @Test
+    void aRowThatWasPlacedOutranksOneNothingCouldPlace() {
+        PointResolution resolved = PointResolver.resolveAt(owed(),
+                List.of(at("unplaced"), at("placed")),
+                reading -> searched(reading.behavior().equals("unplaced")
+                        ? unverified(reading.behavior()) : built(reading.behavior())));
+
+        assertEquals("placed", assertInstanceOf(PointResolution.Generated.class, resolved)
+                        .composedBy(),
+                "the reading whose row was read back where it was built for is the one kept");
+    }
+
+    /** And where no reading placed one, the row nothing placed is still a row to offer. */
+    @Test
+    void aRowNothingPlacedIsStillOfferedWhereNothingBetterWas() {
+        PointResolution resolved = PointResolver.resolveAt(owed(),
+                List.of(at("unplaced"), at("neither")),
+                reading -> searched(reading.behavior().equals("unplaced")
+                        ? unverified(reading.behavior()) : notComposed()));
+
+        assertEquals("unplaced", assertInstanceOf(PointResolution.Generated.class, resolved)
+                        .composedBy(),
+                "a row this compiler could not read back is a row an author asked for");
+    }
+
     /** In the order the readings were handed over, which is the order the module declares them. */
     @Test
     void theReadingsAreWalkedInTheOrderTheyWereGiven() {
@@ -291,8 +325,17 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     }
 
     private static ItemAssessment.Attempt built(String carrier) {
-        return new ItemAssessment.Attempt.Built(new Generator.GeneratedRow(
+        return ItemAssessment.Attempt.Built.certified(new Generator.GeneratedRow(
                 new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null);
+    }
+
+    /** The same row, with nothing having read it back where it was built for. */
+    private static ItemAssessment.Attempt unverified(String carrier) {
+        return new ItemAssessment.Attempt.Unverified(new Generator.GeneratedRow(
+                new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null,
+                List.of(), new EstablishmentGap.Observation(
+                        java.util.Set.of(souther.compiler.observe.Incompleteness.Code
+                                .VALUE_TRUNCATED)));
     }
 
     /** The same, as what a reading holds at the point. */

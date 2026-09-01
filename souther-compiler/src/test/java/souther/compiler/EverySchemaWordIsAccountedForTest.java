@@ -428,7 +428,10 @@ class EverySchemaWordIsAccountedForTest {
         return List.of(
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
-                new ObligationDisposition.Undecided(),
+                new ObligationDisposition.Undecided(
+                        Set.of(ObligationDisposition.Uncertainty.COVERAGE)),
+                new ObligationDisposition.Undecided(
+                        Set.of(ObligationDisposition.Uncertainty.WRITABILITY)),
                 new ObligationDisposition.NotCounted(
                         Set.of(ObligationDisposition.Reason.NOTHING_WAS_READ)));
     }

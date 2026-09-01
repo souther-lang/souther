@@ -404,8 +404,27 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
 
         record Number(Place value) implements Reading {}
 
-        /** There was no value to read, and this is what stopped there being one. */
+        /**
+         * A value was there and the observation of it did not come back whole.
+         *
+         * <p>What {@link Incompleteness.Code} names is what an observation met, so only an
+         * observation may put one here. A walk that arrived at no value at all has met nothing and
+         * says {@link NoValue}: given a code instead, the nearest one is borrowed, and a reader
+         * downstream that words a code as what an observation did then says an observation did
+         * something that never happened.
+         */
         record Missing(Incompleteness.Code code) implements Reading {}
+
+        /**
+         * The walk answered with no value here, which is not an observation of one.
+         *
+         * <p>Apart from {@link Missing} because what a reader may do with it is not the same. A
+         * value the observation shortened is a value that exists and this compiler declined to
+         * keep; nothing arriving is this compiler unable to walk to a place, or a place that holds
+         * nothing under the reading being tried. Neither says anything about the number, and only
+         * the first is something a wider budget would have kept.
+         */
+        record NoValue() implements Reading {}
 
         /** The value was read and this term is not a number of it. An answer about the value and not
          * about the observation: a {@code Text} where a number was expected is a class nothing holds,

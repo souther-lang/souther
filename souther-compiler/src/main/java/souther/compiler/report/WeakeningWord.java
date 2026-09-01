@@ -26,8 +26,19 @@ public enum WeakeningWord {
     /** The same at one of the inputs. */
     INPUT_CASES_UNREADABLE,
 
-    /** A row's value at one border could not be read. */
+    /** A row's value at one border was observed and the observation did not come back whole. */
     BORDER_VALUE_UNREADABLE,
+
+    /**
+     * The walk arrived at no value at one border, so there was none to observe.
+     *
+     * <p>Its own word beside the one above. Both leave a point undecided and they are not the same
+     * news: a value an observation stopped is one a wider budget keeps, and a place this compiler
+     * could not get a value out of is not. Said with one word, a reader acting on the report cannot
+     * tell which of the two they are looking at, and the difference is the whole of what the reading
+     * beneath it was built to carry.
+     */
+    BORDER_VALUE_ABSENT,
 
     /** A rule of the model that a reader set aside. */
     RULE_UNREAD,

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.values.Value;
 
@@ -60,6 +61,12 @@ public final class Recognitions {
     /** One told apart by looking at the value, which there has to be one of to look at. */
     private static Membership byShape(ObservedValue value,
                                       java.util.function.Predicate<ObservedValue> holds) {
+        // No class holds what is not there, and which class it is in is what nothing can say. The
+        // word is this classifier's own: what a walk arrived at is not an observation, and the
+        // sentence read off this code is about placing a value rather than about a limit.
+        if (value == null) {
+            return new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE);
+        }
         Membership.Incomplete unread = Membership.unread(value);
         return unread != null ? unread : Membership.of(holds.test(value));
     }
@@ -111,6 +118,10 @@ public final class Recognitions {
             case NumericTerm.Reading.Number number -> Membership.of(
                     holds(count.is(), number.value(), count.carrier()));
             case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
+            // Nothing to place, which no class holds and none refuses either. Said in this
+            // classifier's word for it, as the value that never arrived is above.
+            case NumericTerm.Reading.NoValue _ ->
+                    new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE);
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
         };
     }

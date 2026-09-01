@@ -33,6 +33,9 @@ import souther.compiler.query.ObligationAssessment;
 import souther.compiler.query.ObligationCoverage;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
+import souther.compiler.query.EstablishmentGap;
+import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
@@ -49,6 +52,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * How well a model's {@code example}s cover it, as something a person reads and a build reads.
@@ -500,8 +504,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
         // and is under no finding, and this is the only place it can be said at all.
         for (Adequacy.DeclaredDebt each : account.undecided()) {
-            out.append(String.format("      ? undecided whether a row is at the %s point %s (%s)%n",
-                    each.debt().role(), each.said(), each.debt().describe(names, null)));
+            for (String said : undecidedBecause(each.debt().owed(),
+                    each.debt().role() + " point " + each.said()
+                            + " (" + each.debt().describe(names, null) + ")")) {
+                out.append(String.format("      ? %s%n", said));
+            }
             readings(out, each.debt(), _ -> true, _ -> "");
         }
         // And the ones the count leaves out, said here for the reason it counts them here: a line
@@ -1224,8 +1231,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
         // alone a reader is told a difference with nothing under it to act on.
         for (BorderObligationPointAssessment point : owed.undecided()) {
-            out.append(String.format("      ? undecided whether a row is at the %s point (%s)%n",
-                    point.role(), point.describe(names, declaredIn)));
+            for (String said : undecidedBecause(point.owed(),
+                    point.role() + " point (" + point.describe(names, declaredIn) + ")")) {
+                out.append(String.format("      ? %s%n", said));
+            }
             readings(out, point, _ -> true, _ -> "");
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
@@ -1677,6 +1686,98 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (reason) {
             case NOTHING_WAS_READ -> Surface.UNDER_THE_COUNT;
             case NOT_KNOWN_TO_BE_WRITABLE -> Surface.ON_ITS_OWN_LINE;
+        };
+    }
+
+    /**
+     * What is undecided about one obligation, a sentence per open question.
+     *
+     * <p>Two questions wear one verdict, and an author acts on them differently. Whether a row that
+     * is written stands at the point is answered by reading more of what the rows hold; whether a
+     * row can be written there at all is answered by this compiler keeping more of what it builds,
+     * and the second is not work an author can do. Said in one sentence, the second reads as the
+     * first and sends a reader to look through their own rows for something that is not there.
+     *
+     * <p>Read off the disposition rather than off what is beside it. Which questions are open is
+     * what the disposition was made to say, and a second reading here would be a second answer.
+     */
+    private static List<String> undecidedBecause(ObligationAssessment owed, String point) {
+        if (!(owed.disposition() instanceof ObligationDisposition.Undecided it)) {
+            return List.of();
+        }
+        List<String> said = new ArrayList<>();
+        for (ObligationDisposition.Uncertainty each : it.because()) {
+            said.add(switch (each) {
+                // And what the rows went without, which is what makes it undecided rather than
+                // missed. The reading carried whether a value was stopped or never arrived all the
+                // way here, and a sentence that stopped at "undecided" would be the last step of
+                // the carrying dropping it.
+                case COVERAGE -> "undecided whether a row is at the " + point
+                        + whatTheRowsWentWithout(owed);
+                // Named for what happened and not for the limit's number. Which budget it was is
+                // the observation's own word, and what an author is told is that the row this
+                // compiler composed is not evidence of anything until it can be read back.
+                case WRITABILITY -> "a row was built for the " + point
+                        + ", and " + why(owed.writabilityKnowledge());
+            });
+        }
+        return said;
+    }
+
+    /**
+     * What the readings of a point went without at the border, said after the verdict.
+     *
+     * <p>Empty where they went without nothing there — a point left undecided by a row that never
+     * ran has its reason said elsewhere, and repeating it here would be one gap wearing two
+     * sentences.
+     */
+    private static String whatTheRowsWentWithout(ObligationAssessment owed) {
+        List<String> said = new ArrayList<>();
+        for (Weakening each : owed.weakening().causes()) {
+            if (each instanceof Weakening.BorderValueUnreadable it) {
+                said.add(atTheBorder(it.why()));
+            }
+        }
+        return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
+    }
+
+    /** What one reading met at a border instead of a number, in the reading's own words. */
+    private static String atTheBorder(ReadingGap why) {
+        return switch (why) {
+            case ReadingGap.Observation(Incompleteness.Code code) -> whatStopped(code);
+            // Nothing was observed here, so nothing about an observation is said. What a reader is
+            // owed is that no value arrived at all, which no budget would have changed.
+            case ReadingGap.NoValue _ -> "the walk reached no value there to read";
+        };
+    }
+
+    /** Why nothing could confirm the row a search composed, in the observation's own words. */
+    private static String why(WritabilityKnowledge knowledge) {
+        if (!(knowledge instanceof WritabilityKnowledge.Prevented(EstablishmentGap by))) {
+            // Only a point whose showing was stopped is written this way, and what stopped it is
+            // what this exists to say.
+            throw new IllegalStateException("a point undecided about being writable was not "
+                    + "stopped from being shown so: " + knowledge);
+        }
+        return switch (by) {
+            case EstablishmentGap.Observation(Set<Incompleteness.Code> causes) -> causes.stream()
+                    .map(AdequacyReport::whatStopped)
+                    .collect(Collectors.joining(", and "));
+        };
+    }
+
+    /** What one observation gap cost, said as what it stopped rather than as its code. */
+    private static String whatStopped(Incompleteness.Code code) {
+        return switch (code) {
+            case VALUE_TRUNCATED -> "the observation of it was stopped by a limit, "
+                    + "so where it stands could not be read";
+            case VALUE_UNREADABLE -> "nothing could read it back, "
+                    + "so where it stands could not be read";
+            // Nothing else stops a value being read back at a point: the rest are about a row that
+            // did not run or a module nothing observed, and neither reaches a value just composed.
+            default -> throw new IllegalStateException(
+                    "an observation of a composed value stopped for a reason it cannot have: "
+                            + code);
         };
     }
 
@@ -3182,7 +3283,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     throw new IllegalArgumentException("an observation writes its own code");
             case Weakening.OutputCasesUnreadable _ -> WeakeningWord.OUTPUT_CASES_UNREADABLE;
             case Weakening.InputCasesUnreadable _ -> WeakeningWord.INPUT_CASES_UNREADABLE;
-            case Weakening.BorderValueUnreadable _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
+            // Read through to what the reading met. Both of these leave a point undecided and a
+            // reader acts on them differently, so a projection that answered one word for the pair
+            // would take the difference back out one step after the reading carried it here.
+            case Weakening.BorderValueUnreadable it -> switch (it.why()) {
+                case ReadingGap.Observation _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
+                case ReadingGap.NoValue _ -> WeakeningWord.BORDER_VALUE_ABSENT;
+            };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case souther.compiler.partition.ClosureGap.RuleUnread _ ->
                         WeakeningWord.RULE_UNREAD;

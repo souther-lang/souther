@@ -69,7 +69,18 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
      */
     public ItemAssessment.WritabilityEvidence writabilityEvidence() {
         return ItemAssessment.WritabilityEvidence.of(projection, hasRowWitness(),
-                attempt instanceof ItemAssessment.Attempt.Built);
+                attempt instanceof ItemAssessment.Attempt.Certified);
+    }
+
+    /**
+     * The same, and where the knowing stopped where there are no grounds.
+     *
+     * <p>What an account reads. The grounds alone answer one question and leave two situations
+     * looking alike — nothing has shown a row can be written, and the showing of it was stopped —
+     * and an account acts on those differently.
+     */
+    public WritabilityKnowledge writabilityKnowledge() {
+        return WritabilityKnowledge.of(writabilityEvidence(), attempt);
     }
 
     /** What the readings behind this went without. */
@@ -84,6 +95,6 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
      * to the two answers this holds, and {@link ObligationDisposition} is that question asked once.
      */
     public ObligationDisposition disposition() {
-        return ObligationDisposition.of(coverage, writabilityEvidence());
+        return ObligationDisposition.of(coverage, writabilityKnowledge());
     }
 }

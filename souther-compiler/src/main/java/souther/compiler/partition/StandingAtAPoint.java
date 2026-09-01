@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Whether a tuple of values stands at one point of a border.
@@ -35,8 +36,55 @@ public final class StandingAtAPoint {
      * read leaves the point undecided; a tuple that stands at the level and has no account of its
      * run is one nothing can say reached the comparison, which is not the same as one that ran and
      * did not reach it. Which of them a caller may treat as a miss is the caller's to say.
+     *
+     * <p><b>And the two that found the values are a case of their own.</b> A caller that wants to
+     * know whether the values were seen where the line is asks {@link AtPoint}, and one that wants
+     * to know whether anything watched the run tells its two arms apart — so which readers those
+     * two answers are alike to is settled here, once, rather than by each of them writing the pair
+     * into an arm of its own switch. A caller free to write its own pair is free to write any pair,
+     * and the pair that costs something is a walk that could not look put beside a walk that looked
+     * and found nothing.
      */
-    public enum Met { YES, NO, NOT_WATCHED, UNREADABLE }
+    public sealed interface Met {
+
+        /** The values stand where the line is. */
+        sealed interface AtPoint extends Met {}
+
+        /** And something watched the run reach the comparison, where reaching it was asked. */
+        record Reached() implements AtPoint {}
+
+        /** And nothing watched it get there, which this found out rather than concluded. */
+        record NotWatched() implements AtPoint {}
+
+        /** The values were read, and they are not where the line is. */
+        record NotAtPoint() implements Met {}
+
+        /**
+         * There was nothing at the point to compare, and this is what stopped there being one.
+         *
+         * <p>Carries every reason rather than the fact of there being some, and never one of them
+         * over another. A reader handed the case alone can say only that something went unread —
+         * which is {@code Observed} from {@code TruncatedByLimit} from {@code Absent} being lost one
+         * layer before anybody needs it; handed the strongest, it is lost wherever a point met both.
+         */
+        record CouldNotTell(Set<ReadingGap> why) implements Met {
+
+            public CouldNotTell {
+                if (why == null || why.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a point nothing could be told about says what stopped the telling");
+                }
+                // In the order they were met, for the reason a report keeps any order.
+                why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
+            }
+        }
+
+        Met REACHED = new Reached();
+
+        Met NOT_WATCHED = new NotWatched();
+
+        Met NOT_AT_POINT = new NotAtPoint();
+    }
 
     /**
      * The first of {@code rows} that stands there, or why none was found.
@@ -47,7 +95,7 @@ public final class StandingAtAPoint {
      */
     public static Met met(BorderQuantity quantity, BehaviorInputs where, List<ObservedInputs> rows,
                           Criterion criterion, Optional<ComparisonOccurrence> site) {
-        boolean unreadable = false;
+        Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
         boolean unwatched = false;
         for (ObservedInputs row : rows) {
             // A row has more than one value at a position inside a sequence, and standing at a point
@@ -59,16 +107,20 @@ public final class StandingAtAPoint {
             Map<TermPath, Integer> held = new LinkedHashMap<>();
             OneReadingOfARow first = new OneReadingOfARow(where, row, Map.of(), held);
             boolean stands = false;
-            boolean stopped = false;
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             for (OneReadingOfARow reading : readings(where, row, quantity, criterion, first, held)) {
                 switch (quantity.standsAt(criterion, reading)) {
                     // A reading that could not look, unless what it could not find was an element
                     // the row wrote none of — that is a row that was read and does not stand, and
                     // said of the reading it happened in rather than of the row, since another
                     // reading of the same row may reach the point.
-                    case UNREADABLE -> stopped = stopped || !reading.wroteNothing();
-                    case NO -> { }
-                    case YES -> stands = true;
+                    case BorderQuantity.Stands.CouldNotTell it -> {
+                        if (!reading.wroteNothing()) {
+                            stopped.addAll(it.why());
+                        }
+                    }
+                    case BorderQuantity.Stands.No _ -> { }
+                    case BorderQuantity.Stands.Yes _ -> stands = true;
                 }
                 if (stands) {
                     break;
@@ -76,12 +128,12 @@ public final class StandingAtAPoint {
             }
             if (stands) {
                 if (site.isEmpty()) {
-                    return Met.YES;   // writing the value is the whole of what there is to reach
+                    return Met.REACHED;   // writing the value is the whole of what there is to reach
                 }
                 switch (row.watched()) {
                     case Generator.Watched.Ran(var account) -> {
                         if (site.stream().allMatch(account::reached)) {
-                            return Met.YES;
+                            return Met.REACHED;
                         }
                     }
                     // It stands where the line is and nothing watched it get there. Said rather
@@ -90,12 +142,15 @@ public final class StandingAtAPoint {
                     case Generator.Watched.NoAccount _ -> unwatched = true;
                 }
             }
-            unreadable = unreadable || stopped;
+            unreadable.addAll(stopped);
         }
-        if (unreadable) {
-            return Met.UNREADABLE;
+        // Every reason any row met, the way one reading collects every reason its terms met. A
+        // point tried against several rows is one this could not tell about for whatever stopped
+        // any of them, and taking the strongest would say which row this walk began with.
+        if (!unreadable.isEmpty()) {
+            return new Met.CouldNotTell(unreadable);
         }
-        return unwatched ? Met.NOT_WATCHED : Met.NO;
+        return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
     }
 
     /**

@@ -13,6 +13,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -21,6 +22,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -2517,11 +2519,15 @@ public final class Generator {
                 if (!subject.parameters().get(parameter).equals(each.getKey().writeRoot().head())) {
                     continue;
                 }
-                String elsewhere = readsElsewhere(subject, parameter, observed, each.getKey(),
-                        each.getValue());
-                if (elsewhere != null) {
+                // Only a reading that placed the value somewhere else turns a candidate away. A
+                // reading that could not be made says nothing about where the value is, and a
+                // search that pruned on it would be spending this compiler's own limit as though
+                // it were an answer about the value. The whole-row reading that follows is where
+                // not being able to tell is recorded.
+                if (readsBackAt(subject, parameter, observed, each.getKey(), each.getValue())
+                        instanceof RealizationReadback.Elsewhere(String why)) {
                     refused[0] = true;
-                    return new CandidateCheck.Built.Refused(elsewhere);
+                    return new CandidateCheck.Built.Refused(why);
                 }
             }
             return built;
@@ -2529,27 +2535,29 @@ public final class Generator {
     }
 
     /**
-     * Where the row reads at the term's position, said only where that is not {@code at}.
+     * What reading one candidate back at the term's position came to.
      *
-     * <p>Null where nothing here can say. A fixing whose edge kept no orders, a position the row
-     * wrote no value at, a walk the value and the type disagree about — none of them is the row
-     * standing somewhere else, and refusing a candidate for one would turn what this compiler
-     * cannot see into a row the model does not have.
+     * <p><b>Three answers, and the third is not the second.</b> A value read where it was built for
+     * and a value read somewhere else are what this walk can establish; everything else is the walk
+     * unable to look, and this compiler being unable to look is not the model putting the value
+     * elsewhere. Held as a {@code null} beside a sentence, the two are one — the sentence is
+     * written whenever a number does not come back, so a value whose observation a limit cut short
+     * is refused with a sentence saying it does not stand where it plainly does.
      *
      * <p>One occurrence is enough, as it is for a row that was written: a row stands at a point
-     * where one of its readings does.
-     *
-     * @param on the orders the value was built against, carried from the edge that built it. Read
-     *           back on anything else, this would be a second reading of the position free to
-     *           disagree with the one the value came from
+     * where one of its readings does. And a reading that could not be made at one occurrence does
+     * not take back another that placed the value — the answers are looked at in that order.
      */
-    private static String readsElsewhere(MeasuredInput subject, int parameter,
-                                         souther.compiler.observe.ObservedValue observed,
-                                         RealizationTarget target, Place at) {
+    private static RealizationReadback readsBackAt(MeasuredInput subject, int parameter,
+                                                   souther.compiler.observe.ObservedValue observed,
+                                                   RealizationTarget target, Place at) {
         // The orders to read it back on, asked of the reading that answered them when the value was
         // built. Carried over from there instead, the two ends of one question would be two values
         // free to part, and a row would be read back on an order nothing composed it against.
         souther.compiler.inputs.TermOrders on = subject.quantities().ordersOf(target.term());
+        if (on == null) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.NoOrdersOnTheEdge());
+        }
         // Only this parameter's value is filled in: the walk reads the one the path names, and the
         // others are not this candidate's to say anything about.
         List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
@@ -2557,29 +2565,104 @@ public final class Generator {
         row.set(parameter, observed);
         List<souther.compiler.observe.ObservedValue> values =
                 subject.inputs().valuesAt(row, target.term().subjectPath());
-        if (values == null || values.isEmpty()) {
-            return null;
+        if (values == null) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
+        }
+        if (values.isEmpty()) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
         }
         // What the number is of, asked the way the term's own reader asks it. A number one position
         // answers is read at each value standing there, and a row stands at a point where one of its
         // readings does; a number over a run is read of all of them at once, since that is what the
         // walk was given and any one of them is not it.
+        Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
+        boolean nothing = false;
         boolean stands = switch (target) {
             case RealizationTarget.AtOnePosition _ -> {
                 boolean any = false;
                 for (souther.compiler.observe.ObservedValue value : values) {
-                    any |= on.read(value) instanceof NumericTerm.Reading.Number number
-                            && number.value().compareTo(at) == 0;
+                    switch (on.read(value)) {
+                        case NumericTerm.Reading.Number number ->
+                                any |= number.value().compareTo(at) == 0;
+                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
+                        // Nothing at this occurrence, which the walk answers with and another
+                        // occurrence may not. Neither placed nor elsewhere, and not something an
+                        // observation stopped either.
+                        case NumericTerm.Reading.NoValue _ -> nothing = true;
+                        case NumericTerm.Reading.NotNumber _ -> { }
+                    }
                 }
                 yield any;
             }
-            case RealizationTarget.OverARun _ ->
-                    on.readOver(values) instanceof NumericTerm.Reading.Number number
-                            && number.value().compareTo(at) == 0;
+            case RealizationTarget.OverARun _ -> switch (on.readOver(values)) {
+                case NumericTerm.Reading.Number number -> number.value().compareTo(at) == 0;
+                case NumericTerm.Reading.Missing missing -> {
+                    unread.add(missing.code());
+                    yield false;
+                }
+                case NumericTerm.Reading.NoValue _ -> {
+                    nothing = true;
+                    yield false;
+                }
+                case NumericTerm.Reading.NotNumber _ -> false;
+            };
         };
-        return stands ? null
-                : "it was composed to put " + target.term() + " at " + at
-                        + " and does not stand there";
+        if (stands) {
+            return new RealizationReadback.AtRequestedPlace();
+        }
+        if (!unread.isEmpty()) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.Observation(unread));
+        }
+        if (nothing) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
+        }
+        return new RealizationReadback.Elsewhere("it was composed to put " + target.term()
+                + " at " + at + " and does not stand there");
+    }
+
+    /**
+     * What reading a candidate back said about where it stands.
+     *
+     * <p>This walk's own vocabulary and not the one an account is written in. What is asked here is
+     * one parameter's value against one place, which is a cheap prune of the search — a candidate
+     * this lets through is one worth going on with, and never one this has declared to be a row at
+     * the point. What settles that is the whole row, read after it is composed, and what the
+     * <em>account</em> then says is written in the account's words.
+     */
+    private sealed interface RealizationReadback {
+
+        /** The value reads back as the number it was built for. */
+        record AtRequestedPlace() implements RealizationReadback {}
+
+        /** It reads back as some other number, and this is how that is said. */
+        record Elsewhere(String why) implements RealizationReadback {}
+
+        /** Nothing here could say where it reads, and this is what stopped the saying. */
+        record CouldNotTell(ReadbackGap why) implements RealizationReadback {}
+    }
+
+    /**
+     * What stopped one candidate being read back where it was built for.
+     *
+     * <p>Kept apart from what an account calls a gap. The cases here are this walk's own — an edge
+     * that carried no orders, a path the walk and the type disagree about — and only one of them is
+     * about the observation. Shared with the account's vocabulary, a prune's reasons would be
+     * offered as reasons a point cannot be shown writable, and three of these have nothing to do
+     * with that.
+     */
+    private sealed interface ReadbackGap {
+
+        /** The fixing's edge kept no orders, so there is nothing to read the value on. */
+        record NoOrdersOnTheEdge() implements ReadbackGap {}
+
+        /** The walk and the declared type disagree about the path, which the quantity reports. */
+        record WalkAndTypeDisagree() implements ReadbackGap {}
+
+        /** The row wrote no value at the position the term names. */
+        record NoValueAtThePosition() implements ReadbackGap {}
+
+        /** The observation of the value did not come back whole. */
+        record Observation(Set<Incompleteness.Code> causes) implements ReadbackGap {}
     }
 
     /**
