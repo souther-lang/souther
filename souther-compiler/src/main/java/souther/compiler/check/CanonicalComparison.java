@@ -4,18 +4,18 @@ package souther.compiler.check;
  * The canonical statement a comparison comes to, over two values of whatever a reader holds them
  * as.
  *
- * <p>Six ways to compare two values state three things between them: that the two are the same
- * value, that one stands below the other, and the denial of either. Which of the three a comparison
- * states is decided from what it placed ({@link ComparisonClaim}), and it is decided once — a
- * reader that worked it out from the operator would be a second answer, and the two agree only for
- * as long as somebody keeps them so.
+ * <p>Two statements carry the six ways to compare two values: that the two are the same value, and
+ * that one stands below the other. Each of them and its denial is four, and the two sides of an
+ * order are six. Which of them a comparison states is decided from what it placed
+ * ({@link ComparisonClaim}), and it is decided once — a reader that worked it out from the operator
+ * would be a second answer, and the two agree only for as long as somebody keeps them so.
  *
  * <p><b>A proposition and not a record of one.</b> Nothing here can be taken apart. Which of the
- * three this is, which side each value is on, and whether it is denied are what a reader would have
- * to put back together, and putting them back together is the derivation this type exists to hold:
- * a reader that switched on the first fact and forgot the last would state the comparison that
- * holds exactly where this one does not. So the only way to read one is {@link #expressedAs}, which
- * hands the reader its own three constructors and assembles the answer here.
+ * two it is, which side each value is on, and whether it is denied are what a reader would have to
+ * put back together, and putting them back together is the derivation this type exists to hold: a
+ * reader that switched on the first fact and forgot the last would state the comparison that holds
+ * exactly where this one does not. So the only way to read one is {@link #expressedAs}, which hands
+ * the reader its own way of writing each and assembles the answer here.
  *
  * <p><b>Over any two values.</b> A comparison of two terms and a comparison of two expressions
  * state the same thing about their sides, and what differs is only what a side is and what a
@@ -24,7 +24,7 @@ package souther.compiler.check;
  */
 final class CanonicalComparison<A> {
 
-    /** How a reader writes the three statements in its own representation. */
+    /** How a reader writes the two statements, and a denial, in its own representation. */
     interface Expression<A, T> {
 
         /** The two sides are the same value. */

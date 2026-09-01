@@ -67,8 +67,7 @@ class WhatAComparisonStatesIsDerivedFromWhatItPlacedTest {
     }
 
     private static Stated canonical(BinOp op) {
-        ComparisonClaim placed = (ComparisonClaim) ComparisonPlacement.of(op);
-        return placed.canonical("l", "r").expressedAs(AS_STATED);
+        return AsPlaced.claim(op).canonical("l", "r").expressedAs(AS_STATED);
     }
 
     @Test
@@ -99,9 +98,9 @@ class WhatAComparisonStatesIsDerivedFromWhatItPlacedTest {
     @Test
     void aTurnedOrderStatesTheSameThingOfTheSidesTurnedWithIt() {
         stated().keySet().stream()
-                .filter(op -> ComparisonPlacement.of(op) instanceof ComparisonClaim.Cut)
+                .filter(op -> AsPlaced.claim(op) instanceof ComparisonClaim.Cut)
                 .forEach(op -> {
-                    ComparisonClaim placed = (ComparisonClaim) ComparisonPlacement.of(op);
+                    ComparisonClaim placed = AsPlaced.claim(op);
                     assertEquals(placed.canonical("l", "r").expressedAs(AS_STATED),
                             placed.turned().canonical("r", "l").expressedAs(AS_STATED),
                             "turning the claim and the two sides together leaves the statement"
@@ -109,17 +108,27 @@ class WhatAComparisonStatesIsDerivedFromWhatItPlacedTest {
                 });
     }
 
-    /** And a denied claim states the denial of what it stated. */
-    @Test
-    void aDeniedClaimStatesTheDenialOfWhatItStated() {
-        stated().forEach((op, was) -> {
-            ComparisonClaim placed = (ComparisonClaim) ComparisonPlacement.of(op);
-            assertEquals(denial(was), placed.denied().canonical("l", "r").expressedAs(AS_STATED),
-                    "what holds where a comparison does not is what it states, denied: " + op);
-        });
+    /** Which comparison holds exactly where each of them does not. Written out, because the two
+     *  sides of a denial are both rows of the table above and neither is worked out from the
+     *  other: the statement of a denied claim is read off this table and not by wrapping what the
+     *  claim stated, which for half of them would be a denial of a denial and is a shape nothing
+     *  here makes. */
+    private static Map<BinOp, BinOp> refuting() {
+        Map<BinOp, BinOp> out = new LinkedHashMap<>();
+        out.put(BinOp.EQ, BinOp.NE);
+        out.put(BinOp.NE, BinOp.EQ);
+        out.put(BinOp.LT, BinOp.GE);
+        out.put(BinOp.GE, BinOp.LT);
+        out.put(BinOp.GT, BinOp.LE);
+        out.put(BinOp.LE, BinOp.GT);
+        return out;
     }
 
-    private static Stated denial(Stated stated) {
-        return stated instanceof Stated.Denied denied ? denied.of() : new Stated.Denied(stated);
+    /** And a denied claim states what the comparison holding where it does not states. */
+    @Test
+    void aDeniedClaimStatesWhatRefusesIt() {
+        refuting().forEach((op, refusing) -> assertEquals(stated().get(refusing),
+                AsPlaced.claim(op).denied().canonical("l", "r").expressedAs(AS_STATED),
+                "what holds where a comparison does not is what its denial states: " + op));
     }
 }

@@ -46,11 +46,7 @@ class TwoWritingsOfOneComparisonAreOneTermTest {
     }
 
     private Term comparing(BinOp op, Term left, Term right) {
-        return interned.comparison(placed(op).canonical(left, right));
-    }
-
-    private static ComparisonClaim placed(BinOp op) {
-        return (ComparisonClaim) ComparisonPlacement.of(op);
+        return interned.comparison(AsPlaced.claim(op).canonical(left, right));
     }
 
     @Test

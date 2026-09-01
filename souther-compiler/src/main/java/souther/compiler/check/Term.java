@@ -734,7 +734,7 @@ final class Term {
          * <p>Two clauses comparing the same two terms are one term however the author reached for
          * the comparison, which matters wherever the comparison is not the whole condition — only
          * there can the denial not be carried by the polarity instead. What each spelling states is
-         * the claim's answer, and this says what a term for each of the three is.
+         * the claim's answer, and this says which term states it.
          */
         Term comparison(CanonicalComparison<Term> canonical) {
             return canonical.expressedAs(asTerms);
@@ -742,7 +742,7 @@ final class Term {
 
         private final AsTerms asTerms = new AsTerms();
 
-        /** Which term each of the three canonical statements is. */
+        /** Which term a canonical statement is written as. */
         private final class AsTerms implements CanonicalComparison.Expression<Term, Term> {
 
             /** Whose two parts are unordered, because which side of an equality a value was written

@@ -2251,18 +2251,18 @@ final class Terms {
      * operands.
      *
      * <p>Recognised here, where the node is. A comparison of two values is named by what it placed
-     * ({@link ComparisonClaim#canonical}), so the six ways to write one come to the three things
-     * they state and two clauses comparing the same two values meet as one term. Handed the
+     * ({@link ComparisonClaim#canonical}), so the six ways to write one come to what they state and
+     * two clauses comparing the same two values meet as one term. Handed the
      * operator instead, what a comparison states would be read a second time below the point where
      * it was already settled. What is left is an operator the interner takes as written.
      */
     private Naming binary(Core.Binary b, Denotations at, Map<BindingId, Term> bound, int depth,
                           Leaf leaf) {
         List<Core> sides = List.of(b.left(), b.right());
-        Comparison compared = Comparison.of(b).orElse(null);
-        if (compared != null) {
+        ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+        if (placed != null) {
             return over(sides, at, bound, depth, leaf,
-                    ps -> interned.comparison(compared.claim().canonical(ps.get(0), ps.get(1))));
+                    ps -> interned.comparison(placed.canonical(ps.get(0), ps.get(1))));
         }
         return over(sides, at, bound, depth, leaf,
                 ps -> interned.operator(b.op(), ps.get(0), ps.get(1)));
