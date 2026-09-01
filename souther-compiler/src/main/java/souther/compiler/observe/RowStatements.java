@@ -81,6 +81,37 @@ public final class RowStatements {
         }
 
         /**
+         * One value of a stand-in as it was read: what it is, and where it is written.
+         *
+         * <p>Kept until the stand-in is known to be one a row can hand over, and not after. What a
+         * reader is given is the values; where each of them was written is what a reader is sent to
+         * when one of them turns out not to be carryable, and there is nothing to send anyone to
+         * once they all are.
+         */
+        record Written(ObservedValue value, SourcePos at) {
+
+            public Written {
+                if (value == null || at == null) {
+                    throw new IllegalArgumentException("a value a stand-in states is written"
+                            + " somewhere");
+                }
+            }
+        }
+
+        /** One entry as it was read: the arguments it answers for, its answer, and where the entry
+         *  itself is written. */
+        record EntryRead(List<Written> arguments, Written answer, SourcePos at) {
+
+            public EntryRead {
+                arguments = List.copyOf(arguments);
+                if (answer == null || at == null) {
+                    throw new IllegalArgumentException("an entry answers what it states, and is"
+                            + " written somewhere");
+                }
+            }
+        }
+
+        /**
          * What a stand-in stating these was read as.
          *
          * <p>Every value it states, in the order it states them: each entry as it is written, its
@@ -94,12 +125,13 @@ public final class RowStatements {
          *              built and compared against
          */
         static StandInRead of(ValueName.Behavior dependency, SourcePos at, List<Type> takes,
-                              List<StoodIn.Entry> entries, StoodIn.Otherwise otherwise) {
+                              List<EntryRead> entries, StoodIn.Otherwise otherwise) {
             if (dependency == null || at == null || otherwise == null) {
                 throw new IllegalArgumentException("a stand-in is one dependency's, written"
                         + " somewhere, and answers what it is not written to");
             }
-            for (StoodIn.Entry entry : entries) {
+            List<StoodIn.Entry> carried = new ArrayList<>();
+            for (EntryRead entry : entries) {
                 if (entry.arguments().size() != takes.size()) {
                     // An entry states a call, and a call to this dependency is as many values as it
                     // declares. One stating another number is an entry nothing can ever be matched
@@ -108,16 +140,19 @@ public final class RowStatements {
                     throw new IllegalArgumentException("`" + dependency + "` takes " + takes.size()
                             + " and an entry states " + entry.arguments().size());
                 }
-                for (ObservedValue argument : entry.arguments()) {
-                    Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(argument);
+                List<ObservedValue> arguments = new ArrayList<>();
+                for (Written argument : entry.arguments()) {
+                    Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(argument.value());
                     if (stopped != null) {
-                        return unavailable(dependency, entry.at(), stopped);
+                        return unavailable(dependency, argument.at(), stopped);
                     }
+                    arguments.add(argument.value());
                 }
-                Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(entry.answer());
+                Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(entry.answer().value());
                 if (stopped != null) {
-                    return unavailable(dependency, entry.at(), stopped);
+                    return unavailable(dependency, entry.answer().at(), stopped);
                 }
+                carried.add(new StoodIn.Entry(arguments, entry.answer().value(), entry.at()));
             }
             if (otherwise instanceof StoodIn.Otherwise.Answer(ObservedValue value, SourcePos where)) {
                 Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(value);
@@ -125,7 +160,7 @@ public final class RowStatements {
                     return unavailable(dependency, where, stopped);
                 }
             }
-            return new Available(StoodIn.of(dependency, at, takes, entries, otherwise));
+            return new Available(StoodIn.of(dependency, at, takes, carried, otherwise));
         }
 
         private static StandInRead unavailable(ValueName.Behavior dependency, SourcePos at,

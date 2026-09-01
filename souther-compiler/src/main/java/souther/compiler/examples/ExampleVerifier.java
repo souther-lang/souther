@@ -304,11 +304,16 @@ public final class ExampleVerifier {
             // What the row states, read the one way a table's row is read. What a person is shown
             // is beside it and is this reader's own: the two are not one string, which is the
             // whole reason a machine-readable half is carried at all.
-            StoodIn.Entry carried = ExampleStatements.carried(fixtures, entry);
+            RowStatements.StandInRead.EntryRead carried =
+                    ExampleStatements.carried(fixtures, entry);
             List<String> shownInputs = new ArrayList<>();
             for (int i = 0; i < entry.arguments().length; i++) {
                 shownInputs.add(fixtures.shown(fixtures.structured(entry.arguments()[i]),
                         sig.ins().get(i).type()));
+            }
+            List<ObservedValue> inputs = new ArrayList<>();
+            for (RowStatements.StandInRead.Written argument : carried.arguments()) {
+                inputs.add(argument.value());
             }
             List<RecordedRow> alsoBy = new ArrayList<>();
             for (StatedRow stated : rows) {
@@ -317,7 +322,7 @@ public final class ExampleVerifier {
                 }
             }
             entries.add(new StandinEntry(of, behavior, first.pos(), entry.row(),
-                    carried.arguments(), carried.answer(), shownInputs,
+                    inputs, carried.answer().value(), shownInputs,
                     fixtures.shown(fixtures.structured(entry.answer().value()), sig.outputType()),
                     alsoBy));
         }
@@ -2107,14 +2112,16 @@ public final class ExampleVerifier {
         // What the table was written to answer, off the same build the dispatch above is. The rows
         // it cannot dispatch to are not among them: a reader walking these is walking answers the
         // stand-in can give, and which rows those are is the table's own rule to have decided.
-        List<StoodIn.Entry> entries = new ArrayList<>();
+        List<RowStatements.StandInRead.EntryRead> entries = new ArrayList<>();
         for (ExampleStatements.Standin entry : table.explicit()) {
             entries.add(ExampleStatements.carried(fixtures, entry));
         }
+        // The `_` row's answer, quoted where that answer is written rather than where the row
+        // begins: it is the only value the row states, and it is the one a reader is sent to.
         ExampleStatements.Standin fallback = table.fallback();
         StoodIn.Otherwise otherwise = fallback == null ? new StoodIn.Otherwise.NothingStated()
                 : new StoodIn.Otherwise.Answer(fixtures.observed(fallback.answer().value()),
-                        fallback.row().pos());
+                        fallback.row().output().pos());
         return new StoodInFor.Read(new DependencyStandin(dependency, arity, body),
                 RowStatements.StandInRead.of(dependency, fk.pos(), takes(depSig), entries,
                         otherwise));

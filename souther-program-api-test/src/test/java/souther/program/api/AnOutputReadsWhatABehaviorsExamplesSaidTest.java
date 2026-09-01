@@ -327,6 +327,54 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
     }
 
     /**
+     * And which value of the stand-in it was, where a row states more than one.
+     *
+     * <p>A table's row states one value for each of the dependency's arguments and one more for the
+     * answer. Told only which row nothing could be made of, an author is left to work out which of
+     * them it was — so what is said is the place that value is written, which is what tells the
+     * second argument from the first.
+     */
+    @Test
+    void andWhichOfTheValuesOnTheRowItWas() {
+        StringBuilder elements = new StringBuilder();
+        for (int i = 0; i < 65; i++) {
+            elements.append(i == 0 ? "" : ", ").append(i);
+        }
+        CheckedProgram program = CheckedProgram.of(List.of("""
+                module demo
+
+                data Count = Int
+
+                behavior tally : (label: String, xs: List<Int>) -> Count
+
+                behavior countOf : (label: String) -> Count
+                    depends on tally
+
+                let countOf (label, tally) = tally(label, [ ])
+
+                fake tally
+                    | ("a",
+                       [ %s ])
+                        -> Count(1)
+                    | _ -> Count(0)
+
+                example countOf
+                    | "counted by what stands in" : ("a") -> Count(0)
+                """.formatted(elements)));
+
+        CheckedRow row = behavior(program, "demo", "countOf").rows().get(0);
+        RowStatement.StandInUnavailable why = assertInstanceOf(
+                RowStatement.StandInUnavailable.class,
+                assertInstanceOf(CheckedRow.NotReproducible.class, row.statement()).why());
+
+        // The row begins on line 13 with its first argument, its second is on 14, and the answer it
+        // states for them is on 15. What was not kept is the second argument, and neither the row
+        // nor the answer is what a reader is sent to.
+        assertEquals(14, why.at().line(),
+                "quoted at the value that was not kept, which is the second argument");
+    }
+
+    /**
      * What a field holds is read from what declares it, all the way from the program.
      *
      * <p>A row writing {@code [ 1, 2 ]} says which elements and not which order they are in, and

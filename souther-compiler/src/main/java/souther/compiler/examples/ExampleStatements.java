@@ -26,8 +26,7 @@ import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.FieldTypes;
-import souther.compiler.observe.ObservedValue;
-import souther.compiler.observe.StoodIn;
+import souther.compiler.observe.RowStatements;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -969,13 +968,21 @@ public final class ExampleStatements {
      * behavior carries it to an output that has to answer the dependency itself, and a reader of the
      * examples repository is shown it beside the text. Read twice, the two would be free to observe
      * one row as two values.
+     *
+     * <p>Each value with where that value is written, and not with where the row is. A row states
+     * one for each of the dependency's arguments and one more for the answer; told only which row a
+     * value that could not be carried is on, an author is left to work out which of them nothing
+     * could be made of.
      */
-    static StoodIn.Entry carried(FixtureReader fixtures, Standin entry) {
-        List<ObservedValue> arguments = new ArrayList<>();
-        for (Object argument : entry.arguments()) {
-            arguments.add(fixtures.observed(argument));
+    static RowStatements.StandInRead.EntryRead carried(FixtureReader fixtures, Standin entry) {
+        List<RowStatements.StandInRead.Written> arguments = new ArrayList<>();
+        for (int i = 0; i < entry.arguments().length; i++) {
+            arguments.add(new RowStatements.StandInRead.Written(
+                    fixtures.observed(entry.arguments()[i]), entry.row().inputs().get(i).pos()));
         }
-        return new StoodIn.Entry(arguments, fixtures.observed(entry.answer().value()),
+        return new RowStatements.StandInRead.EntryRead(arguments,
+                new RowStatements.StandInRead.Written(fixtures.observed(entry.answer().value()),
+                        entry.row().output().pos()),
                 entry.row().pos());
     }
 
