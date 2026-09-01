@@ -100,6 +100,14 @@ public final class RowStatements {
                         + " somewhere, and answers what it is not written to");
             }
             for (StoodIn.Entry entry : entries) {
+                if (entry.arguments().size() != takes.size()) {
+                    // An entry states a call, and a call to this dependency is as many values as it
+                    // declares. One stating another number is an entry nothing can ever be matched
+                    // against — carried, it would be a stand-in with an answer no argument reaches
+                    // and a reader with no way to tell that from one it simply was not asked.
+                    throw new IllegalArgumentException("`" + dependency + "` takes " + takes.size()
+                            + " and an entry states " + entry.arguments().size());
+                }
                 for (ObservedValue argument : entry.arguments()) {
                     Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(argument);
                     if (stopped != null) {
