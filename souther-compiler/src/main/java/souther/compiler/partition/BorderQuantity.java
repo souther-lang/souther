@@ -7,10 +7,14 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a border is a border <em>of</em>: the quantity a rule cuts.
@@ -91,7 +95,7 @@ public sealed interface BorderQuantity {
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
             return switch (of.read(row.at(term.position()))) {
-                case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
+                case NumericTerm.Reading.Missing missing -> Stands.unreadable(missing.code());
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
                         where.holds(new Level.OnACarrier(of.answered(), number.value()))
@@ -303,9 +307,18 @@ public sealed interface BorderQuantity {
             // whole number is no number at all, and the row stood at nothing (#1018).
             NumericTerm.Reading here = on.read(row.at(on.term().subjectPath()));
             NumericTerm.Reading there = against.read(row.at(against.term().subjectPath()));
-            if (here instanceof NumericTerm.Reading.Missing
-                    || there instanceof NumericTerm.Reading.Missing) {
-                return Stands.UNREADABLE;
+            // Both sides, and not the first of them. The pair is unreadable for whatever stopped
+            // either, and a reader told about one end is being told which end this happened to
+            // look at first.
+            Set<Incompleteness.Code> stopped = EnumSet.noneOf(Incompleteness.Code.class);
+            if (here instanceof NumericTerm.Reading.Missing missing) {
+                stopped.add(missing.code());
+            }
+            if (there instanceof NumericTerm.Reading.Missing missing) {
+                stopped.add(missing.code());
+            }
+            if (!stopped.isEmpty()) {
+                return new Stands.Unreadable(stopped);
             }
             if (!(here instanceof NumericTerm.Reading.Number onAt)
                     || !(there instanceof NumericTerm.Reading.Number againstAt)) {
@@ -521,6 +534,15 @@ public sealed interface BorderQuantity {
         @Override
         public Stands standsAt(Criterion where, Observation row) {
             java.math.BigDecimal at = java.math.BigDecimal.ZERO;
+            // Every term before anything is concluded. What stopped a reading is collected over the
+            // whole form rather than taken from whichever term the map handed over first: the form
+            // is unreadable for whatever stopped any of it, and stopping at the first said which
+            // term this walk happened to begin with. A term that read as no number at all is held
+            // until then for the same reason — a form with one of each is one nothing could read,
+            // and answering that it does not stand would be this compiler's own gap said as the
+            // model's answer.
+            Set<Incompleteness.Code> stopped = EnumSet.noneOf(Incompleteness.Code.class);
+            boolean noNumber = false;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
                 // Each on its own order. Read on one order for the whole form, a position written
                 // back differently from its neighbour was read as a value it does not hold.
@@ -534,13 +556,21 @@ public sealed interface BorderQuantity {
                     case NumericTerm.TakenOver over ->
                             orders.readOver(row.everyValueAt(over.subjectPath()));
                 };
-                if (read instanceof NumericTerm.Reading.Missing) {
-                    return Stands.UNREADABLE;
+                if (read instanceof NumericTerm.Reading.Missing missing) {
+                    stopped.add(missing.code());
+                    continue;
                 }
                 if (!(read instanceof NumericTerm.Reading.Number number)) {
-                    return Stands.NO;
+                    noNumber = true;
+                    continue;
                 }
                 at = at.add(Count.number(number.value()).at().multiply(each.getValue()));
+            }
+            if (!stopped.isEmpty()) {
+                return new Stands.Unreadable(stopped);
+            }
+            if (noNumber) {
+                return Stands.NO;
             }
             return where.holds(new Level.ACount(new Count(at)))
                     ? Stands.YES : Stands.NO;
@@ -748,11 +778,48 @@ public sealed interface BorderQuantity {
      */
     BoundaryTarget.Shape shape();
 
-    /** Whether a row is at an item, where a row that could not be read is neither. */
-    enum Stands {
-        YES,
-        NO,
-        UNREADABLE
+    /**
+     * Whether a row is at an item, where a row that could not be read is neither.
+     *
+     * <p>The third carries what stopped the reading, because that is a fact about this compiler's
+     * observation and never one about the model. Answered without it, a reader is left to work out
+     * from what it has why there was nothing to compare — and what it has is the absence of a
+     * number, which reads exactly like a number that did not match.
+     */
+    sealed interface Stands {
+
+        /** The values stand at the item. */
+        record Yes() implements Stands {}
+
+        /** They were read, and they do not. */
+        record No() implements Stands {}
+
+        /**
+         * There was no number to compare, and this is what there was instead.
+         *
+         * <p>More than one where the quantity reads more than one term: a rule relating two
+         * positions and a form over several are each unreadable for whatever stopped any of them,
+         * and naming one would be picking which of them a reader is told about.
+         */
+        record Unreadable(Set<Incompleteness.Code> causes) implements Stands {
+
+            public Unreadable {
+                if (causes == null || causes.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a reading nothing could be made of says what stopped it");
+                }
+                causes = Collections.unmodifiableSet(EnumSet.copyOf(causes));
+            }
+        }
+
+        Stands YES = new Yes();
+
+        Stands NO = new No();
+
+        /** Unreadable for one reason, which is what a quantity reading one term has. */
+        static Stands unreadable(Incompleteness.Code code) {
+            return new Unreadable(EnumSet.of(code));
+        }
     }
 
     /** What one row holds at each of a behavior's positions, for a quantity reading its own value
