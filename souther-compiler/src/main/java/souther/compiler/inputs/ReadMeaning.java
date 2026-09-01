@@ -1,5 +1,8 @@
 package souther.compiler.inputs;
 
+import java.util.List;
+import java.util.Objects;
+
 /**
  * What a name a body reads stands for, said in terms of the behavior's input.
  *
@@ -33,7 +36,7 @@ public sealed interface ReadMeaning {
     record Position(TermPath path) implements ReadMeaning {
 
         public Position {
-            java.util.Objects.requireNonNull(path, "a name at a position is at one");
+            Objects.requireNonNull(path, "a name at a position is at one");
         }
     }
 
@@ -48,7 +51,7 @@ public sealed interface ReadMeaning {
     record Through(Denotation denotes) implements ReadMeaning {
 
         public Through {
-            java.util.Objects.requireNonNull(denotes, "a name read through denotes something");
+            Objects.requireNonNull(denotes, "a name read through denotes something");
         }
     }
 
@@ -78,14 +81,14 @@ public sealed interface ReadMeaning {
      * know what they agree on may ignore how many there are, and one that identified them here
      * would have taken that decision for every reader.
      */
-    record OneOf(java.util.List<Denotation> alternatives) implements ReadMeaning {
+    record OneOf(List<Denotation> alternatives) implements ReadMeaning {
 
         public OneOf {
             if (alternatives == null || alternatives.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a name stands for something, so its alternatives are not none");
             }
-            alternatives = java.util.List.copyOf(alternatives);
+            alternatives = List.copyOf(alternatives);
         }
     }
 

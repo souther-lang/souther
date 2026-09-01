@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import java.util.Objects;
+
 /**
  * What a reading of where an expression stands came to.
  *
@@ -38,7 +40,7 @@ public sealed interface PathResolution {
     record At(TermPath path) implements PathResolution {
 
         public At {
-            java.util.Objects.requireNonNull(path, "a position reached is somewhere");
+            Objects.requireNonNull(path, "a position reached is somewhere");
         }
     }
 

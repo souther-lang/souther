@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import souther.compiler.types.BindingId;
 
+import java.util.Objects;
+
 /**
  * What a walk over the binding graph may do at one binding, for the question it is asking.
  *
@@ -25,7 +27,7 @@ public sealed interface ElementStep {
     record Through(BindingId binding) implements ElementStep {
 
         public Through {
-            java.util.Objects.requireNonNull(binding, "a step goes to a binding");
+            Objects.requireNonNull(binding, "a step goes to a binding");
         }
     }
 

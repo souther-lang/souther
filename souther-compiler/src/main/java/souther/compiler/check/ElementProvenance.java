@@ -6,6 +6,7 @@ import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Where the elements of what a binding holds came from, for the bindings an expansion wrote.
@@ -103,7 +104,7 @@ public final class ElementProvenance {
         // refused whatever was written there. Read after, the two edges that answer alike would go
         // through without a question having been asked, and only the one that consults it would
         // notice — which is the licence being decided by which edge happened to be there.
-        java.util.Objects.requireNonNull(question, "an edge is read for a question");
+        Objects.requireNonNull(question, "an edge is read for a question");
         return switch (binding == null ? null : edges.get(binding)) {
             case null -> new ElementStep.NoEdge();
             // The two bindings hold the same values, so either question goes on through.

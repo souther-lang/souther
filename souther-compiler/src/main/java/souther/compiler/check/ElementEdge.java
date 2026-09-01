@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.types.BindingId;
 
+import java.util.Objects;
+
 /**
  * How the elements of what one binding holds stand to the elements of another's.
  *
@@ -33,7 +35,7 @@ sealed interface ElementEdge {
     record TheSameAs(BindingId container) implements ElementEdge {
 
         public TheSameAs {
-            java.util.Objects.requireNonNull(container, "an edge runs to a binding");
+            Objects.requireNonNull(container, "an edge runs to a binding");
         }
     }
 
@@ -42,7 +44,7 @@ sealed interface ElementEdge {
     record MadeFrom(BindingId container) implements ElementEdge {
 
         public MadeFrom {
-            java.util.Objects.requireNonNull(container, "an edge runs to a binding");
+            Objects.requireNonNull(container, "an edge runs to a binding");
         }
     }
 }

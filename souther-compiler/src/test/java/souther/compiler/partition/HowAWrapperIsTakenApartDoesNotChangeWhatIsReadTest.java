@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -165,7 +166,7 @@ class HowAWrapperIsTakenApartDoesNotChangeWhatIsReadTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return souther.compiler.report.AdequacyReport.of(compilation)
+        return AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).evidence().toString();
     }
 

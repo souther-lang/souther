@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import souther.compiler.core.Core;
 
+import java.util.Objects;
+
 /**
  * What a binding is, by where it came from: the one ordering of the facts a name is answered from.
  *
@@ -41,7 +43,7 @@ sealed interface BindingRole {
     record Root(TermPath path) implements BindingRole {
 
         public Root {
-            java.util.Objects.requireNonNull(path, "a parameter is the name of a position");
+            Objects.requireNonNull(path, "a parameter is the name of a position");
         }
     }
 
@@ -56,7 +58,7 @@ sealed interface BindingRole {
     record Element(Core container) implements BindingRole {
 
         public Element {
-            java.util.Objects.requireNonNull(container, "an element came from a container");
+            Objects.requireNonNull(container, "an element came from a container");
         }
     }
 
@@ -77,7 +79,7 @@ sealed interface BindingRole {
     record Alias(Core value) implements BindingRole {
 
         public Alias {
-            java.util.Objects.requireNonNull(value, "a name was given something");
+            Objects.requireNonNull(value, "a name was given something");
         }
     }
 
