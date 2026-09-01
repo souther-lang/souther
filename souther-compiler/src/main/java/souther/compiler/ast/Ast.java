@@ -817,18 +817,6 @@ public interface Ast {
             return written.pos();
         }
 
-        /**
-         * The same initialiser over a rewritten value.
-         *
-         * <p>The field's occurrence is the author's and survives a rewrite of what fills it. Naming
-         * the field again — which every rewrite that took {@link #name()} and a position did — puts a
-         * spelling where an occurrence was, and what is lost is the only record of where the author
-         * wrote it: a report about the field then underlines as many characters as the name has,
-         * starting where it starts, which is the same thing until it is not.
-         */
-        public FieldInit withValue(Expr rewritten) {
-            return rewritten == value ? this : new FieldInit(written, rewritten);
-        }
     }
 
     // --- expressions ---
@@ -1205,13 +1193,6 @@ public interface Ast {
          */
         public static FieldAccess restamped(Expr target, String field, SourcePos at, Region over) {
             return new FieldAccess(target, WrittenName.synthetic(field, at), at, over);
-        }
-
-        /** The same access over a rewritten target. The field's occurrence and the stretch of source
-         * the read was written over are the author's and survive a rewrite of what it reads from —
-         * naming the field again here would put a spelling where an occurrence was. */
-        public FieldAccess withTarget(Expr rewritten) {
-            return rewritten == target ? this : new FieldAccess(rewritten, name, pos, region);
         }
 
         /** The field this reads. */
