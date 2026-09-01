@@ -8,6 +8,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.Towards;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -45,7 +46,7 @@ class ACutSaysWhatItDividesAndWhereTest {
                 new BorderQuantity.OfACoordinate(AxisId.of("f", term("n")), term("n"),
                         souther.compiler.inputs.TermOrders.itself(WHOLE)),
                 new Level.OnACarrier(WHOLE, new Count(new BigDecimal(t))),
-                new ComparisonClaim.Cut(true, false), null);
+                new ComparisonClaim.Cut(Towards.BELOW, false), null);
     }
 
     /** {@code k * n > t}, read as an arithmetic form over a multiple of that position. */
@@ -53,7 +54,7 @@ class ACutSaysWhatItDividesAndWhereTest {
         return new Cutting(
                 new BorderQuantity.OverAForm("f", form("n", k), Map.of(term("n"), souther.compiler.inputs.TermOrders.itself(WHOLE))),
                 new Level.ACount(new Count(new BigDecimal(t))),
-                new ComparisonClaim.Cut(true, false), null);
+                new ComparisonClaim.Cut(Towards.BELOW, false), null);
     }
 
     /**
@@ -126,7 +127,7 @@ class ACutSaysWhatItDividesAndWhereTest {
         Cutting closed = new Cutting(
                 new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrders.itself(WHOLE))),
                 new Level.ACount(new Count(new BigDecimal("9"))),
-                new ComparisonClaim.Cut(true, true), null);
+                new ComparisonClaim.Cut(Towards.BELOW, true), null);
 
         assertEquals("4|5", closed.seam().key());
     }

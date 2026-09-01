@@ -3,6 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
+
+import java.util.Objects;
 
 /**
  * A value a behavior compares an input against, and which side of it the value itself falls on.
@@ -23,8 +26,15 @@ import souther.compiler.numeric.Place;
  *                in an {@code ensures}. Both leave values a row can write either side; what differs
  *                is what meeting the line takes, and that is the origin's to answer
  */
-public record Threshold(NumericTerm.FromOnePosition term, Seam parts, boolean valueBelongsBelow,
+public record Threshold(NumericTerm.FromOnePosition term, Seam parts, Towards valueBelongs,
                         OriginRef origin) {
+
+    /** A side and not the absence of one, for the reason a cut's own is
+     *  ({@link souther.compiler.check.ComparisonClaim.Cut}): a line with no side reads as one
+     *  whose value falls above it, and asks for a row against the wrong neighbour. */
+    public Threshold {
+        Objects.requireNonNull(valueBelongs, "which side of the line its own value falls on");
+    }
 
     /**
      * Where a row is owed against this line, as a value of the position, or null where the position
@@ -41,7 +51,7 @@ public record Threshold(NumericTerm.FromOnePosition term, Seam parts, boolean va
      * a third or the decimal next to one.
      */
     public Place value() {
-        Level beside = valueBelongsBelow ? parts.below() : parts.above();
+        Level beside = valueBelongs == Towards.BELOW ? parts.below() : parts.above();
         return beside instanceof Level.OnACarrier on ? on.at() : null;
     }
 

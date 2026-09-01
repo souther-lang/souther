@@ -1384,7 +1384,14 @@ public final class InvariantChecker {
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
         }
-        if (!InvariantBound.ordering(bin.op()) && bin.op() != BinOp.EQ) {
+        // A rule that orders the values, or one that says which value they take. A rule that only
+        // rules a value out is read no further here, and neither is an operator that compares
+        // nothing: what is below reads a clause for the end it places on a position and for which
+        // declarations narrowed that position, and neither of those is a thing a denial of one
+        // value states.
+        ComparisonClaim asWritten = Comparison.of(bin).map(Comparison::claim).orElse(null);
+        if (asWritten == null
+                || asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
             settle(bin, from, states(bin, at, byName, arithmeticOf(bin, at, byName)),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
@@ -1394,11 +1401,11 @@ public final class InvariantChecker {
         // says.
         Coordinate found = byName.get(nameOf(bin.left(), at));
         Core bound = bin.right();
-        BinOp op = bin.op();
+        ComparisonClaim said = asWritten;
         if (found == null) {
             found = byName.get(nameOf(bin.right(), at));
             bound = bin.left();
-            op = InvariantBound.flipped(op);
+            said = said.turned();
         }
         // An end where the other side is a constant, and a relation everywhere else. Which it is
         // cannot be asked of the other side's name: what a clause compares a coordinate to may be a
@@ -1408,9 +1415,9 @@ public final class InvariantChecker {
         // the order places none — there is no value to draw a line at — and it is not a relation
         // either: what it compares the coordinate to is a constant this read perfectly. So it falls
         // out here rather than being filed as a clause that could have moved an edge.
-        InvariantBound.Read end = found == null || !InvariantBound.ordering(op)
-                ? new InvariantBound.Read.NoEnd()
-                : InvariantBound.at(op, Terms.asWrittenValue(bound), found.carrier());
+        InvariantBound.Read end = found != null && said instanceof ComparisonClaim.Cut cut
+                ? InvariantBound.at(cut, Terms.asWrittenValue(bound), found.carrier())
+                : new InvariantBound.Read.NoEnd();
         Coordinate about = found;
         // What the clause is about, asked of the comparison and not of what `end` came to. A
         // coordinate compared for order against something naming no other coordinate states where
@@ -1425,7 +1432,7 @@ public final class InvariantChecker {
         // `width` stops that no reading can ever answer, because a rule relating two positions
         // places no end (ADR-0090). The reader already knows: the reason it records for such a
         // comparison is `ComparisonBetweenPositions`.
-        if (about != null && InvariantBound.ordering(op)
+        if (about != null && said instanceof ComparisonClaim.Cut
                 && coordinatesIn(bound, at, byName).isEmpty()
                 && shape instanceof ClauseStates.SomethingElse named) {
             Set<RuleKey> names = new LinkedHashSet<>(named.named());
@@ -1466,7 +1473,7 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            noLineDrawn(bin, from, part, at, byName, noLines, read);
+            noLineDrawn(bin, asWritten, from, part, at, byName, noLines, read);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1662,11 +1669,12 @@ public final class InvariantChecker {
      * left a finding at {@code y} of a rule its own canonical form had cancelled — and the word
      * left there was the word for {@code x}.
      */
-    private void noLineDrawn(Core.Binary comparison, RuleRef.Invariant from, int conjunct,
+    private void noLineDrawn(Core.Binary comparison, ComparisonClaim placed,
+                            RuleRef.Invariant from, int conjunct,
                             Denotations at,
                             Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out,
                             Arithmetic read) {
-        if (!InvariantBound.ordering(comparison.op())) {
+        if (!(placed instanceof ComparisonClaim.Cut)) {
             return;
         }
         Places left = placesIn(comparison.left(), at, byName);

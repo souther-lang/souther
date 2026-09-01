@@ -1,11 +1,11 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.Towards;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -83,27 +83,22 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * included — was downgraded to one nothing promises is writable.
      */
     public static Read of(Hir.Expr clause, Carrier carrier) {
-        if (carrier == null || !(clause instanceof Hir.Binary bin)) {
+        ClauseComparison read = carrier == null ? null
+                : ClauseComparison.of(clause).orElse(null);
+        if (read == null) {
             return NO_END;
         }
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
-        Hir.Expr left = bin.left();
-        Hir.Expr right = bin.right();
-        BinOp op = bin.op();
-        if (!isValue(left) && isValue(right)) {
-            Hir.Expr swap = left;
-            left = right;
-            right = swap;
-            op = mirrored(op);
+        if (!isValue(read.left())) {
+            read = read.turned();
         }
-        if (!isValue(left)) {
+        // An equality states both ends at once and a disequality states neither, so neither is an
+        // end this has anywhere to put.
+        if (!isValue(read.left()) || !(read.claim() instanceof ComparisonClaim.Cut cut)) {
             return NO_END;
         }
-        Place bound = carrier.literalOf(right);
-        if (bound == null) {
-            return NO_END;
-        }
-        return ordered(op, bound, carrier);
+        Place bound = carrier.literalOf(read.right());
+        return bound == null ? NO_END : ordered(cut, bound, carrier);
     }
 
     /**
@@ -116,18 +111,20 @@ public record InvariantBound(boolean lower, Endpoint end) {
     public static Read ofSize(Hir.Expr clause, ValueName measure) {
         // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
         // where one does.
-        return sizeComparedIn(clause, measure, VALUE)
-                .map(read -> ordered(read.op(), Count.of(read.count()), Carrier.WHOLE))
-                .orElse(NO_END);
+        SizeComparison read = sizeComparedIn(clause, measure, VALUE).orElse(null);
+        return read != null && read.claim() instanceof ComparisonClaim.Cut cut
+                ? ordered(cut, Count.of(read.count()), Carrier.WHOLE)
+                : NO_END;
     }
 
     /**
      * A comparison of a counted number against a literal, as it was written.
      *
-     * @param op    the operator, with the count on the left however the clause was spelled
+     * @param claim what the comparison placed on the count, read with the count on the left however
+     *              the clause was spelled
      * @param count what it is compared against
      */
-    public record SizeComparison(BinOp op, BigDecimal count) {}
+    private record SizeComparison(ComparisonClaim claim, BigDecimal count) {}
 
     /**
      * The comparison {@code clause} makes about {@code measure} taken of {@code subject}, or empty
@@ -135,30 +132,25 @@ public record InvariantBound(boolean lower, Endpoint end) {
      *
      * <p>Before any reading of what it means. {@link #ofSize} turns one of these into an end of a
      * range and answers nothing for the comparisons that are not ends — an equality states both ends
-     * at once and a disequality states neither, so a range has nowhere to put them. A reader asking
-     * something a range cannot hold, such as whether a count of none is refused, needs the comparison
-     * itself. Recognised here so that the shape is read in one place and what it means in as many as
-     * there are questions.
+     * at once and a disequality states neither, so a range has nowhere to put them. Kept apart from
+     * that reading so that the shape a clause has to be to say anything about a count is recognised
+     * in one place, and what such a comparison means in as many as there are questions to ask of it.
      */
-    public static Optional<SizeComparison> sizeComparedIn(Hir.Expr clause, ValueName measure,
-                                                          String subject) {
-        if (!(clause instanceof Hir.Binary bin)) {
+    private static Optional<SizeComparison> sizeComparedIn(Hir.Expr clause, ValueName measure,
+                                                           String subject) {
+        ClauseComparison read = ClauseComparison.of(clause).orElse(null);
+        if (read == null) {
             return Optional.empty();
         }
-        Hir.Expr left = bin.left();
-        Hir.Expr right = bin.right();
-        BinOp op = bin.op();
-        if (!takesSizeOf(left, measure, subject) && takesSizeOf(right, measure, subject)) {
-            Hir.Expr swap = left;
-            left = right;
-            right = swap;
-            op = mirrored(op);
+        if (!takesSizeOf(read.left(), measure, subject)) {
+            read = read.turned();
         }
-        if (!takesSizeOf(left, measure, subject)) {
+        if (!takesSizeOf(read.left(), measure, subject)) {
             return Optional.empty();
         }
-        BigDecimal count = wholeLiteral(right);
-        return count == null ? Optional.empty() : Optional.of(new SizeComparison(op, count));
+        BigDecimal count = wholeLiteral(read.right());
+        return count == null ? Optional.empty()
+                : Optional.of(new SizeComparison(read.claim(), count));
     }
 
     /**
@@ -173,39 +165,36 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * one question with one answer whatever recognised the coordinate — asked again here, a strict
      * bound would land on the neighbour in one reader and on the literal in the other.
      *
-     * @param op    the comparison, with the coordinate on its left
+     * @param cut   what the comparison placed, stated of the coordinate
      * @param bound what the coordinate is compared against
      */
-    static Read at(BinOp op, Hir.Expr bound, Carrier carrier) {
+    static Read at(ComparisonClaim.Cut cut, Hir.Expr bound, Carrier carrier) {
         if (carrier == null || bound == null) {
             return NO_END;
         }
         Place at = carrier.literalOf(bound);
-        return at == null ? NO_END : ordered(op, at, carrier);
+        return at == null ? NO_END : ordered(cut, at, carrier);
     }
 
-    /** Which comparison an operand on the right states of one on the left. */
-    static BinOp flipped(BinOp op) {
-        return mirrored(op);
-    }
-
-    /** Whether {@code op} says where values stop rather than which one a value is. */
-    static boolean ordering(BinOp op) {
-        return ComparisonPlacement.orders(op);
-    }
-
-    /** One end, from the comparison and how the carrier's counts are spaced. */
-    private static Read ordered(BinOp op, Place bound, Carrier carrier) {
-        boolean steps = carrier.spacing() == Granularity.DISCRETE;
-        return switch (op) {
-            case GE -> placed(true, Endpoint.inclusive(bound));
-            case LE -> placed(false, Endpoint.inclusive(bound));
-            case GT -> steps ? stepped(true, carrier.onTheGrid(Count.number(bound).plus(1)))
-                    : placed(true, Endpoint.exclusive(bound));
-            case LT -> steps ? stepped(false, carrier.onTheGrid(Count.number(bound).minus(1)))
-                    : placed(false, Endpoint.exclusive(bound));
-            default -> NO_END;
-        };
+    /**
+     * One end, from what the comparison placed and how the carrier's counts are spaced.
+     *
+     * <p>Which end it is and whether the end admits the number are the claim's two answers: a rule
+     * bounds a value below exactly where the values it admits are above the number it named, and
+     * the end is the number itself exactly where the rule holds there. What is left for this to
+     * decide is where a refused number leaves the end, which is a fact about the order and not
+     * about the comparison.
+     */
+    private static Read ordered(ComparisonClaim.Cut cut, Place bound, Carrier carrier) {
+        boolean lower = cut.satisfyingSide() == Towards.ABOVE;
+        if (cut.holdsAtTheValue()) {
+            return placed(lower, Endpoint.inclusive(bound));
+        }
+        if (carrier.spacing() != Granularity.DISCRETE) {
+            return placed(lower, Endpoint.exclusive(bound));
+        }
+        Count number = Count.number(bound);
+        return stepped(lower, carrier.onTheGrid(lower ? number.plus(1) : number.minus(1)));
     }
 
     private static Read placed(boolean lower, Endpoint end) {
@@ -246,16 +235,6 @@ public record InvariantBound(boolean lower, Endpoint end) {
 
     private static boolean isValue(Hir.Expr e) {
         return e instanceof Hir.Var v && v.name().equals(VALUE);
-    }
-
-    private static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case LE -> BinOp.GE;
-            case GT -> BinOp.LT;
-            case GE -> BinOp.LE;
-            default -> op;
-        };
     }
 
     /** A whole number a literal names, or null where it names one with a fraction: a value that

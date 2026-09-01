@@ -31,19 +31,6 @@ import souther.compiler.check.ComparisonClaim;
 public record LineFacts(ComparisonClaim claim) {
 
     /**
-     * The line a rule that keeps a run of the values drew, which is what a bound is.
-     *
-     * <p>The one place a caller holding an order as two facts rather than as the claim can make one
-     * of these. A bound keeps the values one way of its own and admits its own value or does not,
-     * and those are the two an order is; a rule that names a value has neither, so there is no way
-     * in here to ask for one and no way to build the state where a value both is named and belongs
-     * to a side.
-     */
-    public static LineFacts ordering(boolean valueBelongsBelow, boolean holdsAtTheValue) {
-        return new LineFacts(new ComparisonClaim.Cut(valueBelongsBelow, holdsAtTheValue));
-    }
-
-    /**
      * Whether the rule is true at the line's own value, which is what says which of the two points
      * against the line a row there stands at.
      *
@@ -80,8 +67,7 @@ public record LineFacts(ComparisonClaim claim) {
             case DomainPoint.AtTheLine _ -> holdsAtTheValue();
             case DomainPoint.BesideTheLine _ -> !holdsAtTheValue();
             case DomainPoint.InTheRegion in -> claim instanceof ComparisonClaim.Cut order
-                    ? in.side() == Border.satisfyingSide(order.holdsAtTheValue(),
-                            order.valueBelongsBelow())
+                    ? in.side() == order.satisfyingSide()
                     : !holdsAtTheValue();
         };
     }

@@ -14,6 +14,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Towards;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -203,15 +204,14 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
     /**
      * Which way a comparison holds, off what it claims about the value it names.
      *
-     * <p>Two facts and they are enough: whether the value it names is on the side the comparison is
-     * true below, and whether the comparison holds at that value. {@code x <= c} holds below and at
-     * it; {@code x < c} holds below and not at it, and {@code c} is above; {@code x >= c} holds
-     * above and at it; {@code x > c} holds above and not at it, and {@code c} is below. So the true
-     * side is the low one exactly where those two agree.
+     * <p>Which side it is true on and whether it is true at the value it names, which is one
+     * comparison of the six. {@code x <= c} holds below and at it; {@code x < c} holds below and
+     * not at it; {@code x >= c} holds above and at it; {@code x > c} holds above and not at it.
+     * The side is the claim's own answer and is not worked out here from the two facts it holds.
      */
     private static Rel relOf(ComparisonClaim claim) {
         return switch (claim) {
-            case ComparisonClaim.Cut cut -> cut.valueBelongsBelow() == cut.holdsAtTheValue()
+            case ComparisonClaim.Cut cut -> cut.satisfyingSide() == Towards.BELOW
                     ? (cut.holdsAtTheValue() ? Rel.LE : Rel.LT)
                     : (cut.holdsAtTheValue() ? Rel.GE : Rel.GT);
             case ComparisonClaim.Singled singled ->

@@ -1,16 +1,18 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Towards;
+
+import java.util.Objects;
+
 /**
  * What a comparison placed on a position's values, read off the comparison and nothing else.
  *
  * <p>One classification, asked wherever a rule compares a position to something: a clause of an
  * invariant, a comparison in a body, a clause of an {@code ensures}. A rule is read the same way
  * wherever it is written (spec §boundary-coordinates), and this is the reading that says what it
- * placed. It was three: {@code InvariantBound.ordering} answered it for a {@code data}'s clauses,
- * {@code ComparedLine.of} for a body's and a declaration's comparisons, and
- * {@code GuardThresholds.orders} answered a coarser version of the same question under the same
- * word. Three answers to one question drift, and two of them already had: an equality places a line
- * where a body writes it and placed nothing where a {@code data} did.
+ * placed. Answered once, and carried from wherever a comparison was recognised: a second answer to
+ * it drifts from this one, and an equality places a line under one of them and nothing under the
+ * other while both go on being called what a rule placed.
  *
  * <p><b>Two cases, because an operator that placed nothing is no comparison.</b> That an operator
  * compares is settled where a comparison is recognised ({@link Comparison}), and this is what such
@@ -41,22 +43,84 @@ public sealed interface ComparisonClaim
     ComparisonClaim turned();
 
     /**
+     * What the comparison that holds exactly where this one does not places, which is the same
+     * partition selected the other way round.
+     *
+     * <p>A denial is the comparison's own meaning and not a reader's arrangement: {@code x <= c}
+     * fails exactly where {@code x > c} holds, and both say the number named is on the low side.
+     * Answered from the claim, a reader that meets a rule under a negation has the claim of the
+     * rule it states; answered from the operator, it is a second table of operators that agrees
+     * with this one only for as long as somebody keeps it so.
+     *
+     * <p>Asked of a claim and not of a {@link ComparisonPlacement}, because a denial is of
+     * something stated. There is nothing an operator that placed nothing states the failure of.
+     */
+    ComparisonClaim denied();
+
+    /**
      * An order: the values either side of the line are different classes.
      *
-     * @param valueBelongsBelow whether the number named is on the low side. {@code x <= c} puts it
-     *                          there; {@code x < c} puts it on the high side. Getting this wrong
-     *                          moves the line by one and asks for a row that proves nothing
-     * @param holdsAtTheValue   whether the comparison is true at the number named. Not derivable
-     *                          from the other: {@code x <= c} and {@code x > c} agree about which
-     *                          class the number is in and disagree here
+     * @param valueBelongs    which class the number named is itself in. {@code x <= c} puts it
+     *                        below; {@code x < c} puts it above. Getting this wrong moves the line
+     *                        by one and asks for a row that proves nothing
+     * @param holdsAtTheValue whether the comparison is true at the number named. Not derivable
+     *                        from the other: {@code x <= c} and {@code x > c} agree about which
+     *                        class the number is in and disagree here
      */
-    record Cut(boolean valueBelongsBelow, boolean holdsAtTheValue) implements ComparisonClaim {
+    record Cut(Towards valueBelongs, boolean holdsAtTheValue) implements ComparisonClaim {
+
+        /**
+         * A side and not the absence of one.
+         *
+         * <p>Which class the number named is in is one of two answers and the language has no way
+         * to say so of a reference, so it is said here. Absent, every reader comparing it to a
+         * side gets the other one — a cut with no side reads as one bounding the values below, and
+         * an order the model never stated goes on being answered about.
+         */
+        public Cut {
+            Objects.requireNonNull(valueBelongs, "which class the number a cut names is in");
+        }
 
         /** Turning the sides round moves the number named to the other class and leaves whether the
          *  rule holds there alone: {@code x <= c} and {@code -x >= -c} are one statement. */
         @Override
-        public ComparisonClaim turned() {
-            return new Cut(!valueBelongsBelow, holdsAtTheValue);
+        public Cut turned() {
+            return new Cut(valueBelongs.opposite(), holdsAtTheValue);
+        }
+
+        /** The same line with the other class selected, which is what a denial of an order is. */
+        @Override
+        public Cut denied() {
+            return new Cut(valueBelongs, !holdsAtTheValue);
+        }
+
+        /**
+         * Which side of the line the comparison is true on.
+         *
+         * <p>The one place the two facts a cut holds are put together. Which class the number named
+         * is in and whether the rule holds there are separate answers, and every question about the
+         * line — which end of a range it is, which way a run of values has to lie to satisfy it,
+         * which side a row is owed on — is this one. Worked out where each of those is asked, the
+         * pairing of the two is remembered in as many places as there are readers, and a reader
+         * that pairs them the other way round answers every one of its own questions consistently
+         * about a line whose sides are swapped.
+         */
+        public Towards satisfyingSide() {
+            return holdsAtTheValue ? valueBelongs : valueBelongs.opposite();
+        }
+
+        /**
+         * The order satisfied on {@code side} that answers {@code holdsAtTheValue} at the value it
+         * names, which is {@link #satisfyingSide} read the other way.
+         *
+         * <p>For a reader that kept the side rather than the class the value is in — a bound
+         * records which end of a range it placed, and which side its own value falls on follows
+         * from that end together with whether the bound admits it. Run backwards by such a reader,
+         * the derivation is the pairing of the two facts written a second time, and a line stated
+         * as one end and read back as the other is a line whose sides are the wrong way round.
+         */
+        public static Cut satisfiedOn(Towards side, boolean holdsAtTheValue) {
+            return new Cut(holdsAtTheValue ? side : side.opposite(), holdsAtTheValue);
         }
     }
 
@@ -77,8 +141,15 @@ public sealed interface ComparisonClaim
 
         /** An equality names a value and orders nothing, so there is nothing to turn round. */
         @Override
-        public ComparisonClaim turned() {
+        public Singled turned() {
             return this;
+        }
+
+        /** The other of the two classes: what is denied of the value named is met everywhere
+         *  else. */
+        @Override
+        public Singled denied() {
+            return new Singled(!holdsAtTheValue);
         }
     }
 

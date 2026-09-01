@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
@@ -102,14 +103,11 @@ public sealed interface OriginRef {
      * comparison is not modelled, because no measure asks it: a row meets the line by lighting the
      * comparison's own probe.
      *
-     * @param rule              which comparison, which is the rule and the whole of it
-     * @param read              which reading of that rule this is, and where it was met
-     * @param valueBelongsBelow which side of the line the cut value itself is on. It decides which
-     *                          neighbour is the other class's edge: {@code <= 3000} leaves 3001 over
-     *                          there, {@code < 3000} leaves 2999.
-     * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
-     *                          from {@code valueBelongsBelow}: {@code x <= c} and {@code x > c} agree
-     *                          about the class the value is in and disagree here
+     * @param rule  which comparison, which is the rule and the whole of it
+     * @param read  which reading of that rule this is, and where it was met
+     * @param facts what the rule placed on the values ({@link souther.compiler.check.ComparisonClaim
+     *              ComparisonClaim}), which decides which neighbour is the other class's edge:
+     *              {@code <= 3000} leaves 3001 over there, {@code < 3000} leaves 2999
      */
     record ComparisonOrigin(RuleRef.Comparison rule, Read read, LineFacts facts)
             implements OriginRef {
@@ -181,17 +179,14 @@ public sealed interface OriginRef {
      *                          {@code b}. Counted over all of them and not over the ones a line came
      *                          out of, so that a reading which could make nothing of one still
      *                          numbers the next the same as a reading that could
-     * @param valueBelongsBelow which side of the line the cut value itself is on, which decides
-     *                          which neighbour is the other class's edge
-     * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
-     *                          from {@code valueBelongsBelow}, and what tells one line of a rule
-     *                          from another written at the same value: {@code id.value <= 5} and
-     *                          {@code id.value > 5} agree about the class the value is in and are
-     *                          two things a row on the line shows apart. On a line between two
-     *                          positions it is the whole of what the row shows, since there is no
-     *                          class either side to read instead
-     * @param singles           whether the comparison singles the value out rather than ordering
-     *                          the values either side of it
+     * @param facts             what the rule placed on the values
+     *                          ({@link souther.compiler.check.ComparisonClaim ComparisonClaim}),
+     *                          which decides which neighbour is the other class's edge and what
+     *                          tells one line of a rule from another written at the same value:
+     *                          {@code id.value <= 5} and {@code id.value > 5} agree about the class
+     *                          the value is in and are two things a row on the line shows apart. On
+     *                          a line between two positions that is the whole of what the row shows,
+     *                          since there is no class either side to read instead
      */
     record EnsuresOrigin(RuleRef.Ensures rule, int conjunct, LineFacts facts)
             implements OriginRef {
@@ -392,9 +387,8 @@ public sealed interface OriginRef {
             // exactly when the bound does not admit it. A bound singles nothing out — it keeps a run
             // of the order — and that the far side holds no value at all is a different answer,
             // given where a border reads what a line has sides.
-            case InvariantOrigin i -> LineFacts.ordering(
-                    (i.keeps() == souther.compiler.numeric.EndSide.UPPER) == i.holdsAtTheValue(),
-                    i.holdsAtTheValue());
+            case InvariantOrigin i -> new LineFacts(ComparisonClaim.Cut.satisfiedOn(
+                    i.keeps().inward(), i.holdsAtTheValue()));
             case NarrowedOrigin n -> n.bound().lineFacts();
         };
     }

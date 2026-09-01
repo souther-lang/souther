@@ -224,7 +224,8 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(15, 16)))),
-                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(true, true)));
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(
+                        souther.compiler.numeric.Towards.BELOW, true)));
     }
 
     /** The clause the bound in these tests names, which is only an identity here. */

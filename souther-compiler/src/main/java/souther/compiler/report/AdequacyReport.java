@@ -6,6 +6,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.numeric.Towards;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.RoleAnswer;
 import souther.compiler.diag.Citation;
@@ -2088,7 +2089,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // two lines apart by these facts would be telling them apart by it.
         if (line.facts().claim()
                 instanceof ComparisonClaim.Cut order) {
-            facts.put("valueBelongsBelow", order.valueBelongsBelow());
+            facts.put("valueBelongsBelow", order.valueBelongs() == Towards.BELOW);
         }
         facts.put("holdsAtTheValue", line.facts().holdsAtTheValue());
         facts.put("singles", line.facts().singles());

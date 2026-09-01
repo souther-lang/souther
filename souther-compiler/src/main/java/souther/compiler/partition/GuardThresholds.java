@@ -451,7 +451,7 @@ public final class GuardThresholds {
                     }
                     case ComparisonClaim.Cut order -> out.add(new LineEvidence.Divides(
                             new Threshold(at.position(), at.cutting().seam(),
-                                    order.valueBelongsBelow(), origin)));
+                                    order.valueBelongs(), origin)));
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at. It divides the position — the classes either side are what the model

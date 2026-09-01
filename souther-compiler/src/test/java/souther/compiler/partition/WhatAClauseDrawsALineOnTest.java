@@ -73,7 +73,8 @@ class WhatAClauseDrawsALineOnTest {
         Threshold line = clauses.thresholds().get(0);
         assertEquals("id", line.path().toString());
         assertInstanceOf(OriginRef.EnsuresOrigin.class, line.origin());
-        assertEquals(new souther.compiler.check.ComparisonClaim.Cut(true, false),
+        assertEquals(new souther.compiler.check.ComparisonClaim.Cut(
+                        souther.compiler.numeric.Towards.BELOW, false),
                 ((OriginRef.EnsuresOrigin) line.origin()).facts().claim(),
                 "`> 0` puts the zero on the low side and is not met there, so the row beside it is"
                         + " the one above");

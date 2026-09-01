@@ -231,7 +231,7 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
         // of one rule cannot agree on.
         guards.thresholds().forEach(each ->
                 out.add(each.term() + " " + each.parts().below() + "|" + each.parts().above()
-                        + " below=" + each.valueBelongsBelow()));
+                        + " belongs=" + each.valueBelongs()));
         guards.between().forEach(each -> out.add(quantityOf(each.cuts().of())
                 + " at " + each.cuts().at() + " " + each.cuts().claim()));
         return out.stream().sorted().toList();

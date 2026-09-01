@@ -10,6 +10,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Towards;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.RuleRef;
@@ -265,7 +266,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         OriginRef closed = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
                 THE_ONLY_CONJUNCT,
-                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(true, true)));
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
         Border border = Border.at(lineAt(new AxisId("cap", "n"), carrier, Count.of(100)), closed,
                 new NumericDomain.Bounds(null, null));
 

@@ -6,6 +6,7 @@ import souther.compiler.check.AReadingOfAPosition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
@@ -218,6 +219,6 @@ class OneBorderReadTwiceIsOneReadingTest {
         return new AuthoredLine(new RuleRef.Comparison("weigh",
                 new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
                         souther.compiler.types.CoverageConstruct.BINARY)),
-                0, LineFacts.ordering(true, true), List.of());
+                0, new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)), List.of());
     }
 }
