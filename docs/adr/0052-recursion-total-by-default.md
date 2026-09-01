@@ -1,6 +1,6 @@
 # ADR-0052: Recursion is total by default, checked by size-change termination
 
-Status: Accepted. Amends ADR-0038.
+Status: Accepted. Amends ADR-0038. The outer-guard rationale is amended by #1159.
 
 ## Context
 
@@ -31,6 +31,16 @@ A wall clock remains as the outer guard, for what a counter cannot reach: an eva
 A dependency's code is counted too, and by rewriting its bytecode rather than by asking the artifact to carry more. A published module carries what an importer needs to read its declarations — its types, its invariants, the `let`s it exposes — so a behavior's body stays in the jar it was built into. Regenerating what travels and taking the rest from the jar is the one thing that cannot be done: a class defined by the evaluation's loader and one defined by the parent are different types under one binary name, so a module split between them hands its own types to its own implementation and the cast fails, reported as an example that does not hold about a model that is fine.
 
 So a module from the path is not regenerated at all. Its classes are taken whole and given a counted point on every backward branch as they are loaded for an evaluation. Nothing anyone ships changes, an implementation stays unreadable to those who import it, and a jar built before any of this existed is counted the same as one built after. What this cannot add is the recursion-depth count, which the emitter puts in by moving a helper's body aside and wrapping it: a recursion inside a jar is bounded by the stack the evaluation runs on and reported as having exhausted it (`E1924`) rather than by the depth limit.
+
+### Amended: the outer guard counts compiler-owned time
+
+The paragraph above gives the guard's reason as provenance — code this compile did not generate, so with no counted points in it. That is the case it was introduced for, and it is not the boundary. The boundary is ownership: what the guard measures is elapsed time the compiler itself spends without answering, and time taken by code answering out of somebody else's world is not the compiler's to bound.
+
+The two readings came apart when a row could be run against an implementation supplied from Java. Such an implementation is code this compile did not generate, so provenance puts it inside the guard; but what it answers out of is the caller's world — a transaction, an HTTP call, a test runner, each with its own way of saying how long it gets — and a clock over both would report a caller's database as this compiler failing to answer. So what a supplied implementation spends is left out. The code from a jar the paragraph above names stays in, and for the same reason it is in: it runs as part of the evaluation, on the evaluation's own worker, and nothing else is bounding it.
+
+Where a run is the compiler's from beginning to end, which is every run a compile makes for itself, nothing is left out and the compiler-owned time is the whole of the wait. The reading above is that case, and holds for it.
+
+`E1923` is read this way. It says the compiler went on working without answering for longer than the policy allows, over work of its own the counters do not reach — and not that the model does not terminate, which is `E1910`. It is not said about an implementation a binding supplied: a row that such an implementation never returns from is not given up on by the compiler at all.
 
 ## Consequences
 
