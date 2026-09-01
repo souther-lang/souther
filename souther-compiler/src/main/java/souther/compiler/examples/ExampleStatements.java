@@ -368,8 +368,8 @@ public final class ExampleStatements {
                         said.add(unreadableFake(fk, Unread.overspending(which, limit)));
                 case Read.StackRanOut(int depthLimit) ->
                         said.add(unreadableFake(fk, new Unread.StackRanOut(depthLimit)));
-                case Read.Unanswered(long ranOutOf) ->
-                        said.add(unreadableFake(fk, new Unread.DidNotAnswer(ranOutOf)));
+                case Read.Unanswered(long withinMs) ->
+                        said.add(unreadableFake(fk, new Unread.DidNotAnswer(withinMs)));
                 // Not about this fake: the runtime is `provided`, so a host without it builds no value
                 // at all and every fake in every module would say the same thing. Where the rows are
                 // evaluated that is recorded once, as an incompleteness.
@@ -404,13 +404,15 @@ public final class ExampleStatements {
          * how large they are. */
         record StackRanOut<T>(int depthLimit) implements Read<T> {}
 
-        /** The reading stopped answering, and the wait it was held to: what a report has to name is
-         * what the wait actually was, not what a second reader of the setting makes of it later.
+        /** The reading stopped answering, and the wait it was held to, in milliseconds: what a
+         * report has to name is what the wait actually was, not what a second reader of the setting
+         * makes of it later. Not a budget in the sense the counted limits are — those are spent by
+         * the code, and this is time the compiler spent without answering.
          *
          * <p>Not a statement about the model. Whatever did not come back was not counted — code from
          * a jar this compile did not generate, or the compiler itself — so nothing here can say the
          * statements are at fault. */
-        record Unanswered<T>(long budgetMs) implements Read<T> {}
+        record Unanswered<T>(long withinMs) implements Read<T> {}
 
         /** This host has no runtime to build a value against. */
         record RuntimeAbsent<T>() implements Read<T> {}
@@ -712,9 +714,9 @@ public final class ExampleStatements {
                         new Unread.StackRanOut(depthLimit)));
                 return;
             }
-            case Read.Unanswered(long budgetMs) -> {
+            case Read.Unanswered(long withinMs) -> {
                 timedOut.add(new UnreadFake(wrote(fk), marked(fk),
-                        new Unread.DidNotAnswer(budgetMs)));
+                        new Unread.DidNotAnswer(withinMs)));
                 return;
             }
             // Not about this fake. The runtime is `provided`, so a host without it builds no value at

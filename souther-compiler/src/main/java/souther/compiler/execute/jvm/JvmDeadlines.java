@@ -66,14 +66,10 @@ public final class JvmDeadlines {
         }
     }
 
-    /** A worker on the platform's own stack, and {@code budgetMs} on the clock. */
-    public static Deadline ofMillis(long budgetMs) {
-        return ofMillis(budgetMs, 0L);
-    }
-
-    /** The same, said as a length. */
-    public static Deadline ofMillis(long budgetMs, long stackBytes) {
-        return of(Duration.ofMillis(budgetMs), stackBytes);
+    /** A worker on the platform's own stack, and {@code timeout} of this compile's own time on the
+     *  clock. */
+    public static Deadline of(Duration timeout) {
+        return of(timeout, 0L);
     }
 
     /**
@@ -87,6 +83,10 @@ public final class JvmDeadlines {
      * reached first.
      *
      * <p>{@code 0} asks for the platform default, which is what the JVM does with the argument.
+     *
+     * <p>A length and not a number of milliseconds, here as on {@link Deadline#timeout}. A face
+     * taking milliseconds would round before anything counted, and a wait shorter than one — which
+     * the policy admits, taking any positive length — would arrive as no wait at all.
      */
     public static Deadline of(Duration timeout, long stackBytes) {
         long waitNanos = nanosOf(timeout);

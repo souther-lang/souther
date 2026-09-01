@@ -13,7 +13,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p>A row is one thread's from beginning to end and has to be: what it spends is counted on that
  * thread ({@code EvaluationContext}), what it went through is collected there ({@code Probe}), and
  * how deep it may recurse is decided by the stack that thread was made with — a number of bytes the
- * arrangement running the row says outright ({@link CallerCrossingDeadlines}) rather than inherits.
+ * arrangement running the row says outright ({@link JvmDeadlines}) rather than inherits.
  * Splitting a row across two threads would take the counting apart, and running it on whatever
  * thread called would put a model's recursion limit at the mercy of the surrounding {@code -Xss}.
  *

@@ -242,7 +242,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.compilerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 answerer.asAnswering(classes, parent),
                 CheckedEnsures.executableOf(

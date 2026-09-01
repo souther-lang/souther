@@ -81,8 +81,10 @@ public final class WrittenStatements {
         /** The stack ran out before the counted depth limit was reached. */
         record StackRanOut(int depthLimit) implements Unread {}
 
-        /** The reading stopped answering within the wait it was given. */
-        record DidNotAnswer(long budgetMs) implements Unread {}
+        /** The reading did not answer within the wait it was given, in milliseconds. Not a budget in
+         *  the sense {@link Overspent} names one: those are spent by the code that ran, and this is
+         *  time the compiler spent without answering. */
+        record DidNotAnswer(long withinMs) implements Unread {}
 
         /** {@link Overspent} for whichever budget {@code which} names. */
         static Unread overspending(FailurePhase which, long limit) {
@@ -119,7 +121,7 @@ public final class WrittenStatements {
             return switch (this) {
                 case Overspent(FailurePhase _, long limit) -> Long.toString(limit);
                 case StackRanOut(int depthLimit) -> Integer.toString(depthLimit);
-                case DidNotAnswer(long budgetMs) -> Long.toString(budgetMs);
+                case DidNotAnswer(long withinMs) -> Long.toString(withinMs);
             };
         }
     }

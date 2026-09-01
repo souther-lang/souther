@@ -45,7 +45,7 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
     /** A row of the compile's own that will not come back is given up on. */
     @Test
     void aRowThatStopsAnsweringSpendsTheWait() {
-        Deadline deadline = JvmDeadlines.ofMillis(200);
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(200));
 
         Deadline.Outcome<String> came = deadline.given(WORK, () -> {
             Thread.sleep(30_000);
@@ -58,7 +58,7 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
     /** An application taking many times the wait spends none of it. */
     @Test
     void whatTheApplicationTakesIsNotTheCompilesToSpend() {
-        Deadline deadline = JvmDeadlines.ofMillis(500);
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(500));
 
         Deadline.Outcome<Object> came = deadline.given(WORK,
                 () -> Handoff.onTheThreadThatAsked().call(() -> {
@@ -81,7 +81,7 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
      */
     @Test
     void whatTheCompileSpendsAroundCrossingsIsOneWait() {
-        Deadline deadline = JvmDeadlines.ofMillis(400);
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(400));
 
         Deadline.Outcome<Object> came = deadline.given(WORK, () -> {
             for (int each = 0; each < 5; each++) {
@@ -108,7 +108,7 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
      */
     @Test
     void aRowsWorkerDoesNotStartASecondRun() {
-        Deadline deadline = JvmDeadlines.ofMillis(30_000);
+        Deadline deadline = JvmDeadlines.of(Duration.ofSeconds(30));
 
         Deadline.Outcome<Object> came = deadline.given(WORK,
                 () -> deadline.given(WORK, () -> "a run within a run"));

@@ -41,8 +41,8 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
     /** The arrangement, on a worker of {@code stackBytes}. The wait is long enough that nothing
      *  here reaches it: what these hold is where a row and an application run, and a row given up
      *  on for time is held elsewhere. */
-    private static Deadline crossing(long stackBytes) {
-        return JvmDeadlines.ofMillis(Duration.ofMinutes(1).toMillis(), stackBytes);
+    private static Deadline arrangement(long stackBytes) {
+        return JvmDeadlines.of(Duration.ofMinutes(1), stackBytes);
     }
 
     /** The row's own work is not on the caller's thread, and what it hands over is. */
@@ -51,7 +51,7 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
         AtomicReference<Thread> read = new AtomicReference<>();
         AtomicReference<Thread> applied = new AtomicReference<>();
 
-        Deadline.Outcome<String> came = crossing(1L << 20)
+        Deadline.Outcome<String> came = arrangement(1L << 20)
                 .given(WORK, () -> {
                     read.set(Thread.currentThread());
                     return (String) Handoff.onTheThreadThatAsked().call(() -> {
@@ -72,7 +72,7 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
     void theWorkerIsGivenTheStackItWasAskedFor() {
         AtomicReference<Integer> reached = new AtomicReference<>(0);
 
-        crossing(64L << 20).given(WORK, () -> {
+        arrangement(64L << 20).given(WORK, () -> {
             reached.set(deep(0, 30_000));
             return null;
         });
@@ -88,7 +88,7 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
     /** What the handed-over work threw comes back as it was thrown, for the row to read. */
     @Test
     void whatTheApplicationThrewComesBackToTheRow() {
-        Deadline.Outcome<String> came = crossing(1L << 20)
+        Deadline.Outcome<String> came = arrangement(1L << 20)
                 .given(WORK, () -> (String) Handoff.onTheThreadThatAsked().call(() -> {
                     throw new InvocationFailure(new IllegalStateException("the SQL failed"));
                 }));
@@ -111,7 +111,7 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
         InvocationTargetException stopped =
                 new InvocationTargetException(new IllegalStateException("the SQL failed"));
 
-        Deadline.Outcome<String> came = crossing(1L << 20)
+        Deadline.Outcome<String> came = arrangement(1L << 20)
                 .given(WORK, () -> (String) Handoff.onTheThreadThatAsked().call(() -> {
                     throw stopped;
                 }));
@@ -135,7 +135,7 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
     /** A row that hands nothing over still finishes, which is every run a compile makes. */
     @Test
     void aRowThatHandsNothingOverIsAnsweredAllTheSame() {
-        Deadline.Outcome<String> came = crossing(1L << 20)
+        Deadline.Outcome<String> came = arrangement(1L << 20)
                 .given(WORK, () -> "nothing crossed");
 
         assertEquals("nothing crossed",

@@ -392,7 +392,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.compilerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 // What this instance is supplied for, said by the caller. Whether a behavior may be
                 // supplied for at all is `SoutherExamples.bind`'s rule; this is the seam below it.
