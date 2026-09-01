@@ -14,6 +14,7 @@ import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -138,10 +139,6 @@ final class Conditions {
     static void stating(Terms terms, Core rawCond, Denotations at, boolean positive,
                         List<NumericConstraint> out) {
         Core cond = asSizeComparison(rawCond);
-        Core ordered = asOrderComparison(terms, cond, at);
-        if (ordered != cond) {
-            stating(terms, ordered, at, positive, out);
-        }
         Core under = negated(cond);
         if (under != null) {
             stating(terms, under, at, !positive, out);
@@ -154,21 +151,55 @@ final class Conditions {
             stating(terms, b.right(), at, positive, out);
             return;
         }
-        if (cond instanceof Core.Binary b) {
-            ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
-            LinearForm<FactSubject> left = placed == null ? null : terms.affineOf(b.left(), at);
-            LinearForm<FactSubject> right = placed == null ? null : terms.affineOf(b.right(), at);
+        // Every reading, because each of them holds of the values and an arm read without one of
+        // them is an arm bounded by less than what choosing it settles.
+        for (StatedComparison stated : comparisonsStatedBy(terms, cond, at).inReadingOrder()) {
+            LinearForm<FactSubject> left = terms.affineOf(stated.left(), at);
+            LinearForm<FactSubject> right = terms.affineOf(stated.right(), at);
             if (left != null && right != null) {
-                // Asserted false, what the condition states is what holds where it does not.
-                out.add(new NumericConstraint(left.minus(right),
-                        (positive ? placed : placed.denied()).statedRelation()));
+                out.add(new NumericConstraint(left.minus(right), stated.relationUnder(positive)));
             }
         }
     }
 
     /**
-     * A comparison of what an operation answering an order answered, as the comparison of the two
-     * values it orders — or {@code e} unchanged.
+     * The comparisons {@code cond} states, in their reading order.
+     *
+     * <p>The one entry point a reader of a flat condition takes. A condition that is not a
+     * comparison states none, and a comparison states itself and, where it compares what an
+     * operation answering an order answered, the comparison of the two values that order is of
+     * ({@link #orderStatedBy}). Composition repeats while it says something, so a comparison of a
+     * sign of a sign comes to the values underneath it; the deepest reading is first and the
+     * comparison as written is last. It stops on its own: each composition takes the arguments of a
+     * call one of the sides was, so the sides get smaller every time round.
+     *
+     * <p>Handed over as statements and not as expressions. What a reading arrived at is a claim and
+     * two sides ({@link StatedComparison}), which is what every reader below does something with —
+     * written back into the tree as an operator, it would be a comparison the source never wrote
+     * that each of them had to recognise again before it could read what this already knew.
+     */
+    static ComparisonReadings comparisonsStatedBy(Terms terms, Core cond, Denotations at) {
+        if (!(cond instanceof Core.Binary b)) {
+            return ComparisonReadings.none();
+        }
+        ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+        if (placed == null) {
+            return ComparisonReadings.none();
+        }
+        List<StatedComparison> readings = new ArrayList<>();
+        readings.add(new StatedComparison(placed, b.left(), b.right()));
+        for (StatedComparison composed = orderStatedBy(terms, readings.getLast(), at);
+                composed != null;
+                composed = orderStatedBy(terms, readings.getLast(), at)) {
+            readings.add(composed);
+        }
+        Collections.reverse(readings);
+        return new ComparisonReadings(readings);
+    }
+
+    /**
+     * The comparison of the two values an order is of, where {@code stated} compares what an
+     * operation answering that order answered — or null where it states nothing about them.
      *
      * <p>What such an operation answers is a sign ({@link DischargeRules#orderStatedBy}), so a
      * condition that settles which side of nought the answer falls on is a condition about the two
@@ -194,35 +225,29 @@ final class Conditions {
      * leave the clause unreadable — a construction dropped from the check where it had been reported.
      * Reading a predicate never takes a reading away.
      */
-    static Core asOrderComparison(Terms terms, Core e, Denotations at) {
-        if (!(e instanceof Core.Binary b)) {
-            return e;
-        }
-        ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
-        if (placed == null) {
-            return e;
-        }
-        boolean callFirst = b.left() instanceof Core.PreservedCall;
-        Core side = callFirst ? b.left() : b.right();
-        Core against = callFirst ? b.right() : b.left();
+    private static StatedComparison orderStatedBy(Terms terms, StatedComparison stated,
+                                                  Denotations at) {
+        boolean callFirst = stated.left() instanceof Core.PreservedCall;
+        Core side = callFirst ? stated.left() : stated.right();
+        Core against = callFirst ? stated.right() : stated.left();
         if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2) {
-            return e;
+            return null;
         }
         PositiveOrder positive =
                 DischargeRules.orderStatedBy(call.operation());
         if (positive == null
                 || terms.bodyKey(call.args().get(0), at) == null
                 || terms.bodyKey(call.args().get(1), at) == null) {
-            return e;
+            return null;
         }
         // The relation the source wrote, read from the sign's side of the comparison: `call rel x`
         // however the two were written round.
-        Rel written = (callFirst ? placed : placed.turned()).statedRelation();
+        Rel written = (callFirst ? stated.claim() : stated.claim().turned()).statedRelation();
         Rel stands = standsToNought(terms, call, written, against, at);
-        return stands == null ? e
-                : comparison(ComparisonWriting.operatorStating(stands),
+        return stands == null ? null
+                : new StatedComparison(ComparisonClaim.stating(stands),
                         CallArguments.of(positive.greater(), call),
-                        CallArguments.of(positive.lesser(), call), b);
+                        CallArguments.of(positive.lesser(), call));
     }
 
     /**
@@ -285,60 +310,62 @@ final class Conditions {
         return e;
     }
 
-    record Polar(Core expr, boolean positive) {}
+    record Polar(Core expr, boolean positive) {
+
+        /** A condition that states no comparison, which is stated as itself. There is nothing to
+         *  bring to a canonical form: what a guard settles such a condition by is the condition, and
+         *  the six ways of writing one thing that {@link #polar} exists for are ways of writing a
+         *  comparison. */
+        static Polar itself(Core e, boolean positive) {
+            return new Polar(e, positive);
+        }
+    }
 
     /**
-     * {@code e}, asserted with polarity {@code positive}, as the comparison of {@code ==} or {@code <}
-     * that says the same thing: {@code a /= b} is {@code a == b} denied, {@code a >= b} is
+     * {@code stated}, asserted with polarity {@code positive}, as the comparison of {@code ==} or
+     * {@code <} that says the same thing: {@code a /= b} is {@code a == b} denied, {@code a >= b} is
      * {@code a < b} denied, and {@code a > b} is {@code b < a}. A fact is settled by key equality, so
      * without this the six ways to compare two terms are six facts, and a guard written one way would
      * leave a clause written the other unsettled.
      */
-    static Polar polar(Core e, boolean positive) {
-        if (e instanceof Core.Binary b) {
-            ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
-            if (placed != null) {
-                return canonical(b, placed, positive);
-            }
-        }
-        return new Polar(e, positive);
+    static Polar polar(StatedComparison stated, boolean positive) {
+        Polar written =
+                stated.claim().canonical(stated.left(), stated.right()).expressedAs(AS_POLAR);
+        return positive ? written : AS_POLAR.denied(written);
     }
 
-    /**
-     * The one of the two canonical comparisons {@code placed} is, and which way it is asserted.
-     *
-     * <p>Which of the two it is, which side of it each value goes on and whether it is denied are
-     * what {@code placed} states ({@link ComparisonClaim#canonical}). What is here is the rest:
-     * that a canonical comparison of this compiler's own is written as an operator between the two
-     * sides, and that its denial is carried by the polarity beside it rather than by a node.
-     */
-    private static Polar canonical(Core.Binary b, ComparisonClaim placed, boolean positive) {
-        AsPolar as = new AsPolar(b);
-        Polar stated = placed.canonical(b.left(), b.right()).expressedAs(as);
-        return positive ? stated : as.denied(stated);
-    }
+    /** One of them, because it holds nothing: what a canonical comparison is written as is the same
+     *  answer wherever it is asked. */
+    private static final AsPolar AS_POLAR = new AsPolar();
 
     /**
-     * A canonical comparison, written as a node standing where {@code of} did with what is asserted
-     * of it held beside it.
+     * A canonical comparison, written as a node with what is asserted of it held beside it.
      *
-     * <p>{@code of} is here because a node is more than its two sides and its operator: where it
-     * came from, what it answers and where it stands are what the readings below it file the fact
-     * under, and a comparison put in its place that said any of them differently would be a fact
-     * about somewhere else. What is written is the reader's own business and is no part of what the
-     * comparison states, which is why the node is held here and not carried in the statement.
+     * <p>The node is this reader's own spelling and stands nowhere. What a comparison is filed under
+     * is what it places and the terms of its two sides ({@link Terms}), so where it came from, what
+     * it answers and where it stands decide nothing here — which is why they are written inert
+     * rather than taken from a comparison the source wrote. A statement is a claim and two sides,
+     * and there is no occurrence in it to inherit.
      */
-    private record AsPolar(Core.Binary of)
-            implements CanonicalComparison.Expression<Core, Polar> {
+    private record AsPolar() implements CanonicalComparison.Expression<Core, Polar> {
 
         @Override
         public Polar theSameValue(Core left, Core right) {
-            return new Polar(comparison(BinOp.EQ, left, right, of), true);
+            return new Polar(canonical(BinOp.EQ, left, right), true);
         }
 
         @Override
         public Polar below(Core left, Core right) {
-            return new Polar(comparison(BinOp.LT, left, right, of), true);
+            return new Polar(canonical(BinOp.LT, left, right), true);
+        }
+
+        /** Written over nothing the source holds. The three the node needs besides its operator
+         *  and sides decide nothing any reader of this asks, so they are filled with what says so:
+         *  unwritten, so no coverage site is named by it, the type a comparison answers, and a
+         *  position taken from a side because the constructor takes one. */
+        private static Core.Binary canonical(BinOp op, Core left, Core right) {
+            return new Core.Binary(op, left, right, CoverageOrigin.unwritten(), Type.BOOL,
+                    left.pos());
         }
 
         /** Carried beside the node, which is what a polarity is for: a denial written as a node
@@ -348,10 +375,6 @@ final class Conditions {
         public Polar denied(Polar statement) {
             return new Polar(statement.expr(), !statement.positive());
         }
-    }
-
-    static Core.Binary comparison(BinOp op, Core left, Core right, Core.Binary of) {
-        return new Core.Binary(op, left, right, of.origin(), of.type(), of.pos());
     }
 
     /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an

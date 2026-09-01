@@ -139,11 +139,12 @@ class InvariantCapabilitiesTest {
     }
 
     /**
-     * And one that settles only once the reading has normalized it.
+     * And one that settles only once it is read as what it states.
      *
      * <p>{@code Int.compare(1, 2) >= 0} is a call to a reader folding what an author wrote, and is
-     * {@code 1 >= 2} to the walk that reads clauses, which rewrites comparisons before it reads them.
-     * Folded before that walk, the clause fell through to be read as a relation over two constants,
+     * the order of {@code 1} and {@code 2} to the walk that reads clauses, which reads a clause as
+     * the comparisons it states before it decides anything. Folded before that walk, the clause fell
+     * through to be read as a relation over two constants,
      * and an author was told that any guard implying it discharges the construction — for a clause
      * no guard implies and no value satisfies.
      */
