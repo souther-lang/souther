@@ -52,8 +52,8 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
     @ParameterizedTest
     @EnumSource(CopyableFactKind.class)
     void bothEndsMovedInducesTheFactOfTheCopy(CopyableFactKind kind) {
-        assertEquals(Map.of(OF, FROM, OF_HERE, FROM_HERE),
-                carried(kind, Map.of(OF, OF_HERE, FROM, FROM_HERE)).of(kind),
+        assertEquals(written(kind, Map.of(OF, FROM, OF_HERE, FROM_HERE)),
+                carried(kind, Map.of(OF, OF_HERE, FROM, FROM_HERE)),
                 "the copy's bindings have between them what the body's had, and the body it was"
                         + " copied from is a body too, so its own fact stays as it was");
     }
@@ -69,9 +69,9 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
     @ParameterizedTest
     @EnumSource(CopyableFactKind.class)
     void oneEndMovedInducesNothing(CopyableFactKind kind) {
-        assertEquals(Map.of(OF, FROM), carried(kind, Map.of(OF, OF_HERE)).of(kind),
+        assertEquals(written(kind, Map.of(OF, FROM)), carried(kind, Map.of(OF, OF_HERE)),
                 "the binding a fact is said of moved and the one it is said of did not");
-        assertEquals(Map.of(OF, FROM), carried(kind, Map.of(FROM, FROM_HERE)).of(kind),
+        assertEquals(written(kind, Map.of(OF, FROM)), carried(kind, Map.of(FROM, FROM_HERE)),
                 "and the other way round: the end this fact is said of is where it was");
     }
 
@@ -79,8 +79,8 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
     @ParameterizedTest
     @EnumSource(CopyableFactKind.class)
     void aRenamingOfOtherBindingsInducesNothing(CopyableFactKind kind) {
-        assertEquals(Map.of(OF, FROM),
-                carried(kind, Map.of(new BindingId(WRITTEN, 9), OF_HERE)).of(kind),
+        assertEquals(written(kind, Map.of(OF, FROM)),
+                carried(kind, Map.of(new BindingId(WRITTEN, 9), OF_HERE)),
                 "a copy of some other part of the body says nothing about this fact");
     }
 
@@ -166,6 +166,20 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
         ElementProvenance.Builder builder = new ElementProvenance.Builder();
         record(builder, kind, OF, FROM);
         builder.carriedAcross(renaming);
+        return builder.built();
+    }
+
+    /**
+     * The whole of what a body with exactly {@code facts} of {@code kind} proved.
+     *
+     * <p>Compared as one value rather than as the table of the kind under test. What a copy must not
+     * do includes writing somewhere else, and a comparison that only read back the kind it wrote
+     * would pass a fact that landed among the others.
+     */
+    private static ElementProvenance written(CopyableFactKind kind,
+                                             Map<BindingId, BindingId> facts) {
+        ElementProvenance.Builder builder = new ElementProvenance.Builder();
+        facts.forEach((of, from) -> record(builder, kind, of, from));
         return builder.built();
     }
 

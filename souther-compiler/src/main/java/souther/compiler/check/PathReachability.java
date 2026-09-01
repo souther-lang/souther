@@ -565,7 +565,7 @@ public final class PathReachability {
     private TermPath positionOf(Core e, InputReads reads) {
         return switch (reads.pathOf(e, symbols)) {
             case PathResolution.At(var at) -> at;
-            case PathResolution.NotAPosition _, PathResolution.Unread _ -> null;
+            case PathResolution.NotAPosition _ -> null;
         };
     }
 

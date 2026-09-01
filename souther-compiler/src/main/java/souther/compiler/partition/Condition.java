@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Comparison;
+import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.types.BinOp;
 
 /**
@@ -94,26 +96,29 @@ sealed interface Condition {
      * <p>Bindings are looked through and their names taken in; the two operators are taken apart;
      * everything else is either one comparison or nowhere this reading goes.
      */
-    static Condition of(Core e, InputReads reads) {
+    static Condition of(Core e, InputReads reads, Symbols symbols) {
         if (e instanceof Core.LetIn let) {
-            return of(let.body(), reads.and(let.binder(), let.value()));
+            return of(let.body(), reads.and(let.binder(), let.value()), symbols);
         }
         // A name standing for a truth is that truth. What a `let` binds is already carried for the
         // sake of which position a term names, and stopping at the name here left a fork on one
         // proving nothing while the same condition written out proved a comparison — the reading
         // being transparent to one reader and opaque to the other, over one binding.
         //
+        // Asked of the one reading of a name rather than of the binding it happens to hold. What a
+        // name is comes before what it was given — a parameter, an element an operation handed out,
+        // one of several values an arm left standing — and going after the value without asking
+        // would be this reader putting those in an order of its own.
+        //
         // It terminates because a binder's value can only mention binders introduced before it, so
         // each step of this goes strictly outwards.
-        if (e instanceof Core.Read name && name.binding() != null) {
-            Core bound = reads.bound().get(name.binding());
-            if (bound != null) {
-                return of(bound, reads);
-            }
+        if (e instanceof Core.Read name
+                && reads.meaningOf(name, symbols) instanceof ReadMeaning.Through through) {
+            return of(through.denotes().value(), through.denotes().at(), symbols);
         }
         if (e instanceof Core.Binary binary && combines(binary.op())) {
-            Condition left = of(binary.left(), reads);
-            Condition right = of(binary.right(), reads);
+            Condition left = of(binary.left(), reads, symbols);
+            Condition right = of(binary.right(), reads, symbols);
             return binary.op() == BinOp.AND
                     ? new Both(binary, left, right) : new Either(binary, left, right);
         }
