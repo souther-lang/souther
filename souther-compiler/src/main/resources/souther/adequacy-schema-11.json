@@ -1359,7 +1359,7 @@
             }
           },
           {
-            "description": "Which thing a row is owed for is written exactly for the two kinds that are about one.",
+            "description": "Which thing a row is owed for is written exactly for the kinds that are about one, and its shape is the shape that account keeps.",
             "if": {
               "anyOf": [
                 {
@@ -1387,13 +1387,40 @@
             "then": {
               "required": [
                 "obligationId"
-              ]
+              ],
+              "properties": {
+                "obligationId": {
+                  "$ref": "#/$defs/obligationId"
+                }
+              }
             },
             "else": {
-              "not": {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "arm_unreached"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              "then": {
                 "required": [
                   "obligationId"
-                ]
+                ],
+                "properties": {
+                  "obligationId": {
+                    "$ref": "#/$defs/armObligationId"
+                  }
+                }
+              },
+              "else": {
+                "not": {
+                  "required": [
+                    "obligationId"
+                  ]
+                }
               }
             }
           }
@@ -1425,8 +1452,15 @@
             ]
           },
           "obligationId": {
-            "$ref": "#/$defs/obligationId",
-            "description": "Which thing a row is owed for the finding is about, written for `boundary_unmet` and `domain_point_uncovered` and for no other kind. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, and in `declarations[].obligations` where one of the module's declarations owns it. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is the run beside the line: one rule at one level in one role owes two `in` points when two cases stop that run in different places."
+            "description": "Which thing a row is owed for the finding is about, written for every kind that is about one and for no other. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, in `declarations[].obligations` where one of the module's declarations owns it, and in `branch.obligations` where it is an arm of the body. Its shape is the shape that account keeps, and which one follows from `kind`: a point of a line for `boundary_unmet` and `domain_point_uncovered`, an arm for `arm_unreached`. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is not in the words: one rule at one level in one role owes two `in` points when two cases stop the run in different places, and a fork whose caller supplies the rule owes one arm per rule handed in, at one place and under one label.",
+            "oneOf": [
+              {
+                "$ref": "#/$defs/obligationId"
+              },
+              {
+                "$ref": "#/$defs/armObligationId"
+              }
+            ]
           },
           "ruleId": {
             "$ref": "#/$defs/ruleId",
@@ -1615,6 +1649,7 @@
             "additionalProperties": false,
             "allOf": [
               {
+                "description": "An arm says where it stands once, and beside it whatever left it open. `undecided` is the reading that stopped, so it carries `weakening`; `not_counted` is the fork nothing tells apart, so it carries `notCountedBecause`; the two settled states are settled by the rows and carry neither. Nothing here re-encodes the disposition: a status and a hit beside it would be the same answer twice, free to disagree with the first.",
                 "if": {
                   "required": [
                     "disposition"
@@ -1630,28 +1665,39 @@
                     "notCountedBecause"
                   ],
                   "not": {
-                    "anyOf": [
-                      {
-                        "required": [
-                          "status"
-                        ]
-                      },
-                      {
-                        "required": [
-                          "hit"
-                        ]
-                      }
+                    "required": [
+                      "weakening"
                     ]
                   }
                 },
                 "else": {
-                  "required": [
-                    "status",
-                    "hit"
-                  ],
                   "not": {
                     "required": [
                       "notCountedBecause"
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "required": [
+                    "disposition"
+                  ],
+                  "properties": {
+                    "disposition": {
+                      "const": "undecided"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "weakening"
+                  ]
+                },
+                "else": {
+                  "not": {
+                    "required": [
+                      "weakening"
                     ]
                   }
                 }
@@ -1676,16 +1722,9 @@
                   "occurrences_not_told_apart"
                 ]
               },
-              "status": {
-                "$ref": "#/$defs/status",
-                "description": "How far the reading behind this arm got, present exactly where the arm is counted. `complete` is every row read; `partial` is a row that could have gone through this arm not having come back, and then `hit` is false and `disposition` is `undecided`. A row through the arm is `complete` whatever else stopped: it went through it, and a reading that ran out somewhere else does not take that back."
-              },
               "weakening": {
-                "$ref": "#/$defs/weakening"
-              },
-              "hit": {
-                "type": "boolean",
-                "description": "Whether a row this compilation observed goes through the arm. Present exactly where the arm is counted. Read with `status`: false under `partial` is no row was seen to, not no row does."
+                "$ref": "#/$defs/weakening",
+                "description": "What the reading of this behavior's rows went without, present exactly where `disposition` is `undecided`. It is why nobody can say whether a row goes through this arm — a row that could have gone through it did not come back — and not a second way of saying that nobody can: what the arm came to is `disposition`, and it is said once."
               },
               "label": {
                 "type": "string"

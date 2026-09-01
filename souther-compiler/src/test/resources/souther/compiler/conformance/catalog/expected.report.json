@@ -830,9 +830,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.catalog",
@@ -852,9 +850,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         } ],
         "denominatorSettled" : true
       },
@@ -2239,9 +2235,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2261,9 +2255,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2283,9 +2275,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "souther.bool",
@@ -2306,9 +2296,7 @@
               "declaration" : "Bool.not"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "souther.bool",
@@ -2329,9 +2317,7 @@
               "declaration" : "Bool.not"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2351,9 +2337,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2373,9 +2357,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2395,9 +2377,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2417,9 +2397,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2439,9 +2417,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2461,9 +2437,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
@@ -2483,9 +2457,7 @@
               "kind" : "here"
             }
           },
-          "disposition" : "met",
-          "status" : "complete",
-          "hit" : true
+          "disposition" : "met"
         } ],
         "denominatorSettled" : true
       },

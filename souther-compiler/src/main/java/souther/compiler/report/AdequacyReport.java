@@ -29,7 +29,6 @@ import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.ArmCoverage;
 import souther.compiler.query.ArmDisposition;
 import souther.compiler.query.ArmExclusion;
 import souther.compiler.query.ArmObligation;
@@ -2159,6 +2158,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * at one place and they are two lines. Which declarations took an end in is
      * {@code narrowedWithin}: a bound another type narrowed is not the bound it narrows.
      */
+    private static void obligationId(ObjectNode into, About.ObligationIdentity identity) {
+        switch (identity) {
+            case About.ObligationIdentity.OfALine(var point) -> obligationId(into, point);
+            case About.ObligationIdentity.OfAnArm(var arm) -> armId(into, arm);
+        }
+    }
+
     private static void obligationId(ObjectNode into,
                                      souther.compiler.partition.BorderObligationPoint point) {
         authoredLineId(into.putObject("line"), point.line().line());
@@ -2859,17 +2865,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // tell them apart.
                 a.put("construct", word(arm.display().construct()));
                 at(a, arm.display().at(), sources);
+                // Where the arm stands, once. What the rows came to and how far the reading got are
+                // what the account read to decide it, and an arm's reading is one reading — so a
+                // status and a hit beside this would be the same answer in a second encoding, with
+                // nothing holding the two in step. That is what a consumer would reimplement, and
+                // what this measure stopped doing internally.
                 a.put("disposition", wire(arm.disposition()));
                 switch (arm) {
-                    // What the rows came to about this arm, said the way every other measure of
-                    // this document says it: a status, whatever it went without, and the answer
-                    // itself. The disposition above is what the account makes of the three.
-                    case ArmObligation.Counted it -> {
-                        a.put("status", wire(statusOf(it.coverage())));
-                        weakening(a, it.coverage().weakening());
-                        a.put("hit", it.coverage().made()
-                                .map(ArmCoverage::hit).orElse(false));
-                    }
+                    // And what left it open, where something did. Provenance and not a second
+                    // answer: an arm a row that did not come back may have gone through is
+                    // undecided, and which reading stopped is what a reader acts on.
+                    case ArmObligation.Counted it -> weakening(a, it.coverage().weakening());
                     case ArmObligation.NotCounted it ->
                             a.put("notCountedBecause", wire(it.because()));
                 }
@@ -3086,10 +3092,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             // And which thing a row is owed for, where the finding is about one. The words in
             // `subject` do not tell two of them apart — a rule read at one level in one role owes
-            // two points where two cases stop the run in different places — so a consumer joining
-            // a finding to its `partition.obligations` entry joins on this.
-            if (finding.about() instanceof About.ABorderObligation owed) {
-                obligationId(f.putObject("obligationId"), owed.obligation().point());
+            // two points where two cases stop the run in different places, and a fork whose caller
+            // supplies the rule owes one arm per rule at one place — so a consumer joining a
+            // finding to the account's entry joins on this.
+            //
+            // Asked of the subject, for the reason the rule above is: the accounts that keep such
+            // things are not a list this holds, and one written here would leave a finding about
+            // the next of them named by words that tell two of its obligations apart nowhere.
+            if (finding.about() instanceof About.OfAnObligation owed) {
+                obligationId(f.putObject("obligationId"), owed.obligationIdentity());
             }
             // And which limit stopped it, where the finding is about one being in the way. Two
             // conjuncts of one clause about one position can stop for two different limits, so

@@ -636,7 +636,10 @@ class CompilePartialAdequacyTest {
         for (JsonNode arm : branch.get("obligations")) {
             assertEquals("undecided", arm.get("disposition").asString(),
                     () -> "a row that did not come back may have gone through it: " + branch);
-            assertFalse(arm.get("hit").asBoolean(), () -> "and none was seen to: " + branch);
+            // What left it open, and no second way of saying that it is open. An arm says where it
+            // stands once; a status and a hit beside the word would be the same answer again.
+            assertEquals(1, arm.get("weakening").size(),
+                    () -> "and the reading that stopped is why: " + branch);
         }
     }
 
