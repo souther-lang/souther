@@ -71,10 +71,10 @@ public sealed interface BorderQuantity {
          *  is is one position's own values, so a move that leaves it without one leaves it
          *  something else. */
         @Override
-        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
-            NumericTerm.FromOnePosition landed = to.atOnePosition();
+        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
+            NumericTerm.FromOnePosition landed = to.term().atOnePosition();
             return term.equals(from) && landed != null
-                    ? new OfACoordinate(new AxisId(axis.behavior(), to.toString()), landed, orders)
+                    ? new OfACoordinate(new AxisId(axis.behavior(), landed.toString()), landed, to)
                     : null;
         }
 
@@ -190,12 +190,12 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
+        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
             if (!on.term().equals(from) && !against.term().equals(from)) {
                 return null;
             }
-            TermOrders here = on.term().equals(from) ? orders : on;
-            TermOrders there = against.term().equals(from) ? orders : against;
+            TermOrders here = on.term().equals(from) ? to : on;
+            TermOrders there = against.term().equals(from) ? to : against;
             // A distance is between two positions, so a move that leaves either end answered by no
             // single position leaves the pair something a distance is not. And a name standing at
             // more than one can bring the two ends of one together — answered here, because what a
@@ -426,15 +426,16 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
-            if (!form.coefs().containsKey(from) || form.coefs().containsKey(to)) {
+        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
+            NumericTerm landed = to.term();
+            if (!form.coefs().containsKey(from) || form.coefs().containsKey(landed)) {
                 return null;
             }
             Map<NumericTerm, java.math.BigDecimal> coefs = new java.util.LinkedHashMap<>();
-            form.coefs().forEach((term, coef) -> coefs.put(term.equals(from) ? to : term, coef));
+            form.coefs().forEach((term, coef) -> coefs.put(term.equals(from) ? landed : term, coef));
             Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
-            on.forEach((term, its) -> moved.put(term.equals(from) ? to : term,
-                    term.equals(from) ? orders : its));
+            on.forEach((term, its) -> moved.put(term.equals(from) ? landed : term,
+                    term.equals(from) ? to : its));
             return new OverAForm(behavior,
                     new LinearForm<>(form.constant(), coefs), moved);
         }
@@ -642,10 +643,15 @@ public sealed interface BorderQuantity {
      * counted from one to the other, and a caller building the pair itself would be the second place
      * that has to know it.
      *
-     * @param orders what the term is read on and answers at its new position, which is a fact about
-     *               where it lands and cannot be carried over from where it was
+     * <p>Where it lands is read off the orders rather than named beside them. What the term is read
+     * on and answers at its new position is a fact about that position — it cannot be carried over
+     * from where it was — and the reading's answer says which position it is about, so a second
+     * argument saying it is a second thing to get right and one this could not refuse: it does not
+     * use the name it is given.
+     *
+     * @param to what the term is read on and answers at its new position, and which position that is
      */
-    BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders);
+    BorderQuantity movedTo(NumericTerm from, TermOrders to);
 
     /**
      * The order one position under this quantity is read and written back on, or null where the
@@ -665,7 +671,13 @@ public sealed interface BorderQuantity {
     /** What each of a form's terms is measured on, for a reader of a line rather than of a row. */
     static Map<NumericTerm, Carrier> answeredOn(Map<NumericTerm, TermOrders> orders) {
         Map<NumericTerm, Carrier> out = new java.util.LinkedHashMap<>();
-        orders.forEach((term, on) -> out.put(term, on.answered()));
+        orders.forEach((term, on) -> {
+            // Each entry's orders are that position's own. A table whose keys are the right numbers
+            // says nothing about which of them each answer came from, and what comes out of here is
+            // a number filed under an order, with the term gone.
+            on.areOf(term);
+            out.put(term, on.answered());
+        });
         return Map.copyOf(out);
     }
 

@@ -38,7 +38,8 @@ final class TermReading {
      * arrangement the whole of #1027 exists to stop. The decision is here, where the arms that need
      * it are.
      */
-    static Reading at(NumericTerm.FromOnePosition term, ObservedValue at, TermOrders on) {
+    static Reading at(TermOrders on, ObservedValue at) {
+        NumericTerm.FromOnePosition term = on.term().atOnePosition();
         Carrier observed = on.observed();
         Membership.Incomplete unread = Membership.unread(at);
         if (unread != null) {
@@ -50,7 +51,7 @@ final class TermReading {
         // the value should be, and a walk that only looked at the outside would call that a value
         // this term does not hold.
         if (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
-            return at(term, c.field("value"), on);
+            return at(on, c.field("value"));
         }
         return switch (term) {
             case NumericTerm.ValueOf _ -> asItStands(at, observed);
@@ -73,8 +74,8 @@ final class TermReading {
      * — so those answer that this is no number of theirs rather than being read as whichever value
      * came first.
      */
-    static Reading over(NumericTerm.TakenOver term, java.util.List<ObservedValue> values,
-                        TermOrders on) {
+    static Reading over(TermOrders on, java.util.List<ObservedValue> values) {
+        NumericTerm.TakenOver term = (NumericTerm.TakenOver) on.term();
         // Nothing to read, which a caller that could not walk to the run answers with. Said as
         // "this is no number of that" rather than as a total over the values it did find.
         if (values == null) {

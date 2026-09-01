@@ -110,13 +110,17 @@ final class TermRealizations {
      * of them are said here. {@link RealizationTarget} answers the first for every number there is;
      * a {@link Realization.BuiltNone} is the second.
      */
-    static Realization at(RealizationTarget target, Type sourceType, TermOrders orders,
+    static Realization at(Type sourceType, TermOrders orders,
                           Place answer, souther.compiler.inputs.SearchRegion within,
                           Symbols symbols, ReadingPolicy policy) {
         if (sourceType == null) {
             return new Realization.BuiltNone(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
+        // Which number is being written for, read off the answer that says which number it is of.
+        // Handed in beside it, it was a second name for the same thing and a caller could give two
+        // — and this would then write a value for one number on the order of another.
+        RealizationTarget target = RealizationTarget.of(orders.term());
         return switch (target.term()) {
             // Written by the carrier the line was drawn on, and wearing every name the position
             // declares. Read off the boundary's own shape instead, a count on one carrier could be
@@ -126,9 +130,9 @@ final class TermRealizations {
             case NumericTerm.ValueOf _ ->
                     oneValue(FixtureTemplate.on(orders.answered(), answer, symbols.scope()::reach),
                             sourceType, symbols);
-            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), target, sourceType, orders,
+            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), sourceType, orders,
                     answer, within, symbols, policy);
-            case NumericTerm.TakenOver over -> overARun(over.takenAs(), target, sourceType, orders,
+            case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
                     answer, within, symbols, policy);
         };
     }
@@ -142,7 +146,7 @@ final class TermRealizations {
      * agree, an operation would have gained a boundary nobody could write a row for, and the report
      * would have said only that every value tried was refused.
      */
-    private static Realization taken(TakenAs how, RealizationTarget target, Type sourceType,
+    private static Realization taken(TakenAs how, Type sourceType,
                                      TermOrders orders, Place answer,
                                      souther.compiler.inputs.SearchRegion within,
                                      Symbols symbols, ReadingPolicy policy) {
@@ -154,7 +158,7 @@ final class TermRealizations {
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
             // itself or out of a path inside its elements, and answered for both in one place.
-            case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, target, sourceType,
+            case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, sourceType,
                     orders, within, symbols, policy);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
@@ -180,12 +184,12 @@ final class TermRealizations {
      * reading answers that this is no number of theirs, and nothing composes a container for a
      * number nothing reads.
      */
-    private static Realization overARun(TakenAs how, RealizationTarget target, Type sourceType,
+    private static Realization overARun(TakenAs how, Type sourceType,
                                         TermOrders orders, Place answer,
                                         souther.compiler.inputs.SearchRegion within,
                                         Symbols symbols, ReadingPolicy policy) {
         return switch (how) {
-            case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, target, sourceType,
+            case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, sourceType,
                     orders, within, symbols, policy);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
                     new Realization.BuiltNone(

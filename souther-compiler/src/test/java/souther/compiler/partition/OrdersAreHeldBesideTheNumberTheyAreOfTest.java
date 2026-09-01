@@ -49,6 +49,14 @@ class OrdersAreHeldBesideTheNumberTheyAreOfTest {
     }
 
     @Test
+    void norIsALineAComparisonDrew() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ComparedLine(CHARGE, Count.of(1), OF_THE_CEILING,
+                        new souther.compiler.check.ComparisonClaim.Cut(
+                                souther.compiler.numeric.Towards.BELOW, true)));
+    }
+
+    @Test
     void norIsACoordinateOfABorder() {
         assertThrows(IllegalArgumentException.class,
                 () -> new BorderQuantity.OfACoordinate(

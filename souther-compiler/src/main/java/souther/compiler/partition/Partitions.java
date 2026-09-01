@@ -856,13 +856,13 @@ public final class Partitions {
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
-                    holding(term, orders, new Recognition.CountIs.At(value)),
+                    holding(orders, new Recognition.CountIs.At(value)),
                     standing(type, carrier, value, symbols)));
         }
         Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
-        Recognition away = holding(term, orders,
+        Recognition away = holding(orders,
                 new Recognition.CountIs.AwayFrom(values));
         classes.add(other == null
                 ? PartitionClass.ungeneratable(term + "/" + label, label, away,
@@ -889,11 +889,11 @@ public final class Partitions {
         return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
     }
 
-    /** A class that reads the term's count out of a row and answers about it. */
-    private static Recognition holding(NumericTerm.FromOnePosition term,
-                                          souther.compiler.inputs.TermOrders on,
-                                          Recognition.CountIs is) {
-        return new Recognition.OfACount(term, on, is);
+    /** A class that reads the count of the number {@code on} is of out of a row, and answers about
+     *  it. The number comes from the orders rather than beside them: a class of one number built on
+     *  another's order is what the pair naming its own number is here to stop. */
+    private static Recognition holding(TermOrders on, Recognition.CountIs is) {
+        return new Recognition.OfACount(on.term().atOnePosition(), on, is);
     }
 
     /** The cuts a position has, with the values a body singled out added as lines of their own. */

@@ -78,12 +78,11 @@ public final class TermOrders {
      * together from the reading that settled them.
      */
     public NumericTerm.Reading read(souther.compiler.observe.ObservedValue value) {
-        NumericTerm.FromOnePosition one = term.atOnePosition();
-        if (one == null) {
+        if (term.atOnePosition() == null) {
             throw new IllegalArgumentException(
                     term + " is read over the values of a run, and this is one value");
         }
-        return TermReading.at(one, value, this);
+        return TermReading.at(this, value);
     }
 
     /**
@@ -93,10 +92,10 @@ public final class TermOrders {
      * only says what its number is of them.
      */
     public NumericTerm.Reading readOver(java.util.List<souther.compiler.observe.ObservedValue> values) {
-        if (!(term instanceof NumericTerm.TakenOver over)) {
+        if (!(term instanceof NumericTerm.TakenOver)) {
             throw new IllegalArgumentException(term + " is a number of one value, not of a run");
         }
-        return TermReading.over(over, values, this);
+        return TermReading.over(this, values);
     }
 
     /** What a value at the term's path is decoded on, or null where nothing orders it. */

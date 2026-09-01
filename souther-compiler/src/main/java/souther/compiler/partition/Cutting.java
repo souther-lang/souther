@@ -179,7 +179,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // What the term it moves to is measured on, asked of the reading that is here anyway. Taken
         // as an argument beside the term, the two were free to be about two terms — and the reading
         // that would have settled it was being handed over in the same call.
-        BorderQuantity moved = of.movedTo(from, to, quantities.ordersOf(to));
+        BorderQuantity moved = of.movedTo(from, quantities.ordersOf(to));
         if (moved == null || !moved.levels().canCutAt(at)) {
             return null;
         }

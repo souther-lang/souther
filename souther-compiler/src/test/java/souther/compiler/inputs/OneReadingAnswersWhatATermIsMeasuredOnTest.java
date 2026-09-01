@@ -160,10 +160,11 @@ class OneReadingAnswersWhatATermIsMeasuredOnTest {
                     () -> "a term's orders are made from what a reading resolved, and " + made
                             + " lets any caller pair two carriers it happens to hold");
         }
-        assertTrue(java.util.Arrays.stream(TermOrders.class.getDeclaredMethods())
+        assertEquals(List.of(), java.util.Arrays.stream(TermOrders.class.getDeclaredMethods())
                         .filter(each -> each.getReturnType() == TermOrders.class)
-                        .noneMatch(each ->
-                                java.lang.reflect.Modifier.isPublic(each.getModifiers())),
-                "and no factory beside it is open either");
+                        .map(java.lang.reflect.Method::getName).sorted().toList(),
+                "and there is no factory beside it at all, open or not: a second way to make one is"
+                        + " a second place to count, and the count above reads calls rather than"
+                        + " declarations");
     }
 }

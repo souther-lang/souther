@@ -2628,7 +2628,7 @@ public final class Generator {
         // there is measured on as well, and the two are one value only for as long as no term
         // arrives where they part.
         souther.compiler.inputs.TermOrders on = subject.quantities().ordersOf(target.term());
-        return edgeFrom(TermRealizations.at(target, writtenAt, on, at, within, subject.symbols(),
+        return edgeFrom(TermRealizations.at(writtenAt, on, at, within, subject.symbols(),
                 subject.inputs().policy()), target, at);
     }
 

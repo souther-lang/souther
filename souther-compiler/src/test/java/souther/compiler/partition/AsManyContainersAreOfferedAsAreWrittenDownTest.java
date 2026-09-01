@@ -90,7 +90,7 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
         TermOrders orders = souther.compiler.inputs.TermOrdersFixtures
                 .at(total, OF_WHOLE_NUMBERS, SYMBOLS);
         assertTrue(orders.answered() != null, "and the order it answers on is the elements'");
-        return TermRealizations.at(new RealizationTarget.AtOnePosition(total), OF_WHOLE_NUMBERS,
+        return TermRealizations.at(OF_WHOLE_NUMBERS,
                 orders, SIX, NothingTheRulesSay.REGION, SYMBOLS, POLICY);
     }
 }

@@ -40,6 +40,13 @@ import souther.compiler.numeric.Place;
 record ComparedLine(NumericTerm.FromOnePosition term, Place value,
                     TermOrders orders, ComparisonClaim claim) {
 
+    ComparedLine {
+        // A line is drawn on a position's own number, which is the narrower kind of term, and the
+        // orders say which number they are of. Two spellings of one thing, so the second is refused
+        // here rather than read further along as a line on one number at the order of another.
+        orders.areOf(term);
+    }
+
     /**
      * What {@code comparison} draws, or null where it draws nothing.
      *
