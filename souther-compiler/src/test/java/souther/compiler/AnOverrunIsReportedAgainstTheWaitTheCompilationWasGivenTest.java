@@ -2,7 +2,8 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.Note;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.query.Adequacy;
 
 import org.junit.jupiter.api.Test;
@@ -10,11 +11,9 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The wait a report quotes is the one this compilation was given.
@@ -44,10 +43,10 @@ class AnOverrunIsReportedAgainstTheWaitTheCompilationWasGivenTest {
 
     @Test
     void theQuotedWaitIsTheOneTheCompilationWasGiven() {
-        assertTrue(reportedFor(Duration.ofMillis(4_321)).contains("4321ms"),
-                reportedFor(Duration.ofMillis(4_321)));
-        assertTrue(reportedFor(Duration.ofMillis(8_765)).contains("8765ms"),
-                reportedFor(Duration.ofMillis(8_765)));
+        assertEquals(new ExampleMessage.TheEvaluationDidNotAnswer("4321"),
+                reportedFor(Duration.ofMillis(4_321)).said());
+        assertEquals(new ExampleMessage.TheEvaluationDidNotAnswer("8765"),
+                reportedFor(Duration.ofMillis(8_765)).said());
     }
 
     /**
@@ -60,40 +59,35 @@ class AnOverrunIsReportedAgainstTheWaitTheCompilationWasGivenTest {
      */
     @Test
     void aWaitShorterThanAMillisecondIsNotQuotedAsNone() {
-        String said = reportedFor(Duration.ofNanos(1_500));
-
-        assertEquals(List.of("0.0015ms"), millisecondsIn(said), said);
+        assertEquals(new ExampleMessage.TheEvaluationDidNotAnswer("0.0015"),
+                reportedFor(Duration.ofNanos(1_500)).said());
     }
 
-    /** And nothing else is: a number from the arrangement would still be in the line beside it. */
+    /**
+     * And it is the only wait the report names.
+     *
+     * <p>The whole of what the diagnostic says, as values. A wait the arrangement invented would be
+     * a second one somewhere in them, and the hint names none — so what a reader sees can quote one
+     * wait and no other, whatever a catalog entry is worded like.
+     */
     @Test
-    void andNoOtherWaitIsInTheLine() {
-        String said = reportedFor(Duration.ofMillis(4_321));
+    void andNoOtherWaitIsAmongWhatItSays() {
+        Diagnostic one = reportedFor(Duration.ofMillis(4_321));
 
-        assertEquals(List.of("4321ms"), millisecondsIn(said), said);
+        assertEquals(new ExampleMessage.TheEvaluationDidNotAnswer("4321"), one.said());
+        assertEquals(List.of(new ExampleMessage.NotAnsweringIsNotNotTerminating()),
+                one.notes().stream().map(Note::said).toList());
     }
 
     /** What the compile says about a row that did not come back, given {@code wait} and an
      *  arrangement under which that row does not come back. */
-    private static String reportedFor(Duration wait) {
+    private static Diagnostic reportedFor(Duration wait) {
         CompileException raised = assertThrows(CompileException.class,
                 () -> Compiler.compiled(DOES_NOT_ANSWER, "Main", new ArrayList<>(),
                         Adequacy.Asked.NOTHING, wait,
                         DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("run"))));
 
         assertEquals("E1923", raised.code(), "the row did not answer");
-        Diagnostic one = raised.diagnostics().get(0);
-        return new HumanRenderer(false).render(one, null, Locale.ENGLISH);
-    }
-
-    /** Every number of milliseconds the rendered line says, in the order it says them. */
-    private static List<String> millisecondsIn(String rendered) {
-        List<String> said = new ArrayList<>();
-        java.util.regex.Matcher matched =
-                java.util.regex.Pattern.compile("\\d+(\\.\\d+)?ms").matcher(rendered);
-        while (matched.find()) {
-            said.add(matched.group());
-        }
-        return said;
+        return raised.diagnostics().get(0);
     }
 }

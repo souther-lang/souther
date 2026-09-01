@@ -4,9 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourcePos;
 import souther.compiler.examples.Deadline;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.WaitShown;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -58,22 +61,45 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
         Thread.sleep(600);
 
         assertEquals(Handoff.Serviced.WAIT_SPENT,
-                handoff.serviceUntilDone(Duration.ofMillis(100).toNanos()),
+                handoff.serviceUntilDone(Duration.ofMillis(100)),
                 "the row's own work is the compile's time whenever it was run");
     }
 
     /**
-     * The wait an arrangement is handed is the wait it holds.
+     * The wait an arrangement is handed is the wait it holds, over every wait the policy admits.
      *
-     * <p>A length, kept as one. Handed on as a number of milliseconds it would be rounded before
-     * anything counted it, and a wait shorter than a millisecond — which the policy admits, taking
-     * any positive length — would arrive as no wait at all.
+     * <p>Which is any positive length, and the population is that rather than the lengths a wait is
+     * usually written in. Both ends have their own way of not being held: below a millisecond a wait
+     * handed on as a number of them is rounded to none, and past what a {@code long} of nanoseconds
+     * holds a wait converted to one does not fit at all. A middle-sized wait is held by an
+     * arrangement that does neither and by one that does both, so the middle alone says nothing.
      */
     @Test
-    void theWaitIsHeldAsItWasHandedOver() {
-        Duration asked = Duration.ofNanos(1_500_000);
+    void everyWaitThePolicyAdmitsIsHeldAsItWasHandedOver() {
+        for (Duration asked : List.of(
+                Duration.ofNanos(1),
+                Duration.ofNanos(1_500_000),
+                Duration.ofSeconds(60),
+                Duration.ofNanos(Long.MAX_VALUE).plusSeconds(1),
+                Duration.ofDays(365_000))) {
+            new EvaluationPolicy(1L, 1, asked);   // the policy admits it
 
-        assertEquals(asked, JvmDeadlines.onWorkers().forThisCompile(asked).timeout());
+            assertEquals(asked, JvmDeadlines.onWorkers().forThisCompile(asked).timeout(),
+                    () -> "held as handed: " + asked);
+        }
+    }
+
+    /** And every one of them is written down as the wait it was, rather than as none or not at
+     *  all. */
+    @Test
+    void everyWaitThePolicyAdmitsIsWrittenAsWhatItWas() {
+        assertEquals("0.000001", WaitShown.of(Duration.ofNanos(1)));
+        assertEquals("1.5", WaitShown.of(Duration.ofNanos(1_500_000)));
+        assertEquals("60000", WaitShown.of(Duration.ofSeconds(60)));
+        assertEquals("9223372036854.775807",
+                WaitShown.of(Duration.ofNanos(Long.MAX_VALUE)));
+        // 365,000 days of milliseconds, which is more than a `long` of nanoseconds holds.
+        assertEquals("31536000000000", WaitShown.of(Duration.ofDays(365_000)));
     }
 
     /** A row of the compile's own that will not come back is given up on. */

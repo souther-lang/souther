@@ -389,7 +389,8 @@ public final class Compilation {
      * them: it states the terms, and this states one of them.
      *
      * @throws IllegalArgumentException if {@code budget} is not positive; a row that is given no time
-     *     at all would report every behavior as one that does not terminate.
+     *     at all is given up on before it starts, and every behavior is reported as one this
+     *     compiler could not answer for.
      */
     public Compilation withExampleBudget(java.time.Duration budget) {
         // Refused by the terms rather than here. What a positive wait is is the policy's to say —

@@ -12,6 +12,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.Note;
+import souther.compiler.observe.WaitShown;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -264,13 +266,15 @@ class CompileFakeTableWhereWrittenTest {
         Diagnostic one = said.get(0).diagnostic();
         assertEquals(14, ((Primary.InSource) one.primary()).place().region().start().line(), "at the fake");
         assertEquals(6, ((Primary.InSource) one.primary()).place().region().start().column(), "on the behavior it names");
-        // The number is read off the wait this compile was given rather than written in, so the
-        // line still holds if that wait changes. Ungrouped, which is how it is set.
-        assertTrue(rendered(one).contains("Building the `fake find` table did not answer within "
-                        + DoesNotComeBack.WAIT.toMillis() + "ms"),
-                rendered(one));
-        assertTrue(rendered(one).contains("not code this compile generated"),
-                "the hint says whose fault it is not: " + rendered(one));
+        // What it says, as the values it says it about. Asked of the rendered line it would be
+        // asked of the catalog's English as well, and a sentence reworded is not this reading
+        // changing.
+        assertEquals(new ExampleMessage.TheTableDidNotAnswer("find",
+                        WaitShown.of(DoesNotComeBack.WAIT)),
+                one.said(), "the fake it is about, and the wait this compile was given");
+        assertEquals(List.of(new ExampleMessage.TheTableNotAnsweringIsNotTheTableBeingWrong("find")),
+                one.notes().stream().map(Note::said).toList(),
+                "and the hint that says whose fault it is not");
     }
 
     /** The one diagnostic of a compile that has one. */

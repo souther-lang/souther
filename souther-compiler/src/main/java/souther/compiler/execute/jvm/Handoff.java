@@ -2,6 +2,7 @@ package souther.compiler.execute.jvm;
 
 import souther.compiler.examples.CallerApplication;
 
+import java.time.Duration;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.locks.Condition;
@@ -43,6 +44,10 @@ import java.util.concurrent.locks.ReentrantLock;
 final class Handoff {
 
     private static final ThreadLocal<Handoff> ON_THIS_THREAD = new ThreadLocal<>();
+
+    /** The longest one wait on a condition can be asked for, which is what a {@code long} of
+     *  nanoseconds holds. A wait longer than this is waited out in as many of these as it takes. */
+    private static final Duration LONGEST_AWAIT = Duration.ofNanos(Long.MAX_VALUE);
 
     /**
      * Where a hand-off is between the two threads it is shared by.
@@ -236,8 +241,8 @@ final class Handoff {
      * nothing was handed over, so an application that reached the crossing before the wait ran out
      * is applied rather than being given up on for the scheduler's sake.
      */
-    Serviced serviceUntilDone(long waitNanos) throws InterruptedException {
-        long remaining = waitNanos;
+    Serviced serviceUntilDone(Duration wait) throws InterruptedException {
+        Duration remaining = wait;
         lock.lock();
         try {
             while (true) {
@@ -248,10 +253,10 @@ final class Handoff {
                     moved.signalAll();
                 }
                 while (phase instanceof Phase.Running || phase instanceof Phase.Answered) {
-                    if (remaining <= 0) {
+                    if (remaining.isZero() || remaining.isNegative()) {
                         return Serviced.WAIT_SPENT;
                     }
-                    remaining = moved.awaitNanos(remaining);
+                    remaining = waitedOut(remaining);
                 }
                 if (!(phase instanceof Phase.Asked(CallerApplication.Application application))) {
                     return Serviced.ROW_LEFT;   // the row left, or was given up on
@@ -280,6 +285,20 @@ final class Handoff {
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * Waits for the other side to move, and what is left of {@code remaining} after it.
+     *
+     * <p>A wait is a length and a wait on a condition is a number of nanoseconds, and the first
+     * holds lengths the second cannot. A term the policy admits is not made shorter to fit the
+     * machine that keeps it: what does not fit is waited out in as much of it as does, as many
+     * times as it takes, and what is left is a length throughout.
+     */
+    private Duration waitedOut(Duration remaining) throws InterruptedException {
+        long asked = remaining.compareTo(LONGEST_AWAIT) > 0 ? Long.MAX_VALUE : remaining.toNanos();
+        long left = moved.awaitNanos(asked);
+        return remaining.minusNanos(asked - left);
     }
 
     /**

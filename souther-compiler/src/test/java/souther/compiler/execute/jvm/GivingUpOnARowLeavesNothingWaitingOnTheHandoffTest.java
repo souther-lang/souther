@@ -41,7 +41,7 @@ class GivingUpOnARowLeavesNothingWaitingOnTheHandoffTest {
         // hand-off waiting for an answer that has not been worked out yet.
         Thread asked = new Thread(() -> {
             try {
-                handoff.serviceUntilDone(Duration.ofSeconds(30).toNanos());
+                handoff.serviceUntilDone(Duration.ofSeconds(30));
             } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }

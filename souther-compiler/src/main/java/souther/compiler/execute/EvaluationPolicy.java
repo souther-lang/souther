@@ -78,9 +78,9 @@ public record EvaluationPolicy(long stepLimit, int recursionDepthLimit, Duration
      * How long the compiler waits before giving up on an evaluation that has stopped answering.
      *
      * <p>Generous, because reaching it is not an answer about the model: a row decided by its steps
-     * is decided long before this, and a row that reaches this is one the counters could not see into.
-     * A short one would turn slow-but-counted work into a failure to answer, which is the reading this
-     * whole arrangement exists to stop.
+     * is decided long before this, and a row that reaches this spent the time in work of the
+     * compiler's own that the counters do not reach. A short one would turn slow-but-counted work
+     * into a failure to answer, which is the reading this whole arrangement exists to stop.
      */
     public static final Duration DEFAULT_COMPILER_TIMEOUT = Duration.ofSeconds(60);
 

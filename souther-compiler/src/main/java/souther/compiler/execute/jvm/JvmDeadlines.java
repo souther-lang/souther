@@ -89,7 +89,6 @@ public final class JvmDeadlines {
      * the policy admits, taking any positive length — would arrive as no wait at all.
      */
     public static Deadline of(Duration timeout, long stackBytes) {
-        long waitNanos = nanosOf(timeout);
         return new Deadline() {
 
             @Override
@@ -124,7 +123,7 @@ public final class JvmDeadlines {
                 worker.setDaemon(true);
                 worker.start();
                 try {
-                    if (handoff.serviceUntilDone(waitNanos) == Handoff.Serviced.WAIT_SPENT) {
+                    if (handoff.serviceUntilDone(timeout) == Handoff.Serviced.WAIT_SPENT) {
                         // Given up on when the caller says so and not here: what the worker
                         // published is still there to be read, and reading it comes first.
                         return new Deadline.Outcome.Overran<>(() -> {
@@ -152,21 +151,6 @@ public final class JvmDeadlines {
     public static JvmExampleDeadlines onWorkers() {
         long stackBytes = workerStackFromSettings();
         return compilerTimeout -> of(compilerTimeout, stackBytes);
-    }
-
-    /**
-     * {@code timeout} as this clock counts, which is nanoseconds.
-     *
-     * <p>A length longer than nanoseconds can hold is one nothing reaches, so it is counted as the
-     * longest this can count rather than refused: what the term says is how long the compiler may go
-     * on without answering, and a term nothing will reach is not a term stated wrongly.
-     */
-    private static long nanosOf(Duration timeout) {
-        try {
-            return timeout.toNanos();
-        } catch (ArithmeticException _) {
-            return Long.MAX_VALUE;
-        }
     }
 
     private JvmDeadlines() {
