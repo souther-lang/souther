@@ -5,6 +5,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -179,18 +180,22 @@ final class Intervals {
     /**
      * The classes those ranges are, on the term {@code of} at a position of {@code type}.
      *
-     * <p>The term says how a row's value is read into a number and how its numbers are spaced; the
+     * <p>The orders say how a row's value is read into a number and how its numbers are spaced; the
      * type says what a value written at one of them looks like. A range of lengths has the first and
      * not the second: five is not what is written at the position, a string of five characters is,
      * and which values carry a count is asked of what builds them rather than settled here.
+     *
+     * <p>The orders are handed in and not worked out from the type. Which order a number is
+     * measured on follows from where the reading has its term standing, and a caller deriving it
+     * from whatever type reached it would be answering about wherever that type came from.
      */
     static List<PartitionClass> classesOf(List<Band> runs, NumericTerm.FromOnePosition of,
-                                          Type type,
+                                          Type type, TermOrders orders,
                                           ReadingPolicy policy,
                                           Symbols symbols, Endpoint min, Endpoint max) {
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
-        Carrier carrier = of.answeredOn(type, symbols);
+        Carrier carrier = orders.answered();
         List<PartitionClass> classes = new ArrayList<>();
         for (Band run : runs) {
             String label = rangeOf(run, min, max).label(carrier);
@@ -199,7 +204,7 @@ final class Intervals {
             // The run's own answer about what is in it. Read off a range of the position's counts,
             // a class whose line falls at a place the position has no value for had no end to state
             // — so it held every value, and two such classes each held everything the other did.
-            Recognition is = new Recognition.OfACount(of, of.ordersAt(type, symbols),
+            Recognition is = new Recognition.OfACount(of, orders,
                     new Recognition.CountIs.InARun(run));
             if (inside == null) {
                 classes.add(PartitionClass.ungeneratable(id, label, is,

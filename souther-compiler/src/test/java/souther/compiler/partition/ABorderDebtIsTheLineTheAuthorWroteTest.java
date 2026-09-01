@@ -404,8 +404,9 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
-        return Partitions.bordersOf(axis, symbols,
-                domain.quantities(symbols).runsBetween(axis.term()), new LinesRead());
+        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
+        return Partitions.bordersOf(axis, reading,
+                reading.runsBetween(axis.term()), new LinesRead());
     }
 
     /** A newtype's own clause, reached through the record that holds it. */

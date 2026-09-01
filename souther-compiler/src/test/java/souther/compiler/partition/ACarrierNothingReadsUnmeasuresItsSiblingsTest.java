@@ -104,7 +104,7 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
         String standing = read.partitioning().edgeIsKnownWritable(axis.term())
                 ? " writable" : " not known to be writable";
-        return Partitions.bordersOf(axis, read.symbols(),
+        return Partitions.bordersOf(axis, read.reading(),
                         read.reading().runsBetween(axis.term()), new LinesRead()).stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
