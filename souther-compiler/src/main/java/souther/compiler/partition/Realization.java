@@ -54,7 +54,43 @@ public sealed interface Realization {
      * <p>The item stays owed. What a report says of it is that it is not known to be writable, which
      * is the account any unpromised edge gets.
      */
-    record Unknown(Reason why) implements Realization {
+    record Unknown(Reason why, java.util.Set<CompositionBudget> stoppedBy)
+            implements Realization {
+
+        public Unknown {
+            stoppedBy = java.util.Set.copyOf(stoppedBy);
+        }
+
+        /** A walk that came to nothing without any budget of this compiler's having run out. */
+        public static Unknown nothingComposedOne() {
+            return new Unknown(Reason.NOTHING_COMPOSED_ONE, java.util.Set.of());
+        }
+
+        /**
+         * A walk these budgets of this compiler's stopped.
+         *
+         * <p>Which budget it was and the word it comes back with are made together here, and the
+         * word is never what the budget is read back from: one of these words is written wherever a
+         * walk of a side comes back empty, budget or no budget, so a reader recovering a budget
+         * from it would be recovering one that may never have been reached.
+         */
+        public static Unknown stoppedBy(java.util.Set<CompositionBudget> budgets) {
+            if (budgets.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a walk this compiler stopped says which budget stopped it");
+            }
+            // The word each of these has always come back with, and not one word for all of them.
+            // Which of the two a stopped walk says is the budget's, and a stop that said the other
+            // would move a sentence a reader has been reading for reasons of its own.
+            Reason why = switch (Generator.UnresolvedCombination.Reason.wordFor(budgets)) {
+                case NOTHING_COMPOSES_ONE -> Reason.NOTHING_COMPOSED_ONE;
+                case SEARCH_LIMIT -> Reason.THE_SEARCH_RAN_OUT;
+                default -> throw new IllegalStateException(
+                        "a budget that stopped a walk came back with a word no walk says: "
+                                + budgets);
+            };
+            return new Unknown(why, budgets);
+        }
 
         public enum Reason {
             /** This compiler composed no candidate — a position whose type it cannot write at, a

@@ -1923,8 +1923,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                 .TwoNumbersAtOneLocation _ ->
                                 "a condition on another number taken where this row is already"
                                         + " being written for one";
+                        // What stopped the looking, and not that nothing was found. An author does
+                        // nothing about the first and may do something about the second.
+                        case souther.compiler.partition.ReachabilityGap.Why
+                                .TheWalkForItsPositionsWasStopped(var by) ->
+                                "a condition on positions this compiler stopped looking at ("
+                                        + said(by) + ")";
                     };
         };
+    }
+
+    /**
+     * What a budget of this compiler's is called where a reader meets one.
+     *
+     * <p>Its own words and not the constant's name. What the compiler calls a figure is a name for
+     * the code that reads it; what a reader wants is what this compiler declined to do, in a phrase
+     * they can act on — and a budget added arrives here as a compile error rather than as a name
+     * nobody wrote a sentence for.
+     */
+    private static String said(java.util.Set<souther.compiler.partition.CompositionBudget> budgets) {
+        List<String> out = new ArrayList<>();
+        for (souther.compiler.partition.CompositionBudget each : budgets) {
+            out.add(switch (each) {
+                case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
+                case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
+                case PAIRINGS_BUILT_AT_ONCE -> "how many of a map's pairings are built at once";
+                case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
+                        "how many elements a total is spread over";
+                case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
+                case DECOMPOSITIONS_OF_A_TOTAL_OFFERED ->
+                        "how many ways a total is decomposed";
+                case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
+                case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
+                case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
+                case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
+                        "how many values of an unbounded progression are tried";
+                case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
+                case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
+                case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
+                        "how many values a position on the way is tried at";
+                case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
+            });
+        }
+        return String.join(", ", out);
     }
 
     /**

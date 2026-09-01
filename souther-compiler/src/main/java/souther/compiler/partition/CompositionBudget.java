@@ -62,7 +62,36 @@ public enum CompositionBudget {
 
     /** How many assignments of one parameter's positions a search composes. A bound on the search
      *  and not on any one position. */
-    ASSIGNMENTS_A_SEARCH_COMPOSES(() -> 256);
+    ASSIGNMENTS_A_SEARCH_COMPOSES(() -> 256),
+
+    /** How many values of a progression nothing bounds are tried. */
+    VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED(() -> 16),
+
+    /** How many levels past the one a side starts from are asked for. */
+    LEVELS_A_SIDE_IS_ASKED_AT(LevelCandidateSource::levelsTried),
+
+    /** How often a walk re-reads the rules with the positions it has fixed. */
+    TIMES_THE_RULES_ARE_ASKED_AGAIN(() -> 2_000),
+
+    /** How many values of one position on the way to a border are tried. Its outcome is not a
+     *  composing that stopped: the row is composed, and what was not composed against is one
+     *  condition on the way ({@link ReachabilityGap}). */
+    VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT(() -> 8),
+
+    /**
+     * How deep a construction plan descends.
+     *
+     * <p><b>Named here and carried by nothing.</b> Reaching it does not stop a composing and does
+     * not shorten an offer: the plan comes back with a position it has no fields for, the composing
+     * goes on against that plan, and what a failure afterwards says is what any refusal says. So
+     * there is no place on the way out for this to travel, and giving it one takes a shape the plan
+     * itself does not have — a plan that is complete and a plan that was cut are one word today.
+     *
+     * <p>Here all the same, because the inventory of what this compiler declines to do is what a
+     * reader of any of the others is entitled to, and a budget left out of it because its channel
+     * is missing is one nobody will find again. What is missing is the channel, not the name.
+     */
+    DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(() -> 8);
 
     private final IntSupplier maximum;
 

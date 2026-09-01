@@ -447,7 +447,16 @@ public final class Generator {
                              PLACES_A_PAIR_IS_TRIED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                              SHAPES_OF_A_TOTAL_OFFERED, DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
-                             STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES -> SEARCH_LIMIT;
+                             STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
+                             VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
+                             LEVELS_A_SIDE_IS_ASKED_AT -> SEARCH_LIMIT;
+                        // Reaching these stops no composing, so no search comes back from one of
+                        // them and there is no word to give. Asked for one all the same, this says
+                        // so rather than lending a word from a budget that does stop something.
+                        case TIMES_THE_RULES_ARE_ASKED_AGAIN,
+                             VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
+                             DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> throw new IllegalArgumentException(
+                                "no search comes back from this budget, so it has no word: " + each);
                     };
                     if (word != null && word != here) {
                         throw new IllegalStateException("one search stopped by budgets that come"
@@ -2489,13 +2498,20 @@ public final class Generator {
             // pair: which values one of them may take depends on what the other took, and a value
             // chosen for the first without asking is right about its own run and wrong about the
             // pair as often as not.
-            Map<NumericTerm.FromOnePosition, Place> standing = shared || !placeable ? null
+            NumericWitness.Standing found = shared || !placeable ? null
                     : NumericWitness.of(here, owing,
                             term -> subject.quantities().ordersOf(term).answered());
+            Map<NumericTerm.FromOnePosition, Place> standing =
+                    found == null ? null : found.at();
             if (standing == null) {
+                // And where a budget of this compiler's is why the walk found nothing, that rather
+                // than the word for a walk that had everything and reached none of it.
                 unrepresented.add(new ReachabilityGap.Uncomposed(cut, shared
                         ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
-                        : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                        : found != null && !found.stoppedBy().isEmpty()
+                                ? new ReachabilityGap.Why.TheWalkForItsPositionsWasStopped(
+                                        found.stoppedBy())
+                                : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
                 continue;
             }
             for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
