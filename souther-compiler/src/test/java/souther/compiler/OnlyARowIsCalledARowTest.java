@@ -4,11 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Prepared;
 import souther.test.Signatures;
+import souther.test.TheBareRowNames;
 import souther.test.WhatAModuleDeclares;
 
-import java.lang.classfile.ClassModel;
 import java.lang.classfile.Signature;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,34 +90,20 @@ class OnlyARowIsCalledARowTest {
      */
     private static final Set<String> CONTAINERS = Set.of("java/util/List");
 
-    private static final Set<String> RESERVED_MEMBERS = Set.of("row", "rows");
-
-    private static final Set<String> RESERVED_TYPES = Set.of("Row", "Rows");
-
     /** A member called {@code row} or {@code rows} answers a row, or rows. */
     @Test
     void aMemberCalledRowAnswersARow() {
-        List<String> wrong = new ArrayList<>();
-        for (WhatAModuleDeclares.Declared each : compiled().taking(RESERVED_MEMBERS)) {
-            if (!answersARow(each.type())) {
-                wrong.add(each.shown());
-            }
-        }
-        assertEquals(List.of(), wrong,
+        assertEquals(List.of(),
+                TheBareRowNames.takenIn(compiled(), each -> answersARow(each.type())),
                 "a member called row or rows answers a row or rows, and these answer something else");
     }
 
     /** A type called {@code Row} or {@code Rows} is a row, or is rows. */
     @Test
     void aTypeCalledRowIsARow() {
-        List<String> wrong = new ArrayList<>();
-        for (ClassModel each : compiled().classes()) {
-            String internal = each.thisClass().asInternalName();
-            if (RESERVED_TYPES.contains(simple(internal)) && !ROWS.contains(internal)) {
-                wrong.add(internal);
-            }
-        }
-        assertEquals(List.of(), wrong,
+        assertEquals(List.of(),
+                TheBareRowNames.typesIn(compiled()).stream()
+                        .filter(each -> !ROWS.contains(each)).toList(),
                 "a type called Row or Rows is a row, and these are something else");
     }
 
@@ -176,7 +161,7 @@ class OnlyARowIsCalledARowTest {
         for (String each : ROWS) {
             assertTrue(internal.contains(each), () -> "the walk did not reach " + each);
         }
-        assertFalse(compiled().taking(RESERVED_MEMBERS).isEmpty(),
+        assertFalse(compiled().taking(TheBareRowNames.MEMBERS).isEmpty(),
                 "the reserved name is in use on what may hold it");
     }
 
@@ -216,11 +201,6 @@ class OnlyARowIsCalledARowTest {
                 && bounded.wildcardIndicator()
                         != Signature.TypeArg.Bounded.WildcardIndicator.SUPER
                 && isARow(bounded.boundType());
-    }
-
-    private static String simple(String internal) {
-        String last = internal.substring(internal.lastIndexOf('/') + 1);
-        return last.substring(last.lastIndexOf('$') + 1);
     }
 
     private static WhatAModuleDeclares compiled() {
