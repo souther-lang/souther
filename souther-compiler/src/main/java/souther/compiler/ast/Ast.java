@@ -3,14 +3,11 @@ package souther.compiler.ast;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.BindingOwner;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -1018,7 +1015,7 @@ public interface Ast {
 
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
-                    NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Expansion, Block,
+                    NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Block,
                     Tuple, TupleGet, Unreachable {
     }
 
@@ -1132,78 +1129,6 @@ public interface Ast {
             return annotated && declaredType instanceof RetType rt ? rt : null;
         }
     }
-
-    /**
-     * One application of a non-recursive helper, with the callee's body in place of the call.
-     *
-     * <p>It is one node rather than the bindings it becomes because a signature is one statement.
-     * {@code emptyLike (xs: List<'a>) : List<'a>} says the result holds what the argument held, and
-     * that is said by the two occurrences of {@code 'a} being one variable. Written out as a binding
-     * per argument, each carrying its own declared type, there is nothing left saying the two
-     * occurrences were ever the same — and a signature position that leaves no binding at all, which
-     * the declared return and an unapplied function parameter both do, has nowhere to say anything.
-     * Holding the whole instantiation here is what makes the rule hold however the callee was
-     * written.
-     *
-     * <p>{@code application} names this one expansion, and the variables of {@code declaredReturn},
-     * {@code bound} and {@code given} are that application's ({@link Type.MetaVar}). Two calls of one
-     * helper are two applications and two sets of variables; a call inside an expansion is another.
-     *
-     * <p>{@code body} is the callee's, with each parameter read as the binding or the function it was
-     * given. It is the only slot holding code that runs: what {@code given} holds is already inside
-     * it wherever the callee applies it, and is kept here so the signature can be read against it.
-     */
-    record Expansion(ValueName callee, BindingOwner application, List<Bound> bound,
-                     List<Given> given, RetType declaredReturn, Expr body,
-                     SourcePos pos, Region region) implements Expr {
-
-        /**
-         * The same expansion as the nested bindings it writes — for a reader whose question is only
-         * about what flows where.
-         *
-         * <p>Not every reader is asking about the signature. What an invariant may be discharged
-         * from is a question about which value reached which position, and to that reader an
-         * expansion is a name bound to an argument and a body reading it, exactly as a {@code let}
-         * the author wrote is. Reading it as one keeps those readers saying about a call what they
-         * say about the code it stands for.
-         */
-        public Expr asBindings() {
-            Expr out = body;
-            for (int i = bound.size() - 1; i >= 0; i--) {
-                Bound b = bound.get(i);
-                out = new LetIn(b.binder(), b.value(), b.declaredType(), out, pos, region);
-            }
-            return out;
-        }
-    }
-
-    /** {@code e} with every expansion in it read as the bindings it writes ({@link
-     * Expansion#asBindings}), at every depth. */
-    public static Expr asBindings(Expr e) {
-        Expr through = e instanceof Expansion ex ? ex.asBindings() : e;
-        return mapChildren(through, Ast::asBindings, name -> name);
-    }
-
-    /** A value argument. It becomes a binding, so the body reads a name rather than the argument's
-     * text, and the callee's declared type for it comes along. */
-    record Bound(Binder binder, RetType declaredType, Expr value) {}
-
-    /**
-     * A function argument. It leaves no binding, so what the signature said about it reaches a
-     * reader only from here.
-     *
-     * <p>{@code arrivesAs} is what the argument is declared as where it comes from, where this
-     * expansion can see that. The two declarations are what a boundary holds — what this callee
-     * wants of the position, and what the function handed to it is — and reading them against each
-     * other is what the boundary is for.
-     *
-     * <p>{@code applied} is whether the callee's body still reaches it. Where it does, the body is
-     * where this argument is typed and what the signature said is checked by that application, as it
-     * is for a function written in place. Where it does not — the callee named a function parameter
-     * and never used it — the body says nothing about it at all, and this is the only place it can
-     * be held to the type the callee declared for it.
-     */
-    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs) {}
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type). */
     record ListLit(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
@@ -1605,8 +1530,6 @@ public interface Ast {
                             region);
             case LetIn x -> new LetIn(x.binder(), x.value(), x.declaredType(), x.annotated(),
                     x.opens(), x.body(), x.pos(), region);
-            case Expansion x -> new Expansion(x.callee(), x.application(), x.bound(), x.given(),
-                    x.declaredReturn(), x.body(), x.pos(), region);
             case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.pos(), region);
             case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
@@ -1686,21 +1609,6 @@ public interface Ast {
                 yield value == li.value() && body == li.body() ? li
                         : new LetIn(li.binder(), value, li.declaredType(), li.annotated(),
                                 li.opens(), body, li.pos(), li.region());
-            }
-            // `given` is not a slot. What stands there is caller code that is also inside `body`,
-            // wherever the callee applies it, so a walk that took both would read one lambda twice —
-            // and rewrite it into two different things. It is read only by whoever asks what the
-            // signature said about it.
-            case Expansion ex -> {
-                List<Bound> bound = each(ex.bound(), b -> {
-                    Expr value = atExpr.apply(b.value());
-                    return value == b.value() ? b
-                            : new Bound(b.binder(), b.declaredType(), value);
-                });
-                Expr body = atExpr.apply(ex.body());
-                yield bound == ex.bound() && body == ex.body() ? ex
-                        : new Expansion(ex.callee(), ex.application(), bound, ex.given(),
-                                ex.declaredReturn(), body, ex.pos(), ex.region());
             }
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());

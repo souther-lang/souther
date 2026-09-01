@@ -1309,10 +1309,6 @@ public final class Resolve {
             case Ast.Tuple x -> new Hir.Tuple(exprs(x.elements(), bound), x.pos(), x.region());
             case Ast.TupleGet x -> new Hir.TupleGet(expr(x.tuple(), bound), x.index(), x.arity(),
                     x.pos(), x.region());
-            // An expansion is what the inliner writes, and the inliner runs on what this pass
-            // answers. One here is a tree that has been below this boundary and come back.
-            case Ast.Expansion x -> throw new IllegalStateException(
-                    "an expansion reached resolution at " + x.pos());
         };
     }
 
