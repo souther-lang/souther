@@ -33,11 +33,13 @@ import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.InputClassifications;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Measuring one behavior's rows against the distinctions its model draws.
@@ -830,10 +832,14 @@ final class Coverages {
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
                 return switch (realizer.realize(quantity.standingAt(criterion), able.region())) {
-                    case Realization.Found found -> whatCameOfIt(
-                            standingThere(probe, quantity, where, criterion, site, label,
-                                    probe.attempt(label, found.fixing(), able)),
-                            label, within);
+                    case Realization.Found found -> {
+                        souther.compiler.partition.Generator.BoundaryAttempt made =
+                                probe.attempt(label, found.fixing(), able);
+                        yield whatCameOfIt(made, label, within,
+                                () -> standingThere(probe, quantity, where, criterion, site,
+                                        (souther.compiler.partition.Generator.BoundaryAttempt.Built)
+                                                made));
+                    }
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
                     // that stopped, or one that composed no candidate at all, settles nothing
@@ -952,30 +958,21 @@ final class Coverages {
      * stand at the point says the way to the border was not composed against in full; the point is
      * owed the same row it was owed before, and nothing here says one cannot be written.
      */
-    private static souther.compiler.partition.Generator.BoundaryAttempt standingThere(
+    private static StandingAtAPoint.Met standingThere(
             Probe probe, BorderQuantity quantity, BehaviorInputs where, Criterion criterion,
-            java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site, String label,
-            souther.compiler.partition.Generator.BoundaryAttempt made) {
-        if (!(made instanceof souther.compiler.partition.Generator.BoundaryAttempt.Built built)) {
-            return made;
-        }
+            java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site,
+            souther.compiler.partition.Generator.BoundaryAttempt.Built built) {
         souther.compiler.partition.ObservedInputs read =
                 probe.read(built.row().inputs()).asInputs();
         if (read == null) {
-            return made;   // nothing built it, so nothing here can say where it went
+            // Nothing came back to read, so nothing here can say where the value went. Which is
+            // this walk unable to look and not this walk having looked — the row was composed and
+            // taken by the decoders either way, and the case that says so is the one for a reading
+            // that did not happen.
+            return new StandingAtAPoint.Met.CouldNotTell(
+                    EnumSet.of(Incompleteness.Code.VALUE_UNREADABLE));
         }
-        return switch (StandingAtAPoint.met(quantity, where, List.of(read), criterion, site)) {
-            case YES, NOT_WATCHED -> made;
-            // Carrying what the composer could not compose against. This is the outcome that most
-            // needs it: a row was built and was not seen reaching the point, and whether some
-            // condition above the line went unused is the first thing that would explain it.
-            case NO, UNREADABLE -> new souther.compiler.partition.Generator.BoundaryAttempt.Unresolved(
-                    new souther.compiler.partition.Generator.UnresolvedCombination(
-                            List.of(label),
-                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                    .NO_CERTIFIED_WITNESS),
-                    built.unrepresented());
-        };
+        return StandingAtAPoint.met(quantity, where, List.of(read), criterion, site);
     }
 
     /** A search that came to nothing at {@code subject}, which is what a point is written as. */
@@ -1004,7 +1001,8 @@ final class Coverages {
      */
     private static ItemAssessment.Attempt.Searched whatCameOfIt(
             souther.compiler.partition.Generator.BoundaryAttempt made, String subject,
-            souther.compiler.partition.WayToTheBorder within) {
+            souther.compiler.partition.WayToTheBorder within,
+            Supplier<StandingAtAPoint.Met> standing) {
         return switch (made) {
             case null -> new ItemAssessment.Attempt.Unresolved(
                     new souther.compiler.partition.Generator.UnresolvedCombination(
@@ -1015,8 +1013,36 @@ final class Coverages {
             // stages and two answers: a condition the walk stated stays stated, and writing the
             // composer's own failure onto the way would have one condition wearing two of the
             // walk's words.
+            //
+            // And the row read back, which is where a composed value becomes a value at the point
+            // or stops short of being one. The three answers of that reading are the three this
+            // hands on, and this is the only place they are turned into what a search came to.
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new ItemAssessment.Attempt.Built(built.row(), within, built.unrepresented());
+                    switch (standing.get()) {
+                        case StandingAtAPoint.Met.AtPoint _ ->
+                                new ItemAssessment.Attempt.Certified(built.row(), within,
+                                        built.unrepresented());
+                        // Composed and not seen where it was composed for. Which says the way to
+                        // the border was not composed against in full and never that the point is
+                        // unwritable, and it carries what the composer could not act on because
+                        // that is the first thing that would explain it.
+                        case StandingAtAPoint.Met.NotAtPoint _ ->
+                                new ItemAssessment.Attempt.Unresolved(
+                                        new souther.compiler.partition.Generator
+                                                .UnresolvedCombination(List.of(subject),
+                                                souther.compiler.partition.Generator
+                                                        .UnresolvedCombination.Reason
+                                                        .NO_CERTIFIED_WITNESS),
+                                        within, built.unrepresented());
+                        // And a reading that could not look is not a reading that looked. The value
+                        // was built and the decoders took it; what did not happen is the reading
+                        // back. Said as the answer above, a point a value was just built at is
+                        // reported as one nothing can write a row at.
+                        case StandingAtAPoint.Met.CouldNotTell it ->
+                                new ItemAssessment.Attempt.Unverified(built.row(), within,
+                                        built.unrepresented(),
+                                        new EstablishmentGap.Observation(it.causes()));
+                    };
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
                     new ItemAssessment.Attempt.Unresolved(left.why(), within,
                             left.unrepresented());
@@ -1066,7 +1092,7 @@ final class Coverages {
             StandingAtAPoint.Met met, boolean guard, souther.compiler.partition.Border border,
             souther.compiler.query.Adequacy.RowReading observed) {
         List<RowOutcome> rows = observed.rowsSeen();
-        if (met == StandingAtAPoint.Met.YES) {
+        if (met instanceof StandingAtAPoint.Met.Reached) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
             return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
         }
@@ -1075,8 +1101,10 @@ final class Coverages {
         // nothing read at all, which may be the row that is at this value; and, for a line a fork
         // drew, a row that never finished and so never reached the comparison.
         Set<Weakening> by = new LinkedHashSet<>();
-        if (met == StandingAtAPoint.Met.UNREADABLE) {
-            by.add(new Weakening.BorderValueUnreadable(border));
+        if (met instanceof StandingAtAPoint.Met.CouldNotTell it) {
+            for (Incompleteness.Code cause : it.causes()) {
+                by.add(new Weakening.BorderValueUnreadable(border, cause));
+            }
         }
         for (Incompleteness gap : observed.gaps()) {
             // Rows nothing read at all bear on every line. Rows that were read and did not finish

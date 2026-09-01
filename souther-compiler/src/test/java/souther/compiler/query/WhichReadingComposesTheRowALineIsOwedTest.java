@@ -291,7 +291,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     }
 
     private static ItemAssessment.Attempt built(String carrier) {
-        return new ItemAssessment.Attempt.Built(new Generator.GeneratedRow(
+        return ItemAssessment.Attempt.Built.certified(new Generator.GeneratedRow(
                 new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null);
     }
 

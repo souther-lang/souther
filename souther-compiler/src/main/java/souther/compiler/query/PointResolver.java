@@ -105,11 +105,14 @@ public final class PointResolver {
                         walked.put(reading, new SearchCoverage.ReadingSearch.Unavailable());
                 case ReadingEvidence.Searched(ItemAssessment.Attempt attempt) -> {
                     switch (attempt) {
-                        case ItemAssessment.Attempt.Built(var row, var _, var _) ->
+                        // A row was built, whether or not the reading back placed it. What this
+                        // hands over is the row, and an author holding one this compiler could not
+                        // read back has the same row it composed.
+                        case ItemAssessment.Attempt.Built built ->
                                 // The line is answered. Which reading answered it is where the row
                                 // goes, and what a reader asking about one coordinate compares
                                 // against — so the position is carried and not the behavior alone.
-                                { return new PointResolution.Generated(reading, row); }
+                                { return new PointResolution.Generated(reading, built.row()); }
                         case ItemAssessment.Attempt.Unresolved(var why, var _, var _) ->
                                 walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));

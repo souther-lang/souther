@@ -7,6 +7,7 @@ import souther.compiler.partition.NotOwedReason;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -57,15 +58,32 @@ public sealed interface ItemAssessment {
          * <p>Which is why the two used to be attempts and are not. "A row is already there" and
          * "this was never measured" are things the measurement says, and a search that reported them
          * was repeating what its own input already held.
+         *
+         * <p><b>Read over the states and not off a list of the ones that qualify.</b> The question
+         * is whether anything is left to find out here, and a measurement that is short of
+         * something is the case that most needs a candidate — it is the one where this compiler
+         * cannot say whether a row exists. Named the other way round, as a list of the shapes worth
+         * searching, a reading weakened by what went unread falls through to {@code false} and the
+         * point is never searched at all; nothing is then built, nothing shows the point writable,
+         * and the account says the model admits no row there. A state added to {@link Measurement}
+         * arrives here as a compile error rather than as that silence.
          */
         public boolean worthSearching() {
             if (hasRowWitness()) {
                 return false;
             }
-            return coverage instanceof Measurement.Complete<Coverage> whole
-                            && whole.value() instanceof Coverage.NoHit
-                    || coverage instanceof Measurement.NotMeasured<Coverage> none
-                            && none.why() == Coverage.NotAsked.NO_ROWS;
+            return switch (coverage) {
+                // Read to the end and no row at it, or read as far as it got and no row at it: both
+                // are points where a candidate tells somebody something.
+                case Measurement.Complete<Coverage> it -> it.value() instanceof Coverage.NoHit;
+                case Measurement.Partial<Coverage> it -> it.value() instanceof Coverage.NoHit;
+                // No rows to look at is a point worth building one for. The other reasons nobody
+                // measured are not: a question this compilation was not put is not work to hand to
+                // an author.
+                case Measurement.NotMeasured<Coverage> it -> it.why() == Coverage.NotAsked.NO_ROWS;
+                // Nothing to build against, which the search would find out again.
+                case Measurement.FailedToMeasure<Coverage> _ -> false;
+            };
         }
 
         /**
@@ -116,8 +134,13 @@ public sealed interface ItemAssessment {
          * true of whether anything was known, and false of what was doing the knowing.
          */
         public WritabilityEvidence writabilityEvidence() {
+            // The certified arm and not `Built`. What grounds this is a value shown to be at the
+            // point, and a row whose read-back never came back has not been shown to be anywhere —
+            // counted here, an observation this compiler cut short would be reported as the model
+            // admitting a row, which is the same trade as the one it is here to stop, made the
+            // other way round. What that row does license is said by `WritabilityKnowledge`.
             return WritabilityEvidence.of(projection, hasRowWitness(),
-                    attempt instanceof Attempt.Built);
+                    attempt instanceof Attempt.Certified);
         }
     }
 
@@ -368,20 +391,65 @@ public sealed interface ItemAssessment {
             List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed();
         }
 
-        /** A value at the point, built and accepted by the module's own decoders. */
-        record Built(Generator.GeneratedRow row,
-                     souther.compiler.partition.WayToTheBorder way,
-                     List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
-                implements Searched {
+        /**
+         * A value at the point, built and accepted by the module's own decoders.
+         *
+         * <p><b>What was built, and whether it was read back where it was built for, are two
+         * things.</b> Composing a value that the decoders take does not say the value lands at the
+         * point — a rule the composer could not act on refuses a candidate the composer thought it
+         * had placed — so the row is read again after it is built. Which leaves three outcomes and
+         * not two: the reading agreed, the reading disagreed, and the reading did not happen.
+         *
+         * <p>Held as one case, the third can only be said as the second: a value whose read-back a
+         * limit cuts short is filed as a search that composed nothing, and the point it stands at
+         * is then reported as one nothing can write a row at. Held as a boolean beside the row,
+         * every reader decides again what the boolean licenses.
+         *
+         * <p>So this is what the two share — a row was built, and whoever wants it can have it —
+         * and the arms below are what only one of them may say. A reader asking for the row asks
+         * for {@link Built}; a reader asking whether anything showed the point writable asks for
+         * {@link Certified}, and gets a compile error rather than a silent yes if a third way of
+         * being built arrives.
+         */
+        sealed interface Built extends Searched {
 
-            public Built {
-                uncomposed = List.copyOf(uncomposed);
-            }
+            /** The value this search composed, whichever of the two this is. */
+            Generator.GeneratedRow row();
 
             /** A row composed where the whole way was stated and used. */
-            public Built(Generator.GeneratedRow row,
-                         souther.compiler.partition.WayToTheBorder way) {
-                this(row, way, List.of());
+            static Built certified(Generator.GeneratedRow row,
+                                   souther.compiler.partition.WayToTheBorder way) {
+                return new Certified(row, way, List.of());
+            }
+        }
+
+        /** Built, and read back standing where it was built for. */
+        record Certified(Generator.GeneratedRow row,
+                         souther.compiler.partition.WayToTheBorder way,
+                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                implements Built {
+
+            public Certified {
+                uncomposed = List.copyOf(uncomposed);
+            }
+        }
+
+        /**
+         * Built, and the reading that would have said where it stands did not come back.
+         *
+         * <p>Nothing here is about the model. The row is as much a row as {@link Certified}'s and is
+         * offered as one; what is missing is this compiler's own confirmation, and {@code why} is
+         * what stopped it.
+         */
+        record Unverified(Generator.GeneratedRow row,
+                          souther.compiler.partition.WayToTheBorder way,
+                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                          EstablishmentGap why)
+                implements Built {
+
+            public Unverified {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "a row nothing certified says what stopped it");
             }
         }
 
