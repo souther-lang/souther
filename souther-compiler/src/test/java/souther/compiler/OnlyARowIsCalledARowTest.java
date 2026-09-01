@@ -3,29 +3,16 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Prepared;
+import souther.test.Signatures;
+import souther.test.WhatAModuleDeclares;
 
-import java.io.IOException;
-import java.lang.classfile.Attributes;
-import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
-import java.lang.classfile.FieldModel;
-import java.lang.classfile.MethodModel;
-import java.lang.classfile.MethodSignature;
 import java.lang.classfile.Signature;
-import java.lang.classfile.attribute.RecordAttribute;
-import java.lang.classfile.attribute.RecordComponentInfo;
-import java.lang.constant.ClassDesc;
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -45,6 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the member leaves a type free to be called {@code Rows} while holding blocks, which is where this
  * was found.
  *
+ * <p><b>And one claim, because a prohibition alone cannot be held to.</b> Both prohibitions are
+ * over what this module holds, so widening what counts as rows moves the population with them and
+ * leaves nothing to report: a rule that admits more finds less. What the rule admits is said
+ * separately, against shapes rather than against the module.
+ *
  * <p><b>What is reserved is the bare name.</b> {@code row} and {@code rows} exactly, and the types
  * {@code Row} and {@code Rows} exactly. A compound name has a different head concept —
  * {@code rowCount} is a number, {@code RowReading} is a reading, {@code RowsRead} is what was read
@@ -54,7 +46,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p><b>What it is over is production declarations.</b> It reads the main class files of this
  * module, which is where the row vocabulary is declared and where a reader of this compiler meets
- * it. Test fixtures, local variables and parameters are not part of the surface it protects: a
+ * it. The modules beside it hold the same rule and say it themselves, each over its own classes.
+ * Test fixtures, local variables and parameters are not part of the surface it protects: a
  * table-driven test's own {@code Row} is not a name any reader of the compiler resolves, and what a
  * method calls a value inside its body is not a declaration. Serialized vocabulary is outside it
  * too — a report's JSON key {@code "rows"} is a wire contract of its own and is not renamed by
@@ -104,10 +97,12 @@ class OnlyARowIsCalledARowTest {
 
     /** A member called {@code row} or {@code rows} answers a row, or rows. */
     @Test
-    void aMemberCalledRowAnswersARow() throws IOException, URISyntaxException {
+    void aMemberCalledRowAnswersARow() {
         List<String> wrong = new ArrayList<>();
-        for (ClassModel each : compiled()) {
-            wrong.addAll(membersOf(each));
+        for (WhatAModuleDeclares.Declared each : compiled().taking(RESERVED_MEMBERS)) {
+            if (!answersARow(each.type())) {
+                wrong.add(each.shown());
+            }
         }
         assertEquals(List.of(), wrong,
                 "a member called row or rows answers a row or rows, and these answer something else");
@@ -115,10 +110,10 @@ class OnlyARowIsCalledARowTest {
 
     /** A type called {@code Row} or {@code Rows} is a row, or is rows. */
     @Test
-    void aTypeCalledRowIsARow() throws IOException, URISyntaxException {
+    void aTypeCalledRowIsARow() {
         List<String> wrong = new ArrayList<>();
-        for (ClassModel each : compiled()) {
-            String internal = internal(each);
+        for (ClassModel each : compiled().classes()) {
+            String internal = each.thisClass().asInternalName();
             if (RESERVED_TYPES.contains(simple(internal)) && !ROWS.contains(internal)) {
                 wrong.add(internal);
             }
@@ -128,43 +123,12 @@ class OnlyARowIsCalledARowTest {
     }
 
     /**
-     * And both prohibitions are over something.
-     *
-     * <p>Both pass on the empty set, which is also what a walk that read nothing answers. The rows
-     * are the population the member rule is about — a name it lets through rather than one it never
-     * met — and the classes are what the type rule ranges over. Told neither, a walk that had lost
-     * its way would report this module clean.
-     */
-    @Test
-    void bothOfThoseAreOverSomething() throws IOException, URISyntaxException {
-        List<ClassModel> compiled = compiled();
-        // Named, rather than counted against a floor somebody chose: a walk that reached the
-        // classes the rule is written about is what this is asking, and a number would be met by
-        // any hundred of them.
-        List<String> internal = compiled.stream().map(OnlyARowIsCalledARowTest::internal).toList();
-        for (String each : ROWS) {
-            assertTrue(internal.contains(each), () -> "the walk did not reach " + each);
-        }
-        List<String> allowed = new ArrayList<>();
-        for (ClassModel each : compiled) {
-            for (MethodModel method : each.methods()) {
-                if (RESERVED_MEMBERS.contains(method.methodName().stringValue())
-                        && answersARow(answeredBy(method))) {
-                    allowed.add(internal(each) + "." + method.methodName().stringValue());
-                }
-            }
-        }
-        assertFalse(allowed.isEmpty(), "the reserved name is in use on what may hold it");
-    }
-
-    /**
      * And what the reserved name may answer is these shapes and no others.
      *
-     * <p>The two prohibitions above say what this module holds today, so an edit that widened what
-     * counts as rows would go on passing — the population would move with it and nothing would be
-     * left to report. What the rule admits is a claim of its own, and it is made here against
-     * shapes rather than against the module: each is written out and run, so widening the rule
-     * fails on the shape it newly admits and narrowing it fails on the shape it stops admitting.
+     * <p>The two prohibitions say what this module holds today, so an edit that widened what counts
+     * as rows would go on passing — the population would move with it and nothing would be left to
+     * report. So what the rule admits is claimed here against shapes: each is written out and run,
+     * and widening the rule fails on the shape it newly admits.
      *
      * <p>The refusals are the ones that cost something. A plurality of pluralities is the shape
      * this whole rule came from: {@code rows().size()} over one is a count of groups read as a
@@ -176,14 +140,14 @@ class OnlyARowIsCalledARowTest {
         Map<String, Boolean> shapes = new LinkedHashMap<>();
         shapes.put(row, true);                                  // a row
         shapes.put("Ljava/util/List<" + row + ">;", true);       // rows
-        shapes.put("[" + row, true);                            // rows, written as an array
         shapes.put("Ljava/util/List<+" + row + ">;", true);      // rows nothing writes to
         shapes.put("Ljava/util/List<Ljava/util/List<" + row + ">;>;", false);   // groups of rows
-        shapes.put("[[" + row, false);                          // the same, written as an array
+        shapes.put("[" + row, false);                           // a shape nobody has decided about
+        shapes.put("[[" + row, false);                          // groups of them, as an array
         shapes.put("[Ljava/util/List<" + row + ">;", false);     // and the same, mixed
         shapes.put("Ljava/util/Map<Ljava/lang/String;Ljava/util/List<" + row + ">;>;",
                 false);                                         // rows under a key
-        shapes.put("Ljava/util/Set<" + row + ">;", false);       // a shape nobody has decided about
+        shapes.put("Ljava/util/Set<" + row + ">;", false);       // another nobody has decided about
         shapes.put("Ljava/util/List<-" + row + ">;", false);     // rows go in, anything comes out
         shapes.put("Ljava/util/List<*>;", false);                // what it holds is unsaid
         shapes.put("Lsouther/compiler/check/Prepared$ForExamples;", false);   // what holds blocks
@@ -196,45 +160,24 @@ class OnlyARowIsCalledARowTest {
     }
 
     /**
-     * Every declaration of one class that takes the reserved name.
+     * And the prohibitions are over something.
      *
-     * <p>One name of one class is one finding. A record component, the field it writes and the
-     * accessor that answers it are one thing the author wrote, and so are a field and the accessor
-     * beside it; naming each of them would say the same finding three times over.
-     *
-     * <p>So a record whose component takes the reserved name and may hold it covers a second
-     * declaration of that name in the same record — a static field, which is the only way to write
-     * one. Nothing in this compiler does, and closing it would mean telling a component's own field
-     * and accessor from a member that merely shares its name, which a class file does not say.
+     * <p>Both pass on the empty set, which is also what a walk that read nothing answers. The rows
+     * are the population the member rule is about — names it lets through rather than ones it never
+     * met — and the classes are what the type rule ranges over.
      */
-    private static List<String> membersOf(ClassModel of) {
-        List<String> wrong = new ArrayList<>();
-        Set<String> said = new LinkedHashSet<>();
-        Set<String> components = new LinkedHashSet<>();
-        for (RecordComponentInfo each : of.findAttribute(Attributes.record())
-                .map(RecordAttribute::components).orElse(List.of())) {
-            components.add(each.name().stringValue());
-            if (RESERVED_MEMBERS.contains(each.name().stringValue())
-                    && !answersARow(signatureOf(each)) && said.add(each.name().stringValue())) {
-                wrong.add(internal(of) + "." + each.name().stringValue()
-                        + " : " + shown(signatureOf(each)));
-            }
+    @Test
+    void andTheProhibitionsAreOverSomething() {
+        List<String> internal = compiled().classes().stream()
+                .map(each -> each.thisClass().asInternalName()).toList();
+        // Named, rather than counted against a floor somebody chose: a walk that reached the
+        // classes the rule is written about is what this is asking, and a number would be met by
+        // any hundred of them.
+        for (String each : ROWS) {
+            assertTrue(internal.contains(each), () -> "the walk did not reach " + each);
         }
-        for (FieldModel each : of.fields()) {
-            String name = each.fieldName().stringValue();
-            if (RESERVED_MEMBERS.contains(name) && !components.contains(name)
-                    && !answersARow(signatureOf(each)) && said.add(name)) {
-                wrong.add(internal(of) + "." + name + " : " + shown(signatureOf(each)));
-            }
-        }
-        for (MethodModel each : of.methods()) {
-            String name = each.methodName().stringValue();
-            if (RESERVED_MEMBERS.contains(name) && !components.contains(name)
-                    && !answersARow(answeredBy(each)) && said.add(name)) {
-                wrong.add(internal(of) + "." + name + " : " + shown(answeredBy(each)));
-            }
-        }
-        return wrong;
+        assertFalse(compiled().taking(RESERVED_MEMBERS).isEmpty(),
+                "the reserved name is in use on what may hold it");
     }
 
     /**
@@ -245,22 +188,20 @@ class OnlyARowIsCalledARowTest {
      * under the reserved name it would be read as a count of rows, which is the reading this whole
      * rule exists to remove — the one that came off {@code rows().rows().size()}.
      *
-     * <p>An array of rows is rows for the same reason a list of them is, and stops at the same
-     * place. A number is not rows: what it counts is not in it.
+     * <p>A number is not rows: what it counts is not in it. Nor is an array of them — not because
+     * an array could not hold rows, but because nothing here writes one, and admitting a shape in
+     * advance is what {@link #CONTAINERS} is closed against.
      */
     private static boolean answersARow(Signature answered) {
-        return switch (answered) {
-            case Signature.ArrayTypeSig array -> isARow(array.componentSignature());
-            case Signature.ClassTypeSig cls -> isARow(cls)
-                    || CONTAINERS.contains(named(cls)) && cls.typeArgs().size() == 1
-                    && holdsARow(cls.typeArgs().getFirst());
-            default -> false;
-        };
+        return answered instanceof Signature.ClassTypeSig cls
+                && (isARow(cls)
+                        || CONTAINERS.contains(Signatures.named(cls)) && cls.typeArgs().size() == 1
+                        && holdsARow(cls.typeArgs().getFirst()));
     }
 
     /** Whether a type is one of the rows themselves. */
     private static boolean isARow(Signature type) {
-        return type instanceof Signature.ClassTypeSig cls && ROWS.contains(named(cls));
+        return type instanceof Signature.ClassTypeSig cls && ROWS.contains(Signatures.named(cls));
     }
 
     /**
@@ -277,77 +218,12 @@ class OnlyARowIsCalledARowTest {
                 && isARow(bounded.boundType());
     }
 
-    private static String named(Signature.ClassTypeSig of) {
-        String descriptor = of.classDesc().descriptorString();
-        return descriptor.substring(1, descriptor.length() - 1);
-    }
-
-    /** What a method answers, generic where it was written generic. */
-    private static Signature answeredBy(MethodModel of) {
-        Optional<MethodSignature> generic = of.findAttribute(Attributes.signature())
-                .map(it -> MethodSignature.parseFrom(it.signature().stringValue()));
-        return generic.map(MethodSignature::result)
-                .orElseGet(() -> Signature.of(of.methodTypeSymbol().returnType()));
-    }
-
-    private static Signature signatureOf(FieldModel of) {
-        return of.findAttribute(Attributes.signature())
-                .map(it -> Signature.parseFrom(it.signature().stringValue()))
-                .orElseGet(() -> Signature.of(of.fieldTypeSymbol()));
-    }
-
-    private static Signature signatureOf(RecordComponentInfo of) {
-        return of.findAttribute(Attributes.signature())
-                .map(it -> Signature.parseFrom(it.signature().stringValue()))
-                .orElseGet(() -> Signature.of(of.descriptorSymbol()));
-    }
-
-    private static String shown(Signature of) {
-        return switch (of) {
-            case Signature.ArrayTypeSig array -> shown(array.componentSignature()) + "[]";
-            case Signature.BaseTypeSig base ->
-                    ClassDesc.ofDescriptor(String.valueOf(base.baseType())).displayName();
-            case Signature.TypeVarSig var -> var.identifier();
-            case Signature.ClassTypeSig cls -> cls.typeArgs().isEmpty() ? named(cls)
-                    : named(cls) + "<" + String.join(", ",
-                            cls.typeArgs().stream().map(OnlyARowIsCalledARowTest::shown).toList())
-                            + ">";
-        };
-    }
-
-    private static String shown(Signature.TypeArg arg) {
-        return switch (arg) {
-            case Signature.TypeArg.Unbounded _ -> "?";
-            case Signature.TypeArg.Bounded bounded -> switch (bounded.wildcardIndicator()) {
-                case NONE -> shown(bounded.boundType());
-                case EXTENDS -> "? extends " + shown(bounded.boundType());
-                case SUPER -> "? super " + shown(bounded.boundType());
-            };
-        };
-    }
-
-    private static String internal(ClassModel of) {
-        return of.thisClass().asInternalName();
-    }
-
     private static String simple(String internal) {
         String last = internal.substring(internal.lastIndexOf('/') + 1);
         return last.substring(last.lastIndexOf('$') + 1);
     }
 
-    /** Every class this compiler was built into, found from where one of them is loaded from. */
-    private static List<ClassModel> compiled() throws IOException, URISyntaxException {
-        Path root = Path.of(Prepared.class.getResource("Prepared.class").toURI());
-        for (int up = 0; up <= "souther/compiler/check".chars().filter(it -> it == '/').count();
-                up++) {
-            root = root.getParent();
-        }
-        List<ClassModel> out = new ArrayList<>();
-        try (Stream<Path> walk = Files.walk(root)) {
-            for (Path each : walk.filter(it -> it.toString().endsWith(".class")).sorted().toList()) {
-                out.add(ClassFile.of().parse(Files.readAllBytes(each)));
-            }
-        }
-        return out;
+    private static WhatAModuleDeclares compiled() {
+        return WhatAModuleDeclares.of(Prepared.class);
     }
 }

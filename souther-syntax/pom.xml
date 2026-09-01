@@ -31,5 +31,10 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

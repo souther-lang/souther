@@ -924,12 +924,12 @@ public final class ExampleStatements {
 
         /** Whether a fake's row states the arguments a call arrived with, each by the language's
          * equality. A multi-input dependency is matched as a tuple (spec §example-fakes), so this walks them. */
-        private static boolean sameArguments(Object[] row, Object[] key) {
-            if (row.length != key.length) {
+        private static boolean sameArguments(Object[] arguments, Object[] key) {
+            if (arguments.length != key.length) {
                 return false;
             }
-            for (int i = 0; i < row.length; i++) {
-                if (!souther.runtime.Values.equal(row[i], key[i])) {
+            for (int i = 0; i < arguments.length; i++) {
+                if (!souther.runtime.Values.equal(arguments[i], key[i])) {
                     return false;
                 }
             }
