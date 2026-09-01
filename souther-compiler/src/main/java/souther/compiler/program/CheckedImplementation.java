@@ -17,8 +17,8 @@ import java.util.List;
  * <p>Each state, and not a body that may be absent. A composition is an implementation (spec
  * §sequential-composition) and has no body; so is an implementation another compile emitted. A
  * reader given {@code Optional<Core>} would find nothing there and have to decide what nothing
- * meant, and the three things it can mean are different programs. Nothing here has to be recovered
- * from a second fact.
+ * meant, and every arm below but one is something it can mean — each of them a different program.
+ * Nothing here has to be recovered from a second fact.
  */
 public sealed interface CheckedImplementation {
 
