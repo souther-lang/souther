@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.UnaryOperator;
 
 /**
  * The abstract syntax: a module as the characters that spell it were read, with every name still a
@@ -365,11 +364,7 @@ public interface Ast {
     record EnsuresClause(Optional<String> name, List<EnsuresArm> arms, SourcePos pos, Region region)
             implements Written {}
 
-    record EnsuresArm(List<Name> cases, Expr expr, SourcePos pos, Region region) implements Written {
-        public EnsuresArm with(Expr rewritten) {
-            return new EnsuresArm(cases, rewritten, pos, region);
-        }
-    }
+    record EnsuresArm(List<Name> cases, Expr expr, SourcePos pos, Region region) implements Written {}
 
     /** A behavior parameter. Its type may be an anonymous union of cases (spec §unmarked-output). */
     record Param(WrittenName written, RetType type) implements Ast {
@@ -700,12 +695,6 @@ public interface Ast {
             return new InvariantClause(Optional.empty(), expr, expr.pos(), expr.region());
         }
 
-        /** The same clause over a rewritten expression — what a stage that rewrites expressions
-         * produces, so a rewrite never drops the name the rest of the compiler classifies by, nor
-         * where the author wrote the clause it rewrote. */
-        public InvariantClause with(Expr rewritten) {
-            return new InvariantClause(name, rewritten, pos, region);
-        }
     }
 
     /** A sum data definition {@code data X = A | B | ...}. Carries no boundary representation — see
@@ -1021,10 +1010,6 @@ public interface Ast {
             return new ElseArm(Optional.empty(), body, body.pos());
         }
 
-        /** The same arm over a rewritten body, so a rewriting stage keeps the clause it answers. */
-        public ElseArm with(Expr rewritten) {
-            return new ElseArm(clause, rewritten, pos);
-        }
     }
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. {@code origin} is the
@@ -1414,22 +1399,4 @@ public interface Ast {
         }
     }
 
-    /** Rewrites each clause's expression, keeping its name. Every stage that rewrites a declaration's
-     * invariant goes through here, so no rewrite can drop the name the failure is classified by. */
-    public static List<InvariantClause> mapClauses(List<InvariantClause> clauses, UnaryOperator<Expr> f) {
-        List<InvariantClause> out = new ArrayList<>();
-        for (InvariantClause clause : clauses) {
-            out.add(clause.with(f.apply(clause.expr())));
-        }
-        return out;
-    }
-
-    /** Rewrites each departure's body, keeping the clause it answers. */
-    public static List<ElseArm> mapArms(List<ElseArm> arms, UnaryOperator<Expr> f) {
-        List<ElseArm> out = new ArrayList<>();
-        for (ElseArm arm : arms) {
-            out.add(arm.with(f.apply(arm.body())));
-        }
-        return out;
-    }
 }
