@@ -10,7 +10,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
@@ -175,10 +175,10 @@ class OneBorderReadTwiceIsOneReadingTest {
     /** The same bound, with its line written as {@code at}. */
     private static Border boundAt(Count at) {
         AxisId axis = new AxisId("weigh", "w.a");
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return Border.at(BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(axis,
-                                new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                                TermOrders.itself(WHOLE)),
+                        new BorderQuantity.OfACoordinate(axis, term,
+                                TermOrdersFixtures.itself(term, WHOLE)),
                         new Level.OnACarrier(WHOLE, at)),
                 aBound(),
                 new NumericDomain.Bounds(Endpoint.inclusive(at),
@@ -200,10 +200,10 @@ class OneBorderReadTwiceIsOneReadingTest {
 
     private static BoundaryTarget aLineAt(String path, int value) {
         AxisId axis = new AxisId("weigh", path);
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                        TermOrders.itself(WHOLE)),
+                new BorderQuantity.OfACoordinate(axis, term,
+                        TermOrdersFixtures.itself(term, WHOLE)),
                 at(value));
     }
 

@@ -70,7 +70,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
 
     /** The same measure, offered another run of classes and another set of lines. */
     private static Axis carrying(Axis axis, List<PartitionClass> classes, List<Cut> cuts) {
-        return new Axis(axis.id(), axis.term(), axis.type(), classes, cuts);
+        return new Axis(axis.id(), axis.term(), classes, cuts);
     }
 
     private static Axis axisOf(Partitions.Partitioning read, String id) {
@@ -350,8 +350,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         assertNotSame(length.term(), again, "a second naming, built here");
         assertEquals(length.term(), again, "of the number the reading already named");
 
-        Axis measuring = new Axis(length.id(), again, length.type(),
-                length.classes(), length.cuts());
+        Axis measuring = new Axis(length.id(), again, length.classes(), length.cuts());
 
         assertSame(again, measuring.term(),
                 "so the classes of that number are the classes of an axis measuring it");

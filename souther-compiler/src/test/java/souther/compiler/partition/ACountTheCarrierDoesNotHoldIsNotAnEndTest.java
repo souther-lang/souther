@@ -216,7 +216,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Partitions.Partitioning p =
                 Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
-                .flatMap(axis -> Partitions.bordersOf(axis, symbols,
+                .flatMap(axis -> Partitions.bordersOf(axis, reading,
                         reading.runsBetween(axis.term()), new LinesRead()).stream())
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)

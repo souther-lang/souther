@@ -10,8 +10,6 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * The quantity a comparison over two positions cuts: how far the two stand apart.
@@ -50,9 +48,33 @@ import java.util.Map;
  *                       as one position against another. A number and not a count of steps: an order
  *                       with no smallest step still holds its values a distance apart
  */
-record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition against,
-                     Map<NumericTerm, TermOrders> carriers,
-                     Count stepsApart) {
+record ComparedTerms(TermOrders on, TermOrders against, Count stepsApart) {
+
+    ComparedTerms {
+        // The two ends are the orders, and each says which position it is of. Held as a pair of
+        // positions beside a map from position to orders, the two structures were what a reader
+        // had to keep agreeing: the map's keys could be the right pair and its values the other
+        // way round, and every check either structure made would pass.
+        if (onTerm(on) == null || onTerm(against) == null) {
+            throw new IllegalArgumentException(
+                    "a distance runs between two positions: " + on + " against " + against);
+        }
+    }
+
+    /** The position at one end, or null where those orders are of no single position. */
+    private static NumericTerm.FromOnePosition onTerm(TermOrders orders) {
+        return orders == null ? null : orders.term().atOnePosition();
+    }
+
+    /** The position the line is named by, which is the one the author wrote on the left. */
+    NumericTerm.FromOnePosition onPosition() {
+        return onTerm(on);
+    }
+
+    /** The position it is held apart from. */
+    NumericTerm.FromOnePosition againstPosition() {
+        return onTerm(against);
+    }
 
     /**
      * The two positions {@code comparison} names, or null where it names no such pair.
@@ -72,18 +94,11 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
                     GuardThresholds.namedBy(comparison.at().left(), read, reads);
             GuardThresholds.Named against =
                     GuardThresholds.namedBy(comparison.at().right(), read, reads);
-            // A distance runs between two positions, so each side has to be a number one answers.
-            NumericTerm.FromOnePosition here = on == null ? null : on.term().atOnePosition();
-            NumericTerm.FromOnePosition there =
-                    against == null ? null : against.term().atOnePosition();
-            Map<NumericTerm, TermOrders> carriers =
-                    here == null || there == null ? null
-                            : aDistanceBetween(here, on.orders(), there, against.orders());
-            if (carriers != null) {
+            if (on != null && against != null && aDistanceRuns(on.orders(), against.orders())) {
                 // The subject is the one the author wrote on the left, which the canonical form
                 // keeps too. Which of the two a line is named by is not something to derive where
                 // the source settles it: `charge > ceiling` is a line about the charge.
-                return new ComparedTerms(here, there, carriers, Count.ZERO);
+                return new ComparedTerms(on.orders(), against.orders(), Count.ZERO);
             }
         }
         return null;
@@ -108,18 +123,12 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
      * two positions written back differently — a decimal against a whole number is the pair that
      * exists — is still one distance, and it is only the writing that differs.
      */
-    private static Map<NumericTerm, TermOrders> aDistanceBetween(
-            NumericTerm on, TermOrders here,
-            NumericTerm against, TermOrders there) {
-        if (on == null || against == null || here == null || there == null
-                || here.answered() == null || there.answered() == null
-                || on.equals(against) || !here.answered().standsAgainst(there.answered())) {
-            return null;
-        }
-        Map<NumericTerm, TermOrders> both = new LinkedHashMap<>();
-        both.put(on, here);
-        both.put(against, there);
-        return both;
+    private static boolean aDistanceRuns(TermOrders here, TermOrders there) {
+        return here != null && there != null
+                && onTerm(here) != null && onTerm(there) != null
+                && here.answered() != null && there.answered() != null
+                && !here.term().equals(there.term())
+                && here.answered().standsAgainst(there.answered());
     }
 
     /**
@@ -161,18 +170,13 @@ record ComparedTerms(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition
         // these counts count", a property of the values stood in for a property of the places: two
         // strings stand no measurable distance apart and are still one above the other, so the
         // place they meet is a line — and this refused it, leaving the spelling to draw one.
-        if (here == null) {
-            return null;
-        }
-        Map<NumericTerm, TermOrders> carriers =
-                aDistanceBetween(two[0], hereOn, two[1], thereOn);
-        if (carriers == null) {
+        if (here == null || !aDistanceRuns(hereOn, thereOn)) {
             return null;
         }
         // The distance as the number it is. Held as a count of the carrier's steps, a threshold
         // that is not a whole number of them — which two decimals a rule holds half apart give —
         // was an exception thrown out of the measure.
-        return new ComparedTerms(two[0], two[1], carriers, new Count(read.cut()));
+        return new ComparedTerms(hereOn, thereOn, new Count(read.cut()));
     }
 
 }

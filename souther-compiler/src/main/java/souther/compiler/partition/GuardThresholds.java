@@ -562,10 +562,18 @@ public final class GuardThresholds {
     /**
      * The number an expression names and the order that number is read and written on.
      *
-     * @param term  what the expression names
-     * @param order what it is counted on
+     * <p>One component, because the orders say which number they are of. Held beside them, the
+     * number would be a second answer to that, and a reader could be handed a pair built for
+     * another expression with nothing refusing it.
+     *
+     * @param orders what the expression names, and what it is counted on
      */
-    record Named(NumericTerm term, TermOrders orders) {
+    record Named(TermOrders orders) {
+
+        /** What the expression names. */
+        NumericTerm term() {
+            return orders.term();
+        }
 
         /** What a line on it is measured on, which is what most readers of a pair want. */
         Carrier order() {
@@ -594,7 +602,7 @@ public final class GuardThresholds {
             return null;
         }
         TermOrders orders = read.quantities().ordersOf(term);
-        return orders.answered() == null ? null : new Named(term, orders);
+        return orders.answered() == null ? null : new Named(orders);
     }
 
     private GuardThresholds() {}

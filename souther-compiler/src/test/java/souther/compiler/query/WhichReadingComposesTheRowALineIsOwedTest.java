@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.partition.AxisId;
@@ -271,9 +271,10 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** Where a line was read: one position of one behavior, cut at one value. */
     private static BoundaryTarget aLineAt(String behavior, String path) {
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(path));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(new AxisId(behavior, path),
-                        new NumericTerm.ValueOf(TermPath.of(path)), TermOrders.itself(WHOLE)),
+                new BorderQuantity.OfACoordinate(new AxisId(behavior, path), term,
+                        TermOrdersFixtures.itself(term, WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(1)));
     }
 

@@ -175,9 +175,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * rules leave it there — kept as it was, a line would be held inside the values of the position
      * it came from.
      */
-    Cutting movedTo(NumericTerm from, NumericTerm to, TermOrders orders,
-                    Quantities quantities) {
-        BorderQuantity moved = of.movedTo(from, to, orders);
+    Cutting movedTo(NumericTerm from, NumericTerm to, Quantities quantities) {
+        // What the term it moves to is measured on, asked of the reading that is here anyway. Taken
+        // as an argument beside the term, the two were free to be about two terms — and the reading
+        // that would have settled it was being handed over in the same call.
+        BorderQuantity moved = of.movedTo(from, quantities.ordersOf(to));
         if (moved == null || !moved.levels().canCutAt(at)) {
             return null;
         }
@@ -309,8 +311,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (drawn == null) {
             return null;
         }
-        return made(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against(),
-                        drawn.carriers()),
+        return made(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against()),
                 new Level.ACount(drawn.stepsApart()), claim, quantities);
     }
 
@@ -429,8 +430,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static LinearForm<NumericTerm> direction(BorderQuantity of) {
         return switch (of) {
             case BorderQuantity.OfACoordinate one -> LinearForm.atom(one.term());
-            case BorderQuantity.Apart two ->
-                    LinearForm.<NumericTerm>atom(two.on()).minus(LinearForm.atom(two.against()));
+            case BorderQuantity.Apart two -> LinearForm.<NumericTerm>atom(two.on().term())
+                    .minus(LinearForm.atom(two.against().term()));
             case BorderQuantity.OverAForm many -> many.form();
         };
     }

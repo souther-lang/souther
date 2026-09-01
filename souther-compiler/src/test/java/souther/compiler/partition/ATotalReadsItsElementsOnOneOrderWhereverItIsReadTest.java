@@ -73,10 +73,10 @@ class ATotalReadsItsElementsOnOneOrderWhereverItIsReadTest {
     void aTotalOfAContainerAndATotalOverARunReadOneOrder() {
         List<ObservedValue> elements = List.of(new ObservedValue.Integer(1),
                 new ObservedValue.Integer(5));
-        assertEquals(Count.of(6), numberOf(AT_A_POSITION.read(new ObservedValue.Sequence(elements),
-                        A_CONTAINERS_ORDERS)),
+        assertEquals(Count.of(6),
+                numberOf(AT_A_POSITIONS_ORDERS.read(new ObservedValue.Sequence(elements))),
                 "the total of what the place holds");
-        assertEquals(Count.of(6), numberOf(OVER_A_RUN.readOver(elements, A_CONTAINERS_ORDERS)),
+        assertEquals(Count.of(6), numberOf(OVER_A_RUNS_ORDERS.readOver(elements)),
                 "and the total over the values of a run, which are the same values");
     }
 
@@ -92,7 +92,13 @@ class ATotalReadsItsElementsOnOneOrderWhereverItIsReadTest {
             Symbols.none(souther.compiler.DefaultStdlib.get()));
 
     /** A container is on no order of its own, and the total it answers is counted by one. */
-    private static final TermOrders A_CONTAINERS_ORDERS = new TermOrders(null, Carrier.WHOLE);
+    private static final TermOrders AT_A_POSITIONS_ORDERS =
+            souther.compiler.inputs.TermOrdersFixtures.orders(AT_A_POSITION, null, Carrier.WHOLE);
+
+    /** The same two orders, of the number over the run — which is the point: one operation, one
+     *  account of what its elements are places of, whichever of the two names it. */
+    private static final TermOrders OVER_A_RUNS_ORDERS =
+            souther.compiler.inputs.TermOrdersFixtures.orders(OVER_A_RUN, null, Carrier.WHOLE);
 
     private static Count numberOf(NumericTerm.Reading read) {
         return (Count) ((NumericTerm.Reading.Number) read).value();

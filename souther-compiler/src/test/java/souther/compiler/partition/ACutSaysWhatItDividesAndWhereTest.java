@@ -44,7 +44,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     private static Cutting onThePosition(String t) {
         return new Cutting(
                 new BorderQuantity.OfACoordinate(AxisId.of("f", term("n")), term("n"),
-                        souther.compiler.inputs.TermOrders.itself(WHOLE)),
+                        souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE)),
                 new Level.OnACarrier(WHOLE, new Count(new BigDecimal(t))),
                 new ComparisonClaim.Cut(Towards.BELOW, false), null);
     }
@@ -52,7 +52,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     /** {@code k * n > t}, read as an arithmetic form over a multiple of that position. */
     private static Cutting overAMultiple(String k, String t) {
         return new Cutting(
-                new BorderQuantity.OverAForm("f", form("n", k), Map.of(term("n"), souther.compiler.inputs.TermOrders.itself(WHOLE))),
+                new BorderQuantity.OverAForm("f", form("n", k), Map.of(term("n"), souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE))),
                 new Level.ACount(new Count(new BigDecimal(t))),
                 new ComparisonClaim.Cut(Towards.BELOW, false), null);
     }
@@ -94,7 +94,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     @Test
     void aRuleThatSinglesAValueOutSinglesOutAValueOrNoneAtAll() {
         Cutting names = new Cutting(
-                new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrders.itself(WHOLE))),
+                new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE))),
                 new Level.ACount(new Count(new BigDecimal("9"))),
                 new ComparisonClaim.Singled(true), null);
 
@@ -108,7 +108,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     @Test
     void andWhereTheLineIsAValueOfThePositionThatIsTheOneItNames() {
         Cutting names = new Cutting(
-                new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrders.itself(WHOLE))),
+                new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE))),
                 new Level.ACount(new Count(new BigDecimal("8"))),
                 new ComparisonClaim.Singled(true), null);
 
@@ -125,7 +125,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     @Test
     void aThresholdTheWrittenFormNeverReachesStillPartsTheValues() {
         Cutting closed = new Cutting(
-                new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrders.itself(WHOLE))),
+                new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE))),
                 new Level.ACount(new Count(new BigDecimal("9"))),
                 new ComparisonClaim.Cut(Towards.BELOW, true), null);
 

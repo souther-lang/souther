@@ -53,7 +53,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     /** The two orders an hour of a time stands on: seconds of a day at the position, a count by one
      *  for what the operation answers. */
     private static final souther.compiler.inputs.TermOrders AS_AN_HOUR =
-            new souther.compiler.inputs.TermOrders(Carrier.TIME, Carrier.WHOLE);
+            souther.compiler.inputs.TermOrdersFixtures.orders(
+                    term("Time", "hour"), Carrier.TIME, Carrier.WHOLE);
 
     /**
      * Numbers the operation actually answers, which is where its own bound runs.
@@ -124,13 +125,14 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             NumericTerm.TakenOf term = NumericTerm.TakenOf.of(
                     (ValueName.Stdlib) operation, AT, source, SYMBOLS);
             assertNotNull(term, operation + " is taken of what its own signature says it takes");
-            souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
+            souther.compiler.inputs.TermOrders orders =
+                    souther.compiler.inputs.TermOrdersFixtures.at(term, source, SYMBOLS);
             assertNotNull(orders.answered(),
                     operation + " answers a number, so there is an order for it");
             for (long each : answerable(term)) {
                 Place asked = Count.of(each);
                 TermRealizations.Realization made =
-                        TermRealizations.at(new RealizationTarget.AtOnePosition(term), source,
+                        TermRealizations.at(source,
                                 orders, asked, NothingTheRulesSay.REGION, SYMBOLS, POLICY);
                 // An operation that builds nothing at a number is not a failure of this: whether
                 // anything answers it is `EveryAnswerItCanGiveHasASourceValue`, asked below.
@@ -139,7 +141,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                 }
                 for (FixtureTemplate value : built.values()) {
                     assertEquals(new NumericTerm.Reading.Number(asked),
-                            term.read(observed(value), orders),
+                            orders.read(observed(value)),
                             operation + " built " + value.text() + " for " + each
                                     + ", and it does not read back as that");
                     checked++;
@@ -170,10 +172,11 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             NumericTerm.TakenOf term = NumericTerm.TakenOf.of(
                     (ValueName.Stdlib) operation, AT, source, SYMBOLS);
             assertNotNull(term, operation + " is taken of what its own signature says it takes");
-            souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
+            souther.compiler.inputs.TermOrders orders =
+                    souther.compiler.inputs.TermOrdersFixtures.at(term, source, SYMBOLS);
             for (long each : answerable(term)) {
                 assertInstanceOf(TermRealizations.Realization.Built.class,
-                        TermRealizations.at(new RealizationTarget.AtOnePosition(term), source,
+                        TermRealizations.at(source,
                                 orders, Count.of(each), NothingTheRulesSay.REGION, SYMBOLS,
                                 POLICY),
                         operation + " says every number it answers is one some value answers, and"
@@ -193,16 +196,15 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     @Test
     void whatEachAccountAnswersIsWhatTheLibraryAnswers() {
         assertEquals(Count.of(1),
-                number(term("String", "length").read(new ObservedValue.Text("😀"),
-                        new souther.compiler.inputs.TermOrders(Carrier.TEXT, Carrier.WHOLE))),
+                number(souther.compiler.inputs.TermOrdersFixtures.orders(
+                        term("String", "length"), Carrier.TEXT, Carrier.WHOLE)
+                        .read(new ObservedValue.Text("😀"))),
                 "a string counts in code points, and one emoji is one of them");
         assertEquals(Count.of(13),
-                number(term("Time", "hour").read(
-                        new ObservedValue.Temporal("13:45:12"), AS_AN_HOUR)),
+                number(AS_AN_HOUR.read(new ObservedValue.Temporal("13:45:12"))),
                 "a quarter to two in the afternoon falls in the thirteenth hour");
         assertEquals(Count.of(0),
-                number(term("Time", "hour").read(
-                        new ObservedValue.Temporal("00:45:12"), AS_AN_HOUR)),
+                number(AS_AN_HOUR.read(new ObservedValue.Temporal("00:45:12"))),
                 "and three quarters of an hour past midnight falls in the noughth");
     }
 
@@ -216,13 +218,17 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      */
     @Test
     void whatATakenNumberIsMeasuredByIsTheOperationsResult() {
-        assertEquals(Carrier.WHOLE, term("Time", "hour").answeredOn(Type.Prim.TIME, SYMBOLS),
-                "an hour is counted by one");
-        assertEquals(Carrier.TIME, term("Time", "hour").observedOn(Type.Prim.TIME, SYMBOLS),
+        souther.compiler.inputs.TermOrders anHour = souther.compiler.inputs.TermOrdersFixtures
+                .at(term("Time", "hour"), Type.Prim.TIME, SYMBOLS);
+        souther.compiler.inputs.TermOrders aLength = souther.compiler.inputs.TermOrdersFixtures
+                .at(term("String", "length"), Type.STRING, SYMBOLS);
+
+        assertEquals(Carrier.WHOLE, anHour.answered(), "an hour is counted by one");
+        assertEquals(Carrier.TIME, anHour.observed(),
                 "while the value it is read off counts the seconds of its day");
-        assertEquals(Carrier.WHOLE, term("String", "length").answeredOn(Type.STRING, SYMBOLS),
+        assertEquals(Carrier.WHOLE, aLength.answered(),
                 "and a count is whole however the thing counted is ordered");
-        assertEquals(Carrier.TEXT, term("String", "length").observedOn(Type.STRING, SYMBOLS),
+        assertEquals(Carrier.TEXT, aLength.observed(),
                 "while what is read at the position is still a string");
     }
 
@@ -240,10 +246,10 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     void theOrderAValueIsReadOnIsNotTheOrderItsAnswerIsMeasuredOn() {
         NumericTerm.FromOnePosition hour = term("Time", "hour");
         assertEquals(Count.of(13),
-                number(hour.read(new ObservedValue.Temporal("13:00:00"), AS_AN_HOUR)));
+                number(AS_AN_HOUR.read(new ObservedValue.Temporal("13:00:00"))));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                hour.read(new ObservedValue.Temporal("13:00:00"),
-                        souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                souther.compiler.inputs.TermOrdersFixtures.itself(hour, Carrier.WHOLE)
+                        .read(new ObservedValue.Temporal("13:00:00")),
                 "and read on the order the answer is measured on — which is what a caller handing"
                         + " one carrier used to be able to do — the same value reads as no number at"
                         + " all");
@@ -274,18 +280,19 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
         ValueName.Stdlib operation = DefaultStdlib.get().operation(qualified);
         NumericTerm.TakenOf term = NumericTerm.TakenOf.of(operation, AT, source, SYMBOLS);
         assertNotNull(term, qualified + " is taken of what its own signature says it takes");
-        souther.compiler.inputs.TermOrders orders = term.ordersAt(source, SYMBOLS);
+        souther.compiler.inputs.TermOrders orders =
+                    souther.compiler.inputs.TermOrdersFixtures.at(term, source, SYMBOLS);
         for (long each : numbers) {
             Place asked = Count.of(each);
             TermRealizations.Realization made =
-                    TermRealizations.at(new RealizationTarget.AtOnePosition(term), source,
+                    TermRealizations.at(source,
                             orders, asked, NothingTheRulesSay.REGION, SYMBOLS, POLICY);
             TermRealizations.Realization.Built built = assertInstanceOf(
                     TermRealizations.Realization.Built.class, made,
                     qualified + " answers " + each + " of some date, so there is one to offer");
             for (FixtureTemplate value : built.values()) {
                 assertEquals(new NumericTerm.Reading.Number(asked),
-                        term.read(observed(value), orders),
+                        orders.read(observed(value)),
                         qualified + " built " + value.text() + " for " + each
                                 + ", and it does not read back as that");
             }

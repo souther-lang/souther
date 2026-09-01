@@ -163,7 +163,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
         souther.compiler.inputs.NumericTerm.ValueOf atDays =
                 new souther.compiler.inputs.NumericTerm.ValueOf(
                         souther.compiler.inputs.TermPath.of("days"));
-        Axis days = new Axis(new AxisId("fee", "days"), atDays, Type.INT,
+        Axis days = new Axis(new AxisId("fee", "days"), atDays,
                 List.of(divided("days/low", 1).ofTheNumber(atDays),
                         divided("days/high", 9).ofTheNumber(atDays)),
                 List.of());

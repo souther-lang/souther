@@ -19,6 +19,7 @@ import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -482,14 +483,19 @@ public final class Partitions {
         // the record it sits in says about it. Reading the type again here would put a threshold
         // back inside a range the record has no values in.
         NumericDomain.Bounds domain = domainOf(reading, term);
-        Carrier carrier = term.answeredOn(type, symbols);
+        // Both orders as the reading has them. Worked out here from the type this reader happens
+        // to hold, the answer would be about wherever that type came from rather than about where
+        // the reading has this term standing.
+        TermOrders orders = reading.ordersOf(term);
+        Carrier carrier = orders.answered();
         if (here.isEmpty() && !points.isEmpty()) {
             // Nothing orders this position, so its classes are the values singled out and
             // everything else. Ranges here would ask the rows for a distinction between the two
             // sides of a value the behavior treats alike.
             mine.forEach(each -> account.measured(each, id));
-            return made(out, at, behavior, term, type,
-                    classesOf(axis, () -> singledClasses(points, term, type, domain, symbols)),
+            return made(out, at, behavior, term,
+                    classesOf(axis, () -> singledClasses(points, term, type, reading, domain,
+                            symbols)),
                     mergedPoints(cutsOf(axis), points, carrier),
                     partedOf(axis), narrowedOf(axis),
                     new BodyCutInspection.Evidence(), rules);
@@ -531,11 +537,11 @@ public final class Partitions {
         // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
         // written about the position rather than everything that came to nothing.
         NumericDomain.Bounds within = domain;
-        return made(out, at, behavior, term, type,
+        return made(out, at, behavior, term,
                 classesOf(axis, () -> Intervals.classesOf(
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
-                        term, type, policy, symbols,
+                        term, type, reading, policy, symbols,
                         within == null ? null : within.min(),
                         within == null ? null : within.max())),
                 mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier),
@@ -555,14 +561,14 @@ public final class Partitions {
      * the measures — which is what a measure of nothing was.
      */
     private static BodyCutInspection made(List<Axis> out, PositionMeasurements at, String behavior,
-                                          NumericTerm.FromOnePosition term, Type type,
+                                          NumericTerm.FromOnePosition term,
                                           List<PartitionClass> classes, List<Cut> cuts,
                                           List<Parting> parted, NarrowedBounds narrowed,
                                           BodyCutInspection drew, List<RuleWithoutALine> rules) {
         if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
             return cameTo(term, at.position().path(), rules);
         }
-        out.add(Axis.of(behavior, term, type, classes, cuts, parted, narrowed));
+        out.add(Axis.of(behavior, term, classes, cuts, parted, narrowed));
         return drew != null ? drew : cameTo(term, at.position().path(), rules);
     }
 
@@ -817,7 +823,7 @@ public final class Partitions {
         for (Axis axis : axes) {
             if (axis.asksForARow()) {
                 out.put(axis.id(),
-                        bordersOf(axis, symbols, reading.runsBetween(axis.term()), read));
+                        bordersOf(axis, reading, reading.runsBetween(axis.term()), read));
             }
         }
         return out;
@@ -833,8 +839,12 @@ public final class Partitions {
      */
     private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
                                                        NumericTerm.FromOnePosition term, Type type,
+                                                       Quantities reading,
                                                        NumericDomain.Bounds within, Symbols symbols) {
-        souther.compiler.inputs.TermOrders orders = term.ordersAt(type, symbols);
+        // Asked here rather than handed in beside the term. A term and a pair of orders are two
+        // arguments, and two arguments can be about two terms; the reading is one argument that
+        // answers about whichever term it is asked.
+        TermOrders orders = reading.ordersOf(term);
         Carrier carrier = orders.answered();
         List<Place> values = new ArrayList<>();
         for (GuardThresholds.Guards.Singled each : points) {
@@ -846,13 +856,13 @@ public final class Partitions {
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
-                    holding(term, orders, new Recognition.CountIs.At(value)),
+                    holding(orders, new Recognition.CountIs.At(value)),
                     standing(type, carrier, value, symbols)));
         }
         Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
-        Recognition away = holding(term, orders,
+        Recognition away = holding(orders,
                 new Recognition.CountIs.AwayFrom(values));
         classes.add(other == null
                 ? PartitionClass.ungeneratable(term + "/" + label, label, away,
@@ -879,11 +889,11 @@ public final class Partitions {
         return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
     }
 
-    /** A class that reads the term's count out of a row and answers about it. */
-    private static Recognition holding(NumericTerm.FromOnePosition term,
-                                          souther.compiler.inputs.TermOrders on,
-                                          Recognition.CountIs is) {
-        return new Recognition.OfACount(term, on, is);
+    /** A class that reads the count of the number {@code on} is of out of a row, and answers about
+     *  it. The number comes from the orders rather than beside them: a class of one number built on
+     *  another's order is what the pair naming its own number is here to stop. */
+    private static Recognition holding(TermOrders on, Recognition.CountIs is) {
+        return new Recognition.OfACount(on.term().atOnePosition(), on, is);
     }
 
     /** The cuts a position has, with the values a body singled out added as lines of their own. */
@@ -974,8 +984,13 @@ public final class Partitions {
      * what the rules leave the term, which is a reading of the declarations — so a caller that could
      * assemble them would be deciding, from a reading of its own, which lines exist to be measured.
      */
-    static List<Border> bordersOf(Axis axis, Symbols symbols, NumericDomain.Bounds within,
+    static List<Border> bordersOf(Axis axis, Quantities reading, NumericDomain.Bounds within,
                                   LinesRead read) {
+        // Both orders of the number this axis measures, as the reading has them. A pair put
+        // together here out of the position's order and the carrier a cut was drawn on is a pair
+        // whose two halves came from two places, and the day they part is the day a row is decoded
+        // on a count the value is not written in.
+        TermOrders orders = reading.ordersOf(axis.term());
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
         // What each border owes away from its line is a run of the arrangement they make together,
@@ -987,9 +1002,7 @@ public final class Partitions {
         List<Parting> parted = new ArrayList<>(axis.parted());
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(),
-                            new souther.compiler.inputs.TermOrders(
-                                    axis.term().observedOn(axis.type(), symbols), cut.carrier())),
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // Every rule that drew a line here, as it was read. Which of them fall in one place
@@ -999,13 +1012,12 @@ public final class Partitions {
             }
         }
         for (Cut cut : axis.cuts()) {
-            // The carrier is the cut's, which is the one the rule was read on. Asked of the axis
-            // instead, a line drawn on a count taken of a position would be written back as a value
-            // of the position.
+            // The level is on the cut's carrier, which is the one the rule was read on. What the
+            // quantity is measured on is the reading's answer and not read off the line: a line
+            // drawn on a count taken of a position would otherwise be written back as a value of
+            // the position.
             BoundaryTarget target = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(),
-                            new souther.compiler.inputs.TermOrders(
-                                    axis.term().observedOn(axis.type(), symbols), cut.carrier())),
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // One cut, one border. Whether the quantity reaches the line is settled where the
@@ -1074,7 +1086,7 @@ public final class Partitions {
                 // (issue #1084).
                 PositionAccount at = PositionAccount.of(behavior, position, null, null);
                 drawn.add(new Drawn(at,
-                        List.of(Axis.of(behavior, term, at.type(), divided.classes(),
+                        List.of(Axis.of(behavior, term, divided.classes(),
                                 divided.cuts().cuts(), List.of(), position.narrowedEnds()))));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.

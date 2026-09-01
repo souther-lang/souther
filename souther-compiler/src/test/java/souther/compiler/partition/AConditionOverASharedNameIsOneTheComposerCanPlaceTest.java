@@ -110,7 +110,6 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
     private static Generator.BoundaryAttempt composing(Count at) {
         Axis fixed = axisAt("n");
         return Generator.probeFixing(subject(), "n = " + at,
-                _ -> fixed.term().answeredOn(fixed.type(), symbols()),
                 Map.of(new RealizationTarget.AtOnePosition(fixed.term()), at),
                 new Reachability.Reaching(domain().quantities(symbols()).region(),
                         Requirements.NONE,

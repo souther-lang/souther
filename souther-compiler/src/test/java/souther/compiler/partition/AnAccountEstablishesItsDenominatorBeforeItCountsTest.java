@@ -67,7 +67,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
         account.measured(one, new AxisId("f", AT.toString()));
 
         account.everyPieceWasDisposedOf(List.of(new Axis(new AxisId("f", AT.toString()), AT,
-                souther.compiler.types.Type.INT, List.of(),
+                List.of(),
                 List.of(Cut.at(new Carrier.Whole(),
                         new Count(new java.math.BigDecimal("10")), origin())))));
     }

@@ -201,11 +201,12 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     private static BoundaryTarget aLineAt(int at) {
         souther.compiler.check.Carrier carrier = new souther.compiler.check.Carrier.Whole();
         AxisId axis = new AxisId("twice", "a.value");
+        souther.compiler.inputs.NumericTerm.ValueOf term =
+                new souther.compiler.inputs.NumericTerm.ValueOf(
+                        souther.compiler.inputs.TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new souther.compiler.inputs.NumericTerm.ValueOf(
-                                souther.compiler.inputs.TermPath.of(axis.term())),
-                        souther.compiler.inputs.TermOrders.itself(carrier)),
+                new BorderQuantity.OfACoordinate(axis, term,
+                        souther.compiler.inputs.TermOrdersFixtures.itself(term, carrier)),
                 new Level.OnACarrier(carrier, souther.compiler.numeric.Count.of(at)));
     }
 
@@ -404,8 +405,9 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
-        return Partitions.bordersOf(axis, symbols,
-                domain.quantities(symbols).runsBetween(axis.term()), new LinesRead());
+        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
+        return Partitions.bordersOf(axis, reading,
+                reading.runsBetween(axis.term()), new LinesRead());
     }
 
     /** A newtype's own clause, reached through the record that holds it. */

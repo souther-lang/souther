@@ -229,7 +229,7 @@ class ThresholdNormalizationTest {
 
         NumericDomain.Bounds within = read.reading().runsBetween(cost.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
-        List<String> described = pointsAgainstTheLines(cost, read.symbols(), within);
+        List<String> described = pointsAgainstTheLines(cost, read.reading(), within);
 
         assertTrue(described.contains("ON 100000"), described.toString());
         assertTrue(described.contains("OFF 100001"), described.toString());
@@ -274,7 +274,7 @@ class ThresholdNormalizationTest {
         assertEquals(List.of("Prospecting", "Qualified", "Won"), labels(stage),
                 "the cut is the coarser partition, so the classes stay the cases");
 
-        List<String> described = pointsAgainstTheLines(stage, read.symbols(),
+        List<String> described = pointsAgainstTheLines(stage, read.reading(),
                 read.reading().runsBetween(stage.term()));
         assertEquals(List.of("ON Prospecting", "OFF Qualified"), described);
     }
@@ -306,15 +306,16 @@ class ThresholdNormalizationTest {
 
         NumericDomain.Bounds within = read.reading().runsBetween(amount.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
-        List<String> described = pointsAgainstTheLines(amount, read.symbols(), within);
+        List<String> described = pointsAgainstTheLines(amount, read.reading(), within);
         assertTrue(described.contains("OFF 3000"), described.toString());
         assertTrue(described.contains("ON 2999"), described.toString());
     }
 
     /** The points against each of {@code axis}'s borders, as {@code role value}. */
-    private static List<String> pointsAgainstTheLines(Axis axis, Symbols symbols,
+    private static List<String> pointsAgainstTheLines(Axis axis,
+                                                      souther.compiler.inputs.Quantities reading,
                                                       NumericDomain.Bounds within) {
-        return Partitions.bordersOf(axis, symbols, within, new LinesRead()).stream()
+        return Partitions.bordersOf(axis, reading, within, new LinesRead()).stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "

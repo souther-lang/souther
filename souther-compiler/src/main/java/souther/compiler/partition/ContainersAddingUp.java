@@ -88,9 +88,13 @@ final class ContainersAddingUp {
      *                  a container built here would be read as a different total than it was built
      *                  for
      */
-    static TermRealizations.Realization to(Place answer, RealizationTarget target, Type container,
+    static TermRealizations.Realization to(Place answer, Type container,
                                            TermOrders orders, SearchRegion within,
                                            Symbols symbols, ReadingPolicy policy) {
+        // Which number is being built for, read off the answer that says which number it is of.
+        // Named beside it, the two were free to be about two numbers and this would fill a
+        // container found under one path with elements counted on another's order.
+        RealizationTarget target = RealizationTarget.of(orders.term());
         Carrier elements = orders.answered();
         if (!(answer instanceof Count total) || elements == null) {
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);

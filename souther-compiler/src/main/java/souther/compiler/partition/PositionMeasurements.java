@@ -69,10 +69,6 @@ public record PositionMeasurements(PositionAccount position, List<Axis> axes,
             throw new IllegalArgumentException("`" + axis.id() + "` measures a number of "
                     + axis.term().position() + ", and is held under " + position.path());
         }
-        if (!axis.type().equals(position.type())) {
-            throw new IllegalArgumentException("`" + axis.id() + "` reads a value of "
-                    + axis.type() + " where " + position.path() + " holds " + position.type());
-        }
         if (!axis.id().behavior().equals(position.behavior())) {
             throw new IllegalArgumentException("`" + axis.id() + "` is a measure of another"
                     + " behavior's input than " + position.path() + " of " + position.behavior());

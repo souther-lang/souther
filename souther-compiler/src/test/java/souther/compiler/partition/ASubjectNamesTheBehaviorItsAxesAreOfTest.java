@@ -72,6 +72,6 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
 
     private static Axis axisOf(String behavior, String position) {
         return new Axis(new AxisId(behavior, position),
-                new NumericTerm.ValueOf(TermPath.of(position)), Type.INT, List.of(), List.of());
+                new NumericTerm.ValueOf(TermPath.of(position)), List.of(), List.of());
     }
 }

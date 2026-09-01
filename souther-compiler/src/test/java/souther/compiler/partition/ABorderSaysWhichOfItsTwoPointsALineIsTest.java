@@ -292,10 +292,11 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     /** A line on one position's own values, at a place of its carrier. */
     private static BoundaryTarget lineAt(AxisId axis, Carrier carrier,
                                          souther.compiler.numeric.Place at) {
-        return BoundaryTarget.at(new BorderQuantity.OfACoordinate(axis,
-                        new souther.compiler.inputs.NumericTerm.ValueOf(
-                                souther.compiler.inputs.TermPath.of(axis.term())),
-                        souther.compiler.inputs.TermOrders.itself(carrier)),
+        souther.compiler.inputs.NumericTerm.ValueOf term =
+                new souther.compiler.inputs.NumericTerm.ValueOf(
+                        souther.compiler.inputs.TermPath.of(axis.term()));
+        return BoundaryTarget.at(new BorderQuantity.OfACoordinate(axis, term,
+                        souther.compiler.inputs.TermOrdersFixtures.itself(term, carrier)),
                 new Level.OnACarrier(carrier, at));
     }
 

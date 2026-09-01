@@ -10,7 +10,7 @@ import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
@@ -154,10 +154,10 @@ class ANarrowingIsToldOnlyAboutTheEndItWasReadAtTest {
 
     private static BoundaryTarget aLineAt(int value) {
         AxisId axis = new AxisId("weigh", "w.a");
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                        TermOrders.itself(WHOLE)),
+                new BorderQuantity.OfACoordinate(axis, term,
+                        TermOrdersFixtures.itself(term, WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(value)));
     }
 }

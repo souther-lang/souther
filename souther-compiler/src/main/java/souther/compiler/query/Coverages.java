@@ -520,6 +520,10 @@ final class Coverages {
          * by a row anywhere in it, so a row labelled by the places a search happened to compose
          * would name a witness as though it were the item.
          *
+         * <p>What each position's number is measured on is not among the arguments. That is the
+         * reading the row is composed against, which the generator holds; passed in, a caller would
+         * be answering a question about where a term stands from wherever it found the term.
+         *
          * @param reaching what the row has to be to arrive at the border at all. Handed in beside
          *                 the placement rather than left out: the placement is about the positions
          *                 the item names and a condition above the line is about the others, and a
@@ -527,8 +531,6 @@ final class Coverages {
          */
         souther.compiler.partition.Generator.BoundaryAttempt attempt(
                 String label,
-                java.util.function.Function<souther.compiler.inputs.NumericTerm,
-                        souther.compiler.check.Carrier> on,
                 Map<souther.compiler.partition.RealizationTarget, Place> fixing,
                 souther.compiler.partition.Reachability.Reaching reaching);
 
@@ -830,7 +832,7 @@ final class Coverages {
                 return switch (realizer.realize(quantity.standingAt(criterion), able.region())) {
                     case Realization.Found found -> whatCameOfIt(
                             standingThere(probe, quantity, where, criterion, site, label,
-                                    probe.attempt(label, quantity::carrierOf, found.fixing(), able)),
+                                    probe.attempt(label, found.fixing(), able)),
                             label, within);
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search

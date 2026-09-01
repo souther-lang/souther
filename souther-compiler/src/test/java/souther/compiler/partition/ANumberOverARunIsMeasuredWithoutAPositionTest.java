@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -44,7 +45,7 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
             souther.compiler.check.Symbols.none(souther.compiler.DefaultStdlib.get()));
 
     private static final TermOrders WHOLE =
-            TermOrders.itself(new Carrier.Whole());
+            TermOrdersFixtures.itself(TOTAL, new Carrier.Whole());
 
     /** The capability question, which is the one every reader that would act on a place asks. */
     @Test
@@ -66,15 +67,15 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
     /** The number is what the values come to, not what any one of them is. */
     @Test
     void theNumberIsWhatTheValuesAddUpTo() {
-        assertEquals(Count.of(100000), number(TOTAL.readOver(
-                List.of(whole(60000), whole(40000)), WHOLE)),
+        assertEquals(Count.of(100000),
+                number(WHOLE.readOver(List.of(whole(60000), whole(40000)))),
                 "sixty thousand and forty thousand come to the hundred thousand a rule compares");
     }
 
     /** A container holding nothing comes to what the walk starts from. */
     @Test
     void anEmptyRunComesToWhatTheWalkStartsFrom() {
-        assertEquals(Count.of(0), number(TOTAL.readOver(List.of(), WHOLE)),
+        assertEquals(Count.of(0), number(WHOLE.readOver(List.of())),
                 "a row writing no element is a row an author can write, and its total is nought");
     }
 
@@ -82,7 +83,7 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
     @Test
     void aValueThatCouldNotBeReadLeavesTheTotalUnread() {
         assertInstanceOf(NumericTerm.Reading.Missing.class,
-                TOTAL.readOver(List.of(whole(1), new ObservedValue.Unknown("not read")), WHOLE),
+                WHOLE.readOver(List.of(whole(1), new ObservedValue.Unknown("not read"))),
                 "a total is over every value, so one that could not be read is not a total short"
                         + " of a part");
     }
