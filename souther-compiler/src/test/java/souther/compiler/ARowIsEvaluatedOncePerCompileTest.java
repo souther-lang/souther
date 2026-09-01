@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -56,13 +57,13 @@ class ARowIsEvaluatedOncePerCompileTest {
      *  is asked for the wait this compilation was given, the way the build asks for it. */
     private static JvmExampleDeadlines recording(List<Deadline.Work> into) {
         JvmExampleDeadlines build = JvmDeadlines.onWorkers();
-        return outerTimeout -> {
-            Deadline inner = build.forThisCompile(outerTimeout);
+        return compilerTimeout -> {
+            Deadline inner = build.forThisCompile(compilerTimeout);
             return new Deadline() {
 
                 @Override
-                public long budgetMs() {
-                    return inner.budgetMs();
+                public Duration timeout() {
+                    return inner.timeout();
                 }
 
                 @Override

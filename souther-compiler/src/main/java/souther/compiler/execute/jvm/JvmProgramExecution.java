@@ -63,7 +63,7 @@ public final class JvmProgramExecution implements ProgramExecution {
      * which is what stops the boundary saying one wait while the run is given up on at another.
      */
     private souther.compiler.examples.Deadline keeping(ExampleExecution asked) {
-        return deadlines.forThisCompile(asked.policy().outerTimeout());
+        return deadlines.forThisCompile(asked.policy().compilerTimeout());
     }
 
     @Override

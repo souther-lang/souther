@@ -31,6 +31,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -368,8 +369,8 @@ public final class ExampleStatements {
                         said.add(unreadableFake(fk, Unread.overspending(which, limit)));
                 case Read.StackRanOut(int depthLimit) ->
                         said.add(unreadableFake(fk, new Unread.StackRanOut(depthLimit)));
-                case Read.Unanswered(long ranOutOf) ->
-                        said.add(unreadableFake(fk, new Unread.DidNotAnswer(ranOutOf)));
+                case Read.Unanswered(Duration within) ->
+                        said.add(unreadableFake(fk, new Unread.DidNotAnswer(within)));
                 // Not about this fake: the runtime is `provided`, so a host without it builds no value
                 // at all and every fake in every module would say the same thing. Where the rows are
                 // evaluated that is recorded once, as an incompleteness.
@@ -405,12 +406,14 @@ public final class ExampleStatements {
         record StackRanOut<T>(int depthLimit) implements Read<T> {}
 
         /** The reading stopped answering, and the wait it was held to: what a report has to name is
-         * what the wait actually was, not what a second reader of the setting makes of it later.
+         * what the wait actually was, not what a second reader of the setting makes of it later. Not
+         * a budget in the sense the counted limits are — those are spent by the code, and this is
+         * time the compiler spent without answering.
          *
-         * <p>Not a statement about the model. Whatever did not come back was not counted — code from
-         * a jar this compile did not generate, or the compiler itself — so nothing here can say the
-         * statements are at fault. */
-        record Unanswered<T>(long budgetMs) implements Read<T> {}
+         * <p>Not a statement about the model. Whatever did not come back was not counted — the
+         * compiler's own work around the points it places, or a call into classes that have none —
+         * so nothing here can say the statements are at fault. */
+        record Unanswered<T>(Duration within) implements Read<T> {}
 
         /** This host has no runtime to build a value against. */
         record RuntimeAbsent<T>() implements Read<T> {}
@@ -458,7 +461,7 @@ public final class ExampleStatements {
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 // Nothing here was going to read how far it got, so it is given up on at once.
                 abandon.run();
-                return new Read.Unanswered<>(deadline.budgetMs());
+                return new Read.Unanswered<>(deadline.timeout());
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The reading spent what the policy allows. That is an answer about the statements —
@@ -711,9 +714,9 @@ public final class ExampleStatements {
                         new Unread.StackRanOut(depthLimit)));
                 return;
             }
-            case Read.Unanswered(long budgetMs) -> {
+            case Read.Unanswered(Duration within) -> {
                 timedOut.add(new UnreadFake(wrote(fk), marked(fk),
-                        new Unread.DidNotAnswer(budgetMs)));
+                        new Unread.DidNotAnswer(within)));
                 return;
             }
             // Not about this fake. The runtime is `provided`, so a host without it builds no value at

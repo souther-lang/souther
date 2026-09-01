@@ -223,7 +223,7 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 answering,
                 CheckedEnsures.executableOf(

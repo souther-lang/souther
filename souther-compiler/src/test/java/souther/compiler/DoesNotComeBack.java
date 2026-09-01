@@ -103,11 +103,11 @@ public final class DoesNotComeBack {
      * is run inline, and a loop nothing picked out would not be cut short but would hang.
      */
     public static JvmExampleDeadlines overrunningOn(Predicate<Deadline.Work> which) {
-        return outerTimeout -> new Deadline() {
+        return compilerTimeout -> new Deadline() {
 
             @Override
-            public long budgetMs() {
-                return outerTimeout.toMillis();   // what a report about an overrun quotes
+            public Duration timeout() {
+                return compilerTimeout;   // what a report about an overrun quotes
             }
 
             @Override
@@ -138,11 +138,11 @@ public final class DoesNotComeBack {
      * the route is stated.
      */
     static JvmExampleDeadlines throwingOn(Predicate<Deadline.Work> which, Throwable thrown) {
-        return outerTimeout -> new Deadline() {
+        return compilerTimeout -> new Deadline() {
 
             @Override
-            public long budgetMs() {
-                return outerTimeout.toMillis();
+            public Duration timeout() {
+                return compilerTimeout;
             }
 
             @Override

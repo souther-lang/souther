@@ -30,8 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p><b>Read from what was compiled, not from what was written.</b> An arrangement is anything that
  * answers {@link JvmExampleDeadlines}, and the ways to answer an interface are not one spelling: a
  * class implements it, an anonymous body implements it, a lambda answers it and says neither word.
- * A rule that looked for {@code implements JvmExampleDeadlines} would hold for the three that are
- * here and let the fourth past — and the fourth is the easy one to write, because a lambda that
+ * A rule that looked for {@code implements JvmExampleDeadlines} would hold for the ones written that
+ * way and let the next one past — and that one is the easy one to write, because a lambda that
  * closes over a store is a line long.
  */
 class TheArrangementThatKeepsATermDoesNotAskTheCompilationForItTest {
@@ -68,7 +68,7 @@ class TheArrangementThatKeepsATermDoesNotAskTheCompilationForItTest {
      *
      * <p>Not the set of them. What the rule holds is every answer of this interface, whatever it is
      * called and wherever it is written, so pinning a list here would put the rule back in a name
-     * again. What is pinned is that the three there are today were found: a walk that had gone blind
+     * again. What is pinned is that the ones there are today were found: a walk that had gone blind
      * would report nothing and pass.
      */
     @Test
@@ -77,8 +77,7 @@ class TheArrangementThatKeepsATermDoesNotAskTheCompilationForItTest {
 
         assertTrue(found.containsAll(Set.of(
                         "souther.compiler.execute.jvm.JvmDeadlines",
-                        "souther.compiler.query.ChosenJvmExampleDeadlines",
-                        "souther.compiler.examples.CallerCrossingDeadlines")),
+                        "souther.compiler.query.ChosenJvmExampleDeadlines")),
                 () -> "the ones there are should be among what was walked: " + found);
     }
 

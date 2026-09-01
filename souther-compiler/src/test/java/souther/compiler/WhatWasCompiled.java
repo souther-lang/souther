@@ -74,6 +74,29 @@ public final class WhatWasCompiled {
     }
 
     /**
+     * Every class that <em>is</em> an {@code answered}, through however many types in between.
+     *
+     * <p>Narrower than {@link #answering} and for a different question: how many things of a kind
+     * there are, rather than which files write one. A rule about what an answer may depend on is
+     * about the file that wrote it, and a lambda's file is where it was written; a count of the
+     * answers themselves must not take a file that merely hands one back for one more of them.
+     *
+     * <p>Complete only for an interface a lambda cannot answer. Ask that of the interface where the
+     * count is read, because an interface that becomes functional makes this go blind rather than
+     * wrong.
+     */
+    public static Set<String> implementing(Class<?> answered) {
+        ClassDesc asked = answered.describeConstable().orElseThrow();
+        Set<String> found = new LinkedHashSet<>();
+        for (String each : classes()) {
+            if (reaches(parse(each), asked, new LinkedHashSet<>())) {
+                found.add(each);
+            }
+        }
+        return found;
+    }
+
+    /**
      * Whether {@code model} is an {@code asked}, through however many types in between.
      *
      * <p>Directly or not. An interface between the two is a way of answering it and not a way of

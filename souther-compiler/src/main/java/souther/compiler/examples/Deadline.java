@@ -3,6 +3,7 @@ package souther.compiler.examples;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.RowIdentity;
 
+import java.time.Duration;
 import java.util.concurrent.Callable;
 
 /**
@@ -15,10 +16,15 @@ import java.util.concurrent.Callable;
  * is reported as work that did not.
  *
  * <p>So the limit is a seam. What is here is only what a reader of a row needs to ask — which piece
- * of work this is, and what became of it. A thread, a stack, a wall clock, work handed back to the
- * caller: those are how one machine keeps a limit, they are said in
- * {@code souther.compiler.execute.jvm}, and a reader that asked for them here would be holding one
- * arrangement's vocabulary to run a row under any of them.
+ * of work this is, and what became of it. A thread, a stack, a wall clock: those are how one machine
+ * keeps a limit, they are said in {@code souther.compiler.execute.jvm}, and a reader that asked for
+ * them here would be holding one arrangement's vocabulary to run a row under any of them.
+ *
+ * <p>Where a supplied implementation is applied is not one of them, and the two are told apart by
+ * which question they answer. That an implementation answers in the world the caller called from is
+ * what a binding means, holds under any arrangement, and is {@link CallerApplication}. How a row
+ * running elsewhere reaches that world — a hand-off, the thread it is serviced on — is one machine's
+ * answer to it and is said with the rest of them.
  */
 public interface Deadline {
 
@@ -54,8 +60,14 @@ public interface Deadline {
         record With(String target, SourcePos pos) implements Work {}
     }
 
-    /** How many milliseconds this allows. What a report about an overrun quotes. */
-    long budgetMs();
+    /**
+     * How much of this compile's own time this allows. What a report about an overrun quotes.
+     *
+     * <p>A length and not a number of anything. What a report prints it as is the report's, and an
+     * arrangement handing over milliseconds would have already decided that for every reader — which
+     * is how a wait shorter than a millisecond comes to be quoted as none at all.
+     */
+    Duration timeout();
 
     /** {@code work}, run within what this allows. */
     <T> Outcome<T> given(Work work, Callable<T> work0);

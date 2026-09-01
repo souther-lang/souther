@@ -462,7 +462,7 @@ class CompileFakeExampleDisagreementTest {
                         name, souther.compiler.observe.ArmObservation.OMIT)).value().classes(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 CheckedEnsures.executableOf(c.db().ask(
                         new souther.compiler.query.Bodies.ReachableContracts(name)).value()),

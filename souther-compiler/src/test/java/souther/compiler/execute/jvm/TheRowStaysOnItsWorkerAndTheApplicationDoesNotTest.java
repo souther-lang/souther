@@ -1,17 +1,21 @@
-package souther.compiler.examples;
+package souther.compiler.execute.jvm;
 
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.examples.Deadline;
+import souther.compiler.examples.InvocationFailure;
 import souther.compiler.observe.RowIdentity;
 
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -34,11 +38,11 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
     private static final Deadline.Work WORK =
             new Deadline.Work.WholeRow("findTodo", new SourcePos(1, 1), new RowIdentity.Unnamed(1));
 
-    /** The crossing arrangement, on a worker of {@code stackBytes}. What a compile says it gives a
-     *  row is read and not kept here — there is no clock past the crossing — so which wait this is
-     *  asked for says nothing about what any of these observe. */
-    private static Deadline crossing(long stackBytes) {
-        return new CallerCrossingDeadlines(stackBytes).forThisCompile(Duration.ofMinutes(1));
+    /** The arrangement, on a worker of {@code stackBytes}. The wait is long enough that nothing
+     *  here reaches it: what these hold is where a row and an application run, and a row given up
+     *  on for time is held elsewhere. */
+    private static Deadline arrangement(long stackBytes) {
+        return JvmDeadlines.of(Duration.ofMinutes(1), stackBytes);
     }
 
     /** The row's own work is not on the caller's thread, and what it hands over is. */
@@ -47,12 +51,10 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
         AtomicReference<Thread> read = new AtomicReference<>();
         AtomicReference<Thread> applied = new AtomicReference<>();
 
-        Deadline.Outcome<String> came = crossing(1L << 20)
+        Deadline.Outcome<String> came = arrangement(1L << 20)
                 .given(WORK, () -> {
                     read.set(Thread.currentThread());
-                    Handoff back = Handoff.onThisThread();
-                    assertNotNull(back, "a row is given a way back to whoever asked for it");
-                    return (String) back.handOver(() -> {
+                    return (String) Handoff.onTheThreadThatAsked().call(() -> {
                         applied.set(Thread.currentThread());
                         return "answered";
                     });
@@ -70,7 +72,7 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
     void theWorkerIsGivenTheStackItWasAskedFor() {
         AtomicReference<Integer> reached = new AtomicReference<>(0);
 
-        crossing(64L << 20).given(WORK, () -> {
+        arrangement(64L << 20).given(WORK, () -> {
             reached.set(deep(0, 30_000));
             return null;
         });
@@ -86,8 +88,8 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
     /** What the handed-over work threw comes back as it was thrown, for the row to read. */
     @Test
     void whatTheApplicationThrewComesBackToTheRow() {
-        Deadline.Outcome<String> came = crossing(1L << 20)
-                .given(WORK, () -> (String) Handoff.onThisThread().handOver(() -> {
+        Deadline.Outcome<String> came = arrangement(1L << 20)
+                .given(WORK, () -> (String) Handoff.onTheThreadThatAsked().call(() -> {
                     throw new InvocationFailure(new IllegalStateException("the SQL failed"));
                 }));
 
@@ -96,10 +98,44 @@ class TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest {
         assertTrue(threw.getCause() instanceof IllegalStateException);
     }
 
+    /**
+     * What an application ends with is what the row reads, and a checked one is no different.
+     *
+     * <p>Applying a supplied implementation is a reflective call, so what it ends with arrives as an
+     * {@link InvocationTargetException} — the type the answerer reads to say the applied code came
+     * back with a failure. Carried across as anything else, the same throw would be that failure
+     * where a row applies where it stands and something else where it crossed.
+     */
+    @Test
+    void aCheckedFailureCrossesAsItself() {
+        InvocationTargetException stopped =
+                new InvocationTargetException(new IllegalStateException("the SQL failed"));
+
+        Deadline.Outcome<String> came = arrangement(1L << 20)
+                .given(WORK, () -> (String) Handoff.onTheThreadThatAsked().call(() -> {
+                    throw stopped;
+                }));
+
+        assertSame(stopped, assertInstanceOf(Deadline.Outcome.Threw.class, came).cause());
+    }
+
+    /**
+     * An application off a row's worker is refused rather than applied where it stands.
+     *
+     * <p>Applying it here would run the caller's code on a thread the caller never called from,
+     * which is the one thing a crossing is for. A run that fell back to it would be deciding where
+     * the caller's code runs by what its arrangement happened to install.
+     */
+    @Test
+    void anApplicationOffARowsWorkerIsRefused() {
+        assertThrows(IllegalStateException.class,
+                () -> Handoff.onTheThreadThatAsked().call(() -> "applied where it stood"));
+    }
+
     /** A row that hands nothing over still finishes, which is every run a compile makes. */
     @Test
     void aRowThatHandsNothingOverIsAnsweredAllTheSame() {
-        Deadline.Outcome<String> came = crossing(1L << 20)
+        Deadline.Outcome<String> came = arrangement(1L << 20)
                 .given(WORK, () -> "nothing crossed");
 
         assertEquals("nothing crossed",

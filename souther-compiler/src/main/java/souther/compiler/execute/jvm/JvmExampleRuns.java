@@ -1,10 +1,14 @@
 package souther.compiler.execute.jvm;
 
+import souther.compiler.check.Sig;
 import souther.compiler.examples.Answering;
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.observe.ArmObservation;
+
+import java.util.Map;
+import java.util.Set;
 
 /**
  * A run of one module's rows against an implementation supplied from outside Souther.
@@ -26,21 +30,30 @@ public final class JvmExampleRuns {
     private JvmExampleRuns() {}
 
     /**
-     * The module's rows, ready to be run one at a time against what {@code answering} gives.
+     * The module's rows, ready to be run one at a time against {@code implementation}.
      *
-     * <p>Everything but the answerer comes from the compile. What an implementation is held to is
+     * <p>Everything but the instance comes from the compile. What an implementation is held to is
      * the module as this reading of the source has it, which is the whole reason the source is read
      * at the time the run happens.
      *
-     * <p>{@code deadline} is asked for beside the reading rather than taken out of it. What a row is
-     * held to crosses as terms; the arrangement that keeps them is this implementation's, and here
-     * it is the caller's own — a row driven one at a time from Java hands its applications back to
-     * the thread that asked.
+     * <p>How the run is arranged is settled here and is not offered to whoever binds an instance.
+     * Two things have to be of one arrangement: what keeps the wait, and where an application is
+     * applied. The first runs the row on a worker and services what it hands over; the second is
+     * what the row hands over through, and reaches the worker's hand-off. A caller able to name them
+     * separately could name one of each of two arrangements, which is an application handed to
+     * nobody — so there is nowhere to say it.
+     *
+     * <p>{@code answersFor} and {@code sigs} are the binding's own: which behaviors the instance was
+     * supplied for, and the declarations of the module the rows are written for.
      *
      * @throws IllegalStateException where this compile emitted nothing to run the rows against
      */
     public static ExampleVerifier evaluating(JvmProgramImages images, ExampleExecution asked,
-                                             Deadline deadline, Answering answering) {
+                                             Object implementation, Set<String> answersFor,
+                                             Map<String, Sig> sigs) {
+        Deadline deadline = JvmDeadlines.onWorkers().forThisCompile(asked.policy().compilerTimeout());
+        Answering answering = Answering.bound(implementation, answersFor, sigs,
+                Handoff.onTheThreadThatAsked());
         JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
         if (image == null) {
             throw new IllegalStateException("`" + asked.module() + "` emitted nothing to run its"

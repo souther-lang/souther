@@ -228,7 +228,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         mine.db().ask(new Bodies.Requirements(name)).value(),
                         ExampleVerifier.class.getClassLoader(),
                         mine.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                        JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                        JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                         EvaluationPolicy.DEFAULT,
                         Answering.generatedHere(),
                         CheckedEnsures.executableOf(
@@ -324,7 +324,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 answering,
                 CheckedEnsures.executableOf(

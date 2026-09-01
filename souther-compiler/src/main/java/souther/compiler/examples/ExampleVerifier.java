@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.Observations;
+import souther.compiler.observe.WaitShown;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.AtomSpace;
@@ -405,8 +406,8 @@ public final class ExampleVerifier {
                 abandon.run();
                 return new StandinObservation.Unobserved(
                         new StandinObservation.Reason.TheObservationRanOut(
-                                "the implementation did not answer within "
-                                        + deadline.budgetMs() + "ms"));
+                                "the observation did not answer within "
+                                        + within(deadline) + "ms of this compile's own time"));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 return new StandinObservation.Unobserved(whatTheWorkerThrew(cause));
@@ -442,8 +443,8 @@ public final class ExampleVerifier {
                 abandon.run();
                 return new ContractObservation.Unobserved(
                         new StandinObservation.Reason.TheObservationRanOut(
-                                "the implementation did not answer within "
-                                        + deadline.budgetMs() + "ms"));
+                                "the observation did not answer within "
+                                        + within(deadline) + "ms of this compile's own time"));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 return new ContractObservation.Unobserved(whatTheWorkerThrew(cause));
@@ -544,6 +545,11 @@ public final class ExampleVerifier {
         // union for a renderer to read.
         return new ContractObservation.Broken(why, observed,
                 fixtures.shown(observed, sig.outputType()));
+    }
+
+    /** The wait, as every report of this compiler's writes one ({@link WaitShown}). */
+    private static String within(Deadline deadline) {
+        return WaitShown.of(deadline.timeout());
     }
 
     /**
@@ -1352,13 +1358,13 @@ public final class ExampleVerifier {
                 Reached reached = evaluation.state.reached;
                 abandon.run();
                 // Not E1910. What did not come back was not shown to go round more than an example
-                // may — it was not counted at all, which is what an evaluation reaching code this
-                // compile did not generate looks like. Saying the model does not terminate here would
+                // may — it was not counted at all, which is what the compiler's own work around the
+                // counted points looks like. Saying the model does not terminate here would
                 // put a diagnostic on a model that may be right, and send its author to make
                 // something structural that already is.
                 out.add(Diagnostic.at(row.pos())
                         .say(new ExampleMessage.TheEvaluationDidNotAnswer(
-                                Long.toString(deadline.budgetMs())))
+                                within(deadline)))
                         .hint(new ExampleMessage.NotAnsweringIsNotNotTerminating()).build());
                 // No spend is read: the worker is still writing to its state, and a count taken
                 // while it runs would be some of what it spent rather than what it spent. That is
