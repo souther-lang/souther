@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -359,13 +358,13 @@ public final class PathReachability {
             // its own over a fork's condition: a chain is a chain wherever it is written, and one
             // read only under the fork it was written into left the same operators unread a line
             // above.
-            case Core.Binary binary when binary.op() == BinOp.AND
-                    || binary.op() == BinOp.OR -> {
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
                 walk(binary.left(), k, at, reads, decided, nothingAbove);
-                // `&&` gets to its right side having held, `||` having failed. Read the other way
-                // round, a comparison guarded by its neighbour would be read against conditions
-                // nothing on the way to it established.
-                boolean reachedWhen = binary.op() == BinOp.AND;
+                // Which way the left has to come out for the right to run is the operator's own
+                // answer, and the same answer says there is a right side that runs only sometimes.
+                // Read the other way round, a comparison guarded by its neighbour would be read
+                // against conditions nothing on the way to it established.
+                boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
                 Predicates.Assumed reaching = engine.assuming(binary.left(), k, at, reachedWhen);
                 walk(binary.right(), reaching.known(), at, reads,
                         with(decided, reaching, binary.left().pos(), reachedWhen), nothingAbove);

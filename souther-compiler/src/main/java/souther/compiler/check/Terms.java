@@ -1768,7 +1768,7 @@ final class Terms {
         if (result != null && answersIn(result, answered)) {
             return computedBy(result, argsOf(e), answered);
         }
-        if (e instanceof Core.Binary b && isArith(b.op())) {
+        if (e instanceof Core.Binary b && b.op().answersANumber()) {
             return theOneOf(new NumericMeaning.Operator(b.op(), b.left(), b.right()), b.type());
         }
         return null;
@@ -2577,7 +2577,7 @@ final class Terms {
         // what a clause is read against; where it declines to — a variable product, an integer divide
         // — declining is a decision about what this check reasons over, and reporting a construction
         // it has decided not to reason over would be reporting the decision as the author's to fix.
-        if (read instanceof Core.Binary bin && isArith(bin.op())) {
+        if (read instanceof Core.Binary bin && bin.op().answersANumber()) {
             return false;
         }
         // A conditional is one of its branches and which one is not decided here. Saying only that it
@@ -2740,10 +2740,6 @@ final class Terms {
                 .orElse(null);
     }
 
-
-    static boolean isArith(BinOp op) {
-        return op == BinOp.ADD || op == BinOp.SUB || op == BinOp.MUL || op == BinOp.DIV;
-    }
     /** How a preserved call's operation is reached: it is the library's, named under the alias the
      * library publishes it under. A call this representation kept standing applies an operation —
      * the namespace applied is a construction, and is written back as one. */

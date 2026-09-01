@@ -44,7 +44,7 @@ public final class BinaryElaborator {
         if (read.type() instanceof Type.Erroneous) {
             throw new Unanswerable(bin.pos());
         }
-        if (bin.op() == BinOp.AND || bin.op() == BinOp.OR) {
+        if (bin.op().joinsTwoConditions()) {
             Elaborator.requireType(e, read.type(), Type.BOOL, ctx.symbols(),
                     "operand of logical operator");
         }
@@ -255,7 +255,7 @@ public final class BinaryElaborator {
      * answer is null.
      */
     static Type operandBeside(BinOp op, Type other, boolean onTheRight, Symbols symbols) {
-        if (op == BinOp.AND || op == BinOp.OR) {
+        if (op.joinsTwoConditions()) {
             return Type.BOOL;
         }
         if (other == null) {

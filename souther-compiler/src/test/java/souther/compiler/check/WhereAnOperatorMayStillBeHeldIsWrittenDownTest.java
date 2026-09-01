@@ -114,16 +114,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ConstEval.arith",
                     "what the operator computes of two constants"),
             new Held("souther.compiler.check.ConstEval.compare", "the same for a comparison"),
-            new Held("souther.compiler.codegen.BodyGen.comparisonMaterialize",
-                    "which instructions an operator is emitted as"),
-            new Held("souther.compiler.check.Terms.isArith",
-                    "which operators compute a number, spelled as four equalities rather than"
-                            + " asked of the operator: a membership the enum does not own, and one"
-                            + " an operator added later falls quietly outside of"),
-            new Held("souther.compiler.partition.Condition.combines",
-                    "which operators put conditions together, spelled as two equalities — the same"
-                            + " set the enum already answers for, under another name"),
-
             new Held("souther.compiler.check.Conditions.comparison",
                     "builds a node from the operator it is handed"),
             new Held("souther.compiler.reading.Meetings.run",
@@ -241,8 +231,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "walks into a conjunction for the clause that bounds a field"),
             new Held("souther.compiler.check.InvariantChecker.direct",
                     "walks into a conjunction for the clauses an invariant states"),
-            new Held("souther.compiler.check.PathReachability.walk",
-                    "which way an operator has to come out for the arm under it to be reached"),
             new Held("souther.compiler.check.Predicates.assumeCond",
                     "a conjunction asserted true gives both sides, a disjunction asserted false"
                             + " gives both denied"),
@@ -270,6 +258,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.reading.CoverageRead.rightOf", "and which way it runs under"),
             new Held("souther.compiler.reading.Meetings.meetingAt",
                     "asks the enum whether the operator stops early"),
+            new Held("souther.compiler.check.PathReachability.walk",
+                    "asks the enum whether there is a right side that runs on some runs and not"
+                            + " others, and which way the left has to come out for it to"),
 
             // What the operator computes, is typed as, or is emitted as.
             new Held("souther.compiler.check.AffineForms.composed",
@@ -277,8 +268,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.BinaryElaborator.elaborateBinary",
                     "what the operator makes of its operands' types"),
             new Held("souther.compiler.check.BinaryElaborator.operand",
-                    "the same asked of one operand: a scale takes the base a newtype wraps, and a"
-                            + " conjunction takes truths"),
+                    "asks whether the operator joins two conditions, which is the one thing an"
+                            + " operand can be held to before the one beside it has been read"),
             new Held("souther.compiler.check.ConstEval.binary",
                     "what the operator computes of two constants, and which operand it needs to"
                             + " compute it"),
@@ -289,11 +280,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.examples.FixtureReader.fold",
                     "what the operator computes of two numbers a fixture wrote"),
             new Held("souther.compiler.codegen.BodyGen.binary",
-                    "which instructions the operator is emitted as"),
-            new Held("souther.compiler.codegen.BodyGen.orderingOf",
-                    "which operators are orderings, spelled as four cases rather than asked: a"
-                            + " membership the enum does not own, beside the two others spelled"
-                            + " outside it"),
+                    "which instructions the operator is emitted as, and — for the six it emits a"
+                            + " comparison for — the recognition everything below it holds"),
+            new Held("souther.compiler.codegen.BodyGen.lambda$binary$0",
+                    "names the operator in what it says of a comparison that placed nothing"),
+            new Held("souther.compiler.codegen.BodyGen.ordered",
+                    "names the operator in what it says of an order the checker admitted and the"
+                            + " types turn out not to have: the emission itself is off what the"
+                            + " comparison stated"),
 
             // And whether it compares at all, asked of the one place that says so.
             new Held("souther.compiler.check.InvariantChecker.arithmeticOf",
@@ -339,13 +333,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "names the constants it has rules for, against the operator it was handed"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
-                    "names the two that take truths and the two that scale a newtype"),
-            new Held("souther.compiler.check.Terms.isArith",
-                    "names the four constants it calls arithmetic, which is a membership the enum"
-                            + " does not own"),
-            new Held("souther.compiler.partition.Condition.combines",
-                    "names the two constants it calls joining, which is a membership the enum"
-                            + " already answers for under another name"),
+                    "names the two that scale a newtype"),
             new Held("souther.compiler.check.Term.Interner.operator",
                     "names the constants the canonical terms are keyed by, which is the"
                             + " six-into-three the reading of a guard now takes from what was"
