@@ -176,14 +176,30 @@ public sealed interface ObligationCoverage {
     static Measurement<ItemAssessment.Coverage> acrossOneReadingsSearches(
             Measurement<ItemAssessment.Coverage> a, Measurement<ItemAssessment.Coverage> b) {
         return switch (acrossTheReadings(List.of(a, b))) {
-            // A row was seen. Kept as the measurement that saw it, so that what that reading went
-            // without is still said: a row found by a reading which could not read everything is
-            // found, and what it could not read is a fact of its own.
-            case Witnessed _ -> a.made().map(ItemAssessment.Coverage::hit).orElse(false) ? a : b;
+            // A row was seen, and what the searches behind it went without is what both of them
+            // went without. Kept as whichever of the two saw it, the answer turned on which was
+            // walked first — the one that saw a row and read everything, and the one that saw a row
+            // and could not, are one reading here, and what it could not read is a fact of its own.
+            case Witnessed _ -> {
+                WeakeningSet went = wentWithout(a).union(wentWithout(b));
+                yield went.isEmpty()
+                        ? new Measurement.Complete<>(new ItemAssessment.Coverage.Hit())
+                        : new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(), went);
+            }
             case Undecided it -> new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
                     it.weakening());
             case Missed _ -> new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit());
             case NotMeasured it -> new Measurement.NotMeasured<>(it.why());
+        };
+    }
+
+    /** What one search of a reading could not read, and none where it read everything. */
+    private static WeakeningSet wentWithout(Measurement<ItemAssessment.Coverage> made) {
+        return switch (made) {
+            case Measurement.Partial<ItemAssessment.Coverage> it -> it.by();
+            case Measurement.FailedToMeasure<ItemAssessment.Coverage> it -> it.by();
+            case Measurement.Complete<ItemAssessment.Coverage> _,
+                 Measurement.NotMeasured<ItemAssessment.Coverage> _ -> WeakeningSet.none();
         };
     }
 }

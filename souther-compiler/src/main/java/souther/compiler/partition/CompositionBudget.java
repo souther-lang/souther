@@ -68,7 +68,7 @@ public enum CompositionBudget {
     VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED(() -> 16),
 
     /** How many levels past the one a side starts from are asked for. */
-    LEVELS_A_SIDE_IS_ASKED_AT(LevelCandidateSource::levelsTried),
+    LEVELS_A_SIDE_IS_ASKED_AT(() -> 8),
 
     /** How often a walk re-reads the rules with the positions it has fixed. */
     TIMES_THE_RULES_ARE_ASKED_AGAIN(() -> 2_000),

@@ -91,6 +91,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/inputs/SearchRegion;)"
                             + "Lsouther/compiler/partition/LevelRealizer$Reached;",
                     "walks a progression as far as this walks one, and says that is why"),
+            Map.entry("souther.compiler.partition.LevelCandidateSource#<clinit>()V",
+                    "how many levels a side is asked at"),
             Map.entry("souther.compiler.partition.NumericWitness#<clinit>()V",
                     "how many values a position on the way is tried at"),
             Map.entry("souther.compiler.partition.NumericWitness#walk("

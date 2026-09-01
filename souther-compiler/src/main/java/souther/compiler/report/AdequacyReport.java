@@ -1877,14 +1877,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** What the search for a value at an edge came to, where it ran and found none. */
     private static String whatWasTried(SearchOutcomes outcomes, SourceNameResolver names,
                                        SourceId declaredIn) {
+        // Which searches are worth a sentence is the outcomes' answer, not this one's. Told apart
+        // here, two of them would be one piece of news whenever the words for them happened to
+        // match — a report deciding what happened from what it was about to write.
         List<String> said = new ArrayList<>();
-        for (ItemAssessment.Attempt each : outcomes.each()) {
-            String here = whatWasTried(each, names, declaredIn);
-            if (!here.isEmpty() && !said.contains(here)) {
-                said.add(here);
-            }
+        for (ItemAssessment.Attempt each : outcomes.worthSaying()) {
+            said.add(whatWasTried(each, names, declaredIn));
         }
-        return String.join("", said);
+        // One sentence per search, with the readings' own separator between them. Run together,
+        // two searches of one reading read as one clause that says two things.
+        return String.join(";", said);
     }
 
     /** The same, of one search of the point. */

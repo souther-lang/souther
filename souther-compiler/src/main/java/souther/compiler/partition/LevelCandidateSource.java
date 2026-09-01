@@ -35,13 +35,8 @@ public final class LevelCandidateSource {
      * of it; a box that holds none of the first few holds one only where the rules are shaped so that
      * the whole search is worth its own answer.
      */
-    private static final int LEVELS_TRIED = 8;
-
-    /** The same figure, for {@link CompositionBudget} to name it by. Read here rather than written
-     *  there, so that the bound and its name cannot part. */
-    static int levelsTried() {
-        return LEVELS_TRIED;
-    }
+    private static final int LEVELS_TRIED =
+            CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT.maximum();
 
     /**
      * The levels a row at this item could stand at, nearest the line first.

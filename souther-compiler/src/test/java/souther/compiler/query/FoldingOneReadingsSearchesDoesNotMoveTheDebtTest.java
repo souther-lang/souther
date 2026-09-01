@@ -97,24 +97,58 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     }
 
     /**
-     * A row one of them saw is still seen, and what that reading went without is still said.
+     * The folded value is the same value either way round, and not only the same answer.
      *
-     * <p>The one case where the fold keeps a measurement rather than writing one: a row found by a
-     * reading that could not read everything is found, and what it could not read is a fact of its
-     * own that a canonical answer would drop.
+     * <p>The law the projection above does not reach. What the debt says of the pair can be the
+     * same while the measurement the fold writes differs, and the difference is read: a reading's
+     * measurement says what the searches behind it went without, which a report prints. So a fold
+     * that agreed with the debt and kept whichever it saw first would move that sentence with the
+     * order the readings were walked in.
      */
     @Test
-    void aRowSeenByAReadingThatWentWithoutSomethingKeepsWhatItWentWithout() {
+    void thePairIsTheSameValueWhicheverOfThemCameFirst() {
+        List<String> apart = new ArrayList<>();
+        for (Measurement<ItemAssessment.Coverage> a : everyShape()) {
+            for (Measurement<ItemAssessment.Coverage> b : everyShape()) {
+                if (bothSayNobodyAsked(a, b)) {
+                    continue;
+                }
+                Measurement<ItemAssessment.Coverage> one =
+                        ObligationCoverage.acrossOneReadingsSearches(a, b);
+                Measurement<ItemAssessment.Coverage> other =
+                        ObligationCoverage.acrossOneReadingsSearches(b, a);
+                if (!one.equals(other)) {
+                    apart.add(a + " with " + b + ": " + one + " one way, " + other + " the other");
+                }
+            }
+        }
+
+        assertEquals(List.of(), apart, "the searches of one reading are a set of facts about it");
+    }
+
+    /**
+     * A row one of them saw is still seen, and what both of them went without is said.
+     *
+     * <p>Both, because the measurement is of the reading and the reading is both searches. Kept as
+     * whichever saw the row, what the other could not read would be there or not depending on which
+     * of them saw it — and a reader would be told a reading went without nothing on the strength of
+     * the search that happened to come first.
+     */
+    @Test
+    void aRowSeenByOneSearchKeepsWhatEitherOfThemWentWithout() {
         Measurement<ItemAssessment.Coverage> seen =
                 new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(), truncated());
-        Measurement<ItemAssessment.Coverage> missed =
-                new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit());
+        Measurement<ItemAssessment.Coverage> elsewhere =
+                new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(), unreadable());
 
         Measurement<ItemAssessment.Coverage> folded =
-                ObligationCoverage.acrossOneReadingsSearches(seen, missed);
+                ObligationCoverage.acrossOneReadingsSearches(seen, elsewhere);
 
-        assertEquals(seen, folded, "the row stands, and so does what the reading that saw it"
-                + " could not read");
+        assertEquals(new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(),
+                        truncated().union(unreadable())),
+                folded,
+                "the row stands, and what either search could not read is what the reading"
+                        + " went without");
         assertTrue(ObligationCoverage.acrossTheReadings(List.of(folded))
                         instanceof ObligationCoverage.Witnessed,
                 "and the debt reads it as a row at the point, which is what it is");

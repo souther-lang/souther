@@ -768,9 +768,10 @@ final class Coverages {
      * other reading of the line takes that back.
      *
      * <p><b>After everything that is a reading's own.</b> Which conditions a row has to satisfy to
-     * reach the comparison is one of those, so a search is made per reading and merged here rather
-     * than made once against whichever reading this kept. Merged first, the region a row is composed
-     * in is one reading's, chosen by the order a walk took.
+     * reach the comparison is one of those, so a search is made per reading and the searches are
+     * put together here rather than one being made against whichever reading came first. Put
+     * together first, the region a row is composed in is one reading's, chosen by the order a walk
+     * took.
      *
      * <p><b>And never across two debts.</b> A line holds the authored line and where it was read;
      * a debt holds the authored line and the value it is at — so two readings under one line are one
@@ -779,7 +780,7 @@ final class Coverages {
     static List<BorderAssessment> merged(LineReadings readings) {
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
         for (BorderAssessment each : readings.each()) {
-            out.merge(BoundaryLine.of(each.border()), each, Coverages::whicheverSawMore);
+            out.merge(BoundaryLine.of(each.border()), each, Coverages::asOneLine);
         }
         return List.copyOf(out.values());
     }
@@ -866,18 +867,19 @@ final class Coverages {
     }
 
     /**
-     * Which of two readings of one line the report keeps.
+     * Two readings of one line, as the one line they are readings of.
      *
-     * <p>Existential and per point, the same way an arm is: a row met a point if it met it through
-     * any reading of the line. So a reading that found a row outranks one that could not tell, which
-     * outranks one that looked and found none, which outranks one that was never made. Anything else
-     * would let a second call site of a helper take back what a row at the first one established.
+     * <p><b>Nothing is chosen between.</b> A helper called from two places is one line read once
+     * and searched twice — the authored line and the target are the same, and what differs is the
+     * region a row for it was composed in — so the two are put together and neither stands for the
+     * other. Kept as whichever saw more, whatever the other established was gone before anything
+     * downstream could ask, and a point whose only search a budget stopped came out holding nothing.
      *
-     * <p>Point by point rather than border by border. Two readings of one line are the same border
-     * and can have seen different things at different points, and keeping whichever border saw more
-     * on the whole would throw away a point the other one had.
+     * <p>Point by point rather than border by border. Two readings of one line can have seen
+     * different things at different points, and one answer for the whole border would settle a
+     * point from what happened at another.
      */
-    private static BorderAssessment whicheverSawMore(BorderAssessment a, BorderAssessment b) {
+    private static BorderAssessment asOneLine(BorderAssessment a, BorderAssessment b) {
         if (!a.border().obligation().equals(b.border().obligation())) {
             throw new IllegalStateException("two readings of one line owing different rows: "
                     + a.border().obligation() + " and " + b.border().obligation());

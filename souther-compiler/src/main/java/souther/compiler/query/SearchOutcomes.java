@@ -118,6 +118,33 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
                 .findFirst();
     }
 
+    /**
+     * The searches a reader is owed a sentence about, one per thing that happened.
+     *
+     * <p><b>Told apart by what they are and never by how they read.</b> Two searches of one reading
+     * that came to the same thing are one piece of news; two that came to different things are two,
+     * however alike a renderer's words for them. Left to whoever writes the sentences, the same two
+     * facts collapse or do not depending on the wording, which puts a decision about what happened
+     * in the one place that has stopped looking at it.
+     *
+     * <p>A search that composed a row is not among them. What such a search came to is the row,
+     * which a reader gets by being offered it; what this answers is what a point with nothing at it
+     * has to say for itself.
+     */
+    public List<ItemAssessment.Attempt> worthSaying() {
+        List<ItemAssessment.Attempt> out = new ArrayList<>();
+        for (ItemAssessment.Attempt attempt : each) {
+            if (attempt instanceof ItemAssessment.Attempt.Built
+                    || attempt instanceof ItemAssessment.Attempt.Unavailable) {
+                continue;
+            }
+            if (!out.contains(attempt)) {
+                out.add(attempt);
+            }
+        }
+        return List.copyOf(out);
+    }
+
     /** Every condition on the way that none of these composed against. */
     public List<ReachabilityGap> unaccountedFor() {
         List<ReachabilityGap> out = new ArrayList<>();
