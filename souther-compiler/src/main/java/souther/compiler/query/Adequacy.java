@@ -2375,13 +2375,13 @@ public final class Adequacy {
                                               List<souther.compiler.coverage.CoverageSites.Site> all,
                                               Set<Integer> covered,
                                               souther.compiler.check.PathReachability.Answers.AsRun reachable,
-                                              WeakeningSet rows) {
+                                              WeakeningSet weakenings) {
             List<souther.compiler.coverage.CoverageSites.Site> owed = owed(all, reachable);
             Set<Integer> counted = new LinkedHashSet<>(covered);
             counted.retainAll(owed.stream()
                     .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
             Arms arms = new Arms(owed, counted);
-            WeakeningSet by = rows;
+            WeakeningSet by = weakenings;
             for (int probe : reachable.provedWrong()) {
                 by = by.union(WeakeningSet.of(new Weakening.ProofContradicted(behavior, probe)));
             }

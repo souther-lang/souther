@@ -85,12 +85,12 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public Stands standsAt(Criterion where, Observation row) {
+        public Stands standsAt(Criterion where, Observation observation) {
             // Read on the order the value is written on and asked on the order the answer is
             // measured on. The two are one carrier for a position's own content and part for a term
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
-            return switch (of.read(row.at(term.position()))) {
+            return switch (of.read(observation.at(term.position()))) {
                 case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
@@ -297,12 +297,12 @@ public sealed interface BorderQuantity {
          * decimals read as met by no row, including the rows that meet it.
          */
         @Override
-        public Stands standsAt(Criterion where, Observation row) {
+        public Stands standsAt(Criterion where, Observation observation) {
             // Each on its own order. Read on one order for the pair, a position written back
             // differently from the other was read as a value it does not hold — a date read as a
             // whole number is no number at all, and the row stood at nothing (#1018).
-            NumericTerm.Reading here = on.read(row.at(on.term().subjectPath()));
-            NumericTerm.Reading there = against.read(row.at(against.term().subjectPath()));
+            NumericTerm.Reading here = on.read(observation.at(on.term().subjectPath()));
+            NumericTerm.Reading there = against.read(observation.at(against.term().subjectPath()));
             if (here instanceof NumericTerm.Reading.Missing
                     || there instanceof NumericTerm.Reading.Missing) {
                 return Stands.UNREADABLE;
@@ -519,7 +519,7 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public Stands standsAt(Criterion where, Observation row) {
+        public Stands standsAt(Criterion where, Observation observation) {
             java.math.BigDecimal at = java.math.BigDecimal.ZERO;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
                 // Each on its own order. Read on one order for the whole form, a position written
@@ -530,9 +530,9 @@ public sealed interface BorderQuantity {
                 // a total would be read off whichever element the row's reading happened to pick.
                 TermOrders orders = on.get(each.getKey());
                 NumericTerm.Reading read = switch (each.getKey()) {
-                    case NumericTerm.FromOnePosition one -> orders.read(row.at(one.position()));
+                    case NumericTerm.FromOnePosition one -> orders.read(observation.at(one.position()));
                     case NumericTerm.TakenOver over ->
-                            orders.readOver(row.everyValueAt(over.subjectPath()));
+                            orders.readOver(observation.everyValueAt(over.subjectPath()));
                 };
                 if (read instanceof NumericTerm.Reading.Missing) {
                     return Stands.UNREADABLE;
@@ -683,7 +683,7 @@ public sealed interface BorderQuantity {
 
     /** Whether a row stands at one item of a border on this quantity, or whether it could not be
      *  read. */
-    Stands standsAt(Criterion where, Observation row);
+    Stands standsAt(Criterion where, Observation observation);
 
     /** What a search has to solve to put a row at one item. */
     Standing standingAt(Criterion where);

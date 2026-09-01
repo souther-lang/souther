@@ -46,11 +46,12 @@ public record Settlements(List<OfferItem> requested,
         byRow = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byRow));
     }
 
-    /** What {@code row} would do about {@code item}, for a reader holding both. */
-    public Settlement at(RowKey row, OfferItem item) {
-        Map<OfferItem, Settlement> here = byRow.get(row);
+    /** What the row {@code rowKey} addresses would do about {@code item}, for a reader holding
+     *  both. */
+    public Settlement at(RowKey rowKey, OfferItem item) {
+        Map<OfferItem, Settlement> here = byRow.get(rowKey);
         if (here == null || !here.containsKey(item)) {
-            throw new IllegalArgumentException("no entry for " + row + " at " + item);
+            throw new IllegalArgumentException("no entry for " + rowKey + " at " + item);
         }
         return here.get(item);
     }
@@ -66,13 +67,13 @@ public record Settlements(List<OfferItem> requested,
      * <p>Written once because it is what {@link #keeping()} preserves. Said as two rules in two
      * places, the second is the one a later reader drops as an oversight.
      */
-    public boolean offers(Set<RowKey> rows, OfferItem item) {
-        for (RowKey row : rows) {
-            if (byRow.get(row).get(item).settles()) {
+    public boolean offers(Set<RowKey> rowKeys, OfferItem item) {
+        for (RowKey rowKey : rowKeys) {
+            if (byRow.get(rowKey).get(item).settles()) {
                 return true;
             }
         }
-        return rows.contains(composedFor.get(item));
+        return rowKeys.contains(composedFor.get(item));
     }
 
     /**
@@ -117,15 +118,15 @@ public record Settlements(List<OfferItem> requested,
         // way for every row, the walk would go over every item once per row to find the few that
         // name it.
         Map<RowKey, List<OfferItem>> composedHere = new LinkedHashMap<>();
-        composedFor.forEach((item, row) ->
-                composedHere.computeIfAbsent(row, _ -> new ArrayList<>()).add(item));
+        composedFor.forEach((item, rowKey) ->
+                composedHere.computeIfAbsent(rowKey, _ -> new ArrayList<>()).add(item));
         List<RowKey> inOrder = new ArrayList<>(byRow.keySet());
         Set<RowKey> kept = new LinkedHashSet<>(inOrder);
         for (int at = inOrder.size() - 1; at >= 0; at--) {
-            RowKey row = inOrder.get(at);
-            if (goes(row, composedHere.getOrDefault(row, List.of()), count)) {
-                kept.remove(row);
-                byRow.get(row).forEach((item, settlement) -> {
+            RowKey rowKey = inOrder.get(at);
+            if (goes(rowKey, composedHere.getOrDefault(rowKey, List.of()), count)) {
+                kept.remove(rowKey);
+                byRow.get(rowKey).forEach((item, settlement) -> {
                     if (settlement.settles()) {
                         count.merge(item, -1, Integer::sum);
                     }
@@ -137,8 +138,8 @@ public record Settlements(List<OfferItem> requested,
     }
 
     /**
-     * Whether the offering offers as much without {@code row} as with it — {@link #offers} for
-     * every item, read off the counts rather than walked again.
+     * Whether the offering offers as much without the row {@code rowKey} addresses as with it —
+     * {@link #offers} for every item, read off the counts rather than walked again.
      *
      * <p>The counts hold the kept rows and this one among them. So an item this row settles needs a
      * second settler to be left after it goes, and an item it was composed for and settles nothing
@@ -146,8 +147,9 @@ public record Settlements(List<OfferItem> requested,
      *
      * @param composedHere what this row was composed for
      */
-    private boolean goes(RowKey row, List<OfferItem> composedHere, Map<OfferItem, Integer> count) {
-        Map<OfferItem, Settlement> here = byRow.get(row);
+    private boolean goes(RowKey rowKey, List<OfferItem> composedHere,
+                         Map<OfferItem, Integer> count) {
+        Map<OfferItem, Settlement> here = byRow.get(rowKey);
         for (Map.Entry<OfferItem, Settlement> each : here.entrySet()) {
             if (each.getValue().settles() && count.get(each.getKey()) <= 1) {
                 return false;
@@ -417,11 +419,11 @@ public record Settlements(List<OfferItem> requested,
             return RowAsRead.of(sig, building, trial, inputs);
         }
 
-        Settlement settlementOf(RowAsRead row, OfferItem item) {
+        Settlement settlementOf(RowAsRead asRead, OfferItem item) {
             return switch (item) {
-                case OfferItem.AClass(var owed) -> inClass(row, owed);
-                case OfferItem.AnArm(var owed) -> throughArm(row, owed);
-                case OfferItem.APointOfALine at -> atThePoint(row, at);
+                case OfferItem.AClass(var owed) -> inClass(asRead, owed);
+                case OfferItem.AnArm(var owed) -> throughArm(asRead, owed);
+                case OfferItem.APointOfALine at -> atThePoint(asRead, at);
             };
         }
 
@@ -432,15 +434,15 @@ public record Settlements(List<OfferItem> requested,
          * another one is not something a row written here has a value at — which is a row that does
          * not settle it rather than one nothing could tell about.
          */
-        private Settlement inClass(RowAsRead row, Generator.ClassOwed owed) {
+        private Settlement inClass(RowAsRead asRead, Generator.ClassOwed owed) {
             if (!behavior.equals(owed.at().behavior())) {
                 return new Settlement.DoesNotSettle();
             }
-            if (row.values() == null) {
-                return undetermined(row);
+            if (asRead.values() == null) {
+                return undetermined(asRead);
             }
             Classification at =
-                    InputClassifications.of(row.values(), where, axes).get(owed.at());
+                    InputClassifications.of(asRead.values(), where, axes).get(owed.at());
             if (at == null) {
                 return new Settlement.DoesNotSettle();
             }
@@ -460,8 +462,8 @@ public record Settlements(List<OfferItem> requested,
          * — and where there is none, this says so rather than reading the absence as a row that
          * missed.
          */
-        private Settlement throughArm(RowAsRead row, Generator.ArmOwed owed) {
-            return switch (row.watched()) {
+        private Settlement throughArm(RowAsRead asRead, Generator.ArmOwed owed) {
+            return switch (asRead.watched()) {
                 case Generator.Watched.Ran(var account) -> account.taken().contains(owed.probe())
                         ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                 case Generator.Watched.NoAccount _ ->
@@ -476,7 +478,7 @@ public record Settlements(List<OfferItem> requested,
          * behavior's readings do not meet is one a row written here does not settle. Where they do,
          * the walk that reads a written row against the point reads this one.
          */
-        private Settlement atThePoint(RowAsRead read, OfferItem.APointOfALine at) {
+        private Settlement atThePoint(RowAsRead asRead, OfferItem.APointOfALine at) {
             List<AtAPoint> here = reads.get(at);
             if (here == null || here.isEmpty()) {
                 // No reading of this line in this behavior. A row written here has no value on the
@@ -484,16 +486,17 @@ public record Settlements(List<OfferItem> requested,
                 // nothing could tell about.
                 return new Settlement.DoesNotSettle();
             }
-            if (read.values() == null) {
-                return undetermined(read);
+            if (asRead.values() == null) {
+                return undetermined(asRead);
             }
-            ObservedInputs row = read.asInputs();
+            ObservedInputs observed = asRead.asInputs();
             // Existential over the readings, the way a point met at one position of a behavior is
             // met: a row standing on the line anywhere the behavior reads it is a row at the point.
             Settlement answer = new Settlement.DoesNotSettle();
             for (AtAPoint one : here) {
                 Settlement said = switch (StandingAtAPoint.met(one.line().cut().of(), where,
-                        List.of(row), one.criterion(), one.line().origin().comparisonAt())) {
+                        List.of(observed), one.criterion(),
+                        one.line().origin().comparisonAt())) {
                     case YES -> new Settlement.Settles();
                     case NO -> new Settlement.DoesNotSettle();
                     case NOT_WATCHED ->
@@ -519,7 +522,7 @@ public record Settlements(List<OfferItem> requested,
                             souther.compiler.partition.Criterion criterion) {}
 
     /** What an item that needs the values is told, where they are not here. */
-    private static Settlement undetermined(RowAsRead row) {
-        return new Settlement.Undetermined(row.whyNotRead());
+    private static Settlement undetermined(RowAsRead asRead) {
+        return new Settlement.Undetermined(asRead.whyNotRead());
     }
 }
