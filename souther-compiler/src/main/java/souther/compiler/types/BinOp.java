@@ -51,13 +51,14 @@ public enum BinOp {
      * classification read another way, and there is no second list to keep in step with this one.
      *
      * <p>Three things hold that between them, and no one of them holds all of it. javac requires
-     * the argument. Being private, these four are what a declaration in this file can name. And a
-     * {@code null} reaching the constructor is refused there, which is the part neither of the
-     * others sees — an operator in no family answers every membership below with "not this one",
-     * which is what an operator outside the language would answer.
+     * the argument. A {@code Family} that is not null is one of these four, which is what being an
+     * enum is. And a {@code null} reaching the constructor is refused there — an operator in no
+     * family answers every membership below with "not this one", which is what an operator outside
+     * the language would answer.
      *
-     * <p><b>Private, because a partition is not a vocabulary.</b> A reader asks the question it has,
-     * and hands on what it established rather than the family it established it from.
+     * <p><b>Private is none of the three: it is what keeps a partition from becoming a
+     * vocabulary.</b> A reader asks the question it has, and hands on what it established rather
+     * than the family it established it from.
      *
      * <p>{@link #CONCATENATION} is here for the same reason the others are, though nothing asks for
      * it by name yet. Left out, joining two sequences would be what is left over from three sets
