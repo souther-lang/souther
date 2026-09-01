@@ -13,6 +13,8 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.check.Comparison;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Ordering;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
@@ -599,11 +601,11 @@ final class BodyGen {
          * <p>Absent is ordinary here, unlike an arm's: what has a site is every comparison of a
          * condition this plan instruments, and the emitter walks comparisons everywhere else too.
          */
-        private void comparisonProbe(Core.Binary comparison) {
+        private void comparisonProbe(Comparison comparison) {
             if (!armsAreCounted || !ctx.measuring()) {
                 return;
             }
-            ctx.comparisonSiteOf(comparison).ifPresent(site -> {
+            ctx.comparisonSiteOf(comparison.at()).ifPresent(site -> {
                 ctx.emitted(site);
                 code.dup();
                 code.loadConstant(site);
@@ -757,8 +759,10 @@ final class BodyGen {
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> {
-                    binary(bin);
-                    comparisonProbe(bin);
+                    Comparison comparison = binary(bin);
+                    if (comparison != null) {
+                        comparisonProbe(comparison);
+                    }
                 }
                 case Core.Construct nd -> construct(nd);
                 case Core.Match m -> match(m, expected);
@@ -1675,8 +1679,18 @@ final class BodyGen {
             }
         }
 
-        private void binary(Core.Binary bin) {
-            switch (bin.op()) {
+        /**
+         * The operator, emitted; and the comparison it was, where it was one.
+         *
+         * <p>A switch expression, because an enum switch statement is not held to covering its
+         * type. What is wanted here is that an operator added to the language stops the compile
+         * until this has decided what to emit for it, and only an expression asks javac for that.
+         *
+         * <p>What comes back is what a probe records, so a caller has the recognition rather than
+         * the node and a lookup that answers for everything else.
+         */
+        private Comparison binary(Core.Binary bin) {
+            return switch (bin.op()) {
                 // Left to right, stopping as soon as the answer is settled. Not an optimisation:
                 // `/` aborts on a zero divisor and `Int` overflows, so a left operand is how the
                 // domain the right one is evaluated in gets narrowed, and `x /= 0 && 100 / x > 1`
@@ -1692,6 +1706,7 @@ final class BodyGen {
                     code.labelBinding(settled);
                     code.iconst_0();
                     code.labelBinding(end);
+                    yield null;
                 }
                 case OR -> {
                     genExpr(bin.left());
@@ -1703,6 +1718,7 @@ final class BodyGen {
                     code.labelBinding(settled);
                     code.iconst_1();
                     code.labelBinding(end);
+                    yield null;
                 }
                 // `+ - * /` work on two Int or two Decimal operands (spec
                 // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/`
@@ -1715,30 +1731,14 @@ final class BodyGen {
                 // BigDecimal here is what let a scale overflow leave a behavior as a
                 // java.lang.ArithmeticException (ADR-0112, issue #976). This said "Decimal does not
                 // overflow", which is not true of a sum, a difference or a product either.
-                case ADD, SUB, MUL, DIV -> {
-                    // The operands are numbers here: newtype arithmetic is a construction over the
-                    // values its operands wrap, and it was written as one where the tree was built
-                    // (spec §newtype-arithmetic), so nothing is opened or re-wrapped at the operator.
-                    Type t = genExpr(bin.left());
-                    genExpr(bin.right());
-                    if (t == Type.DECIMAL) {
-                        String m = switch (bin.op()) {
-                            case ADD -> "add";
-                            case SUB -> "subtract";
-                            case MUL -> "multiply";
-                            default  -> "divide";
-                        };
-                        code.invokestatic(CD_DecimalMath, m, MTD_bdArith);
-                    } else {
-                        String m = switch (bin.op()) {
-                            case ADD -> "addExact";
-                            case SUB -> "subtractExact";
-                            case MUL -> "multiplyExact";
-                            default  -> "divideExact";
-                        };
-                        code.invokestatic(CD_IntMath, m, MTD_intExact);
-                    }
-                }
+                //
+                // One arm each, and the runtime's method named in it. Read off the operator a
+                // second time inside a single arm, the last of the four is whatever is left over,
+                // and an arithmetic operator added to that arm takes the leftover's method.
+                case ADD -> { arithmetic(bin, "add", "addExact"); yield null; }
+                case SUB -> { arithmetic(bin, "subtract", "subtractExact"); yield null; }
+                case MUL -> { arithmetic(bin, "multiply", "multiplyExact"); yield null; }
+                case DIV -> { arithmetic(bin, "divide", "divideExact"); yield null; }
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
@@ -1758,99 +1758,132 @@ final class BodyGen {
                         genExpr(bin.right());
                         code.invokestatic(CD_Lists, "concat", MTD_Lists_concat);
                     }
+                    yield null;
                 }
-                default -> {
-                    // A single-value newtype compares by its underlying value, so each operand is
-                    // opened to that value right after it is pushed (金額 <= 金額, 金額 <= 100 — the
-                    // checker allows only same newtype or a bare literal).
-                    //
-                    // An ordering is emitted from the order the operands open to and from nothing
-                    // else, and the switch below carries no `default`: reading the representation
-                    // instead is what let `StageN < StageN` fall past every ordering arm into the
-                    // equality test at the bottom, and an order added to {@link Ordering} would
-                    // fall the same way through an `instanceof` chain (issue #856). An equality is
-                    // the representation's own question and stays below.
-                    if (orderingOf(bin) instanceof Ordering how) {
-                        switch (how) {
-                            case Ordering.Longs _ -> {
-                                unwrapNewtypeValue(genExpr(bin.left()));
-                                unwrapNewtypeValue(genExpr(bin.right()));
-                                comparisonMaterialize(bin.op(), true);
-                            }
-                            case Ordering.Natural _ -> {
-                                // These all carry as Comparable — String, BigDecimal, LocalDate,
-                                // LocalTime, LocalDateTime, Instant — so one compareTo reduces the
-                                // order to its sign against 0. BigDecimal.compareTo ignores scale,
-                                // which matches Decimal equality (spec §equality); the others order
-                                // lexicographically / in time.
-                                unwrapNewtypeValue(genExpr(bin.left()));
-                                unwrapNewtypeValue(genExpr(bin.right()));
-                                code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
-                                code.iconst_0();
-                                comparisonMaterialize(bin.op(), false);
-                            }
-                            case Ordering.Places places -> {
-                                // An enumeration compares by where its case stands in the
-                                // declaration, which the sum answers for both operands —
-                                // `stage < Won` pairs a sum with one of its cases, and
-                                // `x < StageN(Qualified)` two wrappers over one sum.
-                                unwrapNewtypeValue(genExpr(bin.left()));
-                                code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
-                                unwrapNewtypeValue(genExpr(bin.right()));
-                                code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
-                                comparisonMaterialize(bin.op(), false);
-                            }
-                            // `opened` answers for the value the operands are opened to, which is
-                            // never one a name is still worn over.
-                            case Ordering.Wrapped _ -> throw new IllegalStateException(
-                                    "an opened order is never a wrapped one: " + bin.left().type());
-                        }
-                        return;
-                    }
-                    Type lt = unwrapNewtypeValue(genExpr(bin.left()));
-                    unwrapNewtypeValue(genExpr(bin.right()));
-                    if (lt == Type.STRING) {
-                        code.invokevirtual(CD_String, "equals",
-                                MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
-                        if (bin.op() == BinOp.NE) {
-                            code.iconst_1();
-                            code.ixor();
-                        }
-                        return;
-                    }
-                    if (isReference(lt)) {
-                        // What sameness is, is the runtime's to say: a data compares by its fields,
-                        // an amount ignores its scale, a collection asks that of what it holds
-                        // (spec §equality). A pair of Decimals takes the overload for them.
-                        emitValueEquals(code, lt == Type.DECIMAL);
-                        if (bin.op() == BinOp.NE) {
-                            code.iconst_1();
-                            code.ixor();
-                        }
-                        return;
-                    }
-                    comparisonMaterialize(bin.op(), lt == Type.INT);
+                case EQ, NE, LT, LE, GT, GE -> {
+                    Comparison comparison = Comparison.of(bin).orElseThrow(
+                            () -> new IllegalStateException(
+                                    "an operator that compares placed nothing: " + bin.op()));
+                    emitComparison(comparison);
+                    yield comparison;
                 }
+            };
+        }
+
+        /** What the operator computes of two numbers, through the runtime that owns the arithmetic
+         *  — {@code IntMath} and {@code DecimalMath} — rather than a host method. The operands are
+         *  numbers here: newtype arithmetic is a construction over the values its operands wrap,
+         *  and it was written as one where the tree was built (spec §newtype-arithmetic), so
+         *  nothing is opened or re-wrapped at the operator. */
+        private void arithmetic(Core.Binary bin, String onDecimal, String onInt) {
+            Type t = genExpr(bin.left());
+            genExpr(bin.right());
+            if (t == Type.DECIMAL) {
+                code.invokestatic(CD_DecimalMath, onDecimal, MTD_bdArith);
+            } else {
+                code.invokestatic(CD_IntMath, onInt, MTD_intExact);
             }
         }
 
-        /** How a {@code <}/{@code <=}/{@code >}/{@code >=} compares its operands, or null when this
-         * is not that comparison. Whether the two may be compared at all was settled by
-         * {@code BinaryElaborator} against the types as written; this reads what they open to. */
-        private Ordering orderingOf(Core.Binary bin) {
-            boolean ordering = switch (bin.op()) {
-                case LT, LE, GT, GE -> true;
-                default -> false;
-            };
-            if (!ordering) {
-                return null;
+        /**
+         * The comparison, emitted from what it placed.
+         *
+         * <p>An order and a value singled out are the two things a comparison places, and which of
+         * the two this is comes from the claim the recognition carries. Read off the operator here
+         * instead, the same six would be divided a second time and the two divisions would agree
+         * only for as long as somebody kept them so.
+         *
+         * <p>A single-value newtype compares by its underlying value, so each operand is opened to
+         * that value right after it is pushed (金額 &lt;= 金額, 金額 &lt;= 100 — the checker allows
+         * only same newtype or a bare literal).
+         */
+        private void emitComparison(Comparison comparison) {
+            switch (comparison.claim()) {
+                case ComparisonClaim.Cut _ -> ordered(comparison.at());
+                case ComparisonClaim.Singled(boolean holdsAtTheValue) ->
+                        same(comparison.at(), holdsAtTheValue);
             }
+        }
+
+        /**
+         * An order, emitted from the order the operands open to and from nothing else.
+         *
+         * <p>The switch carries no {@code default}: reading the representation instead is what let
+         * {@code StageN < StageN} fall past every ordering arm into an equality test, and an order
+         * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
+         */
+        private void ordered(Core.Binary bin) {
+            // Whether the two may be compared at all was settled by BinaryElaborator against the
+            // types as written; this reads what they open to.
             Ordering how = Ordering.ofComparison(bin.left().type(), bin.right().type(), symbols);
             if (how == null) {
                 throw new IllegalStateException("a comparison the checker admitted has no order: "
                         + bin.left().type() + " " + bin.op() + " " + bin.right().type());
             }
-            return how.opened();
+            switch (how.opened()) {
+                case Ordering.Longs _ -> {
+                    unwrapNewtypeValue(genExpr(bin.left()));
+                    unwrapNewtypeValue(genExpr(bin.right()));
+                    comparisonMaterialize(bin.op(), true);
+                }
+                case Ordering.Natural _ -> {
+                    // These all carry as Comparable — String, BigDecimal, LocalDate, LocalTime,
+                    // LocalDateTime, Instant — so one compareTo reduces the order to its sign
+                    // against 0. BigDecimal.compareTo ignores scale, which matches Decimal equality
+                    // (spec §equality); the others order lexicographically / in time.
+                    unwrapNewtypeValue(genExpr(bin.left()));
+                    unwrapNewtypeValue(genExpr(bin.right()));
+                    code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                    code.iconst_0();
+                    comparisonMaterialize(bin.op(), false);
+                }
+                case Ordering.Places places -> {
+                    // An enumeration compares by where its case stands in the declaration, which
+                    // the sum answers for both operands — `stage < Won` pairs a sum with one of its
+                    // cases, and `x < StageN(Qualified)` two wrappers over one sum.
+                    unwrapNewtypeValue(genExpr(bin.left()));
+                    code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                    unwrapNewtypeValue(genExpr(bin.right()));
+                    code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                    comparisonMaterialize(bin.op(), false);
+                }
+                // `opened` answers for the value the operands are opened to, which is never one a
+                // name is still worn over.
+                case Ordering.Wrapped _ -> throw new IllegalStateException(
+                        "an opened order is never a wrapped one: " + bin.left().type());
+            }
+        }
+
+        /**
+         * A value singled out, tested for sameness.
+         *
+         * <p>{@code holdsAtTheValue} says which of the two classes the comparison selects, so a
+         * comparison met where the value is not the one named is this test inverted.
+         */
+        private void same(Core.Binary bin, boolean holdsAtTheValue) {
+            Type lt = unwrapNewtypeValue(genExpr(bin.left()));
+            unwrapNewtypeValue(genExpr(bin.right()));
+            if (lt == Type.STRING) {
+                code.invokevirtual(CD_String, "equals",
+                        MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+                if (!holdsAtTheValue) {
+                    code.iconst_1();
+                    code.ixor();
+                }
+                return;
+            }
+            if (isReference(lt)) {
+                // What sameness is, is the runtime's to say: a data compares by its fields, an
+                // amount ignores its scale, a collection asks that of what it holds (spec
+                // §equality). A pair of Decimals takes the overload for them.
+                emitValueEquals(code, lt == Type.DECIMAL);
+                if (!holdsAtTheValue) {
+                    code.iconst_1();
+                    code.ixor();
+                }
+                return;
+            }
+            comparisonMaterialize(bin.op(), lt == Type.INT);
         }
 
         /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise

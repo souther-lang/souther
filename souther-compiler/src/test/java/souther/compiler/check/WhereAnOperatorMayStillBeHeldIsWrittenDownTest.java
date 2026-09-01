@@ -282,11 +282,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.examples.FixtureReader.fold",
                     "what the operator computes of two numbers a fixture wrote"),
             new Held("souther.compiler.codegen.BodyGen.binary",
-                    "which instructions the operator is emitted as"),
-            new Held("souther.compiler.codegen.BodyGen.orderingOf",
-                    "which operators are orderings, spelled as four cases rather than asked: a"
-                            + " membership the enum does not own, beside the two others spelled"
-                            + " outside it"),
+                    "which instructions the operator is emitted as, and — for the six it emits a"
+                            + " comparison for — the recognition everything below it holds"),
+            new Held("souther.compiler.codegen.BodyGen.lambda$binary$0",
+                    "names the operator in what it says of a comparison that placed nothing"),
+            new Held("souther.compiler.codegen.BodyGen.ordered",
+                    "which instructions an order is emitted as, and which order the checker"
+                            + " admitted where it turns out there is none"),
+            new Held("souther.compiler.codegen.BodyGen.same",
+                    "which instructions a value singled out is tested with"),
 
             // And whether it compares at all, asked of the one place that says so.
             new Held("souther.compiler.check.InvariantChecker.arithmeticOf",
