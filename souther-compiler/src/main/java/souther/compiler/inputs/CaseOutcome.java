@@ -17,12 +17,14 @@ package souther.compiler.inputs;
 sealed interface CaseOutcome {
 
     /**
-     * A reading of the case was opened, and stands at {@code at}.
+     * A reading of the case was opened.
      *
-     * <p>Whether anything is left of it is that reading's answer and not this one's: what is here is
-     * where to ask.
+     * <p>Whether anything is left of it is that reading's answer and not this one's, and where to
+     * ask is not written down here either: a reading is reached by asking under the narrowing this
+     * case is, which is the same fact from the side that knows it. Carried as a path as well, the
+     * two could disagree about which reading answers for this case.
      */
-    record Opened(TermPath at) implements CaseOutcome {}
+    record Opened() implements CaseOutcome {}
 
     /**
      * Naming the case builds it, so there is nothing under it to read.

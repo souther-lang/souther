@@ -37,7 +37,10 @@ sealed interface Viability {
     /**
      * This reading did not go there, so nothing is known either way.
      *
-     * @param at where it stopped, which is what a report of a reading's limits is about
+     * <p>Where it stopped is not carried. Nothing asks it yet, and a place picked out of however
+     * many alternatives went unread would be chosen by the order they were walked in rather than by
+     * anything the model says — which is the shape of answer this type exists to keep out. A reader
+     * that needs the place is a reader that says which of them it wants.
      */
-    record NotRead(TermPath at) implements Viability {}
+    record NotRead() implements Viability {}
 }

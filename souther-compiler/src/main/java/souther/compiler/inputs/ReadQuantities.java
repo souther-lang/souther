@@ -177,18 +177,32 @@ final class ReadQuantities implements Quantities {
                     "`" + at + "` is no position of this input, so there is nothing here to say"
                             + " how many it holds");
         }
-        // The position's own count, which is the one question here that names an arm — and it names
-        // it because it is about that arm.
-        if (!(position.term() instanceof NumericTerm.TakenOf taken)
-                || !(taken.takenAs()
-                        instanceof souther.compiler.semantics.TakenAs.HowManyItHolds)) {
+        NumericTerm counted = howManyItHolds(at.at());
+        if (counted == null) {
             return Integer.MAX_VALUE;
         }
         // Asked of the rules when the question arrives rather than solved for every container as
         // the reading is made: what they leave a count moves with whatever else has been settled.
-        NumericDomain.Bounds runs = runsBetween(position.term());
-        return runs == null ? Integer.MAX_VALUE
-                : souther.compiler.numeric.CountDomain.mostFrom(runs.max());
+        NumericDomain.Bounds runs = runsBetween(counted);
+        return runs == null ? Integer.MAX_VALUE : CountDomain.mostFrom(runs.max());
+    }
+
+    /**
+     * The number of what stands at {@code at} that is how many it holds, or null where this reading
+     * measures it at something else.
+     *
+     * <p>Which number a position is measured at is settled where the position was read, and this is
+     * the one question about it that names an arm — it names it because it is about that arm. Asked
+     * in two places, a reader deciding how many a container may hold and a reader deciding whether
+     * it may hold none would each spell out what a count is, and the second one written would be
+     * the one that forgot that a count taken of a string is a different quantity.
+     */
+    private NumericTerm howManyItHolds(TermPath at) {
+        Position position = byPath.get(at);
+        return position != null
+                && position.term() instanceof NumericTerm.TakenOf taken
+                && taken.takenAs() instanceof TakenAs.HowManyItHolds
+                ? position.term() : null;
     }
 
     /**
@@ -349,12 +363,19 @@ final class ReadQuantities implements Quantities {
         return made;
     }
 
-    /** Whether every one of these terms stands in the values {@code under} describes. */
-    private static boolean stands(Collection<NumericTerm> terms,
-                                  StructuralContext under) {
+    /**
+     * Whether every one of these terms stands in the values {@code under} describes.
+     *
+     * <p>Asked as whether the context already says what each of them needs, and not as whether it
+     * could. A condition about a case holds of the rows that are that case; a context that has not
+     * settled which case the value is is one such a condition says nothing in, and taking it in
+     * there would state it of every row. The two questions agree wherever a context is built from
+     * everything taken in — which is where these are asked from today, and not a reason to ask the
+     * weaker one.
+     */
+    private static boolean stands(Collection<NumericTerm> terms, StructuralContext under) {
         for (NumericTerm term : terms) {
-            if (!(StructuralContext.of(term.subjectPath()).merge(under)
-                    instanceof StructuralContext.Merge.Together)) {
+            if (!under.covers(StructuralContext.of(term.subjectPath()))) {
                 return false;
             }
         }
@@ -453,11 +474,24 @@ final class ReadQuantities implements Quantities {
                 // arrive here as one subject — so the place is the one that subject stands at,
                 // which is what the subject itself says.
                 // What a newtype wraps is at no name of its own, so the place is the value.
-                (atom, path) -> made.put(atom,
-                        new Emptiness.AtAField.Where.In(
-                                atom instanceof InputAtom.Named named ? named.place()
-                                        : path.isEmpty() ? root.toString() : root + "." + path))));
+                (atom, path) -> made.put(atom, placeOf(atom, root, path))));
         return Collections.unmodifiableSequencedMap(made);
+    }
+
+    /**
+     * Where a subject of this input sits, for a proof that names a place.
+     *
+     * <p>Two kinds of subject and two ways of knowing. A named one carries where it is and spells
+     * it itself, which is what keeps the place a proof names and the place a report renders one
+     * spelling. A subject this input has no term for carries only what made it, so where it sits is
+     * what the reading it came from called it, joined to the value that reading was of — it cannot
+     * be asked, so it is told.
+     */
+    private static Emptiness.AtAField.Where placeOf(InputAtom atom, TermPath root, String path) {
+        return new Emptiness.AtAField.Where.In(atom instanceof InputAtom.Named named
+                ? named.place()
+                // What a newtype wraps is at no name of its own, so the place is the value.
+                : path.isEmpty() ? root.toString() : root + "." + path);
     }
 
     /**
@@ -706,9 +740,12 @@ final class ReadQuantities implements Quantities {
      *
      * <p>Looked for in one order, which is a settled order and not a preference. A position fixed at
      * two values contradicts without anything being read; a value the term itself cannot take
-     * contradicts against what the term guarantees; and what the declarations refuse is theirs to
-     * refuse. The terms are taken in the order they are written down, so two contradictions of one
-     * kind are told apart by where they sit rather than by when they were found.
+     * contradicts against what the term guarantees; two things fixed under cases no value is both
+     * of contradict against where they were fixed and against nothing else; and what the
+     * declarations refuse is theirs to refuse. Everything a caller said comes before everything the
+     * declarations say, because what a caller said is what the caller can go and change. The terms
+     * are taken in the order they are written down, so two contradictions of one kind are told
+     * apart by where they sit rather than by when they were found.
      */
     @Override
     public Optional<EmptyInput> emptiness() {
@@ -808,12 +845,11 @@ final class ReadQuantities implements Quantities {
      * container for one that must hold something would refuse a model for a rule nobody wrote.
      */
     private Viability holds(TermPath sequence, StructuralContext under) {
-        Position at = byPath.get(sequence);
-        if (at == null || !(at.term() instanceof NumericTerm.TakenOf taken)
-                || !(taken.takenAs() instanceof TakenAs.HowManyItHolds)) {
+        NumericTerm counted = howManyItHolds(sequence);
+        if (counted == null) {
             return new Viability.MayStand();
         }
-        NumericDomain.Bounds many = runsIn(under, NumericDomain.LinearForm.atom(at.term()));
+        NumericDomain.Bounds many = runsIn(under, NumericDomain.LinearForm.atom(counted));
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
             return new Viability.MayStand();
         }
@@ -849,8 +885,7 @@ final class ReadQuantities implements Quantities {
                 // this compiler stopped.
                 case CaseOutcome.RefusedByTheRules _ ->
                         new Viability.ProvedImpossible(new Emptiness.ConflictingRules());
-                case CaseOutcome.NotWalked _ ->
-                        new Viability.NotRead(sum.sum().refine(each.getKey()));
+                case CaseOutcome.NotWalked _ -> new Viability.NotRead();
                 case CaseOutcome.Opened _ -> viability(under.and(sum.sum(), each.getKey()));
             };
             switch (of) {

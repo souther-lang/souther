@@ -1200,8 +1200,7 @@ public final class InputDomain {
         // back at a value it has already been at would leave a case pointing at a reading nobody
         // made.
         if (opening instanceof RootOpening.Refined it) {
-            observed.became(it.crossing().sum(), it.crossing().branch(),
-                    new CaseOutcome.Opened(opened));
+            observed.became(it.crossing().sum(), it.crossing().branch(), new CaseOutcome.Opened());
         }
         if (reach.handedOn()) {
             handoffs.accepts(by, at, opened);
