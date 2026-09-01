@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.BinOp;
 
@@ -41,6 +42,22 @@ class WhatAnOperatorPlacesIsOneAnswerTest {
     /** Which side of its own line each order is true on. The four cases of the one derivation from
      *  the two facts a cut holds. */
     private static final Map<BinOp, Towards> SATISFIED_ON = satisfiedOn();
+
+    /** The relation each comparison states of its two sides. Written out here and nowhere in the
+     *  compiler: what a reader wanting the numeric words does is ask the claim, and this is the
+     *  table that says which answer that is. */
+    private static final Map<BinOp, Rel> STATED = stated();
+
+    private static Map<BinOp, Rel> stated() {
+        Map<BinOp, Rel> relations = new LinkedHashMap<>();
+        relations.put(BinOp.LT, Rel.LT);
+        relations.put(BinOp.LE, Rel.LE);
+        relations.put(BinOp.GT, Rel.GT);
+        relations.put(BinOp.GE, Rel.GE);
+        relations.put(BinOp.EQ, Rel.EQ);
+        relations.put(BinOp.NE, Rel.NE);
+        return relations;
+    }
 
     private static Map<BinOp, BinOp> swapped() {
         Map<BinOp, BinOp> pairs = new LinkedHashMap<>();
@@ -207,6 +224,84 @@ class WhatAnOperatorPlacesIsOneAnswerTest {
             assertEquals(cut,
                     ComparisonClaim.Cut.satisfiedOn(cut.satisfyingSide(), cut.holdsAtTheValue()),
                     () -> op + " read as a side and built back from it");
+        }
+    }
+
+    /**
+     * What each comparison states as a relation, written out so that the six are the specification.
+     *
+     * <p>The crossing into the words the numeric reasoning is written in. Every reader that had a
+     * table from the operator to a relation is asking for this, and where a table and this part,
+     * the reader tells a domain something the source did not write.
+     */
+    @Test
+    void whatEachComparisonStatesIsOneRelation() {
+        Map<BinOp, Rel> stated = new LinkedHashMap<>();
+        for (BinOp op : STATED.keySet()) {
+            stated.put(op, claim(op).statedRelation());
+        }
+        assertEquals(STATED, stated, "the relation each comparison states of its two sides");
+    }
+
+    /** Denying the claim and denying the relation it states are the same relation, which is what
+     *  lets a reader deny wherever it meets a negation and cross over once. */
+    @Test
+    void denyingAClaimAndDenyingWhatItStatesAreOneRelation() {
+        for (BinOp op : STATED.keySet()) {
+            assertEquals(claim(op).statedRelation().denied(), claim(op).denied().statedRelation(),
+                    () -> "denying " + op + " before and after crossing to a relation");
+        }
+    }
+
+    /**
+     * Turning a comparison round is reading the same statement with the difference the other way
+     * about.
+     *
+     * <p>The law the whole crossing rests on, and the only one that can catch a reader taking the
+     * difference the wrong way round: read where the two sides stand at each other every comparison
+     * agrees with its own turn, so a reading whose sides are exchanged is right about the
+     * equalities and wrong about every ordering.
+     */
+    @Test
+    void turningAComparisonRoundIsTheSameStatementAboutTheOtherDifference() {
+        for (BinOp op : STATED.keySet()) {
+            for (int sign = -1; sign <= 1; sign++) {
+                int stood = sign;
+                assertEquals(claim(op).statedRelation().holds(sign),
+                        claim(op).turned().statedRelation().holds(-sign),
+                        () -> op + " where the left stands " + stood + " to the right, and turned"
+                                + " round where it stands " + -stood);
+            }
+        }
+    }
+
+    /**
+     * A relation written down is a comparison stating it, and every relation can be written down.
+     *
+     * <p>The way back, and the whole of it. A reading that composes a comparison out of what the
+     * rules proved says it in an operator, and what is written is read as a comparison by
+     * everything downstream — so an operator stating something else is a rule nobody wrote arriving
+     * with the source's own position on it. Asked of every relation rather than of the ones some
+     * operator happens to state: what is composed comes from the numeric reasoning, which has all
+     * six whether or not an author wrote them.
+     */
+    @Test
+    void everyRelationIsWrittenAsAComparisonStatingIt() {
+        for (Rel rel : Rel.values()) {
+            BinOp written = ComparisonWriting.operatorStating(rel);
+            assertEquals(rel, claim(written).statedRelation(),
+                    () -> rel + " written down, and read back for what it states");
+        }
+    }
+
+    /** And an operator read for what it places and written back from that is the operator it was,
+     *  which is the two crossings between how a comparison is written and what it means holding
+     *  each other in place. */
+    @Test
+    void anOperatorWrittenBackFromWhatItPlacedIsItself() {
+        for (BinOp op : STATED.keySet()) {
+            assertEquals(op, ComparisonWriting.operatorStating(claim(op).statedRelation()),
+                    () -> op + " read for what it places and written back");
         }
     }
 

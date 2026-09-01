@@ -1,7 +1,9 @@
 package souther.compiler.flow;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.check.Comparison;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -55,10 +57,22 @@ final class Witnessed {
      *                  read — a parameter, an arm's binding, a value handed in from outside
      */
     static boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
-        if (!(e instanceof Core.Binary comparison) || !compares(comparison.op())) {
-            // A position holding a truth, which can be given either of them.
-            return e.type() == Type.Prim.BOOL && positionOf(e, settledBy) != null;
+        if (e instanceof Core.Binary binary) {
+            Comparison comparison = Comparison.of(binary).orElse(null);
+            if (comparison != null) {
+                return standsBehind(binary, comparison.claim(), want, settledBy);
+            }
         }
+        // A position holding a truth, which can be given either of them. An operator that puts
+        // comparisons together or answers a number reads as no position at all, and is answered
+        // here rather than being a case of its own.
+        return e.type() == Type.Prim.BOOL && positionOf(e, settledBy) != null;
+    }
+
+    /** Whether a value of what {@code comparison} is over brings what it {@code placed} out
+     *  {@code want}. */
+    private static boolean standsBehind(Core.Binary comparison, ComparisonClaim placed,
+                                        boolean want, Function<Core.Read, Core> settledBy) {
         Core left = comparison.left();
         Core right = comparison.right();
         List<Object> here = wholeNumberPosition(left, settledBy);
@@ -70,42 +84,41 @@ final class Witnessed {
         }
         if (here != null) {
             return right instanceof Core.Int written && isWholeNumber(written.type())
-                    && against(comparison.op(), written.value(), want);
+                    && against(placed, written.value(), want);
         }
         if (there != null && left instanceof Core.Int written && isWholeNumber(written.type())) {
-            return against(mirrored(comparison.op()), written.value(), want);
+            // The position on the left, which is the statement turned round and not another one.
+            return against(placed.turned(), written.value(), want);
         }
         return false;
     }
 
     /**
-     * Whether some whole number brings {@code position op written} out {@code want}.
+     * Whether some whole number stands to {@code written} a way that brings what was
+     * {@code placed} out {@code want}.
      *
-     * <p>Read off the ends of the range and not by trying values. What closes a way is the number
-     * written being the last one on the side the way needs, which is the only thing about a range of
-     * every whole number that can close one.
+     * <p>Two questions, and only the second is this reading's. Which ways a comparison comes out
+     * {@code want} is what the relation it states answers ({@link Rel#holds}); whether the numbers
+     * hold anything standing that way is what a range of every whole number can say, and the number
+     * written being the last one on a side is the only thing that closes it.
      */
-    private static boolean against(BinOp op, long written, boolean want) {
-        return switch (op) {
-            // Equal to it, and every other whole number is not.
-            case EQ, NE -> true;
-            case GT -> !want || written < Long.MAX_VALUE;
-            case GE -> want || written > Long.MIN_VALUE;
-            case LT -> !want || written > Long.MIN_VALUE;
-            case LE -> want || written < Long.MAX_VALUE;
-            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
+    private static boolean against(ComparisonClaim placed, long written, boolean want) {
+        Rel states = placed.statedRelation();
+        for (int sign = -1; sign <= 1; sign++) {
+            if (states.holds(sign) == want && standsThatWay(sign, written)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    /** The same comparison written the other way round, so the number is always on the right. */
-    private static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case LE -> BinOp.GE;
-            case GT -> BinOp.LT;
-            case GE -> BinOp.LE;
-            default -> op;
-        };
+    /** Whether the whole numbers hold one standing {@code sign} from {@code written}, which the
+     *  number itself always is. */
+    private static boolean standsThatWay(int sign, long written) {
+        if (sign == 0) {
+            return true;
+        }
+        return sign < 0 ? written > Long.MIN_VALUE : written < Long.MAX_VALUE;
     }
 
     /**
@@ -153,14 +166,6 @@ final class Witnessed {
 
     private static boolean isWholeNumber(Type type) {
         return type == Type.Prim.INT;
-    }
-
-    /** Whether the operator answers with which way two values came out against each other. */
-    private static boolean compares(BinOp op) {
-        return switch (op) {
-            case EQ, NE, LT, LE, GT, GE -> true;
-            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
     }
 
     private Witnessed() {}

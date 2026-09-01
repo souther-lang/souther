@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.regex.PatternParser;
@@ -116,10 +115,12 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      */
     @Override
     public PlannedValues<FactSubject> leaf(Core e, boolean positive) {
-        if (e instanceof Core.Binary b && (b.op() == BinOp.EQ || b.op() == BinOp.NE)) {
-            // Which of the two it states, once the denials above have been counted: `/=` denied
-            // states the equality, and `==` denied denies it.
-            return comparison(b, (b.op() == BinOp.EQ) == positive);
+        if (e instanceof Core.Binary b
+                && Comparison.of(b).map(Comparison::claim).orElse(null)
+                        instanceof ComparisonClaim.Singled singled) {
+            // Which of the two it states, once the denials above have been counted: what the
+            // comparison holds at the value it names, turned over by each denial it stands under.
+            return comparison(b, singled.holdsAtTheValue() == positive);
         }
         PlannedValues<FactSubject> matched = pattern(e, positive);
         return matched != null ? matched : unreadable(e);

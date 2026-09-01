@@ -1,11 +1,13 @@
 package souther.compiler.codegen;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ValueName;
+import souther.compiler.check.ClauseComparison;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ConstEval;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Kernel;
+import souther.compiler.numeric.EndSide;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -111,35 +113,58 @@ public final class InvariantConstraints {
         if (clause instanceof Hir.Apply call) {
             return ofCall(call, base);
         }
-        if (!(clause instanceof Hir.Binary bin)) {
+        ClauseComparison read = ClauseComparison.of(clause).orElse(null);
+        if (read == null) {
             return Optional.empty();
         }
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
-        Hir.Expr left = bin.left();
-        Hir.Expr right = bin.right();
-        BinOp op = bin.op();
-        if (!bearsValue(left) && bearsValue(right)) {
-            Hir.Expr swap = left;
-            left = right;
-            right = swap;
-            op = mirrored(op);
-        }
+        ClauseComparison bound = bearsValue(read.left()) || !bearsValue(read.right())
+                ? read : read.turned();
+        ComparisonClaim placed = bound.claim();
+        Hir.Expr left = bound.left();
+        Hir.Expr right = bound.right();
         if (base == Type.STRING) {
-            return ofStringLength(op, left, right);
+            return ofStringLength(placed, left, right);
         }
         if (base == Type.INT) {
-            return ofInt(op, left, right);
+            return ofInt(placed, left, right);
         }
         if (base == Type.DECIMAL) {
-            return ofDecimal(op, left, right);
+            return ofDecimal(placed, left, right);
         }
         if (base instanceof Type.ListOf) {
-            return ofListSize(op, left, right);
+            return ofListSize(placed, left, right);
         }
         if (base instanceof Type.MapOf) {
-            return ofMapSize(op, left, right);
+            return ofMapSize(placed, left, right);
         }
         return Optional.empty();
+    }
+
+    /**
+     * The bound at {@code end} that admits what a bound placed at {@code n} admits, or null where
+     * there is none to name.
+     *
+     * <p>A length, a size and an {@code Int} are whole numbers, so a bound that refuses the number
+     * it names admits exactly what the next one along admits — and Raoh's constraints are inclusive,
+     * so that is the one to hand it. At either end of what the constraint can hold there is no next
+     * number, and the clause keeps the check it already has.
+     */
+    private static Long inclusiveAt(EndSide end, boolean holdsAtTheValue, long n,
+                                    long least, long most) {
+        if (holdsAtTheValue) {
+            return n;
+        }
+        if (end == EndSide.LOWER) {
+            return n == most ? null : n + 1;
+        }
+        return n == least ? null : n - 1;
+    }
+
+    /** Which end of the values a comparison bounds: the side it is satisfied on is where its
+     *  values run from. */
+    private static EndSide endOf(ComparisonClaim.Cut cut) {
+        return EndSide.facing(cut.satisfyingSide());
     }
 
     /**
@@ -151,36 +176,37 @@ public final class InvariantConstraints {
      * duplicates while mapping it (spec §collections), so a constraint chained after that mapping is no
      * longer on a typed decoder, and one chained before it would count the duplicates.
      */
-    private Optional<Constraint> ofListSize(BinOp op, Hir.Expr left, Hir.Expr right) {
+    private Optional<Constraint> ofListSize(ComparisonClaim placed, Hir.Expr left, Hir.Expr right) {
         Integer n = sizeBound(Kernel.LIST_LENGTH, left, right);
         if (n == null) {
             return Optional.empty();
         }
-        return switch (op) {
-            case GE -> Optional.of(n == 1 ? new NonEmpty() : new MinSize(n));
-            case GT -> n == Integer.MAX_VALUE ? Optional.empty()
-                    : Optional.of(n == 0 ? new NonEmpty() : new MinSize(n + 1));
-            case LE -> Optional.of(new MaxSize(n));
-            case LT -> n == 0 ? Optional.empty() : Optional.of(new MaxSize(n - 1));
-            case EQ -> Optional.of(new FixedSize(n));
-            default -> Optional.empty();
+        return switch (placed) {
+            case ComparisonClaim.Singled singled ->
+                    singled.holdsAtTheValue() ? Optional.of(new FixedSize(n)) : Optional.empty();
+            case ComparisonClaim.Cut cut -> {
+                EndSide end = endOf(cut);
+                Long at = inclusiveAt(end, cut.holdsAtTheValue(), n, 0, Integer.MAX_VALUE);
+                yield at == null ? Optional.empty()
+                        : Optional.of(end == EndSide.LOWER
+                                ? at == 1 ? new NonEmpty() : new MinSize(at.intValue())
+                                : new MaxSize(at.intValue()));
+            }
         };
     }
 
     /** The same for a map, which Raoh decodes as a record of its values and bounds by entry count.
      * There is no emptiness constraint of its own there, so {@code >= 1} is a minimum of one. */
-    private Optional<Constraint> ofMapSize(BinOp op, Hir.Expr left, Hir.Expr right) {
+    private Optional<Constraint> ofMapSize(ComparisonClaim placed, Hir.Expr left, Hir.Expr right) {
         Integer n = sizeBound(Kernel.MAP_SIZE, left, right);
-        if (n == null) {
+        if (n == null || !(placed instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
         }
-        return switch (op) {
-            case GE -> Optional.of(new MapMinSize(n));
-            case GT -> n == Integer.MAX_VALUE ? Optional.empty() : Optional.of(new MapMinSize(n + 1));
-            case LE -> Optional.of(new MapMaxSize(n));
-            case LT -> n == 0 ? Optional.empty() : Optional.of(new MapMaxSize(n - 1));
-            default -> Optional.empty();
-        };
+        EndSide end = endOf(cut);
+        Long at = inclusiveAt(end, cut.holdsAtTheValue(), n, 0, Integer.MAX_VALUE);
+        return at == null ? Optional.empty()
+                : Optional.of(end == EndSide.LOWER
+                        ? new MapMinSize(at.intValue()) : new MapMaxSize(at.intValue()));
     }
 
     /** The literal bound {@code size(value)} is compared against, or null when this is not that shape. */
@@ -218,7 +244,8 @@ public final class InvariantConstraints {
         return Optional.empty();
     }
 
-    private Optional<Constraint> ofStringLength(BinOp op, Hir.Expr left, Hir.Expr right) {
+    private Optional<Constraint> ofStringLength(ComparisonClaim placed, Hir.Expr left,
+                                                Hir.Expr right) {
         if (!(left instanceof Hir.Apply call) || !applies(call, Kernel.STRING_LENGTH)
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return Optional.empty();
@@ -228,56 +255,62 @@ public final class InvariantConstraints {
             return Optional.empty();
         }
         int n = bound.intValue();
-        // A length is a whole number, so `> n` admits exactly what `>= n + 1` admits — except at the
-        // top of the range, where there is no such length to name.
-        return switch (op) {
-            case GE -> Optional.of(new MinLength(n));
-            case GT -> n == Integer.MAX_VALUE ? Optional.empty() : Optional.of(new MinLength(n + 1));
-            case LE -> Optional.of(new MaxLength(n));
-            case LT -> n == 0 ? Optional.empty() : Optional.of(new MaxLength(n - 1));
-            case EQ -> Optional.of(new FixedLength(n));
-            default -> Optional.empty();
+        return switch (placed) {
+            case ComparisonClaim.Singled singled ->
+                    singled.holdsAtTheValue() ? Optional.of(new FixedLength(n)) : Optional.empty();
+            case ComparisonClaim.Cut cut -> {
+                EndSide end = endOf(cut);
+                Long at = inclusiveAt(end, cut.holdsAtTheValue(), n, 0, Integer.MAX_VALUE);
+                yield at == null ? Optional.empty()
+                        : Optional.of(end == EndSide.LOWER
+                                ? new MinLength(at.intValue()) : new MaxLength(at.intValue()));
+            }
         };
     }
 
-    private static Optional<Constraint> ofInt(BinOp op, Hir.Expr left, Hir.Expr right) {
+    private static Optional<Constraint> ofInt(ComparisonClaim placed, Hir.Expr left,
+                                              Hir.Expr right) {
         if (!isValue(left)) {
             return Optional.empty();
         }
         Long bound = intLiteral(right);
-        if (bound == null) {
+        if (bound == null || !(placed instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
         }
         long n = bound;
-        // An Int is discrete, so a strict bound is the adjacent inclusive one. At the extremes there
-        // is no adjacent value, so those forms are left to the fallback rather than wrapped around.
-        return switch (op) {
-            case GE -> Optional.of(n == 0 ? new NonNegative() : new Min(n));
-            case GT -> n == 0 ? Optional.of(new Positive())
-                    : n == Long.MAX_VALUE ? Optional.empty() : Optional.of(new Min(n + 1));
-            case LE -> Optional.of(new Max(n));
-            case LT -> n == Long.MIN_VALUE ? Optional.empty() : Optional.of(new Max(n - 1));
-            default -> Optional.empty();
-        };
+        EndSide end = endOf(cut);
+        // Raoh has a name for each of the two bounds at nought, and they are two names rather than
+        // one: a bound refusing nought is `positive()` where the same bound moved to one is a
+        // minimum of one, and both are emitted. So which of them a rule comes to is read before the
+        // bound is moved — unlike a list, where the bound at one and the bound past nought are the
+        // one constraint and moving first says so.
+        if (end == EndSide.LOWER && n == 0) {
+            return Optional.of(cut.holdsAtTheValue() ? new NonNegative() : new Positive());
+        }
+        Long at = inclusiveAt(end, cut.holdsAtTheValue(), n, Long.MIN_VALUE, Long.MAX_VALUE);
+        return at == null ? Optional.empty()
+                : Optional.of(end == EndSide.LOWER ? new Min(at) : new Max(at));
     }
 
-    private static Optional<Constraint> ofDecimal(BinOp op, Hir.Expr left, Hir.Expr right) {
+    private static Optional<Constraint> ofDecimal(ComparisonClaim placed, Hir.Expr left,
+                                                  Hir.Expr right) {
         if (!isValue(left)) {
             return Optional.empty();
         }
         BigDecimal bound = decimalLiteral(right);
-        if (bound == null) {
+        if (bound == null || !(placed instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
         }
         boolean zero = bound.signum() == 0;
-        // A Decimal has no adjacent value, so a strict bound has no inclusive equivalent — except
-        // against zero, which Raoh states directly as positive().
-        return switch (op) {
-            case GE -> Optional.of(zero ? new DecimalNonNegative() : new DecimalMin(bound));
-            case GT -> zero ? Optional.of(new DecimalPositive()) : Optional.empty();
-            case LE -> Optional.of(new DecimalMax(bound));
-            default -> Optional.empty();
-        };
+        // A Decimal has no next value, so a bound refusing the number it names is no inclusive
+        // bound at all — except at nought, which Raoh states directly as positive().
+        if (!cut.holdsAtTheValue()) {
+            return endOf(cut) == EndSide.LOWER && zero
+                    ? Optional.of(new DecimalPositive()) : Optional.empty();
+        }
+        return Optional.of(endOf(cut) == EndSide.LOWER
+                ? zero ? new DecimalNonNegative() : new DecimalMin(bound)
+                : new DecimalMax(bound));
     }
 
     /** Whether the expression reads the newtype's value — directly, or through {@code String.length}. */
@@ -331,16 +364,6 @@ public final class InvariantConstraints {
                 && b.body() instanceof Hir.Var.Denoting v
                 && v.denotes() instanceof ValueName.Local local
                 && local.id().equals(b.params().get(0).id());
-    }
-
-    private static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case LE -> BinOp.GE;
-            case GT -> BinOp.LT;
-            case GE -> BinOp.LE;
-            default -> op;   // == and /= read the same either way
-        };
     }
 
     /** An Int literal, negation included ({@code -1}), or null when the operand is not one. */

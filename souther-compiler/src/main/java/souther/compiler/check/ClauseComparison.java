@@ -19,7 +19,7 @@ import java.util.Optional;
  * value says, and nothing tells the two apart. So the operator goes no further than {@link #of},
  * and what a reader wanting the sides the other way round asks for is {@link #turned}.
  */
-final class ClauseComparison {
+public final class ClauseComparison {
 
     private final Hir.Expr left;
     private final Hir.Expr right;
@@ -33,7 +33,7 @@ final class ClauseComparison {
 
     /** {@code clause} as a comparison, or nothing where it is not one or its operator compares no
      *  values. */
-    static Optional<ClauseComparison> of(Hir.Expr clause) {
+    public static Optional<ClauseComparison> of(Hir.Expr clause) {
         if (!(clause instanceof Hir.Binary bin)) {
             return Optional.empty();
         }
@@ -53,22 +53,22 @@ final class ClauseComparison {
      * out of step at whichever caller forgets, and what it then reads is the comparison the source
      * did not write.
      */
-    ClauseComparison turned() {
+    public ClauseComparison turned() {
         return new ClauseComparison(right, left, claim.turned());
     }
 
     /** The side the claim is stated of. */
-    Hir.Expr left() {
+    public Hir.Expr left() {
         return left;
     }
 
     /** What that side is compared against. */
-    Hir.Expr right() {
+    public Hir.Expr right() {
         return right;
     }
 
     /** What the comparison placed on the values of its left side. */
-    ComparisonClaim claim() {
+    public ComparisonClaim claim() {
         return claim;
     }
 }

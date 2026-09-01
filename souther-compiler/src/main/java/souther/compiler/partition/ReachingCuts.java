@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOccurrence;
@@ -14,7 +13,6 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
-import souther.compiler.numeric.Towards;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -194,41 +192,14 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
         if (read == null) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ComparisonNotRepresentedAsACut());
         }
-        Rel states = relOf(read.claim());
+        // What the comparison states, in the words a domain is told things in. Taken the way the
+        // path met it: an arm reached by the condition failing has what holds exactly where the
+        // comparison does not.
+        Rel states = read.claim().statedRelation();
         // The form with the threshold moved into it, since what a domain is told is `f rel 0`.
         LinearForm<NumericTerm> against =
                 read.form().minus(LinearForm.constant(read.cut()));
-        return new OnTheWay.TakenIn(at, new Cut(against, holding ? states : negated(states)));
-    }
-
-    /**
-     * Which way a comparison holds, off what it claims about the value it names.
-     *
-     * <p>Which side it is true on and whether it is true at the value it names, which is one
-     * comparison of the six. {@code x <= c} holds below and at it; {@code x < c} holds below and
-     * not at it; {@code x >= c} holds above and at it; {@code x > c} holds above and not at it.
-     * The side is the claim's own answer and is not worked out here from the two facts it holds.
-     */
-    private static Rel relOf(ComparisonClaim claim) {
-        return switch (claim) {
-            case ComparisonClaim.Cut cut -> cut.satisfyingSide() == Towards.BELOW
-                    ? (cut.holdsAtTheValue() ? Rel.LE : Rel.LT)
-                    : (cut.holdsAtTheValue() ? Rel.GE : Rel.GT);
-            case ComparisonClaim.Singled singled ->
-                    singled.holdsAtTheValue() ? Rel.EQ : Rel.NE;
-        };
-    }
-
-    /** What it states when it does not hold, which is the whole of the rest of the order. */
-    private static Rel negated(Rel rel) {
-        return switch (rel) {
-            case LE -> Rel.GT;
-            case LT -> Rel.GE;
-            case GE -> Rel.LT;
-            case GT -> Rel.LE;
-            case EQ -> Rel.NE;
-            case NE -> Rel.EQ;
-        };
+        return new OnTheWay.TakenIn(at, new Cut(against, holding ? states : states.denied()));
     }
 
     /** These conditions, with {@code site} reached under {@code assumed}. */

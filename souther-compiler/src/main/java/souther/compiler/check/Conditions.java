@@ -6,6 +6,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Towards;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.BinOp;
@@ -153,12 +154,13 @@ final class Conditions {
             return;
         }
         if (cond instanceof Core.Binary b) {
-            Rel rel = relOf(b.op());
-            Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
-            LinearForm<FactSubject> left = eff == null ? null : terms.affineOf(b.left(), at);
-            LinearForm<FactSubject> right = eff == null ? null : terms.affineOf(b.right(), at);
+            ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+            LinearForm<FactSubject> left = placed == null ? null : terms.affineOf(b.left(), at);
+            LinearForm<FactSubject> right = placed == null ? null : terms.affineOf(b.right(), at);
             if (left != null && right != null) {
-                out.add(new NumericConstraint(left.minus(right), eff));
+                // Asserted false, what the condition states is what holds where it does not.
+                out.add(new NumericConstraint(left.minus(right),
+                        (positive ? placed : placed.denied()).statedRelation()));
             }
         }
     }
@@ -192,7 +194,11 @@ final class Conditions {
      * Reading a predicate never takes a reading away.
      */
     static Core asOrderComparison(Terms terms, Core e, Denotations at) {
-        if (!(e instanceof Core.Binary b) || relOf(b.op()) == null) {
+        if (!(e instanceof Core.Binary b)) {
+            return e;
+        }
+        ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+        if (placed == null) {
             return e;
         }
         boolean callFirst = b.left() instanceof Core.PreservedCall;
@@ -210,10 +216,11 @@ final class Conditions {
         }
         // The relation the source wrote, read from the sign's side of the comparison: `call rel x`
         // however the two were written round.
-        Rel written = relOf(callFirst ? b.op() : mirrored(b.op()));
+        Rel written = (callFirst ? placed : placed.turned()).statedRelation();
         Rel stands = standsToNought(terms, call, written, against, at);
         return stands == null ? e
-                : comparison(opOf(stands), CallArguments.of(positive.greater(), call),
+                : comparison(ComparisonWriting.operatorStating(stands),
+                        CallArguments.of(positive.greater(), call),
                         CallArguments.of(positive.lesser(), call), b);
     }
 
@@ -265,30 +272,6 @@ final class Conditions {
         return null;
     }
 
-    /** The operator a relation is written as, which is {@link #relOf} the other way round. */
-    private static BinOp opOf(Rel rel) {
-        return switch (rel) {
-            case GE -> BinOp.GE;
-            case GT -> BinOp.GT;
-            case LE -> BinOp.LE;
-            case LT -> BinOp.LT;
-            case EQ -> BinOp.EQ;
-            case NE -> BinOp.NE;
-        };
-    }
-
-    /** {@code op} with its two sides exchanged: what the same fact is called when it is written the
-     * other way round. */
-    static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case GT -> BinOp.LT;
-            case LE -> BinOp.GE;
-            case GE -> BinOp.LE;
-            default -> op;
-        };
-    }
-
     /** An emptiness check as the comparison it means, or {@code e} unchanged. */
     static Core asSizeComparison(Core e) {
         if (e instanceof Core.PreservedCall call && call.args().size() == 1
@@ -311,15 +294,40 @@ final class Conditions {
      * leave a clause written the other unsettled.
      */
     static Polar polar(Core e, boolean positive) {
-        if (!(e instanceof Core.Binary b) || relOf(b.op()) == null) {
-            return new Polar(e, positive);
+        if (e instanceof Core.Binary b) {
+            ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+            if (placed != null) {
+                return canonical(b, placed, positive);
+            }
         }
-        return switch (b.op()) {
-            case NE -> new Polar(comparison(BinOp.EQ, b.left(), b.right(), b), !positive);
-            case GE -> new Polar(comparison(BinOp.LT, b.left(), b.right(), b), !positive);
-            case GT -> new Polar(comparison(BinOp.LT, b.right(), b.left(), b), positive);
-            case LE -> new Polar(comparison(BinOp.LT, b.right(), b.left(), b), !positive);
-            default -> new Polar(e, positive);
+        return new Polar(e, positive);
+    }
+
+    /**
+     * The one of the two canonical comparisons {@code placed} is, and which way it is asserted.
+     *
+     * <p>Two independent things are done to get there, each of them one fact of what was placed.
+     * Which sides the canonical form wants is which class the value named is in: the canonical
+     * order names it above, so a comparison that names it below is the same statement with its
+     * sides exchanged. Whether the assertion turns over is whether the comparison holds at the
+     * value: the canonical order does not hold there and the canonical equality does, which is why
+     * the two shapes read that fact opposite ways.
+     *
+     * <p>Written as the two rather than as the four comparisons it comes to, because the four are
+     * a table of what these two facts say together — and a table is a thing to keep in step with
+     * the classification it was copied from.
+     */
+    private static Polar canonical(Core.Binary b, ComparisonClaim placed, boolean positive) {
+        return switch (placed) {
+            case ComparisonClaim.Singled singled ->
+                    new Polar(comparison(BinOp.EQ, b.left(), b.right(), b),
+                            singled.holdsAtTheValue() == positive);
+            case ComparisonClaim.Cut cut -> {
+                boolean exchanged = cut.valueBelongs() == Towards.BELOW;
+                yield new Polar(comparison(BinOp.LT,
+                        exchanged ? b.right() : b.left(), exchanged ? b.left() : b.right(), b),
+                        cut.holdsAtTheValue() != positive);
+            }
         };
     }
 
@@ -347,26 +355,4 @@ final class Conditions {
                 ? iff.cond() : null;
     }
 
-    static Rel relOf(BinOp op) {
-        return switch (op) {
-            case GE -> Rel.GE;
-            case GT -> Rel.GT;
-            case LE -> Rel.LE;
-            case LT -> Rel.LT;
-            case EQ -> Rel.EQ;
-            case NE -> Rel.NE;
-            default -> null;
-        };
-    }
-
-    static Rel negateRel(Rel rel) {
-        return switch (rel) {
-            case GE -> Rel.LT;
-            case GT -> Rel.LE;
-            case LE -> Rel.GT;
-            case LT -> Rel.GE;
-            case EQ -> Rel.NE;
-            case NE -> Rel.EQ;
-        };
-    }
 }

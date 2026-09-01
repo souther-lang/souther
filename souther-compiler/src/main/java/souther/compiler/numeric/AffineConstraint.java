@@ -250,17 +250,14 @@ public sealed interface AffineConstraint<A> {
         return new Read.Stated<>(new HalfSpace<>(form, reaches.tightenUpper(at)));
     }
 
-    /** A comparison naming no position, which is arithmetic rather than a rule about anybody. */
+    /**
+     * A comparison naming no position, which is arithmetic rather than a rule about anybody.
+     *
+     * <p>The assertion is {@code constant rel 0} once nothing is left to weigh, so which way the
+     * constant stands to nought is which way the left side of the comparison stands to the right —
+     * which is the one thing a relation is answered at ({@link NumericDomain.Rel#holds}).
+     */
     private static <A> Read<A> settledByConstantAlone(Rational constant, NumericDomain.Rel rel) {
-        int sign = constant.signum();
-        boolean holds = switch (rel) {
-            case LE -> sign <= 0;
-            case LT -> sign < 0;
-            case GE -> sign >= 0;
-            case GT -> sign > 0;
-            case EQ -> sign == 0;
-            case NE -> sign != 0;
-        };
-        return holds ? new Read.HoldsAlways<>() : new Read.HoldsNever<>();
+        return rel.holds(constant.signum()) ? new Read.HoldsAlways<>() : new Read.HoldsNever<>();
     }
 }
