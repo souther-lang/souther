@@ -8,9 +8,12 @@ import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeElement;
 import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
-import java.lang.classfile.Opcode;
+import java.lang.classfile.instruction.ConstantInstruction;
 import java.lang.classfile.instruction.FieldInstruction;
+import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.classfile.instruction.NewObjectInstruction;
+import java.lang.classfile.instruction.NewReferenceArrayInstruction;
 import java.lang.classfile.instruction.TypeCheckInstruction;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,29 +36,36 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * the ground they stand on, so that an operator reaching somewhere new is a line that has to be
  * written down and given a reason.
  *
- * <p><b>Two ways and no third.</b> An operator is in a method because it was handed in — which is
- * what a signature says — or because it was fetched: answered by a call, read out of a field, or
- * named as one of the constants. Every reading of an operator anywhere begins with one of those,
- * and there is no other way to come by one, so the two lists below are the whole of where an
- * operator can be.
+ * <p><b>One list, and the rule it comes from is the machine's.</b> A method that has an operator
+ * names the type: to use a value as one, the type has to be established, and a symbolic reference
+ * is how that is written down. Which instructions can carry one is a closed set the class file
+ * format decides — a call, a field, a constant, a cast, a made object or array — so what is here is
+ * every method whose code names the operator, together with every method whose signature does and
+ * every field of that type. Not a list of the ways somebody thought of.
  *
  * <p><b>And nothing here works out what was done with it.</b> A switch, a constant compared
  * against, a set asked for membership and a map asked for an answer are four spellings of one act,
  * and a check that knew three of them would be a check somebody could write the fourth past. So
- * what is fixed is the having, which is an instruction and a descriptor, and what each holder does
- * with it is the reason written beside it.
+ * what is fixed is the having, and what each holder does with it is the reason written beside it.
  *
- * <p>Which puts the copiers in the list. A pass that rebuilds a tree fetches every operator it
- * meets and writes each one into the node it is making, and there is nothing to say about that
+ * <p>Which puts the copiers in the list. A pass that rebuilds a tree meets every operator it walks
+ * over and writes each one into the node it is making, and there is nothing to say about that
  * beyond saying it — a line reading "copies it into the node it is rebuilding" is a line anyone who
  * made it do more would have to edit.
  *
- * <p><b>Lists and not counts.</b> A number stays right while one line goes and another arrives, and
- * the arriving one is exactly what these are for.
+ * <p><b>What it does not see, said rather than left to be found.</b> An operator reached by name
+ * through reflection is a string, and a string is not a reference to the type. And what is read is
+ * this module's classes, so a reader of an operator compiled elsewhere is not here. Both are things
+ * to be told about rather than things this can be widened to cover.
+ *
+ * <p><b>A list and not a count.</b> A number stays right while one line goes and another arrives,
+ * and the arriving one is exactly what this is for.
  */
 class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     private static final String BIN_OP = "Lsouther/compiler/types/BinOp;";
+
+    private static final String OPERATOR = "souther/compiler/types/BinOp";
 
     /** Something that has an operator, and what it has one for. */
     private record Held(String what, String why) { }
@@ -322,30 +332,35 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " placed"));
 
     @Test
-    void everythingHandedAnOperatorIsWrittenDownWithAReason() {
-        assertEquals(declared(HANDED_IN), found(handedAnOperator()),
-                "an operator handed somewhere new is a line to be written here with what it is"
-                        + " wanted for. What each of these is handed one for: " + why(HANDED_IN));
+    void everythingWithAnOperatorIsWrittenDownWithAReason() {
+        assertEquals(declared(everything()), found(hasAnOperator()),
+                "an operator reaching somewhere new is a line to be written here with what it is"
+                        + " wanted for. What each of these has one for: " + why(everything()));
     }
 
-    @Test
-    void everythingFetchingAnOperatorIsWrittenDownWithAReason() {
-        assertEquals(declared(FETCHED), found(fetchesAnOperator()),
-                "an operator fetched somewhere new is a line to be written here with what is done"
-                        + " with it. What each of these fetches one for: " + why(FETCHED));
+    /** The two parts above as the one list they are, since a method is often both. */
+    private static List<Held> everything() {
+        Map<String, Held> out = new LinkedHashMap<>();
+        HANDED_IN.forEach(each -> out.putIfAbsent(each.what(), each));
+        FETCHED.forEach(each -> out.putIfAbsent(each.what(), each));
+        return List.copyOf(out.values());
     }
 
-    /** Every field whose type is an operator, and every method whose signature names one. */
-    private static List<String> handedAnOperator() {
+    /**
+     * Everything with an operator: a field of that type, and a method whose signature names one or
+     * whose code does.
+     */
+    private static List<String> hasAnOperator() {
         List<String> out = new ArrayList<>();
         forEachClass((owner, model) -> {
             for (MethodModel method : model.methods()) {
-                String name = method.methodName().stringValue();
-                // What it is given, and not what it answers: a method answering an operator got one
-                // from somewhere, which is the other list.
-                if (method.methodTypeSymbol().parameterList().stream()
-                        .anyMatch(each -> each.descriptorString().equals(BIN_OP))) {
-                    out.add(owner + "." + name);
+                boolean has = method.methodType().stringValue().contains(BIN_OP);
+                for (CodeElement element
+                        : method.code().map(code -> code.elementList()).orElse(List.of())) {
+                    has |= namesTheOperator(element);
+                }
+                if (has) {
+                    out.add(owner + "." + method.methodName().stringValue());
                 }
             }
             for (FieldModel field : model.fields()) {
@@ -358,50 +373,36 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
     }
 
     /**
-     * Every method in which an operator arrives without being handed in: answered by a call, read
-     * out of a field, or named as a constant.
+     * Whether one instruction names the operator.
      *
-     * <p>The three instructions that put one on the stack, which is the whole of how a method comes
-     * by an operator it was not given.
+     * <p>The instructions that can carry a symbolic reference, which is a closed set the class file
+     * format decides rather than one anybody works out from what a program might say. A value of a
+     * type is put on the stack by a call, a field, a constant, a cast, or a made object or array;
+     * anything else moves what is already there. So a method that has an operator names it in one
+     * of these, and a method that names it in none of them never had one.
      */
-    private static List<String> fetchesAnOperator() {
-        List<String> out = new ArrayList<>();
-        forEachClass((owner, model) -> {
-            for (MethodModel method : model.methods()) {
-                boolean fetches = false;
-                for (CodeElement element
-                        : method.code().map(code -> code.elementList()).orElse(List.of())) {
-                    if (element instanceof InvokeInstruction call) {
-                        fetches |= names(call.typeSymbol().returnType().descriptorString());
-                    }
-                    // Read out of a field and not written into one: what is stored came from
-                    // somewhere else in the same method, and that is where it arrived.
-                    if (element instanceof FieldInstruction field
-                            && (field.opcode() == Opcode.GETFIELD
-                                    || field.opcode() == Opcode.GETSTATIC)) {
-                        fetches |= names(field.typeSymbol().descriptorString());
-                    }
-                    // What a collection or anything else generic hands back is an Object until it
-                    // is cast, so the cast is where the operator arrives — and a table held in a
-                    // Map is exactly that.
-                    if (element instanceof TypeCheckInstruction cast
-                            && cast.opcode() == Opcode.CHECKCAST) {
-                        fetches |= names("L" + cast.type().asInternalName() + ";")
-                                || names(cast.type().asInternalName());
-                    }
-                }
-                if (fetches) {
-                    out.add(owner + "." + method.methodName().stringValue());
-                }
-            }
-        });
-        return out;
+    private static boolean namesTheOperator(CodeElement element) {
+        return switch (element) {
+            case InvokeInstruction call -> names(call.owner().asInternalName())
+                    || names(call.type().stringValue());
+            case FieldInstruction field -> names(field.owner().asInternalName())
+                    || names(field.type().stringValue());
+            case TypeCheckInstruction cast -> names(cast.type().asInternalName());
+            case NewObjectInstruction made -> names(made.className().asInternalName());
+            case NewReferenceArrayInstruction made -> names(made.componentType().asInternalName());
+            case ConstantInstruction constant ->
+                    names(String.valueOf(constant.constantValue()));
+            case InvokeDynamicInstruction dynamic -> names(dynamic.type().stringValue())
+                    || dynamic.bootstrapArgs().stream()
+                            .anyMatch(each -> names(String.valueOf(each)));
+            default -> false;
+        };
     }
 
-    /** Whether a descriptor names an operator, an array of them included: what {@code values()}
-     *  hands back is an array, and an operator taken out of one arrived with it. */
-    private static boolean names(String descriptor) {
-        return descriptor.contains(BIN_OP) || descriptor.equals("souther/compiler/types/BinOp");
+    /** Whether a name or a descriptor is the operator's, an array of them and a member of it
+     *  included. */
+    private static boolean names(String what) {
+        return what.contains(BIN_OP) || what.equals(OPERATOR) || what.startsWith(OPERATOR + ".");
     }
 
     private static Map<String, String> declared(List<Held> held) {
