@@ -3113,6 +3113,11 @@ public final class Adequacy {
                 ItemAssessment.Owed each = point.item();
                 switch (each.attempt()) {
                     case ItemAssessment.Attempt.Built built -> rows.add(built.row());
+                    // A search a budget of this compiler's ended came to nothing like any other,
+                    // and what a block short of rows records is that nothing came of it. Which
+                    // figure ended it is the point's own to say and is said where a reader asks
+                    // about the point, not in a list of what this run did not offer.
+                    case ItemAssessment.Attempt.Stopped why -> unresolved.add(why.why());
                     case ItemAssessment.Attempt.Unresolved why -> {
                         unresolved.add(why.why());
                         // And where the decoders were out of reach, the block is short of rows it

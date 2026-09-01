@@ -192,7 +192,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     }
 
     private static WritabilityKnowledge prevented() {
-        return new WritabilityKnowledge.Prevented(new EstablishmentGap.Observation(
+        return WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
                 EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
     }
 }

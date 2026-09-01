@@ -124,6 +124,13 @@ public final class PointResolver {
                         case ItemAssessment.Attempt.Unresolved(var why, var _, var _) ->
                                 walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));
+                        // A search a budget of this compiler's ended, which came to nothing like
+                        // the one above. What offering a row is short of is the same either way,
+                        // and which figure ended it is the point's own to say rather than this
+                        // walk's: what is recorded here is that a search ran and produced no row.
+                        case ItemAssessment.Attempt.Stopped(var why, var _, var _, var _) ->
+                                walked.put(reading,
+                                        new SearchCoverage.ReadingSearch.Attempted(why));
                         // A search that ran with nothing to run against. Said in the words the
                         // generator says it in, as the reading's own outcome: it is a fact about
                         // this run, and one of the reasons a reader may not act on — so a line

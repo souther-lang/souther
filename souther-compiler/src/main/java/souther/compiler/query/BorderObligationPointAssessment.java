@@ -374,7 +374,12 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                     "a point nobody is owed a row at, assessed as one that is: " + not.reason());
         }
         List<Measurement<ItemAssessment.Coverage>> coverage = new ArrayList<>();
-        ItemAssessment.Attempt built = null;
+        // What each reading's search came to, all of them. A search is made per reading and the
+        // readings can have come to different things — one composing a row, one stopped at a figure
+        // of this compiler's, one finding nothing — and every one of those is a fact about this
+        // point. Kept as the strongest, whatever the others found out was dropped, and the answer a
+        // reader got depended on the order the readings were walked in.
+        List<ItemAssessment.Attempt> attempts = new ArrayList<>();
         // Whether a value at the point exists is a fact about the point and not about the reading
         // that reached it: one reading proving it proves it. The other two states are what a reading
         // says about itself, so the weaker of them stands only where nothing proved anything.
@@ -387,12 +392,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                         "a reading owing nothing at a point it owes one at: " + role);
             }
             coverage.add(owed.coverage());
-            // The strongest of them and not the first. A row read back where it was built for is
-            // grounds that a row can be written at the point; one nothing could place is not, and
-            // taking whichever reading came first would let the second stand in for the first and
-            // decide what the account says by the order the readings were walked in.
-            if (outranks(owed.attempt(), built)) {
-                built = owed.attempt();
+            if (owed.attempt() != null) {
+                attempts.add(owed.attempt());
             }
             if (owed.projection().proves()) {
                 projection = ItemAssessment.WritabilityProjection.PROVEN;
@@ -402,27 +403,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             }
         }
         return new ObligationAssessment(asked.criterion(),
-                ObligationCoverage.acrossTheReadings(coverage), projection, built);
-    }
-
-    /**
-     * Whether {@code made} says more about a row at the point than {@code held} does.
-     *
-     * <p>Existential over the readings, the way a row that was found is: what one reading of a line
-     * established, another reading of the same line does not take back. Which leaves an order among
-     * what a search may come back with — a row that was placed, a row nothing could place, and
-     * nothing — and it is the same order everywhere the readings of one line are folded.
-     */
-    private static boolean outranks(ItemAssessment.Attempt made, ItemAssessment.Attempt held) {
-        return says(made) > says(held);
-    }
-
-    private static int says(ItemAssessment.Attempt attempt) {
-        return switch (attempt) {
-            case ItemAssessment.Attempt.Certified _ -> 2;
-            case ItemAssessment.Attempt.Unverified _ -> 1;
-            case null, default -> 0;
-        };
+                ObligationCoverage.acrossTheReadings(coverage), projection, attempts);
     }
 
     /** The measured half, which a point owed a row always has. */

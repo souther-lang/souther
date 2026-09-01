@@ -848,14 +848,18 @@ final class Coverages {
                                     java.util.List.of(label),
                                     souther.compiler.partition.Generator.UnresolvedCombination
                                             .Reason.THE_RULES_LEAVE_NOTHING_THERE), within);
-                    case Realization.Unknown unknown -> switch (unknown.why()) {
-                        case NOTHING_COMPOSED_ONE -> nothingComposedOne(label, within);
-                        case THE_SEARCH_RAN_OUT -> new ItemAssessment.Attempt.Unresolved(
-                                new souther.compiler.partition.Generator.UnresolvedCombination(
-                                        java.util.List.of(label),
-                                        souther.compiler.partition.Generator.UnresolvedCombination
-                                                .Reason.SEARCH_LIMIT), within);
-                    };
+                    // A walk that reached no placement. Where a budget of this compiler's is why it
+                    // reached none, that travels: the point is one this declined to look further
+                    // for, which is not the point being one nothing promises.
+                    case Realization.Unknown unknown -> unknown.stoppedBy().isEmpty()
+                            ? new ItemAssessment.Attempt.Unresolved(
+                                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                                            java.util.List.of(label), wordOf(unknown)), within)
+                            : new ItemAssessment.Attempt.Stopped(
+                                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                                            java.util.List.of(label), wordOf(unknown)),
+                                    within, java.util.List.of(),
+                                    new EstablishmentGap.Composition(unknown.stoppedBy()));
                 };
             }
         };
@@ -1004,7 +1008,7 @@ final class Coverages {
      * not a thing an observation did, so it travels as far as the account's own reasons go and no
      * further.
      */
-    private static EstablishmentGap stopped(StandingAtAPoint.Met.CouldNotTell why) {
+    private static EstablishmentGap.Observation stopped(StandingAtAPoint.Met.CouldNotTell why) {
         Set<Incompleteness.Code> codes = new LinkedHashSet<>();
         for (souther.compiler.partition.ReadingGap each : why.why()) {
             if (each instanceof souther.compiler.partition.ReadingGap.Observation it) {
@@ -1012,6 +1016,23 @@ final class Coverages {
             }
         }
         return new EstablishmentGap.Observation(codes);
+    }
+
+    /**
+     * The word a walk that reached no placement comes back with.
+     *
+     * <p>The realizer's own, kept as it is. What it says is which of the two things a walk that
+     * found nothing did, and it says it whether or not a figure of this compiler's was reached —
+     * which is why the figure travels beside it rather than being read out of it.
+     */
+    private static souther.compiler.partition.Generator.UnresolvedCombination.Reason wordOf(
+            Realization.Unknown unknown) {
+        return switch (unknown.why()) {
+            case NOTHING_COMPOSED_ONE -> souther.compiler.partition.Generator
+                    .UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+            case THE_SEARCH_RAN_OUT -> souther.compiler.partition.Generator
+                    .UnresolvedCombination.Reason.SEARCH_LIMIT;
+        };
     }
 
     /** A search that came to nothing at {@code subject}, which is what a point is written as. */
@@ -1038,7 +1059,7 @@ final class Coverages {
      * outcome of a search that dropped its region, and the reader that wanted it back built the
      * same value by hand a moment later.
      */
-    private static ItemAssessment.Attempt.Searched whatCameOfIt(
+    private static ItemAssessment.Attempt whatCameOfIt(
             souther.compiler.partition.Generator.BoundaryAttempt made, String subject,
             souther.compiler.partition.WayToTheBorder within,
             Supplier<StandingAtAPoint.Met> standing) {
@@ -1096,6 +1117,12 @@ final class Coverages {
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
                     new ItemAssessment.Attempt.Unresolved(left.why(), within,
                             left.unrepresented());
+            // And a search a budget of this compiler's ended, which is the one outcome here that
+            // names something anybody could raise. Said as the one above, an obligation this
+            // declined to work on left the count as one the model admits no row at.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Stopped left ->
+                    new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
+                            new EstablishmentGap.Composition(left.by()));
         };
     }
 

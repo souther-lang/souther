@@ -1726,11 +1726,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // the carrying dropping it.
                 case COVERAGE -> "undecided whether a row is at the " + point
                         + whatTheRowsWentWithout(owed);
-                // Named for what happened and not for the limit's number. Which budget it was is
-                // the observation's own word, and what an author is told is that the row this
-                // compiler composed is not evidence of anything until it can be read back.
-                case WRITABILITY -> "a row was built for the " + point
-                        + ", and " + why(owed.writabilityKnowledge());
+                // Named for what happened, which is not one thing. A reading that did not come
+                // back is of a row this compiler composed; a composing that stopped never had one
+                // — and an opening written for the first says a row was built at a point where
+                // none was. So the sentence is the gap's, and the gaps say which they are.
+                case WRITABILITY ->
+                        "nothing could show a row can be written at the " + point
+                                + " — " + why(owed.writabilityKnowledge());
             });
         }
         return said;
@@ -1763,19 +1765,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    /** Why nothing could confirm the row a search composed, in the observation's own words. */
+    /**
+     * Why nothing could show a row can be written at a point, in the words of what was stopped.
+     *
+     * <p>Every one of them and not the first. A point may have been stopped in more than one way —
+     * a reading of one value that did not come back, a composing for another that never started —
+     * and what a reader wants is everything that would have to give for the point to be settled.
+     */
     private static String why(WritabilityKnowledge knowledge) {
-        if (!(knowledge instanceof WritabilityKnowledge.Prevented(EstablishmentGap by))) {
+        if (!(knowledge instanceof WritabilityKnowledge.Prevented(Set<EstablishmentGap> by))) {
             // Only a point whose showing was stopped is written this way, and what stopped it is
             // what this exists to say.
             throw new IllegalStateException("a point undecided about being writable was not "
                     + "stopped from being shown so: " + knowledge);
         }
-        return switch (by) {
-            case EstablishmentGap.Observation(Set<Incompleteness.Code> causes) -> causes.stream()
-                    .map(AdequacyReport::whatStopped)
-                    .collect(Collectors.joining(", and "));
-        };
+        List<String> out = new ArrayList<>();
+        for (EstablishmentGap each : by) {
+            out.add(switch (each) {
+                case EstablishmentGap.Observation(Set<Incompleteness.Code> causes) ->
+                        "a row was built for it, and " + causes.stream()
+                                .map(AdequacyReport::whatStopped)
+                                .collect(Collectors.joining(", and "));
+                // What this compiler declined to build, and which figure decided it. An author does
+                // nothing about this; what it says is that the point is open because of a policy
+                // here, which is what keeps it out of the work they are told they owe.
+                case EstablishmentGap.Composition(var budgets) ->
+                        "nothing was composed for it: this compiler stopped at " + said(budgets);
+            });
+        }
+        return String.join(", and ", out);
     }
 
     /** What one observation gap cost, said as what it stopped rather than as its code. */

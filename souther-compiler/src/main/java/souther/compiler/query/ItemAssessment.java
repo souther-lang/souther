@@ -357,8 +357,18 @@ public sealed interface ItemAssessment {
      *
      * <p>Made once. The row a person is offered and the value that witnessed the point are the same
      * value, built one time and read twice.
+     *
+     * <p><b>Five outcomes, and three things that may be true of one.</b> The outcomes are what
+     * happened and are exclusive, so a reader asking which of them this is asks an exhaustive
+     * switch. What may be true of one — that a row came of it, that a search ran, that a budget of
+     * this compiler's stopped it — cuts across them: a row that was built and not read back is both
+     * a row somebody may have and a showing this compiler stopped, and neither of those is the
+     * other's special case. Written as one hierarchy, one of the three had to be the spine and the
+     * others became fields or were read off the spelling of whichever arm a reader had in hand.
      */
-    sealed interface Attempt {
+    sealed interface Attempt
+            permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped, Attempt.Unresolved,
+                    Attempt.Unavailable {
 
         /**
          * What a search of the region came to, whichever way it came out.
@@ -369,8 +379,13 @@ public sealed interface ItemAssessment {
          * reached — is an outcome of a search that ran and carries what it ran over. What was
          * written instead was a comment saying so, and the one outcome that arrived by a different
          * route was filed as a search nobody made and dropped its region on the way.
+         *
+         * <p>Beside {@link Attempt} rather than under it. Every outcome but one is a search that
+         * ran, and making this the spine of the outcomes would put the one that is not — a search
+         * nobody could run — outside a hierarchy it belongs in.
          */
-        sealed interface Searched extends Attempt {
+        sealed interface Searched
+                permits Certified, Unverified, Stopped, Unresolved {
 
             /** What the way to the point took in and what it could not, which is what says how much
              *  the outcome beside it is worth. */
@@ -412,23 +427,42 @@ public sealed interface ItemAssessment {
          * {@link Certified}, and gets a compile error rather than a silent yes if a third way of
          * being built arrives.
          */
-        sealed interface Built extends Searched {
+        sealed interface Built permits Certified, Unverified {
 
             /** The value this search composed, whichever of the two this is. */
             Generator.GeneratedRow row();
 
             /** A row composed where the whole way was stated and used. */
-            static Built certified(Generator.GeneratedRow row,
-                                   souther.compiler.partition.WayToTheBorder way) {
+            static Certified certified(Generator.GeneratedRow row,
+                                       souther.compiler.partition.WayToTheBorder way) {
                 return new Certified(row, way, List.of());
             }
+        }
+
+        /**
+         * An attempt a budget of this compiler's stopped, and which budget it was.
+         *
+         * <p>Across the outcomes rather than one of them, because what a budget stops depends on
+         * how far the attempt had got. Stopped before anything was composed, there is no row and
+         * the point is left with nothing; stopped after, there is a row and what is missing is the
+         * reading that would have placed it. Both are this compiler having been stopped and neither
+         * is a thing the model said, which is the one question an account puts to them.
+         *
+         * <p><b>Nothing here says a row cannot be written.</b> What each of these licenses is that
+         * the question is open — and open because of a figure somebody could raise, which is what
+         * tells it from a point nothing ever promised.
+         */
+        sealed interface Prevented permits Unverified, Stopped {
+
+            /** Which budget of this compiler's stopped it, in the words the account reads. */
+            EstablishmentGap by();
         }
 
         /** Built, and read back standing where it was built for. */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
-                implements Built {
+                implements Attempt, Searched, Built {
 
             public Certified {
                 uncomposed = List.copyOf(uncomposed);
@@ -441,16 +475,63 @@ public sealed interface ItemAssessment {
          * <p>Nothing here is about the model. The row is as much a row as {@link Certified}'s and is
          * offered as one; what is missing is this compiler's own confirmation, and {@code why} is
          * what stopped it.
+         *
+         * <p>An observation and never anything else. What was stopped here is a reading of a value
+         * that exists, so the only budget that can be named is one an observation ran out of — a
+         * budget that stopped the composing stopped it before there was anything to read, which is
+         * {@link Stopped}. Written as any gap at all, the two states a search comes back in could be
+         * built holding each other's reasons.
          */
         record Unverified(Generator.GeneratedRow row,
                           souther.compiler.partition.WayToTheBorder way,
                           List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
-                          EstablishmentGap why)
-                implements Built {
+                          EstablishmentGap.Observation why)
+                implements Attempt, Searched, Built, Prevented {
 
             public Unverified {
                 uncomposed = List.copyOf(uncomposed);
                 Objects.requireNonNull(why, "a row nothing certified says what stopped it");
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return why;
+            }
+        }
+
+        /**
+         * A budget of this compiler's stopped the search before any value was composed.
+         *
+         * <p>Told apart from {@link Unresolved} by what it licenses and not by how it feels. A
+         * search that ran through what it had and came back with nothing leaves a point nothing has
+         * promised anything about; a search this compiler ended leaves a point whose question is
+         * open, and open for a reason with a figure attached to it. Held as one, the second was read
+         * as the first, and an obligation this compiler declined to work on left the count as one
+         * the model admits no row at.
+         *
+         * <p>Carries the way and what the composer could not act on, like every other outcome of a
+         * search: the walk happened, and where it happened is what says how much the rest is worth.
+         *
+         * <p>{@code why} says what such a search comes back with, which is the word it has always
+         * come back with; {@code by} is which budget it was. The first cannot be read back from the
+         * second's absence and the second is not recoverable from the first, so both are carried.
+         */
+        record Stopped(Generator.UnresolvedCombination why,
+                       souther.compiler.partition.WayToTheBorder way,
+                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       EstablishmentGap.Composition stoppedBy)
+                implements Attempt, Searched, Prevented {
+
+            public Stopped {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
+                Objects.requireNonNull(stoppedBy, "a search this compiler stopped says which"
+                        + " budget stopped it");
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return stoppedBy;
             }
         }
 
@@ -469,7 +550,7 @@ public sealed interface ItemAssessment {
         record Unresolved(Generator.UnresolvedCombination why,
                           souther.compiler.partition.WayToTheBorder way,
                           List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
-                implements Searched {
+                implements Attempt, Searched {
 
             public Unresolved {
                 uncomposed = List.copyOf(uncomposed);
@@ -525,7 +606,14 @@ public sealed interface ItemAssessment {
          * point answered rather than a search to account for, and for a search nobody made.
          */
         default List<souther.compiler.partition.ReachabilityGap> unaccountedFor() {
-            if (!(this instanceof Unresolved left) || left.why().reason().provesInfeasible()) {
+            Searched left = switch (this) {
+                case Unresolved it -> it.why().reason().provesInfeasible() ? null : it;
+                // A search a budget ended walked as far as it walked, and what it could not compose
+                // against on the way is the first thing that would explain what it came back with.
+                case Stopped it -> it;
+                case Certified _, Unverified _, Unavailable _ -> null;
+            };
+            if (left == null) {
                 return List.of();
             }
             List<souther.compiler.partition.ReachabilityGap> out = new java.util.ArrayList<>();

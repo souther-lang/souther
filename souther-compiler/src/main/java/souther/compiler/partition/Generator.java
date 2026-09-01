@@ -2278,6 +2278,38 @@ public final class Generator {
                 unrepresented = List.copyOf(unrepresented);
             }
         }
+
+        /**
+         * No row came of it, and a budget of this compiler's is why.
+         *
+         * <p>Beside {@link Unresolved} and not a field on it. A search that tried what it had and a
+         * search this compiler ended leave the reader different work — only the second has a figure
+         * somebody could raise — and every reader that has to tell them apart is one an exhaustive
+         * switch already stops.
+         *
+         * <p>{@code why} is the word such a search has always come back with, read off the budgets
+         * so that the two cannot part.
+         */
+        record Stopped(UnresolvedCombination why, java.util.Set<CompositionBudget> by,
+                       List<ReachabilityGap.Uncomposed> unrepresented)
+                implements BoundaryAttempt {
+
+            public Stopped {
+                unrepresented = List.copyOf(unrepresented);
+                by = java.util.Set.copyOf(by);
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a search this compiler stopped says which budget stopped it");
+                }
+            }
+
+            /** One at the label given, in the word its budgets come back with. */
+            static Stopped at(String label, java.util.Set<CompositionBudget> by,
+                              List<ReachabilityGap.Uncomposed> unrepresented) {
+                return new Stopped(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.wordFor(by)), by, unrepresented);
+            }
+        }
     }
 
     /**
@@ -2322,7 +2354,10 @@ public final class Generator {
         // and taking the bottom of the type's range instead is how a boundary that can be written
         // came back as one every value tried was refused at.
         Map<TermPath, Place> settled = new LinkedHashMap<>();
-        Map<TermPath, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
+        // Which budgets each edge held values back at, and not the word for it. The word is one of
+        // two and says nothing about which figure; kept as the word, a refusal that turned out to
+        // be this compiler stopping could not say what stopping it cost.
+        Map<TermPath, java.util.Set<CompositionBudget>> heldBack = new LinkedHashMap<>();
         // Where every position of this row stands: the item's, and the ones the way to it bounds.
         // One map, because a row is one row — walked as two, the second was chosen from what the
         // declarations leave and the first from what reaches the border, and only one of them was
@@ -2337,9 +2372,15 @@ public final class Generator {
             Edge edge = edgeAt(subject, each.getKey(), each.getValue(),
                     fixing.size() > 1, reaching.region());
             if (edge.values().isEmpty()) {
-                return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), edge.reason()),
-                        where.unrepresented());
+                // What stopped the composing where a budget of this compiler's did, and the word
+                // for a search that came to nothing where none did. The two license different
+                // sentences and only the first names something anybody could raise.
+                return edge.stoppedBy().isEmpty()
+                        ? new BoundaryAttempt.Unresolved(
+                                new UnresolvedCombination(List.of(label), edge.reason()),
+                                where.unrepresented())
+                        : BoundaryAttempt.Stopped.at(label, edge.stoppedBy(),
+                                where.unrepresented());
             }
             TermPath at = each.getKey().writeRoot();
             // Two terms at one location is that location asked for two things at once — a string of
@@ -2368,7 +2409,7 @@ public final class Generator {
             if (edge.settledAt() != null) {
                 settled.put(at, edge.settledAt());
             }
-            heldBack.put(at, edge.refused());
+            heldBack.put(at, edge.stoppedBy());
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
@@ -2403,6 +2444,7 @@ public final class Generator {
                 // something this knows. Taken from whichever came first, the reason named the wrong
                 // position's search.
                 UnresolvedCombination.Reason why = tried.reason();
+                java.util.Set<CompositionBudget> stoppedBy = tried.stoppedBy();
                 // A search that offered candidates and certified none of them has not shown that
                 // every value the rules allow was refused: what it found out is that what it built
                 // did not stand where it was built for, which is its own answer.
@@ -2412,11 +2454,20 @@ public final class Generator {
                 }
                 if (here.size() == 1
                         && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
-                    why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
+                    java.util.Set<CompositionBudget> held =
+                            heldBack.getOrDefault(here.keySet().iterator().next(), java.util.Set.of());
+                    if (!held.isEmpty()) {
+                        stoppedBy = held;
+                        why = UnresolvedCombination.Reason.wordFor(held);
+                    }
                 }
-                return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), why, tried.detail()),
-                        where.unrepresented());
+                return stoppedBy.isEmpty()
+                        ? new BoundaryAttempt.Unresolved(
+                                new UnresolvedCombination(List.of(label), why, tried.detail()),
+                                where.unrepresented())
+                        : new BoundaryAttempt.Stopped(
+                                new UnresolvedCombination(List.of(label), why, tried.detail()),
+                                stoppedBy, where.unrepresented());
             }
             inputs.add(tried.value());
         }
