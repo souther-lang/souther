@@ -113,7 +113,7 @@ public final class InputNumber {
         if (element == null) {
             return null;
         }
-        ElementProjection answered = where.elements().projectionAt(element);
+        ElementProjection answered = where.projectionAt(element);
         // Where the elements stand, and nothing where they stand nowhere: a run is over the values
         // at a position, so a container this reading could not place leaves no run to take.
         TermPath at = switch (where.elementAt(element, symbols)) {

@@ -46,7 +46,7 @@ import souther.compiler.types.BindingId;
  * can hold is read from the declarations ({@link InputDomain}), and this only says which position an
  * expression is pointing at.
  */
-public final class InputPath {
+final class InputPath {
 
     private final Symbols symbols;
     private final ElementQuestion asked;
@@ -76,7 +76,7 @@ public final class InputPath {
      * only the outermost name would leave every claim inside an expanded helper about a position
      * nothing here can name.
      */
-    public static PathResolution of(Core e, BindingEnvironment names, Symbols symbols) {
+    static PathResolution of(Core e, BindingEnvironment names, Symbols symbols) {
         return new InputPath(symbols, ElementQuestion.NAMED_POSITION).named(e, names);
     }
 
@@ -93,7 +93,7 @@ public final class InputPath {
      * nothing at all — which reads as a model with no rule there rather than a rule this could not
      * follow.
      */
-    public static PathResolution cameFrom(Core e, BindingEnvironment names, Symbols symbols) {
+    static PathResolution cameFrom(Core e, BindingEnvironment names, Symbols symbols) {
         return new InputPath(symbols, ElementQuestion.VALUE_ORIGIN).named(e, names);
     }
 
@@ -105,8 +105,8 @@ public final class InputPath {
      * the binding rather than of the container's expression: a container built by one operation and
      * handed to the next names no position of its own, and the elements are the same elements.
      */
-    public static PathResolution elementAt(BindingId binding, BindingEnvironment names,
-                                           Symbols symbols) {
+    static PathResolution elementAt(BindingId binding, BindingEnvironment names,
+                                    Symbols symbols) {
         return new InputPath(symbols, ElementQuestion.NAMED_POSITION).elementOf(binding, names);
     }
 

@@ -105,10 +105,10 @@ sealed interface Condition {
         //
         // It terminates because a binder's value can only mention binders introduced before it, so
         // each step of this goes strictly outwards.
-        if (e instanceof Core.Read name && name.binding() != null) {
-            Core bound = reads.bound().get(name.binding());
-            if (bound != null) {
-                return of(bound, reads);
+        if (e instanceof Core.Read name) {
+            Core given = reads.given(name);
+            if (given != null) {
+                return of(given, reads);
             }
         }
         if (e instanceof Core.Binary binary && combines(binary.op())) {

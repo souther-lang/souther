@@ -38,8 +38,8 @@ class WhatWasNotReadIsNotWhatStandsNowhereTest {
     private static final BindingId LOCAL = new BindingId(OWNER, 1);
 
     private static InputReads reads() {
-        return new InputReads(Map.of(PARAMETER, TermPath.of("n")), Map.of(),
-                ElementBindings.NONE, Map.of(), false);
+        return InputReads.written(Map.of(PARAMETER, TermPath.of("n")), Map.of(),
+                ElementBindings.NONE);
     }
 
     private static Core.Read parameter() {

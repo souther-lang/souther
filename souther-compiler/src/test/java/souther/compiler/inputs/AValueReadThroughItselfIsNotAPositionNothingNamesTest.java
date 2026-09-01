@@ -49,8 +49,8 @@ class AValueReadThroughItselfIsNotAPositionNothingNamesTest {
     }
 
     private static InputReads reads(Map<BindingId, Core> bound) {
-        return new InputReads(Map.of(PARAMETER, TermPath.of("n")), bound,
-                ElementBindings.NONE, Map.of(), false);
+        return InputReads.written(Map.of(PARAMETER, TermPath.of("n")), bound,
+                ElementBindings.NONE);
     }
 
     private static Symbols symbols() {
