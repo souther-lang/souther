@@ -59,14 +59,11 @@ public sealed interface ItemAssessment {
          * "this was never measured" are things the measurement says, and a search that reported them
          * was repeating what its own input already held.
          *
-         * <p><b>Read over the states and not off a list of the ones that qualify.</b> The question
-         * is whether anything is left to find out here, and a measurement that is short of
-         * something is the case that most needs a candidate — it is the one where this compiler
-         * cannot say whether a row exists. Named the other way round, as a list of the shapes worth
-         * searching, a reading weakened by what went unread falls through to {@code false} and the
-         * point is never searched at all; nothing is then built, nothing shows the point writable,
-         * and the account says the model admits no row there. A state added to {@link Measurement}
-         * arrives here as a compile error rather than as that silence.
+         * <p><b>Read over the states rather than off a list of the ones that qualify.</b> Every
+         * state says here what it means, so a state added to {@link Measurement} arrives as a
+         * compile error rather than as a silent {@code false} — which is the difference between a
+         * point nobody searched because nothing would come of it and one nobody searched because
+         * the list was written before the state existed.
          */
         public boolean worthSearching() {
             if (hasRowWitness()) {
@@ -76,7 +73,12 @@ public sealed interface ItemAssessment {
                 // Read to the end and no row at it, or read as far as it got and no row at it: both
                 // are points where a candidate tells somebody something.
                 case Measurement.Complete<Coverage> it -> it.value() instanceof Coverage.NoHit;
-                case Measurement.Partial<Coverage> it -> it.value() instanceof Coverage.NoHit;
+                // A measurement short of something is not work to hand to anybody. Nobody can say
+                // whether a row is at such a point, so no finding is made of it and an author is
+                // not behind on it; a candidate built there answers a question the measurement did
+                // not ask, and building one costs a composed row run and read back at every point
+                // of every line the reading fell short at.
+                case Measurement.Partial<Coverage> _ -> false;
                 // No rows to look at is a point worth building one for. The other reasons nobody
                 // measured are not: a question this compilation was not put is not work to hand to
                 // an author.
@@ -392,7 +394,11 @@ public sealed interface ItemAssessment {
         }
 
         /**
-         * A value at the point, built and accepted by the module's own decoders.
+         * A value composed for the point and accepted by the module's own decoders.
+         *
+         * <p>Composed <em>for</em> it and not established to be at it, which is the whole of what
+         * this word promises: {@link Unverified} is the case where nothing placed the value, so a
+         * contract saying a value at the point would be false of one of its own arms.
          *
          * <p><b>What was built, and whether it was read back where it was built for, are two
          * things.</b> Composing a value that the decoders take does not say the value lands at the

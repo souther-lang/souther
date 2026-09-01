@@ -500,6 +500,11 @@ public record Settlements(List<OfferItem> requested,
                             new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
                     case StandingAtAPoint.Met.CouldNotTell _ -> new Settlement.Undetermined(
                             Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+                    // A walk that reached no value, which settles nothing for the same reason and
+                    // by a different route. What this reader is deciding is whether the row before
+                    // it answers the point, and neither of them lets it say so.
+                    case StandingAtAPoint.Met.NothingToRead _ -> new Settlement.Undetermined(
+                            Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
                 };
                 if (said.settles()) {
                     return said;

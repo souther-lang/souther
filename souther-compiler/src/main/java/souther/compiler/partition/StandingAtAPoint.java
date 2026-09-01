@@ -81,7 +81,18 @@ public final class StandingAtAPoint {
             }
         }
 
+        /**
+         * The walk reached no value to compare, which is not an observation of one.
+         *
+         * <p>Apart from {@link CouldNotTell} because the two leave different work. A value a budget
+         * shortened is one a wider budget keeps; a place this compiler could not get a value out of
+         * is not, and reporting it as the first sends a reader after a limit that never fired.
+         */
+        record NothingToRead() implements Met {}
+
         Met REACHED = new Reached();
+
+        Met NOTHING_TO_READ = new NothingToRead();
 
         Met NOT_WATCHED = new NotWatched();
 
@@ -98,6 +109,7 @@ public final class StandingAtAPoint {
     public static Met met(BorderQuantity quantity, BehaviorInputs where, List<ObservedInputs> rows,
                           Criterion criterion, Optional<ComparisonOccurrence> site) {
         Set<Incompleteness.Code> unreadable = EnumSet.noneOf(Incompleteness.Code.class);
+        boolean nowhereToLook = false;
         boolean unwatched = false;
         for (ObservedInputs row : rows) {
             // A row has more than one value at a position inside a sequence, and standing at a point
@@ -109,6 +121,7 @@ public final class StandingAtAPoint {
             Map<TermPath, Integer> held = new LinkedHashMap<>();
             OneReadingOfARow first = new OneReadingOfARow(where, row, Map.of(), held);
             boolean stands = false;
+            boolean walkedToNothing = false;
             Set<Incompleteness.Code> stopped = EnumSet.noneOf(Incompleteness.Code.class);
             for (OneReadingOfARow reading : readings(where, row, quantity, criterion, first, held)) {
                 switch (quantity.standsAt(criterion, reading)) {
@@ -119,6 +132,15 @@ public final class StandingAtAPoint {
                     case BorderQuantity.Stands.Unreadable it -> {
                         if (!reading.wroteNothing()) {
                             stopped.addAll(it.causes());
+                        }
+                    }
+                    // The walk reached no value under this reading. Which is not an observation of
+                    // one, so nothing here is recorded as a limit having stopped anything: another
+                    // reading of the same row may reach the point, and where none does the row is
+                    // one this could not read a value off rather than one a budget shortened.
+                    case BorderQuantity.Stands.NothingToRead _ -> {
+                        if (!reading.wroteNothing()) {
+                            walkedToNothing = true;
                         }
                     }
                     case BorderQuantity.Stands.No _ -> { }
@@ -145,9 +167,16 @@ public final class StandingAtAPoint {
                 }
             }
             unreadable.addAll(stopped);
+            nowhereToLook |= walkedToNothing;
         }
+        // An observation that stopped outranks a walk that reached nothing, the way it does at one
+        // reading: the first names something a wider budget would have kept, and the second names
+        // a place this compiler could not get a value out of at all.
         if (!unreadable.isEmpty()) {
             return new Met.CouldNotTell(unreadable);
+        }
+        if (nowhereToLook) {
+            return Met.NOTHING_TO_READ;
         }
         return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
     }

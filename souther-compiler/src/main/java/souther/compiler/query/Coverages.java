@@ -33,7 +33,6 @@ import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.InputClassifications;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -980,12 +979,13 @@ final class Coverages {
         souther.compiler.partition.ObservedInputs read =
                 probe.read(built.row().inputs()).asInputs();
         if (read == null) {
-            // Nothing came back to read, so nothing here can say where the value went. Which is
-            // this walk unable to look and not this walk having looked — the row was composed and
-            // taken by the decoders either way, and the case that says so is the one for a reading
-            // that did not happen.
-            return new StandingAtAPoint.Met.CouldNotTell(
-                    EnumSet.of(Incompleteness.Code.VALUE_UNREADABLE));
+            // Nothing came back to read the row off, which is not an observation of it. What did
+            // not happen here is the running: the values would not build a second time, or the
+            // model refused them, or the classes would not link — and every one of those is
+            // something this run did rather than a value a limit shortened. Named as the second, a
+            // linkage failure arrives at the account as an observation that was stopped, and the
+            // report says a limit did something that never fired.
+            return StandingAtAPoint.Met.NOTHING_TO_READ;
         }
         return StandingAtAPoint.met(quantity, where, List.of(read), criterion, site);
     }
@@ -1057,6 +1057,18 @@ final class Coverages {
                                 new ItemAssessment.Attempt.Unverified(built.row(), within,
                                         built.unrepresented(),
                                         new EstablishmentGap.Observation(it.causes()));
+                        // And a walk that reached no value made no observation, so there is no
+                        // observation to have been stopped. What this run did is the search's own
+                        // to say, in the generator's words: a gap here would put a limit's name on
+                        // something no limit did, which is the trade this whole reading refuses.
+                        case StandingAtAPoint.Met.NothingToRead _ ->
+                                new ItemAssessment.Attempt.Unresolved(
+                                        new souther.compiler.partition.Generator
+                                                .UnresolvedCombination(List.of(subject),
+                                                souther.compiler.partition.Generator
+                                                        .UnresolvedCombination.Reason
+                                                        .NO_CERTIFIED_WITNESS),
+                                        within, built.unrepresented());
                     };
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
                     new ItemAssessment.Attempt.Unresolved(left.why(), within,
@@ -1116,10 +1128,18 @@ final class Coverages {
         // nothing read at all, which may be the row that is at this value; and, for a line a fork
         // drew, a row that never finished and so never reached the comparison.
         Set<Weakening> by = new LinkedHashSet<>();
+        // Each in its own words. What the rows leave open is the same either way — no row of
+        // theirs settles the point — and why there was nothing to read is not, so the two are
+        // carried apart even where this block treats them alike.
         if (met instanceof StandingAtAPoint.Met.CouldNotTell it) {
             for (Incompleteness.Code cause : it.causes()) {
-                by.add(new Weakening.BorderValueUnreadable(border, cause));
+                by.add(new Weakening.BorderValueUnreadable(border,
+                        new Weakening.WhyNoValue.AnObservationStopped(cause)));
             }
+        }
+        if (met instanceof StandingAtAPoint.Met.NothingToRead) {
+            by.add(new Weakening.BorderValueUnreadable(border,
+                    new Weakening.WhyNoValue.TheWalkReachedNoValue()));
         }
         for (Incompleteness gap : observed.gaps()) {
             // Rows nothing read at all bear on every line. Rows that were read and did not finish

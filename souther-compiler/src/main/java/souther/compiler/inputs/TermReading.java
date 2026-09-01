@@ -41,6 +41,12 @@ final class TermReading {
     static Reading at(TermOrders on, ObservedValue at) {
         NumericTerm.FromOnePosition term = on.term().atOnePosition();
         Carrier observed = on.observed();
+        // Nothing arrived, which is the walk saying it has no value here rather than an observation
+        // saying it could not keep one. Named apart, because the reader that words an observation's
+        // code says what an observation did — and here there was none.
+        if (at == null) {
+            return new Reading.NoValue();
+        }
         Membership.Incomplete unread = Membership.unread(at);
         if (unread != null) {
             return new Reading.Missing(unread.code());
@@ -82,6 +88,12 @@ final class TermReading {
             return new Reading.NotNumber();
         }
         for (ObservedValue each : values) {
+            // An element the walk arrived at nothing for, which is not an observation of one. Said
+            // apart for the reason the one value a place holds is, since a total over a run is over
+            // whatever the run holds and one of them being nothing is not a limit having fired.
+            if (each == null) {
+                return new Reading.NoValue();
+            }
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
                 return new Reading.Missing(unread.code());
@@ -184,6 +196,9 @@ final class TermReading {
         }
         java.math.BigDecimal total = java.math.BigDecimal.ZERO;
         for (ObservedValue each : values) {
+            if (each == null) {
+                return new Reading.NoValue();
+            }
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
                 return new Reading.Missing(unread.code());

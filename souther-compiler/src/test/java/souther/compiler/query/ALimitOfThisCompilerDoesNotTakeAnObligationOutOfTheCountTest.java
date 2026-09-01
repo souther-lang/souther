@@ -88,7 +88,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
         ObligationDisposition disposition = ObligationDisposition.of(
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,
-                                Incompleteness.Code.VALUE_TRUNCATED))),
+                                new Weakening.WhyNoValue.AnObservationStopped(
+                                        Incompleteness.Code.VALUE_TRUNCATED)))),
                 prevented());
 
         assertEquals(new ObligationDisposition.Undecided(EnumSet.of(
@@ -181,7 +182,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 new ObligationCoverage.Missed(),
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,
-                                Incompleteness.Code.VALUE_TRUNCATED))),
+                                new Weakening.WhyNoValue.AnObservationStopped(
+                                        Incompleteness.Code.VALUE_TRUNCATED)))),
                 new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS));
     }
 

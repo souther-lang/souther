@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -54,7 +55,11 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
             souther.compiler.types.Type.Prim.INT,
             souther.compiler.check.Symbols.none(souther.compiler.DefaultStdlib.get()));
 
-    private static final TermOrders WHOLE = TermOrders.itself(new Carrier.Whole());
+    private static final TermOrders ON_THE_TOTAL =
+            TermOrdersFixtures.itself(TOTAL, new Carrier.Whole());
+
+    private static final TermOrders ON_THE_OTHER =
+            TermOrdersFixtures.itself(OTHER_TOTAL, new Carrier.Whole());
 
     private static final Criterion AT_A_HUNDRED =
             new Criterion.AtTheLevel(new Level.ACount(Count.of(100)));
@@ -114,7 +119,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
         BorderQuantity.OverAForm both = new BorderQuantity.OverAForm("decide",
                 LinearForm.atom((NumericTerm) TOTAL)
                         .plus(LinearForm.atom((NumericTerm) OTHER_TOTAL)),
-                Map.of(TOTAL, WHOLE, OTHER_TOTAL, WHOLE));
+                Map.of(TOTAL, ON_THE_TOTAL, OTHER_TOTAL, ON_THE_OTHER));
 
         BorderQuantity.Stands stands = both.standsAt(AT_A_HUNDRED,
                 new BorderQuantity.Observation() {
@@ -138,9 +143,37 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                 "a reading stopped in two ways is stopped in both of them");
     }
 
+    /**
+     * A walk that arrived at no value says that, and not that an observation stopped.
+     *
+     * <p>The two leave different work and only one of them names a budget. A reader that words a
+     * code as what an observation did — and something downstream does, since that is what the code
+     * is for — then says a limit did something where no limit fired: the value it would have
+     * stopped was never met.
+     */
+    @Test
+    void aWalkThatReachedNoValueIsNotAnObservationThatStopped() {
+        BorderQuantity.Stands stands = form().standsAt(AT_A_HUNDRED,
+                new BorderQuantity.Observation() {
+
+                    @Override
+                    public ObservedValue at(TermPath path) {
+                        return null;
+                    }
+
+                    @Override
+                    public List<ObservedValue> everyValueAt(TermPath path) {
+                        return java.util.Collections.singletonList(null);
+                    }
+                });
+
+        assertEquals(BorderQuantity.Stands.NOTHING_TO_READ, stands,
+                "nothing arrived, which is not a value an observation could not keep");
+    }
+
     private static BorderQuantity.OverAForm form() {
         return new BorderQuantity.OverAForm("decide",
-                LinearForm.atom((NumericTerm) TOTAL), Map.of(TOTAL, WHOLE));
+                LinearForm.atom((NumericTerm) TOTAL), Map.of(TOTAL, ON_THE_TOTAL));
     }
 
     /** A row whose only readable place is the run, holding these values. */

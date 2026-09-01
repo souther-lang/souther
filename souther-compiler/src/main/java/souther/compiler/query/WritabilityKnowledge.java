@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import java.util.Objects;
+
 /**
  * What this compilation knows about a row being writable at one point, and where the knowing
  * stopped.
@@ -24,12 +26,31 @@ package souther.compiler.query;
  */
 public sealed interface WritabilityKnowledge {
 
-    /** Something has shown a row can be written here, and this is what. */
+    /**
+     * Something has shown a row can be written here, and this is what.
+     *
+     * <p>Never nothing. An empty set of grounds is what {@link NoEvidence} is, and holding one here
+     * would put the two states one field apart — a point with nothing behind it wearing the word
+     * for a point with something, which is what an account reads to tell a finding from a gap.
+     */
     record Established(ItemAssessment.WritabilityEvidence evidence)
-            implements WritabilityKnowledge {}
+            implements WritabilityKnowledge {
+
+        public Established {
+            if (evidence == null || !evidence.known()) {
+                throw new IllegalArgumentException(
+                        "a point something has shown writable says what showed it");
+            }
+        }
+    }
 
     /** A budget of this compiler's stopped the establishing, and this is which. */
-    record Prevented(EstablishmentGap by) implements WritabilityKnowledge {}
+    record Prevented(EstablishmentGap by) implements WritabilityKnowledge {
+
+        public Prevented {
+            Objects.requireNonNull(by, "a showing that was stopped says what stopped it");
+        }
+    }
 
     /** Nothing has shown a row can be written here, and nothing was stopped from showing it. */
     record NoEvidence() implements WritabilityKnowledge {}

@@ -96,6 +96,7 @@ public sealed interface BorderQuantity {
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
             return switch (of.read(row.at(term.position()))) {
                 case NumericTerm.Reading.Missing missing -> Stands.unreadable(missing.code());
+                case NumericTerm.Reading.NoValue _ -> Stands.NOTHING_TO_READ;
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
                         where.holds(new Level.OnACarrier(of.answered(), number.value()))
@@ -311,14 +312,16 @@ public sealed interface BorderQuantity {
             // either, and a reader told about one end is being told which end this happened to
             // look at first.
             Set<Incompleteness.Code> stopped = EnumSet.noneOf(Incompleteness.Code.class);
-            if (here instanceof NumericTerm.Reading.Missing missing) {
-                stopped.add(missing.code());
+            boolean nothing = false;
+            for (NumericTerm.Reading end : List.of(here, there)) {
+                if (end instanceof NumericTerm.Reading.Missing missing) {
+                    stopped.add(missing.code());
+                }
+                nothing |= end instanceof NumericTerm.Reading.NoValue;
             }
-            if (there instanceof NumericTerm.Reading.Missing missing) {
-                stopped.add(missing.code());
-            }
-            if (!stopped.isEmpty()) {
-                return new Stands.Unreadable(stopped);
+            Stands unread = Stands.unreadable(stopped, nothing);
+            if (unread != null) {
+                return unread;
             }
             if (!(here instanceof NumericTerm.Reading.Number onAt)
                     || !(there instanceof NumericTerm.Reading.Number againstAt)) {
@@ -543,6 +546,7 @@ public sealed interface BorderQuantity {
             // model's answer.
             Set<Incompleteness.Code> stopped = EnumSet.noneOf(Incompleteness.Code.class);
             boolean noNumber = false;
+            boolean nothing = false;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
                 // Each on its own order. Read on one order for the whole form, a position written
                 // back differently from its neighbour was read as a value it does not hold.
@@ -560,14 +564,19 @@ public sealed interface BorderQuantity {
                     stopped.add(missing.code());
                     continue;
                 }
+                if (read instanceof NumericTerm.Reading.NoValue) {
+                    nothing = true;
+                    continue;
+                }
                 if (!(read instanceof NumericTerm.Reading.Number number)) {
                     noNumber = true;
                     continue;
                 }
                 at = at.add(Count.number(number.value()).at().multiply(each.getValue()));
             }
-            if (!stopped.isEmpty()) {
-                return new Stands.Unreadable(stopped);
+            Stands unread = Stands.unreadable(stopped, nothing);
+            if (unread != null) {
+                return unread;
             }
             if (noNumber) {
                 return Stands.NO;
@@ -812,13 +821,40 @@ public sealed interface BorderQuantity {
             }
         }
 
+        /**
+         * The walk arrived at no value, so there was nothing for an observation to be of.
+         *
+         * <p>Beside {@link Unreadable} and not among its causes. A value the observation shortened
+         * exists and a wider budget would have kept it; a walk that reached nothing has met no
+         * value, and no number of nodes changes that. Held as one case, the second borrows the
+         * first's word and every reader that says what an observation did says it of a walk that
+         * made no observation.
+         */
+        record NothingToRead() implements Stands {}
+
         Stands YES = new Yes();
 
         Stands NO = new No();
 
+        Stands NOTHING_TO_READ = new NothingToRead();
+
         /** Unreadable for one reason, which is what a quantity reading one term has. */
         static Stands unreadable(Incompleteness.Code code) {
             return new Unreadable(EnumSet.of(code));
+        }
+
+        /**
+         * What a quantity over several terms came to, given what each of them did.
+         *
+         * <p>An observation that stopped outranks a walk that reached nothing: the first names
+         * something a wider budget would have kept and is the more specific news, and a form
+         * stopped in both ways is stopped in the way somebody can do something about.
+         */
+        static Stands unreadable(Set<Incompleteness.Code> causes, boolean nothingToRead) {
+            if (!causes.isEmpty()) {
+                return new Unreadable(causes);
+            }
+            return nothingToRead ? NOTHING_TO_READ : null;
         }
     }
 
