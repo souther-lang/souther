@@ -8,7 +8,26 @@ import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeElement;
 import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
+import java.lang.classfile.Instruction;
+import java.lang.classfile.instruction.ArrayLoadInstruction;
+import java.lang.classfile.instruction.ArrayStoreInstruction;
+import java.lang.classfile.instruction.BranchInstruction;
 import java.lang.classfile.instruction.ConstantInstruction;
+import java.lang.classfile.instruction.ConvertInstruction;
+import java.lang.classfile.instruction.DiscontinuedInstruction;
+import java.lang.classfile.instruction.IncrementInstruction;
+import java.lang.classfile.instruction.LoadInstruction;
+import java.lang.classfile.instruction.LookupSwitchInstruction;
+import java.lang.classfile.instruction.MonitorInstruction;
+import java.lang.classfile.instruction.NewMultiArrayInstruction;
+import java.lang.classfile.instruction.NewPrimitiveArrayInstruction;
+import java.lang.classfile.instruction.NopInstruction;
+import java.lang.classfile.instruction.OperatorInstruction;
+import java.lang.classfile.instruction.ReturnInstruction;
+import java.lang.classfile.instruction.StackInstruction;
+import java.lang.classfile.instruction.StoreInstruction;
+import java.lang.classfile.instruction.TableSwitchInstruction;
+import java.lang.classfile.instruction.ThrowInstruction;
 import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
@@ -39,9 +58,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p><b>One list, and the rule it comes from is the machine's.</b> A method that has an operator
  * names the type: to use a value as one, the type has to be established, and a symbolic reference
  * is how that is written down. Which instructions can carry one is a closed set the class file
- * format decides — a call, a field, a constant, a cast, a made object or array — so what is here is
- * every method whose code names the operator, together with every method whose signature does and
- * every field of that type. Not a list of the ways somebody thought of.
+ * format decides, and {@link #namesTheOperator} is held to that set by javac rather than by
+ * anybody's memory of it. So what is here is every method whose code names the operator, together
+ * with every method whose signature does and every field of that type — not a list of the ways
+ * somebody thought of.
  *
  * <p><b>And nothing here works out what was done with it.</b> A switch, a constant compared
  * against, a set asked for membership and a map asked for an answer are four spellings of one act,
@@ -357,7 +377,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                 boolean has = method.methodType().stringValue().contains(BIN_OP);
                 for (CodeElement element
                         : method.code().map(code -> code.elementList()).orElse(List.of())) {
-                    has |= namesTheOperator(element);
+                    has |= element instanceof Instruction one && namesTheOperator(one);
                 }
                 if (has) {
                     out.add(owner + "." + method.methodName().stringValue());
@@ -375,14 +395,20 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
     /**
      * Whether one instruction names the operator.
      *
-     * <p>The instructions that can carry a symbolic reference, which is a closed set the class file
-     * format decides rather than one anybody works out from what a program might say. A value of a
-     * type is put on the stack by a call, a field, a constant, a cast, or a made object or array;
-     * anything else moves what is already there. So a method that has an operator names it in one
-     * of these, and a method that names it in none of them never had one.
+     * <p>An instruction either carries a symbolic reference or it does not, and which ones do is the
+     * class file format's answer rather than anybody's. <b>Written without a default, so that it is
+     * javac's answer here too.</b> The kinds are sealed: an arm left out is a compile error, and an
+     * instruction the format grows later is a compile error the day the runtime is raised. Read off
+     * a list somebody typed, this said there was no other way to name a type four times over, and
+     * there was one each time.
+     *
+     * <p>What each arm says is only whether that kind of instruction can name a type. The ones that
+     * cannot are the ones that move, compute or jump: what they work on is already on the stack, and
+     * where it was put there is the arm that answers.
      */
-    private static boolean namesTheOperator(CodeElement element) {
-        return switch (element) {
+    private static boolean namesTheOperator(Instruction instruction) {
+        return switch (instruction) {
+            // Carries one.
             case InvokeInstruction call -> names(call.owner().asInternalName())
                     || names(call.type().stringValue());
             case FieldInstruction field -> names(field.owner().asInternalName())
@@ -390,12 +416,23 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             case TypeCheckInstruction cast -> names(cast.type().asInternalName());
             case NewObjectInstruction made -> names(made.className().asInternalName());
             case NewReferenceArrayInstruction made -> names(made.componentType().asInternalName());
-            case ConstantInstruction constant ->
-                    names(String.valueOf(constant.constantValue()));
+            case NewMultiArrayInstruction made -> names(made.arrayType().asInternalName());
+            case ConstantInstruction constant -> names(String.valueOf(constant.constantValue()));
             case InvokeDynamicInstruction dynamic -> names(dynamic.type().stringValue())
                     || dynamic.bootstrapArgs().stream()
                             .anyMatch(each -> names(String.valueOf(each)));
-            default -> false;
+
+            // Names a type that is never one of ours: an array of a primitive.
+            case NewPrimitiveArrayInstruction _ -> false;
+
+            // Carries no reference at all. Each works on what is already on the stack, on a number,
+            // or on where to go next — and where what it works on was put there is an arm above.
+            case ArrayLoadInstruction _, ArrayStoreInstruction _, BranchInstruction _,
+                    ConvertInstruction _, DiscontinuedInstruction _, IncrementInstruction _,
+                    LoadInstruction _, LookupSwitchInstruction _, MonitorInstruction _,
+                    NopInstruction _, OperatorInstruction _, ReturnInstruction _,
+                    StackInstruction _, StoreInstruction _, TableSwitchInstruction _,
+                    ThrowInstruction _ -> false;
         };
     }
 
