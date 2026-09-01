@@ -279,8 +279,11 @@ public final class InvariantConstraints {
         }
         long n = bound;
         EndSide end = endOf(cut);
-        // Raoh names both of the bounds at nought, and the name is what a reader is shown — so a
-        // bound there is that one rather than the number it would be moved to.
+        // Raoh has a name for each of the two bounds at nought, and they are two names rather than
+        // one: a bound refusing nought is `positive()` where the same bound moved to one is a
+        // minimum of one, and both are emitted. So which of them a rule comes to is read before the
+        // bound is moved — unlike a list, where the bound at one and the bound past nought are the
+        // one constraint and moving first says so.
         if (end == EndSide.LOWER && n == 0) {
             return Optional.of(cut.holdsAtTheValue() ? new NonNegative() : new Positive());
         }

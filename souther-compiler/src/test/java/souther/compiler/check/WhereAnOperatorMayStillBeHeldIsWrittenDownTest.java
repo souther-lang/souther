@@ -73,9 +73,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.codegen.BodyGen.comparisonMaterialize",
                     "which instructions an operator is emitted as"),
             new Held("souther.compiler.check.Terms.isArith",
-                    "whether the operator answers a number"),
+                    "which operators compute a number, spelled as four equalities rather than"
+                            + " asked of the operator: a membership the enum does not own, and one"
+                            + " an operator added later falls quietly outside of"),
             new Held("souther.compiler.partition.Condition.combines",
-                    "whether the operator puts conditions together"),
+                    "which operators put conditions together, spelled as two equalities — the same"
+                            + " set the enum already answers for, under another name"),
 
             new Held("souther.compiler.check.Conditions.comparison",
                     "builds a node from the operator it is handed"),
@@ -110,17 +113,18 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
     /** The one walk that has both, and what each of them is. */
     private static final Held WALKS_TO_A_COMPARISON = new Held(
             "souther.compiler.partition.EnsuresThresholds.stated",
-            "the walk down a clause reaches a comparison partway. The operator it reads is a"
-                    + " disjunction's, on a statement it has not recognised as a comparison and"
-                    + " does not go on to read — what a disjunction states is neither of its sides,"
-                    + " so the walk stops there. The node it takes from the comparison it did"
-                    + " recognise is where a finding is filed, and nothing asks it for an operator.");
+            "the walk down a clause reaches a comparison partway. The operators it reads are a"
+                    + " conjunction's and a disjunction's, both on statements it has not recognised"
+                    + " as comparisons and neither of which it goes on to read — a conjunction is"
+                    + " walked into and what a disjunction states is neither of its sides. The node"
+                    + " it takes from the comparison it did recognise is where a finding is filed,"
+                    + " and nothing asks it for an operator.");
 
     @Test
     void everythingCarryingAnOperatorIsWrittenDownWithAReason() {
-        assertEquals(declared(), carriers(),
+        assertEquals(declared(MAY_HOLD), carriers(),
                 "an operator reaching somewhere new is a line to be written here with what it is"
-                        + " wanted for. What each of these carries one for: " + why());
+                        + " wanted for. What each of these carries one for: " + why(MAY_HOLD));
     }
 
     /**
@@ -144,31 +148,47 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
     /**
      * And who takes the node out of a comparison, which is how the operator stays one call away.
      *
-     * <p>Two things are asked of it and neither is what the comparison placed: which two sides the
-     * rule names, and which occurrence of a comparison in the tree this is. The second is why the
-     * node is held at all — a body is at a place, and a place is a question about the tree — and it
-     * is what keeps the list from being closed by handing out the sides instead.
+     * <p>Three things are wanted of it and none of them is what the comparison placed: the two
+     * sides the rule names, the whole expression to walk, and the place in the tree a reader joins
+     * on or files a finding at. The last is why the node is held at all — a body is at a place, and
+     * a place is a question about the tree — and it is what keeps the list from being closed by
+     * handing out the sides instead.
+     *
+     * <p>Most of these hand the node on rather than read it, which is what makes the list worth
+     * keeping: what travels is the whole node, and every reader it reaches has the operator.
      */
     @Test
     void whoTakesTheNodeOutOfAComparisonIsWrittenDown() {
-        assertEquals(TAKES_THE_NODE, callersOfTheNode(),
-                "a reader taking the node has both sides and the operator; what it wants is one of"
-                        + " the first two, and this is where that is said");
+        assertEquals(declared(TAKES_THE_NODE), taken(),
+                "a reader taking the node has both sides and the operator; what each of these"
+                        + " wants it for: " + why(TAKES_THE_NODE));
     }
 
-    /** Everything that asks a comparison for its node: some for the two sides it names, some for
-     *  which occurrence in the tree it is, and none for the operator. */
-    private static final List<String> TAKES_THE_NODE = List.of(
-            "souther.compiler.coverage.ComparisonCatalog.Catalogued.node",
-            "souther.compiler.coverage.CoverageSites.Plan.requireIsACatalogued",
-            "souther.compiler.inputs.ComparedNumber.lineOf",
-            "souther.compiler.partition.AffineReading.read",
-            "souther.compiler.partition.ComparedTerms.asWritten",
-            "souther.compiler.partition.ComparisonAssessment.of",
-            "souther.compiler.partition.ComparisonReadings.Reading.at",
-            "souther.compiler.partition.Condition.Compares.at",
-            "souther.compiler.partition.Cutting.asWritten",
-            "souther.compiler.partition.EnsuresThresholds.stated");
+    /** Everything that asks a comparison for its node, and what for. */
+    private static final List<Held> TAKES_THE_NODE = List.of(
+            new Held("souther.compiler.coverage.ComparisonCatalog.Catalogued.node",
+                    "hands the node back, for a reader joining on the tree"),
+            new Held("souther.compiler.coverage.CoverageSites.Plan.requireIsACatalogued",
+                    "looks the node up in the catalog, which is keyed by it, and names its place"
+                            + " where the two disagree"),
+            new Held("souther.compiler.inputs.ComparedNumber.lineOf",
+                    "hands the node to the reading that says which of its sides names a position"),
+            new Held("souther.compiler.partition.AffineReading.read",
+                    "reads the two sides as forms, and hands the node to the reading of which side"
+                            + " the rule is about"),
+            new Held("souther.compiler.partition.ComparedTerms.asWritten",
+                    "reads the two sides for the terms named in them"),
+            new Held("souther.compiler.partition.ComparisonAssessment.of",
+                    "walks the whole expression for whether the answer is read anywhere in it, and"
+                            + " hands it on to the reading of what it cuts"),
+            new Held("souther.compiler.partition.ComparisonReadings.Reading.at",
+                    "hands the node back, for a reader joining on the tree"),
+            new Held("souther.compiler.partition.Condition.Compares.at",
+                    "hands the node back as the expression the condition is"),
+            new Held("souther.compiler.partition.Cutting.asWritten",
+                    "hands the node to the reading of what each place is left with"),
+            new Held("souther.compiler.partition.EnsuresThresholds.stated",
+                    "files a finding at the node"));
 
     private static List<String> callersOfTheNode() {
         List<String> out = new ArrayList<>();
@@ -189,15 +209,23 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
         return out;
     }
 
-    private static Map<String, String> declared() {
+    private static Map<String, String> declared(List<Held> held) {
         Map<String, String> out = new TreeMap<>();
-        MAY_HOLD.forEach(each -> out.put(each.what(), ""));
+        held.forEach(each -> out.put(each.what(), ""));
         return out;
     }
 
-    private static Map<String, String> why() {
+    private static Map<String, String> why(List<Held> held) {
         Map<String, String> out = new LinkedHashMap<>();
-        MAY_HOLD.forEach(each -> out.put(each.what(), each.why()));
+        held.forEach(each -> out.put(each.what(), each.why()));
+        return out;
+    }
+
+    /** The methods that take a comparison's node, as a map so that a missing line reads beside the
+     *  reasons rather than as a place in a list. */
+    private static Map<String, String> taken() {
+        Map<String, String> out = new TreeMap<>();
+        callersOfTheNode().forEach(each -> out.put(each, ""));
         return out;
     }
 
