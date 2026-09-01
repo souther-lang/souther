@@ -1086,7 +1086,7 @@ public final class Resolve {
                     stmts.add(new Hir.Let(a.binder(), value, let.pos()));
                     bound = a.bound();
                 }
-                yield new Hir.PrimDecoder(Hir.RawKind.valueOf(p.from().name()), input.binder(), stmts,
+                yield new Hir.PrimDecoder(rawKind(p.from()), input.binder(), stmts,
                         construct(p.result(), bound), p.pos());
             }
             case Ast.ObjectDecoder o -> {
@@ -1104,6 +1104,31 @@ public final class Resolve {
                 yield new Hir.NewtypeDecoder(decRef(n.inner()), input.binder(),
                         construct(n.result(), input.bound()), n.pos());
             }
+        };
+    }
+
+    /**
+     * Which kind of primitive Raw a written one reads, in the vocabulary below this boundary.
+     *
+     * <p>The parsed tree and what this pass answers hold the kinds as separate types, so crossing
+     * between them is a decision and this is where it is made. Written out on both sides rather
+     * than taken from a spelling: a kind added to what the parser can write then has no translation
+     * until one says which kind below it means, and a name shared by the two enums is no answer to
+     * that.
+     *
+     * <p>The switch is an expression and has no {@code default} for that reason. A {@code default}
+     * would answer for a kind nobody had decided about, which is the whole of what this stops.
+     */
+    private static Hir.RawKind rawKind(Ast.RawKind kind) {
+        return switch (kind) {
+            case TEXT -> Hir.RawKind.TEXT;
+            case INT -> Hir.RawKind.INT;
+            case BOOL -> Hir.RawKind.BOOL;
+            case DECIMAL -> Hir.RawKind.DECIMAL;
+            case DATE -> Hir.RawKind.DATE;
+            case TIME -> Hir.RawKind.TIME;
+            case DATETIME -> Hir.RawKind.DATETIME;
+            case INSTANT -> Hir.RawKind.INSTANT;
         };
     }
 
@@ -1272,7 +1297,7 @@ public final class Resolve {
             case Ast.BoolLit x -> new Hir.BoolLit(x.value(), x.pos(), x.region());
             case Ast.Unreachable x -> new Hir.Unreachable(x.reason(), x.pos(), x.region());
             case Ast.Neg x -> new Hir.Neg(expr(x.operand(), bound), x.pos(), x.region());
-            case Ast.Binary x -> new Hir.Binary(BinOp.valueOf(x.op().name()),
+            case Ast.Binary x -> new Hir.Binary(binOp(x.op()),
                     expr(x.left(), bound), expr(x.right(), bound), x.origin(), x.pos(), x.region());
             case Ast.If x -> new Hir.If(expr(x.cond(), bound), expr(x.then(), bound),
                     expr(x.els(), bound), x.origin(), x.pos(), x.region());
@@ -1288,6 +1313,37 @@ public final class Resolve {
             // answers. One here is a tree that has been below this boundary and come back.
             case Ast.Expansion x -> throw new IllegalStateException(
                     "an expansion reached resolution at " + x.pos());
+        };
+    }
+
+    /**
+     * Which operator a written one is, in the vocabulary below this boundary.
+     *
+     * <p>An operator the parser can write and an operator the rest of the compiler gives a meaning
+     * to are separate types on purpose, and a written one becomes a meant one here or nowhere. Both
+     * sides are spelled out so that an operator added to what may be written stops the compile
+     * until somebody says which meaning it denotes — including when the two are given the same
+     * name, which says how they are typed and nothing about what they denote. The same reason
+     * {@code AstBuilder} writes out what each piece of syntax is an operator for.
+     *
+     * <p>The switch is an expression and has no {@code default} for that reason. A {@code default}
+     * would answer for an operator nobody had decided about, which is the whole of what this stops.
+     */
+    private static BinOp binOp(Ast.BinOp op) {
+        return switch (op) {
+            case EQ -> BinOp.EQ;
+            case NE -> BinOp.NE;
+            case LT -> BinOp.LT;
+            case LE -> BinOp.LE;
+            case GT -> BinOp.GT;
+            case GE -> BinOp.GE;
+            case AND -> BinOp.AND;
+            case OR -> BinOp.OR;
+            case ADD -> BinOp.ADD;
+            case SUB -> BinOp.SUB;
+            case MUL -> BinOp.MUL;
+            case DIV -> BinOp.DIV;
+            case CONCAT -> BinOp.CONCAT;
         };
     }
 

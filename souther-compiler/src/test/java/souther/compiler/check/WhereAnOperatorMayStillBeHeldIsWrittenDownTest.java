@@ -184,10 +184,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " the answer is a newtype"),
             new Held("souther.compiler.check.Terms.asWrittenValue",
                     "writes it back into the syntax a value is rendered as"),
+            new Held("souther.compiler.check.Resolve.binOp",
+                    "says which operator the parsed tree's own denotes, the one place the two are"
+                            + " held together: both sides written out, so an operator added to what"
+                            + " may be written stops the compile until somebody decides"),
             new Held("souther.compiler.check.Resolve.expr",
-                    "translates the parsed tree's own operator into this one, by the name each is"
-                            + " spelled with: two enums held together by a string rather than by"
-                            + " anything that would fail to compile"),
+                    "writes what that answered into the node the resolved tree holds"),
 
             // Handing it on to something that answers about it.
             new Held("souther.compiler.check.HelperParams.BodyTyping.visit",
