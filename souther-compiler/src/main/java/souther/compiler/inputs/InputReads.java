@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
@@ -275,21 +274,6 @@ public final class InputReads {
         return InputPath.of(e, names, symbols);
     }
 
-    /**
-     * What {@code name} was given on the way here, or null where it was given nothing and where it
-     * is something else ({@link BindingRole.Alias}).
-     *
-     * <p>For a reader following a name to the expression behind it without asking what the
-     * expression comes to — reading a condition through the binding that names it, where a name
-     * standing for a truth is that truth. What it may not do is decide for itself that being bound
-     * beats being a parameter or an element, which is why the question is asked here.
-     */
-    public Core given(Core.Read name) {
-        return name.binding() != null
-                && names.roleOf(name.binding()) instanceof BindingRole.Alias(var value)
-                ? value : null;
-    }
-
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
      *  where the walk answered no place of it ({@link ElementProjection}). */
     ElementProjection projectionAt(BindingId binding) {
@@ -367,23 +351,11 @@ public final class InputReads {
             case BindingRole.Alias(var value) -> value == read ? new ReadMeaning.Unknown()
                     : new ReadMeaning.Through(new Denotation(value, this));
             case BindingRole.Unknown _ -> new ReadMeaning.Unknown();
-            // A parameter stands at its position, so the walk above answered for it and nothing
-            // reaches here. Arriving means the roots this answers from and the roots that walk read
-            // are not the same roots, which is one reading of one body giving two answers.
-            case BindingRole.Root(var at) -> throw new ARootThatReachedNoPosition(read, at);
+            // A parameter is the position it is the name of. The walk above reaches it by the same
+            // fact, so nothing gets here — and what would be said if anything did is what is said
+            // there, rather than a failure invented to fill the arm.
+            case BindingRole.Root(var at) -> new ReadMeaning.Position(at);
         };
-    }
-
-    /** A name this answers for as a parameter, which the walk after a position did not place. */
-    static final class ARootThatReachedNoPosition extends IllegalStateException
-            implements TheCompilerDisagreesWithItself {
-
-        private static final long serialVersionUID = 1L;
-
-        ARootThatReachedNoPosition(Core.Read read, TermPath at) {
-            super(read.binding() + " is the name of " + at + ", and reading " + read.name()
-                    + " reached no position");
-        }
     }
 
     /**

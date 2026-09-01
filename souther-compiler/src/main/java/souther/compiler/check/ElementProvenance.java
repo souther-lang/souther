@@ -255,7 +255,7 @@ public final class ElementProvenance {
                 BindingId movedEnd = edge == null ? null : renaming.get(edge.container());
                 if (movedEnd != null) {
                     refuseSecond(here, inducedEdges.containsKey(here)
-                            ? inducedEdges.get(here) : edges.get(here));
+                            ? inducedEdges.get(here) : edges.get(here), movedEnd);
                     // An edge added is one this has to say how a copy carries, which is with the
                     // kind it was: the two ends move and what stands between them does not.
                     inducedEdges.put(here, switch (edge) {
@@ -267,7 +267,7 @@ public final class ElementProvenance {
                 BindingId movedWalked = walked == null ? null : renaming.get(walked);
                 if (movedWalked != null) {
                     refuseSecond(here, inducedProjections.containsKey(here)
-                            ? inducedProjections.get(here) : projections.get(here));
+                            ? inducedProjections.get(here) : projections.get(here), movedWalked);
                     inducedProjections.put(here, movedWalked);
                 }
             });
@@ -275,10 +275,10 @@ public final class ElementProvenance {
             projections.putAll(inducedProjections);
         }
 
-        private static void refuseSecond(BindingId here, Object already) {
+        private static void refuseSecond(BindingId here, Object already, Object saying) {
             if (already != null) {
                 throw new IllegalStateException("two facts landed on one binding: " + here
-                        + " was said of " + already + " before this copy said another");
+                        + " was said of " + already + " before this copy said " + saying);
             }
         }
 

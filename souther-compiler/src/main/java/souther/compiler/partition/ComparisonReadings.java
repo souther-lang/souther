@@ -230,7 +230,8 @@ final class ComparisonReadings {
                                          InputReads reads, List<OnTheWay> assumed,
                                          Symbols symbols) {
         List<OnTheWay> out = new ArrayList<>(assumed);
-        out.addAll(ReachingCuts.stating(Condition.of(node, reads), inputs, holding, symbols));
+        out.addAll(ReachingCuts.stating(Condition.of(node, reads, symbols), inputs, holding,
+                symbols));
         return List.copyOf(out);
     }
 
