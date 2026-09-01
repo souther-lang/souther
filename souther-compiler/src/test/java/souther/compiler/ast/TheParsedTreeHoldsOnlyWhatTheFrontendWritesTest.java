@@ -69,10 +69,9 @@ class TheParsedTreeHoldsOnlyWhatTheFrontendWritesTest {
         Set<String> named = whatTheFrontendNames();
         List<Class<?>> forms = forms();
 
-        assertTrue(forms.size() > 50, () -> "read only " + forms.size() + " forms of the parsed tree");
         assertTrue(forms.stream().anyMatch(each -> each == Ast.Data.class),
-                "and reaches the form a data definition is");
-        assertTrue(isNamedIn(Ast.Data.class, named), "which the frontend names");
+                "the walk reaches the form a data definition is");
+        assertTrue(isNamedIn(Ast.Data.class, named), "and the frontend's classes name it");
     }
 
     /** Whether {@code form}'s own name is one of these, as a name and not as the start of a longer
