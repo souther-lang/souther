@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmObligation;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.ArmVocabulary;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
@@ -229,10 +231,16 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                 wrong.add("pairs: " + partition.pairs().counts().unknown() + " untried");
             }
 
+            // Per arm, the way the boundary above is per point: an arm this account calls unmet is
+            // one it read every row against and found nothing going through, so the sentence is
+            // asserted there and nowhere else. Where a row of this behavior did not come back the
+            // arms it may have lit come back undecided instead, which asserts nothing.
             Adequacy.BranchEvidence branch = compilation.db()
                     .ask(new Adequacy.BranchCoverage(module)).value().get("take");
-            if (branch.measured() instanceof Measurement.Complete<?> && !branch.unreached().orElseThrow().isEmpty()) {
-                wrong.add("branch: " + branch.unreached().orElseThrow().size() + " unreached");
+            if (branch.measured().made().isPresent()) {
+                for (ArmObligation.Counted arm : branch.arms().unmet()) {
+                    wrong.add("branch: " + ArmVocabulary.label(arm.display()) + " unreached");
+                }
             }
 
             assertEquals(List.of(), wrong, module + " asserted a gap over rows it did not read");
@@ -322,7 +330,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                 "a boundary nothing is at");
         assertTrue(partition.pairs().counts().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
-                .get("take").unreached().orElseThrow().isEmpty(), "an arm nothing goes through");
+                .get("take").arms().unmet().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(module, true)),
                 Map.of(), SourceNameResolver.identity()).text().isEmpty(),

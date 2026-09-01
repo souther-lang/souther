@@ -63,6 +63,59 @@ public sealed interface About {
     }
 
     /**
+     * A finding about one thing a row is owed for, which is what carries its identity.
+     *
+     * <p>Which findings these are is answered here and nowhere else, for the reason {@link OfARule}
+     * is answered here: read off a list of kinds, a writer has to be told again every time one is
+     * added, and a kind added and not told writes no identity — which is two findings about two
+     * things coming out identical in every field with nothing to join them by. A shape that is
+     * about something a row is owed for says so by being one of these.
+     *
+     * <p>Two questions and not one. Whether a subject names an obligation is this one, and it is
+     * the subject's own; which account's shape that identity has is {@link ObligationIdentity}'s,
+     * and it is closed. A writer that asked both at once — matching the kinds that carry an
+     * identity and rendering each — would own the classification twice over, which is how an arm
+     * came to be named in a document by its label and its place after the account had been given an
+     * identity of its own.
+     */
+    sealed interface OfAnObligation extends About {
+
+        /** What tells this obligation from every other, in the shape its account keeps. */
+        ObligationIdentity obligationIdentity();
+    }
+
+    /**
+     * What tells one thing a row is owed for from every other, over the accounts that keep such
+     * things.
+     *
+     * <p>Closed, so that a surface writing one writes every shape there is: an account added
+     * arrives at each of them as a case to decide about rather than as a value that falls through.
+     * What the shapes have in common is what they are for and not what they hold — a line's point
+     * is a point of an authored line at a level, an arm's is the fork and which of its ways — so
+     * there is nothing here to lift out of them.
+     */
+    sealed interface ObligationIdentity {
+
+        /** A point of a line, which is what the border accounts are owed at. */
+        record OfALine(souther.compiler.partition.BorderObligationPoint point)
+                implements ObligationIdentity {
+
+            public OfALine {
+                java.util.Objects.requireNonNull(point, "an obligation is told apart by something");
+            }
+        }
+
+        /** An arm of a body, which is what the arm account is owed at. */
+        record OfAnArm(souther.compiler.coverage.CoverageSites.Obligation arm)
+                implements ObligationIdentity {
+
+            public OfAnArm {
+                java.util.Objects.requireNonNull(arm, "an obligation is told apart by something");
+            }
+        }
+    }
+
+    /**
      * A point of a line no row stands at, wherever the line is read.
      *
      * <p>The two arms below are one grain. A point is owed once — a line a body's rule drew is read
@@ -76,10 +129,15 @@ public sealed interface About {
      * what it is on. The rest — the role, what the readings came to, which rule — is asked here of
      * both, so that a reader sorting findings or writing a code asks once.
      */
-    sealed interface ABorderObligation extends About {
+    sealed interface ABorderObligation extends OfAnObligation {
 
         /** What every reading of the point came to, which is what the finding stands on. */
         BorderObligationPointAssessment obligation();
+
+        @Override
+        default ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfALine(obligation().point());
+        }
 
         /** Which of a border's four points this is about, which the point itself says. */
         default souther.compiler.partition.PointRole role() {
@@ -276,11 +334,25 @@ public sealed interface About {
         }
     }
 
-    /** An arm of the body no row goes through. */
+    /**
+     * An arm of the body no row goes through.
+     *
+     * <p>The occurrence a reader is sent to, and the arm it is one of. Those are two things: a
+     * behavior with two {@code guard}s writes two arms called {@code else}, and a fork whose caller
+     * supplies the rule is one arm per rule handed in — so two of them can be the same word at the
+     * same place and be two things to cover. What a reader is shown comes off the site; what tells
+     * one from another is the obligation, and this says so by being an {@link OfAnObligation}.
+     */
     record AnArmNoRowGoesThrough(
-            souther.compiler.coverage.CoverageSites.Site arm) implements About {
+            souther.compiler.coverage.CoverageSites.Site arm) implements OfAnObligation {
+
         public AnArmNoRowGoesThrough {
             java.util.Objects.requireNonNull(arm, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfAnArm(arm.obligation());
         }
     }
 }

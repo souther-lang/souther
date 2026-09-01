@@ -62,10 +62,10 @@ class OneDeclarationIsReachedUnderOneNameTest {
                 .ask(new Adequacy.BranchCoverage("ex.app")).value().get("twice");
         assertNotNull(twice, "the models under test compile");
 
-        assertEquals(8, twice.arms().obligations(),
+        assertEquals(8, twice.arms().counted(),
                 "the other module's fork is one obligation per rule handed to it, beside the two"
                         + " written here");
-        assertEquals(List.of(), twice.unsettledDecisions(),
-                () -> "and which copy each is was said: " + twice.unsettledDecisions());
+        assertEquals(List.of(), twice.arms().exclusions(),
+                () -> "and which copy each is was said: " + twice.arms().exclusions());
     }
 }

@@ -68,8 +68,8 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
     @Test
     void twoCallsOfOneCombinatorDoNotShareTheirArms() {
         Adequacy.BranchEvidence twice = armsOfTwice();
-        assertEquals(4, twice.arms().all().size(), "each call is emitted and probed on its own");
-        assertEquals(4, twice.arms().obligations(),
+        assertEquals(4, occurrencesOf(twice), "each call is emitted and probed on its own");
+        assertEquals(4, twice.arms().counted(),
                 "and each is a thing to cover, since each decides a different predicate");
     }
 
@@ -77,10 +77,16 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
     @Test
     void aPredicateNothingRanIsNamed() {
         Adequacy.BranchEvidence twice = armsOfTwice();
-        assertEquals(2, twice.arms().coveredObligations(),
+        assertEquals(2, twice.arms().covered(),
                 "the row reached the first call's two arms and no others");
-        assertEquals(2, twice.unreached().orElseThrow().size(),
-                () -> "and the second call's are named: " + twice.unreached().orElseThrow());
+        assertEquals(2, twice.arms().unmet().size(),
+                () -> "and the second call's are named: " + twice.arms().unmet());
+    }
+
+    /** How many copies of its arms the body holds, which is not how many arms it has. */
+    private static int occurrencesOf(Adequacy.BranchEvidence branch) {
+        return branch.arms().all().stream()
+                .mapToInt(arm -> arm.occurrences().size()).sum();
     }
 
     /**
@@ -116,8 +122,8 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get("both");
         assertNotNull(both, "the model under test compiles");
 
-        assertTrue(both.arms().all().size() > both.arms().obligations(),
+        assertTrue(occurrencesOf(both) > both.arms().counted(),
                 () -> "the helper is spliced in twice and its arms are one: "
-                        + both.arms().all().size() + " occurrences, " + both.arms().obligations() + " keys");
+                        + occurrencesOf(both) + " occurrences, " + both.arms().counted() + " keys");
     }
 }
