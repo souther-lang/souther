@@ -41,8 +41,19 @@ public sealed interface Arithmetic {
      */
     record TheOperator(BinOp op) implements Arithmetic {
 
+        /**
+         * Which operators a row may state, said here rather than trusted of the rows.
+         *
+         * <p>What this declares is that a library operation computes what an operator computes,
+         * and every reader of it takes the operation to answer a number. A row naming an operator
+         * that answers something else would put that operation's value where a number is read.
+         */
         public TheOperator {
             java.util.Objects.requireNonNull(op, "this one names an operator");
+            if (!op.answersANumber()) {
+                throw new IllegalArgumentException(
+                        "an operation computing what an operator computes answers a number: " + op);
+            }
         }
 
         @Override
