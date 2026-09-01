@@ -5,9 +5,13 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
+import java.lang.classfile.CodeElement;
 import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
+import java.lang.classfile.Opcode;
+import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.classfile.instruction.TypeCheckInstruction;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -21,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Everywhere an operator can still reach, and what each of them wants it for.
+ * Everywhere an operator can be, and what each of them wants one for.
  *
  * <p>Beside {@link AnOperatorIsAskedWhatItPlacesInOnePlaceTest}, which says how often an operator
  * may be read for what it places and how often a relation may be written as one. That one holds the
@@ -29,52 +33,52 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * the ground they stand on, so that an operator reaching somewhere new is a line that has to be
  * written down and given a reason.
  *
- * <p>Three lists, because there are three ways to have one. A declaration can carry an operator,
- * which is what a descriptor says. A reading can take one out of a tree, which is an instruction and
- * is where every reading of an operator begins. And a comparison hands out the node it was
- * recognised from, which puts the operator one call away from every reader holding one.
+ * <p><b>Two ways and no third.</b> An operator is in a method because it was handed in — which is
+ * what a signature says — or because it was fetched: answered by a call, read out of a field, or
+ * named as one of the constants. Every reading of an operator anywhere begins with one of those,
+ * and there is no other way to come by one, so the two lists below are the whole of where an
+ * operator can be.
+ *
+ * <p><b>And nothing here works out what was done with it.</b> A switch, a constant compared
+ * against, a set asked for membership and a map asked for an answer are four spellings of one act,
+ * and a check that knew three of them would be a check somebody could write the fourth past. So
+ * what is fixed is the having, which is an instruction and a descriptor, and what each holder does
+ * with it is the reason written beside it.
+ *
+ * <p>Which puts the copiers in the list. A pass that rebuilds a tree fetches every operator it
+ * meets and writes each one into the node it is making, and there is nothing to say about that
+ * beyond saying it — a line reading "copies it into the node it is rebuilding" is a line anyone who
+ * made it do more would have to edit.
  *
  * <p><b>Lists and not counts.</b> A number stays right while one line goes and another arrives, and
  * the arriving one is exactly what these are for.
- *
- * <p>What none of them does is work out whether a reading <em>decided</em> anything on what it took.
- * A switch, a constant compared against, a set asked for membership and a map asked for an answer
- * are four spellings of one act, and a check that knew three of them would be a check somebody could
- * write the fourth past. So what is fixed is the taking, and what each taker does with it is the
- * reason written beside it.
  */
 class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     private static final String BIN_OP = "Lsouther/compiler/types/BinOp;";
 
-    private static final String COMPARISON = "souther/compiler/check/Comparison";
-
-    private static final String BINARY = "souther/compiler/core/Core$Binary";
-
-    private static final String HIR_BINARY = "souther/compiler/ast/Hir$Binary";
-
-    /** A method or a field that carries an operator, and what it carries one for. */
+    /** Something that has an operator, and what it has one for. */
     private record Held(String what, String why) { }
 
-    private static final List<Held> MAY_HOLD = List.of(
+    /**
+     * What is handed an operator: a field it is stored in, and a method a caller passes one to.
+     *
+     * <p>Written {@code owner#field} and {@code owner.method}.
+     */
+    private static final List<Held> HANDED_IN = List.of(
             new Held("souther.compiler.ast.Hir.Binary#op",
                     "the resolved tree, which is where an operator is written down"),
-            new Held("souther.compiler.ast.Hir.Binary.op", "the same, read"),
             new Held("souther.compiler.core.Core.Binary#op",
                     "the tree a check produces, which carries what the source wrote"),
-            new Held("souther.compiler.core.Core.Binary.op", "the same, read"),
 
             new Held("souther.compiler.check.ComparisonPlacement.of",
                     "the one reading of an operator for what it places"),
-            new Held("souther.compiler.check.ComparisonWriting.operatorStating",
-                    "the one writing of a relation as an operator, for a comparison composed out"
-                            + " of what the rules proved"),
 
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "which operands an operator takes and what it answers, which is a question"
                             + " about the operator itself"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
-                    "the type the other operand has to have, likewise"),
+                    "what the operator asks of one operand, given the one beside it"),
             new Held("souther.compiler.check.HelperParams.BodyTyping.visitOperand",
                     "types an operand under the operator it stands beside"),
             new Held("souther.compiler.check.ConstEval.arith",
@@ -95,21 +99,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.reading.Meetings.run",
                     "walks the operands under the operator they are written with"),
 
-            new Held("souther.compiler.check.DischargeRules.operator",
-                    "which operator a library operation is defined as"),
             new Held("souther.compiler.semantics.Arithmetic.TheOperator#op",
                     "a library operation declared to compute what an operator computes"),
-            new Held("souther.compiler.semantics.Arithmetic.TheOperator.op", "the same, read"),
             new Held("souther.compiler.semantics.NumericResult.TheOtherCaseWhen#op",
                     "a library fact stating the case an operation answers something else in, as a"
                             + " comparison against a number: an operator standing for what it"
                             + " means, in a table nothing recognises a comparison out of"),
-            new Held("souther.compiler.semantics.NumericResult.TheOtherCaseWhen.op",
-                    "the same, read"),
 
             new Held("souther.compiler.check.NumericMeaning.Operator#op",
                     "an arithmetic expression keyed by the operator written in it"),
-            new Held("souther.compiler.check.NumericMeaning.Operator.op", "the same, read"),
             new Held("souther.compiler.check.Terms.written",
                     "makes the term a written binary is, off the operator it was written with"),
             new Held("souther.compiler.check.Term.Interner.operator",
@@ -117,48 +115,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " reading of a guard now takes from what was placed, kept here in the"
                             + " operator's own words"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared#op",
-                    "the operator an outcome was written with, which is what a report shows"),
-            new Held("souther.compiler.coverage.SourceOutcome.Compared.op", "the same, read"));
+                    "the operator an outcome was written with, which is what a report shows"));
 
-    /** The one walk that has both, and what each of them is. */
-    private static final Held WALKS_TO_A_COMPARISON = new Held(
-            "souther.compiler.partition.EnsuresThresholds.stated",
-            "the walk down a clause reaches a comparison partway. The operators it reads are a"
-                    + " conjunction's and a disjunction's, both on statements it has not recognised"
-                    + " as comparisons and neither of which it goes on to read — a conjunction is"
-                    + " walked into and what a disjunction states is neither of its sides. The node"
-                    + " it takes from the comparison it did recognise is where a finding is filed,"
-                    + " and nothing asks it for an operator.");
-
-    /**
-     * Everywhere an operator is taken out of a tree, which is where a reading of one can begin.
-     *
-     * <p>What the descriptor list beside this cannot see. A reading that takes the operator out of
-     * a node and answers from it there and then puts one in no signature and holds one in no field
-     * — a table it looks the answer up in is a {@code Map} once the types are erased — so a reading
-     * written that way arrives in nothing that is declared. That is the shape this whole change is
-     * about, and the one it would have been least able to stop.
-     *
-     * <p><b>Every taking, and not the ones that look like decisions.</b> Whether a method decides
-     * anything on what it took is not something a class file says: a switch, a constant compared
-     * against, a set asked for membership and a map asked for an answer are four spellings of one
-     * act, and a check that knew three of them would be a check somebody could write the fourth
-     * past. So what is fixed here is the taking, which is one instruction and has no fourth
-     * spelling, and what each taker does with it is written beside it.
-     *
-     * <p>Which puts the copiers in the list. A pass that rebuilds a tree reads every operator it
-     * meets and writes each one back into the node it is making, and there is nothing to say about
-     * that beyond saying it — a line that reads "copies it into the node it is rebuilding" is a
-     * line that would have to be edited by anyone who made it do more.
-     */
-    @Test
-    void everyOperatorTakenOutOfATreeIsWrittenDown() {
-        assertEquals(declared(TAKEN_FROM_A_TREE), declaredFrom(takesAnOperator()),
-                "an operator taken out of a node is a line here with what is done with it."
-                        + " What each of these takes one for: " + why(TAKEN_FROM_A_TREE));
-    }
-
-    private static final List<Held> TAKEN_FROM_A_TREE = List.of(
+    /** What fetches an operator: answered by a call, read out of a field, or named as a constant. */
+    private static final List<Held> FETCHED = List.of(
             // Recognising a comparison, which is what carries the claim to everything below.
             new Held("souther.compiler.check.Comparison.of",
                     "asks what the operator places, for a binary of a checked body"),
@@ -166,6 +126,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the same, for a clause of a data"),
             new Held("souther.compiler.inputs.ComparedNumber.of",
                     "the same, for any binary a walk over the input space met"),
+            new Held("souther.compiler.check.Conditions.asOrderComparison",
+                    "takes back the operator a composed comparison is written with, which is the"
+                            + " one place a relation becomes one"),
 
             // Rebuilding a tree, which carries the operator across unchanged.
             new Held("souther.compiler.ast.Hir.atSlots",
@@ -186,6 +149,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " the answer is a newtype"),
             new Held("souther.compiler.check.Terms.asWrittenValue",
                     "writes it back into the syntax a value is rendered as"),
+            new Held("souther.compiler.check.Resolve.expr",
+                    "translates the parsed tree's own operator into this one, by the name each is"
+                            + " spelled with: two enums held together by a string rather than by"
+                            + " anything that would fail to compile"),
 
             // Handing it on to something that answers about it.
             new Held("souther.compiler.check.HelperParams.BodyTyping.visit",
@@ -195,12 +162,27 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.namedByRule", "asks whether it computes a number"),
             new Held("souther.compiler.check.Terms.lambda$naming$1",
                     "hands it to the interner, which says which canonical term the comparison is"),
+            new Held("souther.compiler.check.Terms.asOperator",
+                    "reads the operator an arithmetic meaning was keyed by"),
+            new Held("souther.compiler.check.Terms.theOneOf", "the same, for the meaning it interns"),
+            new Held("souther.compiler.check.Terms.openedKey", "the same, for the term it keys"),
+            new Held("souther.compiler.check.Terms.recipeFor", "the same, for the recipe it names"),
+            new Held("souther.compiler.check.NumericMeanings.of",
+                    "keys an arithmetic meaning by the operator a library operation computes"),
+            new Held("souther.compiler.check.DischargeRules.formOperations",
+                    "asks which operator a library operation is defined as"),
             new Held("souther.compiler.coverage.CoverageSites.Walk.number",
                     "records the operator an outcome was written with, which is what a report shows"),
+            new Held("souther.compiler.report.ArmVocabulary.label",
+                    "writes the operator into the words a report shows for an arm"),
             new Held("souther.compiler.reading.Meetings.run",
                     "gathers the operands one operator reaches, which is what it is asked about"),
             new Held("souther.compiler.check.PathReachability.unanswered",
                     "names the operator in what it says went unanswered"),
+            new Held("souther.compiler.check.TheOtherCase.conditionAt",
+                    "composes the comparison a library fact states its other case by, out of the"
+                            + " operator that fact holds: what is written there is read back as a"
+                            + " comparison by everything downstream, and nothing recognised it"),
 
             // Which operators put conditions together, and what each says about its two halves.
             new Held("souther.compiler.check.ClauseExpr.of",
@@ -277,118 +259,139 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " named whatever it states, and anything else is the one value it is"),
             new Held("souther.compiler.check.Relates.twoPositions",
                     "asks the enum whether the operator compares, for a rule that stands one"
-                            + " position against another"));
+                            + " position against another"),
 
-    /** Every method that takes an operator out of a tree. */
-    private static List<String> takesAnOperator() {
+            // Handing back the operator a value of one's own holds.
+            new Held("souther.compiler.ast.Hir.Binary.op", "hands back what the node holds"),
+            new Held("souther.compiler.core.Core.Binary.op", "hands back what the node holds"),
+            new Held("souther.compiler.check.NumericMeaning.Operator.op",
+                    "hands back the operator an arithmetic meaning is keyed by"),
+            new Held("souther.compiler.coverage.SourceOutcome.Compared.op",
+                    "hands back the operator an outcome was written with"),
+            new Held("souther.compiler.semantics.Arithmetic.TheOperator.op",
+                    "hands back the operator a library operation computes"),
+            new Held("souther.compiler.semantics.NumericResult.TheOtherCaseWhen.op",
+                    "hands back the operator a library fact states its other case by"),
+            new Held("souther.compiler.check.DischargeRules.operator",
+                    "reads the operator a library operation is declared to compute"),
+
+            // Naming a constant, which is the other way to come by one.
+            new Held("souther.compiler.check.ComparisonWriting.operatorStating",
+                    "names the constant a relation is written as, which is the one place a"
+                            + " composed comparison is said in the language's own operators"),
+            new Held("souther.compiler.check.Conditions.asSizeComparison",
+                    "writes the equality an emptiness check means: a size stood against nought"),
+            new Held("souther.compiler.check.Conditions.canonical",
+                    "writes the two comparisons a fact is keyed by, which what was placed says"
+                            + " which of and which way round"),
+            new Held("souther.compiler.check.Terms.repeating",
+                    "writes the multiplication a repeated accumulation comes to"),
+            new Held("souther.compiler.semantics.OperationFacts.declared",
+                    "the library's own table, naming the operator each arithmetic operation"
+                            + " computes"),
+            new Held("souther.compiler.semantics.OperationFacts.computesInTheCaseCarrying",
+                    "the same, for an operation whose other case is stated as a comparison"),
+            new Held("souther.compiler.check.ArithmeticCheck.of",
+                    "names the constants it has rules for, against the operator it was handed"),
+            new Held("souther.compiler.check.BinaryElaborator.operandBeside",
+                    "names the two that take truths and the two that scale a newtype"),
+            new Held("souther.compiler.check.Terms.isArith",
+                    "names the four constants it calls arithmetic, which is a membership the enum"
+                            + " does not own"),
+            new Held("souther.compiler.partition.Condition.combines",
+                    "names the two constants it calls joining, which is a membership the enum"
+                            + " already answers for under another name"),
+            new Held("souther.compiler.check.Term.Interner.operator",
+                    "names the constants the canonical terms are keyed by, which is the"
+                            + " six-into-three the reading of a guard now takes from what was"
+                            + " placed"));
+
+    @Test
+    void everythingHandedAnOperatorIsWrittenDownWithAReason() {
+        assertEquals(declared(HANDED_IN), found(handedAnOperator()),
+                "an operator handed somewhere new is a line to be written here with what it is"
+                        + " wanted for. What each of these is handed one for: " + why(HANDED_IN));
+    }
+
+    @Test
+    void everythingFetchingAnOperatorIsWrittenDownWithAReason() {
+        assertEquals(declared(FETCHED), found(fetchesAnOperator()),
+                "an operator fetched somewhere new is a line to be written here with what is done"
+                        + " with it. What each of these fetches one for: " + why(FETCHED));
+    }
+
+    /** Every field whose type is an operator, and every method whose signature names one. */
+    private static List<String> handedAnOperator() {
         List<String> out = new ArrayList<>();
         forEachClass((owner, model) -> {
             for (MethodModel method : model.methods()) {
-                boolean takes = false;
-                for (java.lang.classfile.CodeElement element
+                String name = method.methodName().stringValue();
+                // What it is given, and not what it answers: a method answering an operator got one
+                // from somewhere, which is the other list.
+                if (method.methodTypeSymbol().parameterList().stream()
+                        .anyMatch(each -> each.descriptorString().equals(BIN_OP))
+                        && !generated(name)) {
+                    out.add(owner + "." + name);
+                }
+            }
+            for (FieldModel field : model.fields()) {
+                String name = field.fieldName().stringValue();
+                if (field.fieldType().stringValue().contains(BIN_OP) && !generated(name)) {
+                    out.add(owner + "#" + name);
+                }
+            }
+        });
+        return out;
+    }
+
+    /**
+     * Every method in which an operator arrives without being handed in: answered by a call, read
+     * out of a field, or named as a constant.
+     *
+     * <p>The three instructions that put one on the stack, which is the whole of how a method comes
+     * by an operator it was not given.
+     */
+    private static List<String> fetchesAnOperator() {
+        List<String> out = new ArrayList<>();
+        forEachClass((owner, model) -> {
+            for (MethodModel method : model.methods()) {
+                boolean fetches = false;
+                for (CodeElement element
                         : method.code().map(code -> code.elementList()).orElse(List.of())) {
                     if (element instanceof InvokeInstruction call) {
-                        takes |= call.typeSymbol().returnType().descriptorString().equals(BIN_OP)
-                                && (call.owner().asInternalName().equals(BINARY)
-                                        || call.owner().asInternalName().equals(HIR_BINARY));
+                        fetches |= names(call.typeSymbol().returnType().descriptorString());
+                    }
+                    if (element instanceof FieldInstruction field) {
+                        fetches |= names(field.typeSymbol().descriptorString());
+                    }
+                    // What a collection or anything else generic hands back is an Object until it
+                    // is cast, so the cast is where the operator arrives — and a table held in a
+                    // Map is exactly that.
+                    if (element instanceof TypeCheckInstruction cast
+                            && cast.opcode() == Opcode.CHECKCAST) {
+                        fetches |= names("L" + cast.type().asInternalName() + ";")
+                                || names(cast.type().asInternalName());
                     }
                 }
-                if (takes && !method.methodName().stringValue().startsWith("<")) {
+                if (fetches && !generated(method.methodName().stringValue())) {
                     out.add(owner + "." + method.methodName().stringValue());
                 }
             }
         });
-        out.sort(String::compareTo);
         return out;
     }
 
-    @Test
-    void everythingCarryingAnOperatorIsWrittenDownWithAReason() {
-        assertEquals(declared(MAY_HOLD), carriers(),
-                "an operator reaching somewhere new is a line to be written here with what it is"
-                        + " wanted for. What each of these carries one for: " + why(MAY_HOLD));
+    /** Whether a descriptor names an operator, an array of them included: what {@code values()}
+     *  hands back is an array, and an operator taken out of one arrived with it. */
+    private static boolean names(String descriptor) {
+        return descriptor.contains(BIN_OP) || descriptor.equals("souther/compiler/types/BinOp");
     }
 
-    /**
-     * And a comparison's node and an operator are not both to hand, bar one place that says why.
-     *
-     * <p>A comparison holds its node, because what a body is at is a question about the tree. So
-     * the operator is one call away from every reader that has one, and a reader that took it would
-     * be answering from the operator below the point where the question was settled — which is what
-     * holding the claim exists to stop, and what no count of the crossings would see.
-     *
-     * <p>Asked of what a method invokes, which is as far as a class file says. Two calls in one
-     * body are not proof that the second read what the first handed back; they are proof that
-     * whoever wrote it had both to hand, which is what has to be written down.
-     */
-    @Test
-    void aComparisonsNodeAndAnOperatorAreNotBothToHand() {
-        assertEquals(List.of(WALKS_TO_A_COMPARISON.what()), bothInOneMethod(),
-                WALKS_TO_A_COMPARISON.why());
-    }
-
-    /**
-     * And who takes the node out of a comparison, which is how the operator stays one call away.
-     *
-     * <p>Three things are wanted of it and none of them is what the comparison placed: the two
-     * sides the rule names, the whole expression to walk, and the place in the tree a reader joins
-     * on or files a finding at. The last is why the node is held at all — a body is at a place, and
-     * a place is a question about the tree — and it is what keeps the list from being closed by
-     * handing out the sides instead.
-     *
-     * <p>Most of these hand the node on rather than read it, which is what makes the list worth
-     * keeping: what travels is the whole node, and every reader it reaches has the operator.
-     */
-    @Test
-    void whoTakesTheNodeOutOfAComparisonIsWrittenDown() {
-        assertEquals(declared(TAKES_THE_NODE), declaredFrom(callersOfTheNode()),
-                "a reader taking the node has both sides and the operator; what each of these"
-                        + " wants it for: " + why(TAKES_THE_NODE));
-    }
-
-    /** Everything that asks a comparison for its node, and what for. */
-    private static final List<Held> TAKES_THE_NODE = List.of(
-            new Held("souther.compiler.coverage.ComparisonCatalog.Catalogued.node",
-                    "hands the node back, for a reader joining on the tree"),
-            new Held("souther.compiler.coverage.CoverageSites.Plan.requireIsACatalogued",
-                    "looks the node up in the catalog, which is keyed by it, and names its place"
-                            + " where the two disagree"),
-            new Held("souther.compiler.inputs.ComparedNumber.lineOf",
-                    "hands the node to the reading that says which of its sides names a position"),
-            new Held("souther.compiler.partition.AffineReading.read",
-                    "reads the two sides as forms, and hands the node to the reading of which side"
-                            + " the rule is about"),
-            new Held("souther.compiler.partition.ComparedTerms.asWritten",
-                    "reads the two sides for the terms named in them"),
-            new Held("souther.compiler.partition.ComparisonAssessment.of",
-                    "walks the whole expression for whether the answer is read anywhere in it, and"
-                            + " hands it on to the reading of what it cuts"),
-            new Held("souther.compiler.partition.ComparisonReadings.Reading.at",
-                    "hands the node back, for a reader joining on the tree"),
-            new Held("souther.compiler.partition.Condition.Compares.at",
-                    "hands the node back as the expression the condition is"),
-            new Held("souther.compiler.partition.Cutting.asWritten",
-                    "hands the node to the reading of what each place is left with"),
-            new Held("souther.compiler.partition.EnsuresThresholds.stated",
-                    "files a finding at the node"));
-
-    private static List<String> callersOfTheNode() {
-        List<String> out = new ArrayList<>();
-        forEachClass((owner, model) -> {
-            for (MethodModel method : model.methods()) {
-                for (java.lang.classfile.CodeElement element
-                        : method.code().map(code -> code.elementList()).orElse(List.of())) {
-                    if (element instanceof InvokeInstruction call
-                            && call.owner().asInternalName().equals(COMPARISON)
-                            && call.name().stringValue().equals("at")) {
-                        out.add(owner + "." + method.methodName().stringValue());
-                        break;
-                    }
-                }
-            }
-        });
-        out.sort(String::compareTo);
-        return out;
+    /** A constructor, a class's own setting up, and what the compiler writes for an enum: none of
+     *  them anybody holding an operator. */
+    private static boolean generated(String name) {
+        return name.startsWith("<") || name.startsWith("$")
+                || name.equals("values") || name.equals("valueOf");
     }
 
     private static Map<String, String> declared(List<Held> held) {
@@ -403,64 +406,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
         return out;
     }
 
-    /** A list of identities as a map, so that a missing line reads beside the reasons rather than
-     *  as a place in a list. */
-    private static Map<String, String> declaredFrom(List<String> found) {
+    /** What was found, as a map, so that a missing line reads beside the reasons rather than as a
+     *  place in a list. */
+    private static Map<String, String> found(List<String> what) {
         Map<String, String> out = new TreeMap<>();
-        found.forEach(each -> out.put(each, ""));
+        what.forEach(each -> out.put(each, ""));
         return out;
-    }
-
-    /** Every method and field of the compiler whose type names an operator. */
-    private static Map<String, String> carriers() {
-        Map<String, String> out = new TreeMap<>();
-        forEachClass((owner, model) -> {
-            for (MethodModel method : model.methods()) {
-                String name = method.methodName().stringValue();
-                if (method.methodType().stringValue().contains(BIN_OP) && !synthetic(name)) {
-                    out.put(owner + "." + name, "");
-                }
-            }
-            for (FieldModel field : model.fields()) {
-                String name = field.fieldName().stringValue();
-                if (field.fieldType().stringValue().contains(BIN_OP) && !synthetic(name)) {
-                    out.put(owner + "#" + name, "");
-                }
-            }
-        });
-        return out;
-    }
-
-    /** The methods that reach both a comparison's node and an operator on one. */
-    private static List<String> bothInOneMethod() {
-        List<String> out = new ArrayList<>();
-        forEachClass((owner, model) -> {
-            for (MethodModel method : model.methods()) {
-                boolean node = false;
-                boolean operator = false;
-                for (java.lang.classfile.CodeElement element
-                        : method.code().map(code -> code.elementList()).orElse(List.of())) {
-                    if (element instanceof InvokeInstruction call) {
-                        node |= call.owner().asInternalName().equals(COMPARISON)
-                                && call.name().stringValue().equals("at");
-                        operator |= call.owner().asInternalName().equals(BINARY)
-                                && call.name().stringValue().equals("op");
-                    }
-                }
-                if (node && operator) {
-                    out.add(owner + "." + method.methodName().stringValue());
-                }
-            }
-        });
-        out.sort(String::compareTo);
-        return out;
-    }
-
-    /** The enum's own members and what the compiler generates for a record, neither of which is
-     *  anybody holding an operator. */
-    private static boolean synthetic(String name) {
-        return name.startsWith("<") || name.startsWith("$")
-                || name.equals("values") || name.equals("valueOf");
     }
 
     private interface EachClass {
