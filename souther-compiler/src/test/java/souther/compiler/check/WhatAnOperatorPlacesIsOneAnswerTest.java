@@ -9,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * The algebra of what an operator places, which is what lets a reader stop holding the operator.
@@ -207,6 +208,20 @@ class WhatAnOperatorPlacesIsOneAnswerTest {
                     ComparisonClaim.Cut.satisfiedOn(cut.satisfyingSide(), cut.holdsAtTheValue()),
                     () -> op + " read as a side and built back from it");
         }
+    }
+
+    /**
+     * A cut has a side or is not built.
+     *
+     * <p>The side is one of two answers, and a reference can hold neither. Every reader here asks
+     * which side by comparing it to one of the two, so an absent side is read as the other and an
+     * order nothing stated is answered about all the way down.
+     */
+    @Test
+    void aCutWithNoSideIsRefused() {
+        assertThrows(NullPointerException.class,
+                () -> new ComparisonClaim.Cut(null, true),
+                "a cut whose named value is in neither class is not a cut");
     }
 
     private static ComparisonClaim claim(BinOp op) {

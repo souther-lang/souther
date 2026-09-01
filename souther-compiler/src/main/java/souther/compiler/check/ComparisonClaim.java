@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.Towards;
 
+import java.util.Objects;
+
 /**
  * What a comparison placed on a position's values, read off the comparison and nothing else.
  *
@@ -67,6 +69,18 @@ public sealed interface ComparisonClaim
      */
     record Cut(Towards valueBelongs, boolean holdsAtTheValue) implements ComparisonClaim {
 
+        /**
+         * A side and not the absence of one.
+         *
+         * <p>Which class the number named is in is one of two answers and the language has no way
+         * to say so of a reference, so it is said here. Absent, every reader comparing it to a
+         * side gets the other one — a cut with no side reads as one bounding the values below, and
+         * an order the model never stated goes on being answered about.
+         */
+        public Cut {
+            Objects.requireNonNull(valueBelongs, "which class the number a cut names is in");
+        }
+
         /** Turning the sides round moves the number named to the other class and leaves whether the
          *  rule holds there alone: {@code x <= c} and {@code -x >= -c} are one statement. */
         @Override
@@ -87,9 +101,9 @@ public sealed interface ComparisonClaim
          * is in and whether the rule holds there are separate answers, and every question about the
          * line — which end of a range it is, which way a run of values has to lie to satisfy it,
          * which side a row is owed on — is this one. Worked out where each of those is asked, the
-         * pairing of the two is remembered in as many places as there are readers, and the two
-         * facts are of one type, so a reader that pairs them the other way round is a reader
-         * nothing contradicts.
+         * pairing of the two is remembered in as many places as there are readers, and a reader
+         * that pairs them the other way round answers every one of its own questions consistently
+         * about a line whose sides are swapped.
          */
         public Towards satisfyingSide() {
             return holdsAtTheValue ? valueBelongs : valueBelongs.opposite();

@@ -5,6 +5,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 
+import java.util.Objects;
+
 /**
  * A value a behavior compares an input against, and which side of it the value itself falls on.
  *
@@ -26,6 +28,13 @@ import souther.compiler.numeric.Towards;
  */
 public record Threshold(NumericTerm.FromOnePosition term, Seam parts, Towards valueBelongs,
                         OriginRef origin) {
+
+    /** A side and not the absence of one, for the reason a cut's own is
+     *  ({@link souther.compiler.check.ComparisonClaim.Cut}): a line with no side reads as one
+     *  whose value falls above it, and asks for a row against the wrong neighbour. */
+    public Threshold {
+        Objects.requireNonNull(valueBelongs, "which side of the line its own value falls on");
+    }
 
     /**
      * Where a row is owed against this line, as a value of the position, or null where the position

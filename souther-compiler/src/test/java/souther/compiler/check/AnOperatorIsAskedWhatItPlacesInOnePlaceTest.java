@@ -63,7 +63,7 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
                             + " and is answered rather than excluded"));
 
     @Test
-    void onlyTheTwoBoundariesReadAnOperatorForWhatItPlaces() throws IOException {
+    void onlyARecognitionReadsAnOperatorForWhatItPlaces() throws IOException {
         assertEquals(declared(MAY_ASK), callsTo("of"),
                 "a reader below a recognised comparison that asks the operator again holds the"
                         + " wide answer, and has a case to invent an answer for; a second call in a"
