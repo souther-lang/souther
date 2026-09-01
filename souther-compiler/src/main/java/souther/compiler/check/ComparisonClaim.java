@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.numeric.Towards;
 
 import java.util.Objects;
@@ -38,6 +39,22 @@ public sealed interface ComparisonClaim
      * where {@code x /= c} is not.
      */
     boolean holdsAtTheValue();
+
+    /**
+     * The relation this states of its two sides, which is what the numeric reasoning is written in.
+     *
+     * <p>The one crossing between the two vocabularies, and it is a crossing rather than a second
+     * name for one thing. What is here says how a comparison divided a position's values, and
+     * answers which class the number named is in and which side the rule is satisfied on; a
+     * relation says which way a sum stands to nought, and is what a domain is told and what a bound
+     * arriving from somewhere no comparison was written is also said in. The six of each line up,
+     * so nothing is lost crossing over — and that they line up is why it is written once here
+     * rather than wherever a reader happens to need the other words.
+     *
+     * <p>Stated of the left side against the right, which is the way round every reader of a
+     * relation reads it ({@link Rel#holds}).
+     */
+    Rel statedRelation();
 
     @Override
     ComparisonClaim turned();
@@ -92,6 +109,16 @@ public sealed interface ComparisonClaim
         @Override
         public Cut denied() {
             return new Cut(valueBelongs, !holdsAtTheValue);
+        }
+
+        /** Which way the values it admits lie, and whether the number named is one of them: the
+         *  side is the claim's own answer ({@link #satisfyingSide}) and is not worked out here from
+         *  the two facts a cut holds. */
+        @Override
+        public Rel statedRelation() {
+            return satisfyingSide() == Towards.BELOW
+                    ? (holdsAtTheValue ? Rel.LE : Rel.LT)
+                    : (holdsAtTheValue ? Rel.GE : Rel.GT);
         }
 
         /**
@@ -150,6 +177,12 @@ public sealed interface ComparisonClaim
         @Override
         public Singled denied() {
             return new Singled(!holdsAtTheValue);
+        }
+
+        /** An equality or its denial, which is the whole of what singling a value out states. */
+        @Override
+        public Rel statedRelation() {
+            return holdsAtTheValue ? Rel.EQ : Rel.NE;
         }
     }
 

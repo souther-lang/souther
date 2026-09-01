@@ -1529,8 +1529,11 @@ public final class InvariantChecker {
         // And only where the clause names a position at all. `1 >= 0` cuts nothing either, and it
         // is not a rule that restricts no value of this position — it is a rule about nowhere, said
         // by the one authority for that question, which is whether the value is mentioned.
-        if (!found.isEmpty() && read != null && clause instanceof Core.Binary bin
-                && read.holdsOfEveryRow(bin.op())) {
+        ComparisonClaim states = clause instanceof Core.Binary bin
+                ? Comparison.of(bin).map(Comparison::claim).orElse(null)
+                : null;
+        if (!found.isEmpty() && read != null && states != null
+                && read.holdsOfEveryRow(states)) {
             return new ClauseStates.NoRestriction();
         }
         if (Relates.twoPositions(clause, e -> {
@@ -1756,23 +1759,12 @@ public final class InvariantChecker {
          * <p>Every comparison and not the orderings alone. Which operator is written is no part of
          * whether a rule states anything: {@code lo - lo == 0} holds of every row exactly as the
          * first one does, and an author who wrote it would have been told that which values may
-         * stand at {@code lo} is a question nothing answered. What the operator decides is what the
-         * residue has to be, which is the switch here and nothing else.
+         * stand at {@code lo} is a question nothing answered. What the comparison decides is what
+         * the residue has to be, and which way the residue has to stand is what the relation it
+         * states is answered at.
          */
-        boolean holdsOfEveryRow(BinOp op) {
-            if (residue == null) {
-                return false;
-            }
-            int sign = residue.signum();
-            return switch (op) {
-                case GE -> sign >= 0;
-                case GT -> sign > 0;
-                case LE -> sign <= 0;
-                case LT -> sign < 0;
-                case EQ -> sign == 0;
-                case NE -> sign != 0;
-                case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-            };
+        boolean holdsOfEveryRow(ComparisonClaim claim) {
+            return residue != null && claim.statedRelation().holds(residue.signum());
         }
     }
 
