@@ -12,6 +12,7 @@ import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
 import souther.compiler.program.CheckedRow;
+import souther.compiler.program.StandsIn;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -77,9 +78,9 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         return of.behavior(new ValueName.Behavior(module, name));
     }
 
-    /** A row that hands over values, which is the arm an answer can be held against. */
-    private static CheckedRow.Reproducible reproducible(CheckedRow row) {
-        return assertInstanceOf(CheckedRow.Reproducible.class, row.statement());
+    /** A row an output runs on its own, which is the arm for a behavior that depends on nothing. */
+    private static CheckedRow.SelfContained selfContained(CheckedRow row) {
+        return assertInstanceOf(CheckedRow.SelfContained.class, row.statement());
     }
 
     /** Every row a behavior has, in the order they are written. */
@@ -110,7 +111,7 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
 
         assertEquals(List.of(newtype(NAME, new ObservedValue.Text("ada")),
                         newtype(AMOUNT, new ObservedValue.Integer(3))),
-                reproducible(row).states().inputs());
+                selfContained(row).states().inputs());
     }
 
     /**
@@ -126,9 +127,9 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         CheckedRow row = behavior(CheckedProgram.of(List.of(MODULE)), "demo", "receiptFor")
                 .rows().get(0);
 
-        assertEquals(new Verdict.Held(), reproducible(row).holds(receipt("ada", 3)));
+        assertEquals(new Verdict.Held(), selfContained(row).holds(receipt("ada", 3)));
 
-        Mismatch differs = notHeld(reproducible(row).holds(receipt("ada", 4)));
+        Mismatch differs = notHeld(selfContained(row).holds(receipt("ada", 4)));
         assertEquals(Mismatch.Reason.VALUE, differs.reason());
         assertEquals(List.of(new PathElement.Field("total"), new PathElement.Field("value")),
                 differs.path(), "and where inside the two values they part");
@@ -150,7 +151,7 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         fields.put("total", new ObservedValue.Integer(3));
 
         Mismatch differs =
-                notHeld(reproducible(row).holds(new ObservedValue.Constructed(RECEIPT, fields)));
+                notHeld(selfContained(row).holds(new ObservedValue.Constructed(RECEIPT, fields)));
         assertEquals(Mismatch.Reason.TYPE, differs.reason());
         assertEquals(List.of(new PathElement.Field("total")), differs.path());
     }
@@ -166,14 +167,14 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         CheckedRow row = behavior(CheckedProgram.of(List.of(MODULE)), "demo", "receiptFor")
                 .rows().get(1);
 
-        assertEquals(new Expectation.TheCase(REFUSED), reproducible(row).states().expects());
+        assertEquals(new Expectation.TheCase(REFUSED), selfContained(row).states().expects());
 
         Map<String, ObservedValue> why = ObservedValue.fields();
         why.put("why", new ObservedValue.Text("anything at all"));
         assertEquals(new Verdict.Held(),
-                reproducible(row).holds(new ObservedValue.Constructed(REFUSED, why)));
+                selfContained(row).holds(new ObservedValue.Constructed(REFUSED, why)));
         assertEquals(Mismatch.Reason.TYPE,
-                notHeld(reproducible(row).holds(receipt("ada", 3))).reason());
+                notHeld(selfContained(row).holds(receipt("ada", 3))).reason());
     }
 
     /**
@@ -189,21 +190,21 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
                 .rows().get(0);
 
         assertEquals(Mismatch.Reason.UNREADABLE,
-                notHeld(reproducible(row)
+                notHeld(selfContained(row)
                         .holds(new ObservedValue.Unknown("the output could not read it")))
                         .reason());
     }
 
     /**
-     * A row of a behavior that takes something injected states what has to stand in, and no values.
+     * A row of a behavior that takes something injected crosses with what stood in for it.
      *
      * <p>A row runs against a bound implementation, and what stands in for an injected dependency is
-     * the rest of what makes it runnable. An output whose dependency is an import has nothing to
-     * answer that import with, so it is told what the row needs rather than handed values it cannot
-     * use.
+     * the rest of what makes it runnable. An output whose dependency is an import has nothing of its
+     * own to answer that import with, so it is handed what the row states the dependency answers —
+     * as values and a rule, rather than as anything it has to apply.
      */
     @Test
-    void aRowOfABehaviorThatNeedsAStandInSaysSoRatherThanCrossingAsValues() {
+    void aRowOfABehaviorThatNeedsAStandInCrossesWithWhatStoodInForIt() {
         CheckedProgram program = CheckedProgram.of(List.of("""
                 module demo
 
@@ -223,13 +224,20 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
                 """));
 
         CheckedRow row = behavior(program, "demo", "priceOf").rows().get(0);
-        // And there is nothing to ask it: what a row states says which of the two it is, and only
-        // the one that hands over values answers whether an answer keeps it.
-        CheckedRow.NotReproducible states =
-                assertInstanceOf(CheckedRow.NotReproducible.class, row.statement());
-        assertEquals(new RowStatement.RequiresStandIns(
-                        List.of(new ValueName.Behavior("demo", "rateNow"))),
-                states.why());
+        // An arm of its own, so that a reader written for rows that run on their own cannot be
+        // handed one that does not: what it has to do with this row is in the type.
+        CheckedRow.WithStandIns states =
+                assertInstanceOf(CheckedRow.WithStandIns.class, row.statement());
+        assertEquals(List.of(newtype(declared("Price"), new ObservedValue.Integer(10))),
+                states.states().inputs(), "and it hands over its inputs like any other row");
+
+        StandsIn rateNow = states.standsIn().get(0);
+        assertEquals(new ValueName.Behavior("demo", "rateNow"), rateNow.dependency());
+        // What a `with` answers, asked rather than read: it lists nothing and answers everything,
+        // which is the same shape a table with a `_` row is.
+        assertEquals(new StandsIn.Answer.TheValue(
+                        newtype(declared("Rate"), new ObservedValue.Integer(2))),
+                rateNow.answering(List.of()));
     }
 
     /**
@@ -291,7 +299,7 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
                     | "a set of two" : ([ 1, 2 ]) -> Tags { of = [ 1, 2 ] }
                 """));
 
-        CheckedRow.Reproducible row = reproducible(
+        CheckedRow.SelfContained row = selfContained(
                 behavior(program, "demo", "tagsOf").rows().get(0));
         Map<String, ObservedValue> of = ObservedValue.fields();
         of.put("of", new ObservedValue.Sequence(List.of(new ObservedValue.Integer(2),
@@ -325,7 +333,7 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
                     | "not there" : (false) -> Missing
                 """));
 
-        CheckedRow.Reproducible row = reproducible(
+        CheckedRow.SelfContained row = selfContained(
                 behavior(program, "demo", "lookUp").rows().get(0));
         assertEquals(new Expectation.TheCase(declared("Missing")), row.states().expects());
         assertEquals(new Verdict.Held(),
@@ -398,8 +406,7 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         }
         assertEquals(3, every.size(), () -> "the rows that crossed are " + every);
         assertTrue(every.stream().anyMatch(row -> row.statement()
-                        instanceof CheckedRow.NotReproducible needs
-                        && needs.why() instanceof RowStatement.RequiresStandIns),
+                        instanceof CheckedRow.WithStandIns),
                 "including the one that needs something stood in for");
     }
 

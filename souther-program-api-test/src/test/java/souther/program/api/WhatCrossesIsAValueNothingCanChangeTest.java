@@ -1,5 +1,6 @@
 package souther.program.api;
 
+import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.Mismatch;
@@ -7,6 +8,8 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.PathElement;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowStatement;
+import souther.compiler.observe.RowStatements;
+import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.Verdict;
 import souther.compiler.program.CheckedRow;
 import souther.compiler.types.Type;
@@ -57,6 +60,7 @@ class WhatCrossesIsAValueNothingCanChangeTest {
         List<Class<?>> reached = new ArrayList<>();
         Set<Class<?>> seen = new LinkedHashSet<>();
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(CheckedRow.class, RowStatement.class,
+                StoodIn.class,
                 Expectation.class, Asserted.class, ObservedValue.class, Verdict.class,
                 Mismatch.class, PathElement.class, Position.class));
         while (!pending.isEmpty()) {
@@ -88,7 +92,11 @@ class WhatCrossesIsAValueNothingCanChangeTest {
         }
         // Said out loud, so that a type that stops being asked about is a line to change rather
         // than a check that quietly walks fewer things than it used to.
-        assertEquals(List.of("Mismatch", "RequiresStandIns", "Built", "Elements", "Entries",
+        //
+        // `Entry` is what a stand-in states one call to a dependency as: the arguments it answers
+        // for are a list because a dependency takes as many as it declares, and an output holding
+        // one asks what it answers by handing over as many.
+        assertEquals(List.of("Mismatch", "Entry", "Built", "Elements", "Entries",
                         "Constructed", "Sequence", "Mapping"),
                 asked, "what an output holds that keeps a collection");
     }
@@ -98,7 +106,7 @@ class WhatCrossesIsAValueNothingCanChangeTest {
     void andSoDoesTheOneThatIsMadeByAsking() {
         List<ObservedValue> given = new ArrayList<>();
         given.add(new ObservedValue.Integer(1));
-        RowStatement stated = RowStatement.of(given,
+        RowStatement stated = RowStatements.read(List.of(), given,
                 new Expectation.TheValue(new Asserted.Value(new ObservedValue.Integer(2))));
         given.add(new ObservedValue.Integer(3));
 
@@ -243,6 +251,9 @@ class WhatCrossesIsAValueNothingCanChangeTest {
         }
         if (type == ValueName.Behavior.class) {
             return new ValueName.Behavior("demo", "billFor");
+        }
+        if (type == SourcePos.class) {
+            return new SourcePos(1, 1);
         }
         if (type == java.math.BigDecimal.class) {
             return java.math.BigDecimal.ONE;

@@ -26,6 +26,8 @@ import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.FieldTypes;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.StoodIn;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -959,6 +961,23 @@ public final class ExampleStatements {
      * into. */
     record Standin(Object[] arguments, Hir.FakeRow row, FixtureReader.BuiltFixture answer)
             implements Stated {}
+
+    /**
+     * One row of a built table, as something that did not read the source can hold it.
+     *
+     * <p>The one reading of what a table's row states, for the two that want it: a row of the faked
+     * behavior carries it to an output that has to answer the dependency itself, and a reader of the
+     * examples repository is shown it beside the text. Read twice, the two would be free to observe
+     * one row as two values.
+     */
+    static StoodIn.Entry carried(FixtureReader fixtures, Standin entry) {
+        List<ObservedValue> arguments = new ArrayList<>();
+        for (Object argument : entry.arguments()) {
+            arguments.add(fixtures.observed(argument));
+        }
+        return new StoodIn.Entry(arguments, fixtures.observed(entry.answer().value()),
+                entry.row().pos());
+    }
 
     /**
      * A row the table's dispatch can never return, and the row it returns instead.

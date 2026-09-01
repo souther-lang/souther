@@ -172,7 +172,7 @@ class InputClassificationsTest {
                 // A row whose input the observation stopped in states no values, which is what the
                 // one place that decides answers for these. Kept as the row's own, the fixture
                 // would say two different things about what it handed over.
-                souther.compiler.observe.RowStatement.of(
+                souther.compiler.observe.RowStatements.read(List.of(),
                         List.of(new ObservedValue.Constructed(request.type(), broken)),
                         ((souther.compiler.observe.RowStatement.Stated) row.statement()).expects()),
                 row.run());
