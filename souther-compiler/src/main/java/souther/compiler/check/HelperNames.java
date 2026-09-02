@@ -180,11 +180,10 @@ public final class HelperNames {
             // application's, which takes in arguments this pass did not touch.
             case Hir.Apply call when call.answered() != null
                     && foreign(call.answered().denotes(), which) ->
-                    new Hir.Apply(
+                    call.withFunction(
                             Hir.Var.respelled(qualifiedName(call.answered().denotes()),
                                     ofModule(call.answered().denotes()), call.function().pos(),
-                                    call.function().region()),
-                            call.args(), call.origin(), call.pos(), call.region());
+                                    call.function().region()));
             case Hir.Var v -> qualified(v, which);
             default -> rebuilt;
         };

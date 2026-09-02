@@ -7,7 +7,6 @@ import souther.compiler.diag.Region;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
@@ -127,8 +126,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         ValueName.Stdlib.Namespace namespace = ValueName.Stdlib.namespace(type);
         return new FixtureTemplate(type + "(\"" + iso + "\")",
                 new Hir.Apply(type, new ReachName.TheNamespace(namespace),
-                        List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)),
-                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                        List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)), NOWHERE, NO_SOURCE));
     }
 
     /** The absent optional, which the language names rather than any module. */
@@ -208,7 +206,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         ValueName.OfType named = new ValueName.OfType(written, type.denotes());
         return new FixtureTemplate(written + "(" + inner.text() + ")",
                 new Hir.Apply(written, new ReachName.InScope(named), List.of(inner.value()),
-                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                        NOWHERE, NO_SOURCE));
     }
 
     /** No elements. A list, a set and a map are all written this way in a fixture: what the position
@@ -298,8 +296,8 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         }
         return new FixtureTemplate(
                 type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(spread),
-                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(spread), NOWHERE,
+                        NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared. */
@@ -311,7 +309,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
             inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
         }
         return new FixtureTemplate(type.rendered() + " { " + String.join(", ", written) + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(),
-                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(), NOWHERE,
+                        NO_SOURCE));
     }
 }

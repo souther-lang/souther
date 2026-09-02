@@ -1,7 +1,5 @@
 package souther.compiler.ast;
 
-import souther.compiler.types.ConstructionOrigin;
-
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.RecordComponent;

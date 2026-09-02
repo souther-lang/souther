@@ -8,7 +8,6 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -1575,18 +1574,26 @@ public interface Hir {
      *
      * <p>Expansion makes the two look alike: a construction spliced in from another body is the same
      * node the reader's own would be, and the permission check reading that body would ask the
-     * reader to answer for it. So the construction says where it came from. Every rebuild of this
-     * node carries it — the component has no default, which is what stops a pass from quietly
-     * dropping it and turning a carried construction back into the reader's own.
+     * reader to answer for it. So the construction says where it came from — and a pass writing one
+     * does not answer that question. A construction is made where it is built, and it is built here:
+     * the constructors take no origin, and the two that carry it are the two crossings below. What a
+     * rebuild does with the origin it has is keep it, which is what stops a carried construction from
+     * quietly turning back into the reader's own.
      */
     record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
                    ConstructionOrigin origin, Fields fields, SourcePos pos, Region region)
             implements Expr {
 
+        /** A construction written where it stands, saying which of its fields are written out. */
+        public NewData(Name typeName, List<FieldInit> inits, List<Var> spreads, Fields fields,
+                       SourcePos pos, Region region) {
+            this(typeName, inits, spreads, Origins.Own.IT_IS, fields, pos, region);
+        }
+
         /** A construction written where every field of it is written out. */
-        public NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
-                       ConstructionOrigin origin, SourcePos pos, Region region) {
-            this(typeName, inits, spreads, origin, Fields.EVERY_ONE_WRITTEN, pos, region);
+        public NewData(Name typeName, List<FieldInit> inits, List<Var> spreads, SourcePos pos,
+                       Region region) {
+            this(typeName, inits, spreads, Origins.Own.IT_IS, Fields.EVERY_ONE_WRITTEN, pos, region);
         }
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
@@ -1599,6 +1606,26 @@ public interface Hir {
         public NewData carriedByValue() {
             return new NewData(typeName, inits, spreads, origin.carriedByValue(), fields, pos,
                     region);
+        }
+
+        /** The same construction over rewritten fields and spreads, which is a rebuild and carries
+         *  where the construction came from and which fields it writes out. */
+        public NewData with(List<FieldInit> inits, List<Var> spreads) {
+            return with(inits, spreads, pos, region);
+        }
+
+        /** The same construction rewritten and stamped where the copy of it stands — what a pass
+         *  that copies a body into another one writes. */
+        public NewData with(List<FieldInit> inits, List<Var> spreads, SourcePos pos, Region region) {
+            return new NewData(typeName, inits, spreads, origin, fields, pos, region);
+        }
+
+        /**
+         * Whether the body holding this was handed the construction rather than making it, and so
+         * answers for none of it — asked of the node, which is what holds the answer.
+         */
+        public boolean wasCarried(TypeSymbol.AtModule built) {
+            return origin.carried(built);
         }
     }
 
@@ -1954,9 +1981,15 @@ public interface Hir {
 
         /** Applying whatever {@code function} is, with nothing standing in for what the source
          * wrote — every application but one a lowering rewrote. */
-        public Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos,
+        public Apply(Expr function, List<Expr> args, SourcePos pos, Region region) {
+            this(function, args, Origins.Own.IT_IS, null, pos, region);
+        }
+
+        /** Applying whatever {@code function} is, saying what a lowering replaced the written name
+         *  with. */
+        public Apply(Expr function, List<Expr> args, String appliedAs, SourcePos pos,
                      Region region) {
-            this(function, args, origin, null, pos, region);
+            this(function, args, Origins.Own.IT_IS, appliedAs, pos, region);
         }
 
         /**
@@ -1981,10 +2014,9 @@ public interface Hir {
          * they are, so a report about what is applied would otherwise underline them too. A caller
          * that has the callee's extent builds the {@link Var} itself and passes it.
          */
-        public Apply(String fn, ReachName reachedAs, List<Expr> args,
-                     ConstructionOrigin origin, SourcePos pos, Region region) {
+        public Apply(String fn, ReachName reachedAs, List<Expr> args, SourcePos pos, Region region) {
             this(Var.respelled(fn, Objects.requireNonNull(reachedAs, unanswered(fn)), pos, null),
-                    args, origin, pos, region);
+                    args, Origins.Own.IT_IS, null, pos, region);
         }
 
         /** Why a pass may not apply a name it has not answered for. */
@@ -2076,6 +2108,33 @@ public interface Hir {
          *  {@link #appliedAs} would be dropped by a rewrite that has no opinion about it. */
         public Apply withArgs(List<Expr> args) {
             return new Apply(function, args, origin, appliedAs, pos, region);
+        }
+
+        /** The same application of another spelling of what it applies — a pass that rewrites the
+         *  callee and nothing else, which is how where the construction came from would be dropped
+         *  by a rewrite that has no opinion about it. */
+        public Apply withFunction(Expr function) {
+            return new Apply(function, args, origin, appliedAs, pos, region);
+        }
+
+        /**
+         * This application as a pass rewriting it says it: every part but where the construction it
+         * stands for came from, which is carried.
+         *
+         * <p>A pass copying a body into another one restamps what it copies, and a lowering that
+         * binds what was applied puts its own name in the callee — both write most of an
+         * application and neither is entitled to say where the construction came from. Written
+         * without that part, so that carrying it is not something a caller can forget.
+         */
+        public Apply rewritten(Expr function, List<Expr> args, String appliedAs, SourcePos pos,
+                               Region region) {
+            return new Apply(function, args, origin, appliedAs, pos, region);
+        }
+
+        /** Whether a value this body named is what carried the construction this stands for in —
+         *  asked of the node, which is what holds the answer. */
+        public boolean wasCarriedByValue() {
+            return origin.viaValueReference();
         }
     }
 
@@ -2254,7 +2313,7 @@ public interface Hir {
                     return i.withValue(value);
                 });
                 yield spreads == nd.spreads() && inits == nd.inits() ? nd
-                        : new NewData(nd.typeName(), inits, spreads, nd.origin(), nd.pos(), nd.region());
+                        : nd.with(inits, spreads);
             }
             case Match m -> {
                 Expr scrutinee = atExpr.apply(m.scrutinee());
