@@ -19,8 +19,8 @@ import java.util.List;
  * says about the position it names is which strings stand there — the same kind of answer
  * {@code String.matches} gives and the same kind this compiler already knows how to hold, since a
  * language over code points is what {@link souther.compiler.regex} is. Read one spelling at a time
- * instead, {@code matches} was a set of strings and the four beside it were forms nothing took
- * apart, so a position an author had written a rule for admitted every string there is — and a
+ * instead, {@code matches} was a set of strings and the predicates beside it were forms nothing
+ * took apart, so a position an author had written a rule for admitted every string there is — and a
  * value nobody could compose there took its siblings' obligations down with it.
  *
  * <p><b>Keyed by what the operation means and not by how a rule is written.</b> Each entry says
@@ -157,8 +157,8 @@ public enum StringPredicates {
         /**
          * A pattern it states that this reads no further into, and what stopped the reading.
          *
-         * <p>Only {@link StringPredicates#MATCHES} arrives here. The others compose what they
-         * accept out of text, and there is nothing in that to be stopped by.
+         * <p>Only an entry whose text is a pattern arrives here. One that composes what it accepts
+         * out of text has nothing in that to be stopped by.
          */
         record PatternNotRead(PatternRead.Unsupported why) implements Reading {
 
@@ -264,11 +264,11 @@ public enum StringPredicates {
      * person to change one sees the other. Everything past the text they hand over is
      * {@link #readingOf} and is one.
      *
-     * <p>A call of another number of arguments is refused rather than read as no predicate. Its
-     * arity is settled against the declared signature before a {@link Core.PreservedCall} is built,
-     * so one arriving here says the table above and the library have come to disagree — read as no
-     * predicate, that disagreement would go on quietly costing every rule written with this
-     * operation.
+     * <p>A call of another number of arguments is refused rather than read as no predicate. A call
+     * standing for one of these operations is an application that was typed against the signature
+     * it names, where its arity was settled, so one arriving here with another number of arguments
+     * says the table above and the library have come to disagree — read as no predicate, that
+     * disagreement would go on quietly costing every rule written with this operation.
      */
     public static Stated statedByChecked(Core clause, Symbols symbols) {
         if (!(clause instanceof Core.PreservedCall call)

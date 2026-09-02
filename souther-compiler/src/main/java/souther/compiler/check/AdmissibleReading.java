@@ -155,9 +155,11 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * is reaching the position and the written text and turning the answer into a plan — so a
      * predicate this reading learns is a row in that table and not an arm added here.
      *
-     * <p>Null and not {@link AdmissibleValues#unreadable} for the leaves that are not this, so that
-     * the one place a reading gives up stays where it is: what a rule this could not read costs is
-     * worked out there, and a second answer to it here would be a second account of the same thing.
+     * <p>Null and not {@link AdmissibleValues#unreadable} wherever the leaf's own account is the
+     * right one, so that the one place a reading gives up stays where it is: what a rule this could
+     * not read costs is worked out there, and a second answer to it here would be a second account
+     * of the same thing. That is every leaf that is not one of these, and every one of these whose
+     * reading stopped at something other than this reading's own limit.
      */
     private PlannedValues<FactSubject> pattern(Core e, boolean states) {
         StringPredicates.Stated stated = StringPredicates.statedByChecked(e, symbols);
@@ -195,7 +197,7 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * the clause names.
      *
      * <p>No {@code default}: a construct the subset learns to stop at is one somebody decides about
-     * here, rather than one that quietly joins the eleven.
+     * here, rather than one that quietly takes the answer its neighbours were given.
      */
     private PlannedValues<FactSubject> stoppedBy(PatternRead.Unsupported why, FactSubject position) {
         return switch (why) {

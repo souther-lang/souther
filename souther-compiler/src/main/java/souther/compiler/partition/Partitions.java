@@ -1714,10 +1714,11 @@ public final class Partitions {
     /**
      * A value a source can carry that {@code regex} accepts, or null where there is none to offer.
      *
-     * <p>Null three ways, and they are one answer here: a pattern outside the subset this compiler
-     * reads, one whose machine costs more than writing a value is allowed, and one every string of
-     * which is something nobody can paste. What a caller does with each of them is offer no
-     * candidate, so they are not told apart — a row is offered or it is not.
+     * <p>Null two ways, and they are one answer here: a pattern whose machine costs more than
+     * writing a value is allowed, and one every string of which is something nobody can paste. What
+     * a caller does with each of them is offer no candidate, so they are not told apart — a row is
+     * offered or it is not. A pattern outside the subset this compiler reads never reaches here:
+     * the reading says so, and the caller offers no candidate for the same reason.
      *
      * <p>Read by the one thing here that reads patterns. What this used to have was a reader of its
      * own, which meant two answers to "what does this pattern accept" and one model where they
