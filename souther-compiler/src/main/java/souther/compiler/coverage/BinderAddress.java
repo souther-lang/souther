@@ -17,7 +17,7 @@ package souther.compiler.coverage;
  * <p>There is no third arm on purpose. A read whose binding is neither is a body holding a name
  * nothing in sight binds, which is not something to give an address to.
  */
-sealed interface BinderAddress {
+public sealed interface BinderAddress {
 
     /**
      * One of the behavior's parameters, which the signature binds and the body does not.

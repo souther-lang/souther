@@ -12,7 +12,7 @@ package souther.compiler.coverage;
  * means a place in a body, and a place is where it is rather than which object stood there
  * ({@link NodeAddress}).
  */
-sealed interface SiteAddress {
+public sealed interface SiteAddress {
 
     /** Where a run through one arm of one fork is recorded.
      *

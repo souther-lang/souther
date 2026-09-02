@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntFunction;
 
 /**
  * Which slot of a node each of its children stands in, named.
@@ -27,10 +28,10 @@ import java.util.List;
  * lets an edge and a node stand for a step down. The switch is over a sealed type, so a node kind
  * added to the IR arrives here as a compile error rather than as a place nothing can address.
  */
-final class CoreStructure {
+public final class CoreStructure {
 
     /** Which slot of its parent a child stands in. */
-    sealed interface Edge {
+    public sealed interface Edge {
 
         record NegOperand() implements Edge {}
 
@@ -237,7 +238,7 @@ final class CoreStructure {
     }
 
     private static void indexed(List<Child> out, List<Core> children,
-                                java.util.function.IntFunction<Edge> slot) {
+                                IntFunction<Edge> slot) {
         for (int i = 0; i < children.size(); i++) {
             out.add(new Child(slot.apply(i), children.get(i)));
         }

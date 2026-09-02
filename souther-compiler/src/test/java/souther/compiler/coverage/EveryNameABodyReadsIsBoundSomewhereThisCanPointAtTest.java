@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -76,7 +77,7 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
         int reads = 0;
         for (Body body : everyBody()) {
             NodeAddresses places = NodeAddresses.of(body.behavior(), body.body());
-            Binders binders = Binders.of(body.behavior(), body.body(), places);
+            Binders binders = Binders.of(places);
             for (Core.Read read : readsIn(body.body())) {
                 if (read.binding() == null) {
                     continue;
@@ -134,7 +135,7 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
         Set<String> out = new LinkedHashSet<>();
         for (Body body : bodiesOf(List.of(List.of(source)))) {
             NodeAddresses places = NodeAddresses.of(body.behavior(), body.body());
-            Binders binders = Binders.of(body.behavior(), body.body(), places);
+            Binders binders = Binders.of(places);
             for (Core.Read read : readsIn(body.body())) {
                 if (read.binding() != null) {
                     out.add(binders.at(read.binding()).toString());
@@ -155,7 +156,7 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
     }
 
     private static void walk(Core e, Map<Core, Boolean> seen,
-                             java.util.function.Consumer<Core> at) {
+                             Consumer<Core> at) {
         if (seen.put(e, Boolean.TRUE) != null) {
             return;
         }

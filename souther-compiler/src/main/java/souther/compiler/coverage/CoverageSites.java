@@ -245,6 +245,15 @@ public final class CoverageSites {
             for (ComparisonOccurrence numbered : controlByComparison.keySet()) {
                 requireHeld(numbered, comparisons, "given a control point");
             }
+            // And the numbering says what each number it handed out addresses, so there is one
+            // address per site and it is at the site's own number. A plan is put together field by
+            // field, so the two can be handed over out of step — and a reader asking what a hit
+            // means would be told about a place the number was never issued to, or about none.
+            if (identity.byNumber().size() != sites.size()) {
+                throw new IllegalArgumentException("this plan numbered " + sites.size()
+                        + " places and says what " + identity.byNumber().size() + " of them are;"
+                        + " the sites and the addresses are one answer or they are two");
+            }
         }
 
         private static void requireHeld(ComparisonOccurrence which, ComparisonCatalog comparisons,
@@ -414,9 +423,11 @@ public final class CoverageSites {
             // What the body does, beside where its places are. A numbering is two numberings when
             // the numbers address different places, and it is two when the code at those places
             // does different things; neither half says the other.
-            executable.put(body.getKey(), ExecutableIdentity.of(body.getValue(),
-                    Binders.of(body.getKey(), body.getValue(),
-                            NodeAddresses.of(body.getKey(), body.getValue()))));
+            //
+            // Off the addresses the walk just took, rather than taking them again: where a body's
+            // places are is one answer, and a second descent for it would be a second.
+            executable.put(body.getKey(),
+                    ExecutableIdentity.of(body.getValue(), Binders.of(walk.places)));
         }
         return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
                 walk.byComparison, walk.armsByNode, walk.controlByComparison, walk.mayRepeat,
@@ -744,7 +755,16 @@ public final class CoverageSites {
                     // into a field at a time: what is numbered is inside the fields, and the
                     // construction itself is where the attempt's own arms are made below.
                     structural.take(new CoreStructure.Edge.ConstructedAttempt(), ic.construct());
-                    ic.construct().values().forEach(given -> walk(given.value(), inside));
+                    // And the construction's own slots, taken from the same place: this is where
+                    // the walk goes two levels at once, so it is where the slots of the level it
+                    // passes through would go unvisited with nothing to say so.
+                    CoreStructure.Children built =
+                            CoreStructure.Children.of(ic.construct());
+                    for (int i = 0; i < ic.construct().values().size(); i++) {
+                        walk(built.take(new CoreStructure.Edge.FieldValue(i),
+                                ic.construct().values().get(i).value()), inside);
+                    }
+                    built.requireExhausted();
                     // And what an attempted construction decides by is the value it is given.
                     DecidedBy decided =
                             decidedAt(ic.origin(), ic.expansion(), decisions, supplied);

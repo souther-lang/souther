@@ -19,9 +19,9 @@ import java.util.Set;
  *                 alike, so the path alone is not a place
  * @param occurrences every way down from that body to it
  */
-record NodeAddress(String behavior, Set<CorePath> occurrences) {
+public record NodeAddress(String behavior, Set<CorePath> occurrences) {
 
-    NodeAddress {
+    public NodeAddress {
         if (behavior == null) {
             throw new IllegalArgumentException("a place is a place in somebody's body");
         }

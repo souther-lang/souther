@@ -1,70 +1,32 @@
 package souther.compiler.coverage;
 
-import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * What each name of one body reads from, as a place rather than as a minted number.
  *
- * <p>Built with the addresses of the body's own places, because that is what a binder standing in it
- * is named by. Asked once per body and read by whatever is writing the body down in a form two
- * compiles can be held against each other by.
+ * <p>Read off the one descent that worked out where the body's places are ({@link NodeAddresses}),
+ * because a binder is at a slot of a node and the node is at an address. A walk of its own here
+ * would be a second answer to what the body holds, with its own idea of what to make of a node
+ * several ways lead to.
  */
 final class Binders {
 
     private final String behavior;
 
-    private final Map<BindingId, BinderAddress> byId = new LinkedHashMap<>();
+    private final Map<BindingId, BinderAddress> byId;
 
-    private Binders(String behavior) {
+    private Binders(String behavior, Map<BindingId, BinderAddress> byId) {
         this.behavior = behavior;
+        this.byId = byId;
     }
 
-    /** Where every binder of {@code body} stands, {@code body} being {@code behavior}'s. */
-    static Binders of(String behavior, Core body, NodeAddresses places) {
-        Binders out = new Binders(behavior);
-        out.walk(body, places);
-        return out;
-    }
-
-    private void walk(Core at, NodeAddresses places) {
-        switch (at) {
-            case Core.LetIn li ->
-                    put(li.binder(), places.of(li), new BinderSlot.LetBinder());
-            case Core.Block b -> {
-                for (int i = 0; i < b.params().size(); i++) {
-                    put(b.params().get(i), places.of(b), new BinderSlot.BlockParam(i));
-                }
-            }
-            case Core.Match m -> {
-                for (int i = 0; i < m.cases().size(); i++) {
-                    put(m.cases().get(i).binder(), places.of(m), new BinderSlot.CaseBinder(i));
-                }
-            }
-            case Core.IfConstructed ic ->
-                    put(ic.binder(), places.of(ic), new BinderSlot.ConstructedBinder());
-            default -> { }
-        }
-        for (CoreStructure.Child child : CoreStructure.childrenOf(at)) {
-            walk(child.node(), places);
-        }
-    }
-
-    private void put(Core.Binder binder, NodeAddress owner, BinderSlot slot) {
-        if (binder == null || binder.binding() == null) {
-            return;   // a slot the node has and this body left empty
-        }
-        // One binder per place, so a second answer for one id is a body binding one name twice —
-        // which the reads under it could not tell apart either.
-        BinderAddress already = byId.put(binder.binding(), new BinderAddress.Local(owner, slot));
-        if (already != null) {
-            throw new IllegalStateException("`" + behavior + "` binds " + binder.binding()
-                    + " at " + already + " and again at " + byId.get(binder.binding()));
-        }
+    /** Where every binder of the body {@code places} was taken over stands. */
+    static Binders of(NodeAddresses places) {
+        return new Binders(places.behavior(), places.bound());
     }
 
     /**

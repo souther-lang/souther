@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -19,11 +20,11 @@ import java.util.List;
  *
  * @param edges the slots gone through, outermost first
  */
-record CorePath(List<CoreStructure.Edge> edges) {
+public record CorePath(List<CoreStructure.Edge> edges) {
 
     static final CorePath ROOT = new CorePath(List.of());
 
-    CorePath {
+    public CorePath {
         if (edges == null) {
             throw new IllegalArgumentException("a way down is a way down through something");
         }
@@ -32,7 +33,7 @@ record CorePath(List<CoreStructure.Edge> edges) {
 
     /** This, then one more step. */
     CorePath then(CoreStructure.Edge edge) {
-        List<CoreStructure.Edge> longer = new java.util.ArrayList<>(edges);
+        List<CoreStructure.Edge> longer = new ArrayList<>(edges);
         longer.add(edge);
         return new CorePath(longer);
     }

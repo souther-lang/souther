@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -131,8 +132,7 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
     // --- the fixture ------------------------------------------------------------------------
 
     private static ExecutableIdentity identityOf(String module, String behavior, Core body) {
-        return ExecutableIdentity.of(body,
-                Binders.of(behavior, body, NodeAddresses.of(behavior, body)));
+        return ExecutableIdentity.of(body, Binders.of(NodeAddresses.of(behavior, body)));
     }
 
     private static List<ExecutableIdentity> identitiesOf(String source) {
@@ -166,7 +166,7 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
         };
     }
 
-    private static void binders(Core e, java.util.function.Consumer<Core.Binder> at) {
+    private static void binders(Core e, Consumer<Core.Binder> at) {
         switch (e) {
             case Core.LetIn it -> at.accept(it.binder());
             case Core.Block it -> it.params().forEach(at);

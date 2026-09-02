@@ -11,7 +11,7 @@ package souther.compiler.coverage;
  * <p>One arm per node kind that opens a name, and no more: a node kind that starts binding arrives
  * here as a case the walk cannot answer rather than as a binder nothing can address.
  */
-sealed interface BinderSlot {
+public sealed interface BinderSlot {
 
     /** The name a {@code let} opens for its body. */
     record LetBinder() implements BinderSlot {

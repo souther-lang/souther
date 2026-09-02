@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -112,12 +113,12 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
 
     /** Applies {@code at} to every node of {@code body}, once per node however many ways there are
      *  to it, and answers how many there were. */
-    private static int walk(Core body, java.util.function.Consumer<Core> at) {
+    private static int walk(Core body, Consumer<Core> at) {
         Map<Core, Boolean> seen = new IdentityHashMap<>();
         return walk(body, at, seen);
     }
 
-    private static int walk(Core e, java.util.function.Consumer<Core> at, Map<Core, Boolean> seen) {
+    private static int walk(Core e, Consumer<Core> at, Map<Core, Boolean> seen) {
         if (seen.put(e, Boolean.TRUE) != null) {
             return 0;
         }

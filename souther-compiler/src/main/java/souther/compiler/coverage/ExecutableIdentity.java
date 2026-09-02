@@ -4,7 +4,9 @@ import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * What a body does, written so that two compiles of one source write the same thing.
@@ -32,17 +34,18 @@ import java.util.List;
  * over a tree that is not the tree that runs — and a reading that quietly stood in for it would say
  * two bodies are one on the strength of a name the compiler invented.
  */
-record ExecutableIdentity(Kind kind, List<Object> settled, List<ExecutableIdentity> children) {
+public record ExecutableIdentity(Kind kind, List<Object> settled,
+                                 List<ExecutableIdentity> children) {
 
     /** Which node this is. Named rather than held as the class, so that what two of these compare
      *  is what they say and not which classes a loader happened to make. */
-    enum Kind {
+    public enum Kind {
         INT, DECIMAL, STR, BOOL, TEMPORAL, READ, UNIT_VALUE, OPTION_NONE, UNREACHABLE, NEG,
         FIELD_ACCESS, BINARY, CALL, APPLY, IF, IF_CONSTRUCTED, LET_IN, BLOCK, LIST_LIT,
         OPTION_SOME, TUPLE, TUPLE_GET, CONSTRUCT, MATCH
     }
 
-    ExecutableIdentity {
+    public ExecutableIdentity {
         settled = List.copyOf(settled);
         children = List.copyOf(children);
     }
@@ -55,14 +58,34 @@ record ExecutableIdentity(Kind kind, List<Object> settled, List<ExecutableIdenti
      * bodies that differ in which slot a term stands in differ here.
      */
     static ExecutableIdentity of(Core body, Binders binders) {
+        return of(body, binders, new IdentityHashMap<>());
+    }
+
+    /**
+     * The same, with what each node came to kept.
+     *
+     * <p>A node several ways lead to says the same thing however it was arrived at, so it is written
+     * once and the one value stands wherever it is reached. Written out per arrival instead, a body
+     * whose shared subtrees nest would be a value larger than the body — and every comparison of two
+     * of them would walk all of it, where sharing lets the halves be found the same by being the
+     * same.
+     */
+    private static ExecutableIdentity of(Core body, Binders binders,
+                                         Map<Core, ExecutableIdentity> said) {
+        ExecutableIdentity already = said.get(body);
+        if (already != null) {
+            return already;
+        }
         List<Object> settled = new ArrayList<>();
-        settled.add(open(body.type()));
+        settled.add(typeOf(body));
         Kind kind = say(body, settled, binders);
         List<ExecutableIdentity> children = new ArrayList<>();
         for (CoreStructure.Child child : CoreStructure.childrenOf(body)) {
-            children.add(of(child.node(), binders));
+            children.add(of(child.node(), binders, said));
         }
-        return new ExecutableIdentity(kind, settled, children);
+        ExecutableIdentity made = new ExecutableIdentity(kind, settled, children);
+        said.put(body, made);
+        return made;
     }
 
     /** Everything but the children and the type: what the node says on its own. */
@@ -92,7 +115,11 @@ record ExecutableIdentity(Kind kind, List<Object> settled, List<ExecutableIdenti
             // The place the name is bound, never the name: two bodies alike but for what a `let`
             // spells do the same thing, and the id the compiler minted for it moves with the copy.
             case Core.Read it -> {
-                settled.add(it.binding() == null ? null : binders.at(it.binding()));
+                if (it.binding() == null) {
+                    throw new IllegalStateException("a body that runs reads no name nothing bound: `"
+                            + it.name() + "` at " + it.pos());
+                }
+                settled.add(binders.at(it.binding()));
                 yield Kind.READ;
             }
             case Core.UnitValue it -> {
@@ -164,6 +191,14 @@ record ExecutableIdentity(Kind kind, List<Object> settled, List<ExecutableIdenti
      * whatever the checker called it. Either is a name this compile invented, so two bodies holding
      * one would be compared on it.
      */
+    private static Type typeOf(Core e) {
+        if (e.type() == null) {
+            throw new IllegalStateException("a body that runs holds no term of no type: a "
+                    + e.getClass().getSimpleName() + " at " + e.pos());
+        }
+        return open(e.type());
+    }
+
     private static Type open(Type type) {
         switch (type) {
             case null -> { }

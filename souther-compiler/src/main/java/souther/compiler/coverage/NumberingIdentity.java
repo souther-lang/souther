@@ -32,10 +32,10 @@ import java.util.Map;
  *                   and where it moves the numbers with it {@code byNumber} moves too
  * @param byNumber what each number is an address of, the number being the position in the list
  */
-record NumberingIdentity(String module, Map<String, ExecutableIdentity> executable,
-                         List<SiteAddress> byNumber) {
+public record NumberingIdentity(String module, Map<String, ExecutableIdentity> executable,
+                                List<SiteAddress> byNumber) {
 
-    NumberingIdentity {
+    public NumberingIdentity {
         if (module == null) {
             throw new IllegalArgumentException("a numbering is of somebody's module");
         }
@@ -49,7 +49,7 @@ record NumberingIdentity(String module, Map<String, ExecutableIdentity> executab
     }
 
     /** What number {@code n} is an address of. */
-    SiteAddress at(int n) {
+    public SiteAddress at(int n) {
         if (n < 0 || n >= byNumber.size()) {
             throw new IllegalArgumentException(
                     "this numbering handed out no " + n + "; it handed out " + byNumber.size());
