@@ -96,17 +96,33 @@ final class Predicates {
      * quantifier is recorded — denying one says some element fails the predicate, and which one is
      * not something this check can name. */
     void quantifiedBy(Core raw, Denotations at, boolean positive, List<Quantified> out) {
+        quantifiedBy(raw, at, positive, out, PartsToRead.ALL);
+    }
+
+    /**
+     * The same, reading only the parts {@code parts} asks for.
+     *
+     * <p>The same selection the obligations of a clause are read under, because they are read out
+     * of one clause. A conjunct left out of the one and left in the other is a clause taken half
+     * away, and what would come back is a guarantee assembled from two clauses — the whole one and
+     * the one the caller asked about.
+     */
+    void quantifiedBy(Core raw, Denotations at, boolean positive, List<Quantified> out,
+                      PartsToRead parts) {
+        if (!parts.includes(raw)) {
+            return;
+        }
         Core e = Conditions.asSizeComparison(raw);
         if (e instanceof Core.Binary b
                 && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
                         == ConditionJoin.BOTH) {
-            quantifiedBy(b.left(), at, positive, out);
-            quantifiedBy(b.right(), at, positive, out);
+            quantifiedBy(b.left(), at, positive, out, parts);
+            quantifiedBy(b.right(), at, positive, out, parts);
             return;
         }
         Conditions.Restated under = Conditions.restated(e);
         if (under != null) {
-            quantifiedBy(under.condition(), at, under.denied() != positive, out);
+            quantifiedBy(under.condition(), at, under.denied() != positive, out, parts);
             return;
         }
         if (!positive || !(e instanceof Core.PreservedCall call)

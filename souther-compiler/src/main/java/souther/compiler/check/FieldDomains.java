@@ -1161,13 +1161,22 @@ public final class FieldDomains {
     /**
      * The order these are answered in, which is the order the author wrote them.
      *
-     * <p>The clause and then which conjunct of it, which is what tells two lines of one rule apart
-     * everywhere else ({@link souther.compiler.partition.AuthoredLine}). Read off the walk that
-     * collected them, two readings of one edge would come back as two lines.
+     * <p>What identifies a clause and never what a report calls it. A clause is the declaration it
+     * is written on and which of that declaration's clauses it is ({@link Clause.Id}); the name a
+     * report prints holds neither the module nor the ordinal, so two modules each declaring a
+     * {@code Span} give their clauses one key — and a comparator that answers nought leaves a
+     * stable sort holding the order the walk collected them in, which is the one thing this order
+     * exists to keep out of the answer.
+     *
+     * <p>The declaration, then which clause of it, then which conjunct of that. The last is what
+     * tells two lines of one rule apart everywhere else
+     * ({@link souther.compiler.partition.AuthoredLine}), and the first two are what tell two
+     * clauses apart wherever they are written.
      */
     private static java.util.Comparator<AboutOneCoordinate> inWrittenOrder() {
         return java.util.Comparator
-                .comparing((AboutOneCoordinate each) -> each.from().named())
+                .comparing((AboutOneCoordinate each) -> each.from().clause().id().declaredOn())
+                .thenComparingInt(each -> each.from().clause().id().ordinal())
                 .thenComparingInt(AboutOneCoordinate::conjunct);
     }
 
