@@ -92,12 +92,18 @@ class AnInputTheRulesLeaveEmptyMakesEachInputMeasureNotApplicableTest {
      * that answered per position or per rule say it four times or twice, and a reading that puts the
      * one proof where each measure says why it has no subject says it as many times as there are
      * such measures, whatever the record holds.
+     *
+     * <p>Counted in the sentence a person reads and not in the word a document writes. The two are
+     * the same fact and they are not the same vocabulary: the line said {@code no_feasible_input}
+     * while nothing in this report had written a sentence for the reason, which is a schema word
+     * standing where an English clause belongs.
      */
     @Test
     void theReportSaysItOncePerMeasureAndNotOncePerPosition() {
         List<String> said = new ArrayList<>();
         measured().human().lines()
-                .filter(line -> line.contains("no_feasible_input"))
+                .filter(line -> line.contains(
+                        "the rules reaching this behavior's input leave it no value"))
                 .forEach(said::add);
         assertEquals(2, said.size(),
                 "one line per measure of the input, and no more: " + said);

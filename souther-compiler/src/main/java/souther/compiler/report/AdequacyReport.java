@@ -951,38 +951,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // three, with nothing saying the fourth did not apply — and hid the fact worth reading,
             // which is that a behavior answering a bare primitive gets less scrutiny than one
             // answering a sum.
-            // A measure nobody asked for is not said at all, the way the arms are not: what was
-            // asked for is an input to the whole run, and a line repeating it against every
-            // behavior says one fact as many times as the module has behaviors.
-            String why = switch (counted.reason()) {
-                case Adequacy.SignatureEvidence.NotASum _ ->
-                        "not applicable (this behavior's output is not a sum)";
-                case Adequacy.SignatureEvidence.NoRows _ ->
-                        "not measured (no row names this behavior)";
-                // What was read of the declaration is not said here. Which name resolved to nothing
-                // is reported where it was written, on the line the author edits.
-                case souther.compiler.query.BoundaryForMeasurement.NotDerived _ ->
-                        "not measured (this behavior's signature could not be read)";
-                case souther.compiler.query.NothingWasAsked _ -> null;
-                // Not a word for whatever is left. This measure carries one of the four reason
-                // types above and nothing else, so a fifth arriving here is a reason nobody decided
-                // a word for — and given the word of one of the others it would be printed as a
-                // state it is not. A word standing in for every reason added after it was written
-                // is the same defect as a key standing in for every way a measure can have no
-                // answer, one surface further out.
-                //
-                // A throw and not exhaustiveness the compiler checks. What is switched on is a
-                // `MeasureReason`, which is a plain interface because two of the reasons here
-                // belong to no measure in particular — nobody asked is one fact about the run, and
-                // a boundary that could not be worked out is one fact about the behavior, each
-                // read by several measures. Sealing a reason type per measure would make those
-                // name every measure that reads them, which is the dependency the other way round.
-                // Worth revisiting only if the reasons stop being shared.
-                default -> throw new IllegalStateException(
-                        "the signature measure has no word for " + counted.reason());
-            };
-            if (why != null) {
-                out.append(String.format("    signature   %s%n", why));
+            // A measure whose reason is a fact about the run is not said at all: a line repeating
+            // it against every behavior says one fact as many times as the module has behaviors.
+            // Which reasons those are is the reason's own answer and not this line's, so a state
+            // added to one of them arrives here already saying whether it belongs under a behavior.
+            ReasonProse why = ReasonProse.of(counted.reason());
+            if (why.scope() == ReasonProse.Scope.BEHAVIOR) {
+                out.append(String.format("    signature   %s%n", why.sentence()));
             }
             return;
         }
@@ -1126,7 +1101,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // measurement. `axes 0   single-axis 0/0` was the same three characters a behavior gets
             // when every position it has was measured and every class covered.
             out.append(String.format("    partition   %s%n",
-                    whyNoPartition(partitioned.reason())));
+                    ReasonProse.of(partitioned.reason()).sentence()));
         } else {
             // Counted over the positions that were measured. A position nothing was measured at
             // contributes no classes to the denominator: nought out of two reads as two gaps, and a
@@ -1147,7 +1122,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(partition.axes().stream()
                                     .filter(a -> a.reached().made().isEmpty()).toList(),
-                            a -> whyNoAxis(ReportMeasurement.of(a.reached()).reason())),
+                            a -> ReasonProse.of(ReportMeasurement.of(a.reached()).reason())
+                                    .clause()),
                     inFull(partitioned.status())));
             // The position as well as the class. A class name alone is the same words about two
             // positions of one behavior whose types divide into classes named after the same cases,
@@ -1227,7 +1203,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // a line to be at, which a model whose bounds sit one type away from the position the
             // behavior takes has, and which is the shape of every behavior that validates raw input.
             out.append(String.format("    border      %s%n",
-                    whyNoBoundary(bounded.reason())));
+                    ReasonProse.of(bounded.reason()).sentence()));
         } else {
             // The points the model's own rules discharged are not on this line. They are not
             // obligations, so a count of them beside the obligations would be two units in one
@@ -1546,36 +1522,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The measure's own answer, translated. Nothing here works out why from the row count or
             // the kind of behavior: those correlate with the reason and are not it, and the line an
             // author reads is the one place that difference shows.
-            String said = switch (measured.reason()) {
-                // Each way of owing no arm in its own words. One switch and not a word per measure,
-                // so a reason added later stops here and is decided about.
-                case Adequacy.BranchEvidence.NoArms it -> switch (it) {
-                    case NO_BODY -> "not applicable (this behavior has no body)";
-                    case NO_ARM_OBLIGATIONS -> "not applicable (this body owes no arm)";
-                };
-                case Adequacy.BranchEvidence.Unreadable _ ->
-                        "not measured (the arms could not be read)";
-                // The model says this behavior writes a body. What it owes is unknown rather than
-                // nothing, which is the difference this line exists to show.
-                case Adequacy.BranchEvidence.Unelaborated _ ->
-                        "not measured (this module's bodies were not elaborated)";
-                case Adequacy.BranchEvidence.NotAsked it ->
-                        // The one measure a report says nothing about, because it is not a measure
-                        // of this report: what was asked for is an input to the whole run, and a
-                        // line repeating it against every behavior says one fact as many times as
-                        // the module has behaviors. Every other way of having no number is about
-                        // this behavior and is said here.
-                        it == Adequacy.BranchEvidence.NotAsked.NO_ROWS
-                                ? "not measured (no row names this behavior)" : null;
-                // Not a `null` for whatever is left. The arm measure carries one of the four reason
-                // types above and nothing else, so a fifth arriving here is a reason nobody decided
-                // a word for — and answered with `null` it would leave the line out altogether,
-                // which is the measure going quiet about a number it does not have.
-                default -> throw new IllegalStateException(
-                        "the arm measure has no word for " + measured.reason());
-            };
-            if (said != null) {
-                out.append(String.format("    branch      %s%n", said));
+            //
+            // What a build asked for is not said behavior by behavior, and which reasons those are
+            // comes with the reason rather than being compared against here. Spelled as a test for
+            // the one state that is said, the state added beside it is said as neither.
+            ReasonProse said = ReasonProse.of(measured.reason());
+            if (said.scope() == ReasonProse.Scope.BEHAVIOR) {
+                out.append(String.format("    branch      %s%n", said.sentence()));
             }
             return;
         }
@@ -1821,14 +1774,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 .toList();
     }
 
-    private static String whyNoAxis(souther.compiler.observe.MeasureReason reason) {
-        return switch (reason) {
-            case PartitionEvidence.AxisCoverage.NoRows _ -> "no row names this behavior";
-            case souther.compiler.query.NothingWasAsked _ -> "nothing was asked for";
-            default -> reason.name();
-        };
-    }
-
     /**
      * That a measure with numbers was not made in full, where it was not.
      *
@@ -1840,38 +1785,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String inFull(MeasurementStatus status) {
         return status == MeasurementStatus.PARTIAL ? "   (not all of it was measured)" : "";
-    }
-
-    /**
-     * Why a measure with no number has none, in the words a document promises.
-     *
-     * <p>Said of the rules and not of their absence. A behavior whose only rule about a pair of
-     * positions relates them has rules — printed a line above, by name — and they divide no
-     * position and draw no line; a sentence saying the model has none would read as contradicting
-     * the rule beside it.
-     */
-    private static String whyNoPartition(souther.compiler.observe.MeasureReason reason) {
-        return switch (reason) {
-            case souther.compiler.query.PartitionDerivation.TheReadingDidNotRunOut _ ->
-                    "not measured (no partition axis was derived at any position)";
-            case souther.compiler.query.PartitionDerivation.NothingIsDivided _ ->
-                    "not applicable (the rules of this behavior divide no position)";
-            case souther.compiler.query.PartitionDerivation.NoSubject _ ->
-                    "not applicable (this behavior is measured at its stages)";
-            default -> reason.name();
-        };
-    }
-
-    private static String whyNoBoundary(souther.compiler.observe.MeasureReason reason) {
-        return switch (reason) {
-            case souther.compiler.query.BoundaryDerivation.TheReadingDidNotRunOut _ ->
-                    "not measured (no line was derived at any position)";
-            case souther.compiler.query.BoundaryDerivation.NoRuleDrawsALine _ ->
-                    "not applicable (the rules of this behavior draw no line)";
-            case souther.compiler.query.BoundaryDerivation.NoSubject _ ->
-                    "not applicable (this behavior is measured at its stages)";
-            default -> reason.name();
-        };
     }
 
     /** What the search for a value at an edge came to, where it ran and found none. */
@@ -2093,20 +2006,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
+    /** What an obligation's coverage was left short by, where a reason says. A coverage that came
+     *  to an answer has none, and the note beside the item is what this fills in. */
     private static String whyNoBoundaryItem(ObligationCoverage coverage) {
         MeasureReason why = coverage.why();
-        if (why == null) {
-            return "";
-        }
-        return switch (why) {
-            case ItemAssessment.Coverage.NotAsked it -> switch (it) {
-                case NOT_ASKED -> "nothing was asked for";
-                case ARMS_NOT_ASKED -> "the arms were not asked for";
-                case NO_ROWS -> "no row names this behavior";
-            };
-            case ItemAssessment.Coverage.CouldNotAsk _ -> "the arms could not be measured";
-            default -> why.name();
-        };
+        return why == null ? "" : ReasonProse.of(why).clause();
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
