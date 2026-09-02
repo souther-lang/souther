@@ -6,6 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -90,7 +91,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                arm(new Core.ResolvedPattern.Single(
+                        ResolvedCase.of(CaseSelector.direct(FOUND), List.of(FOUND))), x),
                 written, Known.top(), Denotations.none()).at();
 
         assertSame(written, engine.terms().writtenValue(read(x, Type.ref(FOUND)), at));
@@ -105,7 +107,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                arm(new Core.ResolvedPattern.Single(
+                        ResolvedCase.of(CaseSelector.direct(FOUND), List.of(FOUND))), x),
                 answer, Known.top(), Denotations.none()).at();
 
         assertNull(engine.terms().writtenValue(read(x, Type.ref(FOUND)), at));

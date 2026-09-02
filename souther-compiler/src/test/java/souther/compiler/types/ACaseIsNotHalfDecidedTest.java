@@ -71,10 +71,12 @@ class ACaseIsNotHalfDecidedTest {
     @Test
     void anArmsBindingIsReadOffWhatItSelects() {
         CaseSelector present = CaseSelector.optionPresent(ELEMENT);
-        assertEquals(present.refinement(), new Core.ResolvedPattern.Single(present).binding(),
+        assertEquals(present.refinement(), new Core.ResolvedPattern.Single(covering(present,
+                        TypeSymbol.SOME)).binding(),
                 "one case binds what that case's carrier holds, and there is nowhere to say"
                         + " otherwise");
-        assertNull(new Core.ResolvedPattern.Single(CaseSelector.optionAbsent()).bindType(),
+        assertNull(new Core.ResolvedPattern.Single(
+                        covering(CaseSelector.optionAbsent(), TypeSymbol.NONE)).bindType(),
                 "a carrier holding nothing says so as fully as any other");
     }
 
@@ -84,7 +86,7 @@ class ACaseIsNotHalfDecidedTest {
         TypeSymbol aBool = TypeSymbol.primitive(Type.Prim.BOOL);
         Type subject = Type.union(java.util.Set.of(anInt, aBool));
         Core.ResolvedPattern.AnyOf several = new Core.ResolvedPattern.AnyOf(
-                List.of(CaseSelector.direct(anInt), CaseSelector.direct(aBool)), subject);
+                List.of(aLeaf(anInt), aLeaf(aBool)), subject);
         assertEquals(new Refinement.Direct(subject), several.binding(),
                 "no one case type fits all of the alternatives, and each is already the subject");
     }
@@ -94,10 +96,19 @@ class ACaseIsNotHalfDecidedTest {
         TypeSymbol anInt = TypeSymbol.primitive(Type.Prim.INT);
         Type subject = Type.union(java.util.Set.of(anInt));
         assertThrows(IllegalArgumentException.class,
-                () -> new Core.ResolvedPattern.AnyOf(List.of(CaseSelector.direct(anInt)), subject),
+                () -> new Core.ResolvedPattern.AnyOf(List.of(aLeaf(anInt)), subject),
                 "one case is a Single, which reads its binding off the case");
         assertThrows(IllegalArgumentException.class,
                 () -> new Core.ResolvedPattern.AnyOf(List.of(), subject));
+    }
+
+    /** A leaf as this compile would resolve it: a case that covers itself. */
+    private static ResolvedCase aLeaf(TypeSymbol leaf) {
+        return covering(CaseSelector.direct(leaf), leaf);
+    }
+
+    private static ResolvedCase covering(CaseSelector selector, TypeSymbol... atoms) {
+        return ResolvedCase.of(selector, List.of(atoms));
     }
 
     @Test

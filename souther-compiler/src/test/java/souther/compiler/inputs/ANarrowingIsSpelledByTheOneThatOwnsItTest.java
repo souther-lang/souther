@@ -4,27 +4,29 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
+import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
-import souther.compiler.types.CaseSelector;
-import souther.compiler.types.Type;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -32,23 +34,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Two vocabularies say which narrowing a place carries. What a position's type divides into is
  * {@link Case}, read by {@link Distinctions}; which of those divisions a written arm selected is
- * {@link CaseSelector}, decided by the checker. Both settle a narrowing on their own, so both have
- * a way in here — and what may not have one is a value that settles less than a narrowing. A name
- * is such a value: an optional's present carrier and a case of a sum declared as {@code Some} are
- * written the same word, so a narrowing built from the name is one of the two chosen by whoever
- * built it.
+ * {@link ResolvedCase}, decided by the checker. Both settle a narrowing on their own, so both have
+ * a way in here — and what may not have one is a value that settles less than a narrowing.
  *
- * <p>That is not a hypothetical. {@code Refinement.sumCase(TypeSymbol)} was the second way in, and
- * the reading of a {@code match} arm used it: every path a body wrote through {@code Some v} came
- * out carrying a sum's case where the reading of the position carried a presence. The two spell
- * {@code x@Some} alike and are not equal, so those paths were positions nothing else in this
- * compiler names — silence wherever a reader shrugs at a path it cannot find, and an internal error
- * in the one place that refuses (#1252).
+ * <p>A name is such a value, and it falls short twice over. An optional's present carrier and a
+ * case of a sum declared as {@code Some} are written the same word. And a case that is itself a sum
+ * is one name over several leaves (spec §sum-data) while a position divides into the leaves, so
+ * {@code OnceKind} names no one of them. Both were live: {@code Refinement.sumCase(TypeSymbol)} was
+ * a second way in, and the reading of a {@code match} arm used it, so a body inside {@code | Some v}
+ * wrote at {@code x@Some} carrying a sum's case where the reading carried a presence, and a body
+ * inside {@code | OnceKind as x} wrote at {@code k@OnceKind}, which the reading has no position for
+ * at all (#1252).
+ *
+ * <p>Nothing compared them: a reader that looks such a path up finds nothing and says nothing.
  *
  * <p>What holds the rule is that the variants have no constructor a caller can reach and that the
  * two ways in take the two values that determine a narrowing. What holds the correspondence is
- * {@link #twoVocabulariesAnswerOneNarrowing}, below: exhaustiveness stops a variant being added
- * without an answer, and only a comparison stops an existing one being answered wrongly.
+ * {@link #everySelectionTheCheckerMakesAnswersOneNarrowingOrNone}, below: exhaustiveness stops a
+ * variant being added without an answer, and only a comparison stops an existing one being answered
+ * wrongly.
  */
 class ANarrowingIsSpelledByTheOneThatOwnsItTest {
 
@@ -71,8 +75,9 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
      * <p>Named rather than counted. A count is tripped by a private helper, which is nobody's way
      * in, and the reading of it that fits is to raise the number — which lets a way in be added
      * later with nothing having said so. What is checked beside the names is what each of them
-     * takes: a way in whose parameter is a name, a string or a list of case types is one that
-     * cannot tell the two narrowings apart, whatever it is called.
+     * takes: a way in whose parameter is a name, a string, a list of case types or a selector that
+     * has not been resolved against the declarations is one that cannot answer for a case standing
+     * over several leaves, whatever it is called.
      */
     @Test
     void everyWayInTakesAValueThatSettlesTheNarrowing() {
@@ -85,73 +90,127 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                 ways.stream().map(java.lang.reflect.Method::getName)
                         .collect(java.util.stream.Collectors.toSet()),
                 "a way to spell a narrowing that is not `of` is a decision, not an accident");
-        assertEquals(java.util.Set.of(Case.class, CaseSelector.class),
+        assertEquals(java.util.Set.of(Case.class, ResolvedCase.class),
                 ways.stream().map(each -> each.getParameterTypes()[0])
                         .collect(java.util.stream.Collectors.toSet()),
-                "a narrowing is made from what a position divides into or from what an arm"
-                        + " selected, and from nothing that settles less than either");
+                "a narrowing is made from what a position divides into or from what an arm was"
+                        + " resolved to select, and from nothing that settles less than either");
     }
 
     /**
-     * The two vocabularies answer one narrowing, shape by shape.
+     * Every selection the checker makes answers one of the position's distinctions, or none.
      *
      * <p>The correspondence itself, and the reason the exhaustive {@code switch}es are not the whole
      * of the rule. Nothing stops {@code OptionPresent} being answered with {@code Presence(false)}:
      * every arm would be covered, every reading would compile, and an optional's arms would swap
-     * which position they wrote at. So each division a type states is matched here against the
-     * selector a pattern selecting it carries.
+     * which position they wrote at.
      *
-     * <p>Read off a compiled model rather than written out, so that what the checker actually builds
-     * for {@code Some} is what is compared — a selector written here by hand would agree with
-     * whatever this test thought the checker does.
+     * <p><b>Read forward, off what the checker put on the arms.</b> A test that built a selector for
+     * each distinction and compared the two would only ever meet the selections it thought of, and
+     * the one that mattered is the one it would not have thought of: {@code OnceKind} has no
+     * distinction to be paired with, so it never appears among the pairs and its narrowing goes
+     * unasked about. So the arms of the model are walked, every selection the checker resolved is
+     * taken as it stands, and each is required to answer either one distinction the position states
+     * or none at all.
+     *
+     * <p>The model states each shape once: a case that is a leaf, a case that is itself a sum, an
+     * or-pattern, and both of an optional's carriers.
      */
     @Test
-    void twoVocabulariesAnswerOneNarrowing() {
+    void everySelectionTheCheckerMakesAnswersOneNarrowingOrNone() {
         Read read = read("""
                 module m
 
-                data Empty
-                data Held = { least: Int }
-                data Slot = Empty | Held
-                data Box = { slot: Slot, tag: Int? }
+                data Station  = { at: String }
+                data Hospital = { at: String }
+                data Renkei   = { at: String }
+                data OnceKind  = Station | Hospital
+                data VisitKind = OnceKind | Renkei
+
+                data Tagged = { tag: Int? }
                 data Ack = { at: String }
 
-                behavior open : (b: Box) -> Ack
+                behavior visit : (k: VisitKind, t: Tagged) -> Ack
+                let visit (k, t) = {
+                    let named = match k with
+                        | OnceKind as once ->
+                            match once with
+                                | Station as s -> s.at
+                                | Hospital as h -> h.at
+                        | Renkei as r -> r.at
+                    let both = match k with
+                        | Station | Hospital -> "once"
+                        | Renkei as r -> r.at
+                    let held = match t.tag with
+                        | Some v -> v
+                        | None -> 0
+                    Ack { at = named }
+                }
                 """);
 
-        // That the model under test states what this is about, and no more than that: which order a
-        // type's divisions come back in is settled elsewhere and is nothing this claim rests on.
-        assertEquals(java.util.Set.of("Empty", "Held"), spelledCases(read, "slot"),
-                "the sum states its cases");
-        assertEquals(java.util.Set.of("None", "Some"), spelledCases(read, "tag"),
-                "and the optional states whether it holds anything");
-
-        for (Case each : distinctionsAt(read, "slot")) {
-            Case.SumCase one = (Case.SumCase) each;
-            assertEquals(Refinement.of(each), Refinement.of(CaseSelector.direct(one.leaf())),
-                    () -> "a case of a sum is one narrowing, read either way: " + one.leaf());
+        Map<String, Refinement> answered = new LinkedHashMap<>();
+        int orPatterns = 0;
+        for (Core.Case arm : armsOf(read.body)) {
+            if (arm.selectedCase().isEmpty()) {
+                orPatterns++;
+                continue;
+            }
+            ResolvedCase selected = arm.selectedCase().orElseThrow();
+            answered.put(selected.toString(), Refinement.of(selected));
         }
-        Type held = elementOf(read, "tag");
-        assertEquals(Refinement.of(new Case.Presence(true)),
-                Refinement.of(CaseSelector.optionPresent(held)),
-                "an optional holding something is one narrowing, read either way");
-        assertEquals(Refinement.of(new Case.Presence(false)),
-                Refinement.of(CaseSelector.optionAbsent()),
-                "and so is an optional holding nothing");
+
+        assertEquals(List.of(
+                        "m.OnceKind covering [m.Station, m.Hospital]",
+                        "m.Renkei covering [m.Renkei]",
+                        "m.Station covering [m.Station]",
+                        "m.Hospital covering [m.Hospital]",
+                        "Some covering [Some]",
+                        "None covering [None]"),
+                List.copyOf(answered.keySet()),
+                "the model states each shape of selection once");
+        assertEquals(1, orPatterns,
+                "and one arm selects several cases, which is the shape that selects no one of them");
+
+        // A case standing over several leaves answers no one distinction. Read from its name it
+        // would answer `@OnceKind`, which is a place the reading of the position never holds.
+        assertNull(answered.get("m.OnceKind covering [m.Station, m.Hospital]"),
+                "a case that is itself a sum narrows to several of the position's distinctions,"
+                        + " and so to no one of them");
+
+        // And every other selection answers exactly one of them, matched against what the position
+        // itself states rather than against a narrowing written here.
+        Map<Refinement, String> stated = new LinkedHashMap<>();
+        for (Case each : distinctionsAt(read, TermPath.of("k"))) {
+            stated.put(Refinement.of(each), "k");
+        }
+        for (Case each : distinctionsAt(read, TermPath.of("t").then("tag"))) {
+            stated.put(Refinement.of(each), "t.tag");
+        }
+        for (Map.Entry<String, Refinement> each : answered.entrySet()) {
+            if (each.getValue() == null) {
+                continue;
+            }
+            assertTrue(stated.containsKey(each.getValue()),
+                    () -> "the checker resolved `" + each.getKey() + "` to "
+                            + each.getValue().discriminated()
+                            + ", which no position of this input divides into: " + stated.keySet()
+                                    .stream().map(Refinement::discriminated).toList());
+        }
+        assertEquals(stated.size(), answered.values().stream().filter(java.util.Objects::nonNull)
+                        .distinct().count(),
+                "and between them the arms reach every distinction the two positions state");
     }
 
     /**
-     * And the two are told apart, which is what makes the correspondence load-bearing.
+     * And a presence is not a case of a sum, which is what makes the correspondence load-bearing.
      *
      * <p>A presence and a case of a sum are unequal however they are spelled, so a reader that
      * built one where the other belongs writes at a position nothing else reaches. Were they equal
-     * instead, the mistake would be invisible and this correspondence would say nothing.
+     * instead, the mistake would be invisible and the correspondence above would say nothing.
      */
     @Test
     void aPresenceIsNotACaseOfASumHoweverItIsWritten() {
-        Refinement declaredSome = Refinement.of(CaseSelector.direct(
-                souther.compiler.types.TypeSymbols.declared(
-                        new souther.compiler.types.TypeKey("m", "Some"))));
+        Refinement declaredSome = aLeafNamed("m", "Some");
 
         assertEquals("Some", declaredSome.spelled());
         assertEquals("Some", Refinement.of(new Case.Presence(true)).spelled());
@@ -174,7 +233,7 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
     void twoNarrowingsToTheSameThingAreOne() {
         assertEquals(anInt(), anInt());
         assertEquals(anInt().hashCode(), anInt().hashCode());
-        assertNotEquals(anInt(), Refinement.of(CaseSelector.direct(TypeSymbol.primitive("Bool"))));
+        assertNotEquals(anInt(), aLeaf(TypeSymbol.primitive("Bool")));
 
         assertEquals(Refinement.of(new Case.Presence(true)), Refinement.of(new Case.Presence(true)));
         assertNotEquals(Refinement.of(new Case.Presence(true)),
@@ -184,33 +243,42 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
     }
 
     private static Refinement anInt() {
-        return Refinement.of(CaseSelector.direct(TypeSymbol.primitive("Int")));
+        return aLeaf(TypeSymbol.primitive("Int"));
     }
 
-    /** What the type at {@code field} of the parameter divides into. */
-    private static List<Case> distinctionsAt(Read read, String field) {
-        return Distinctions.ofType(
-                TypeView.of(read.inputs.at(TermPath.of("b").then(field)).view().declared(),
-                        read.symbols),
-                read.symbols);
+    private static Refinement aLeafNamed(String module, String name) {
+        return aLeaf(souther.compiler.types.TypeSymbols.declared(
+                new souther.compiler.types.TypeKey(module, name)));
     }
 
-    private static java.util.Set<String> spelledCases(Read read, String field) {
-        java.util.Set<String> out = new java.util.LinkedHashSet<>();
-        for (Case each : distinctionsAt(read, field)) {
-            out.add(Refinement.of(each).spelled());
-        }
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement aLeaf(TypeSymbol leaf) {
+        return Refinement.of(ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), List.of(leaf)));
+    }
+
+    /** Every arm of every {@code match} the body holds, outermost first. */
+    private static List<Core.Case> armsOf(Core body) {
+        List<Core.Case> out = new ArrayList<>();
+        collect(body, out);
         return out;
     }
 
-    /** What the optional at {@code field} holds, which is what its present carrier is written for. */
-    private static Type elementOf(Read read, String field) {
-        TypeView view = TypeView.of(
-                read.inputs.at(TermPath.of("b").then(field)).view().declared(), read.symbols);
-        return ((Shape.Optional) view.shape()).element();
+    private static void collect(Core at, List<Core.Case> out) {
+        if (at instanceof Core.Match match) {
+            out.addAll(match.cases());
+        }
+        Core.forEachChild(at, each -> collect(each, out));
     }
 
-    private record Read(InputDomain inputs, Symbols symbols) {}
+    /** What the type at one position divides into. */
+    private static List<Case> distinctionsAt(Read read, TermPath at) {
+        return Distinctions.ofType(
+                TypeView.of(read.inputs.at(at).view().declared(), read.symbols), read.symbols);
+    }
+
+    private record Read(InputDomain inputs, Core body, Symbols symbols) {}
 
     private static Read read(String source) {
         Compilation compilation =
@@ -220,10 +288,11 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("open")).findFirst().orElseThrow();
+                .filter(b -> b.name().equals("visit")).findFirst().orElseThrow();
         return new Read(
-                InputDomain.of(spec, sigs.get("open"), symbols, ReadAs.THE_COMPILATION_DOES),
-                symbols);
+                InputDomain.of(spec, sigs.get("visit"), symbols, ReadAs.THE_COMPILATION_DOES),
+                checked.behaviorBodies().get("visit"), symbols);
     }
 }

@@ -1,6 +1,6 @@
 package souther.compiler.inputs;
 
-import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
 /**
@@ -17,12 +17,14 @@ import souther.compiler.types.TypeSymbol;
  * shape of its own with nothing to be an instance of.
  *
  * <p><b>Made only from a value that already settles which narrowing it is.</b> Two vocabularies
- * decide that — what a position's type divides into ({@link Case}) and what a written pattern
- * selects ({@link CaseSelector}) — and each has a way in here. What has no way in is a name: an
- * optional's present carrier and a sum's case are both called {@code Some} where one is written,
- * so a narrowing built from the name alone is one of the two chosen by whoever built it. Every
- * reader below compares narrowings by equality, so the two spellings of one place never meet, and
- * what a body wrote through such a path is about a position nothing else in this compiler names.
+ * decide that — what a position's type divides into ({@link Case}) and what a written pattern was
+ * resolved to select ({@link ResolvedCase}) — and each has a way in here. What has no way in is a
+ * name, and a name falls short twice over. An optional's present carrier and a sum's case are both
+ * called {@code Some} where one is written, so a narrowing built from the name is one of the two
+ * chosen by whoever built it. And a case that is itself a sum is one name over several leaves,
+ * while a position divides into the leaves, so a narrowing built from that name is a place the
+ * reading has none of. Every reader below compares narrowings by equality, so a path spelled either
+ * way never meets the position it was meant to be about.
  */
 public sealed interface Refinement {
 
@@ -67,26 +69,42 @@ public sealed interface Refinement {
     }
 
     /**
-     * The narrowing {@code selected} is, for a reader holding what a written pattern selects.
+     * The narrowing {@code selected} is, or null where selecting it narrows a position to no one
+     * distinction.
      *
      * <p>The same relating of vocabularies as {@link #of(Case)} and from the other end. A position's
      * type says what it divides into; a checked pattern says which of those divisions the arm took.
      * Both settle a narrowing on their own, and a reader that has one of them has no second question
      * to ask.
      *
-     * <p><b>Read off what the selector refines the value to, and never off its name.</b> The two are
-     * made together and cannot disagree ({@link CaseSelector}), and only the first tells an
-     * optional's present carrier from a sum's case declared under the same word. A reader taking the
-     * name would build the sum's narrowing for both, so an optional's arm would write a path the
-     * reading of the position never spells.
+     * <p><b>Read off what the selection was resolved to, and never off the name it was written
+     * by.</b> Two facts settle it and neither is the name. What the value turns out to be tells an
+     * optional's present carrier from a sum's case declared under the same word — a reader taking
+     * the name would build the sum's narrowing for both. And which leaves the selection covers tells
+     * a case that divides the position from one that is itself divided: a case that is a sum stands
+     * for the leaves under it (spec §sum-data), and the reading of a position divides it into those
+     * leaves ({@link Distinctions}), so an arm naming the case above them narrows to several of them
+     * and to no one of them. Read from the name, {@code @OnceKind} would be written where the
+     * reading holds {@code @Station} and {@code @Hospital}.
+     *
+     * <p>So a narrowing is the leaf itself and not the name it was reached by. A case declared over
+     * one leaf is written as that leaf here, which is how the position spells it.
+     *
+     * <p>Null and not a refusal. An arm can select a case that divides nothing at a position, the
+     * way a {@code Bool}'s two values divide none, and what a reader is owed for one is that there
+     * is no narrowing here — the same answer {@link #of(Case)} gives for the distinctions that put
+     * nothing under them.
      *
      * <p>Exhaustive over {@link souther.compiler.types.Refinement}, with no {@code default}: a way
      * of selecting a case added later stops this compiling rather than arriving as whichever arm is
      * nearest.
      */
-    static Refinement of(CaseSelector selected) {
+    static Refinement of(ResolvedCase selected) {
         return switch (selected.refinement()) {
-            case souther.compiler.types.Refinement.Direct _ -> new SumCase(selected.name());
+            case souther.compiler.types.Refinement.Direct _ -> selected.atoms().size() == 1
+                    ? new SumCase(selected.atoms().get(0)) : null;
+            // An optional's carriers cover themselves and are not leaves of anything, so what they
+            // narrow to follows from the carrier alone ({@code CaseSpace}).
             case souther.compiler.types.Refinement.OptionPresent _ -> new Presence(true);
             case souther.compiler.types.Refinement.OptionAbsent _ -> new Presence(false);
         };

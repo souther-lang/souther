@@ -106,7 +106,6 @@ public final class MatchElaborator {
         Type branchType = null;
         for (int armIndex = 0; armIndex < m.cases().size(); armIndex++) {
             Hir.Case c = m.cases().get(armIndex);
-            List<CaseSelector> selected = new ArrayList<>();
             List<TypeSymbol> answersFor = new ArrayList<>();
             List<ResolvedCase> alternatives = new ArrayList<>();
             for (Hir.Name written : c.caseTypes()) {
@@ -117,10 +116,6 @@ public final class MatchElaborator {
                 }
                 alternatives.add(resolved);
                 answersFor.addAll(resolved.atoms());
-                // What goes into the arm is the selector. An arm is emitted from what it tests
-                // and reads, which is all of a case that survives into `Core`; what it covers is
-                // this pass's to hold and is not carried past it.
-                selected.add(resolved.selector());
             }
             // What the arm's own alternatives say about each other, before what they say about the
             // arms before them. An alternative that adds nothing is a mistake inside this arm, and
@@ -148,9 +143,13 @@ public final class MatchElaborator {
                         .say(new MatchMessage.MatchedByMoreThanOneCase(overlap.value().name()))
                         .build());
             }
-            Core.ResolvedPattern pattern = selected.size() == 1
-                    ? new Core.ResolvedPattern.Single(selected.get(0))
-                    : new Core.ResolvedPattern.AnyOf(selected, scrutinee);
+            // Carried on as resolved. What a case covers is read off the declarations, which no
+            // reader below this holds, so a pass that handed on the selector alone would leave
+            // every question about which case of the subject an arm picked to be answered from its
+            // name — and a case that is itself a sum reaches several leaves under one name.
+            Core.ResolvedPattern pattern = alternatives.size() == 1
+                    ? new Core.ResolvedPattern.Single(alternatives.get(0))
+                    : new Core.ResolvedPattern.AnyOf(alternatives, scrutinee);
             Type bindType = pattern.bindType();
             if (c.unwrapAsserts() != null) {
                 if (!(pattern instanceof Core.ResolvedPattern.Single)) {
@@ -213,7 +212,8 @@ public final class MatchElaborator {
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(new Core.ResolvedPattern.Single(selector), CoreBinders.of(c.binding()), body, c.pos()));
+            arms.add(new Core.Case(new Core.ResolvedPattern.Single(resolved),
+                    CoreBinders.of(c.binding()), body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();

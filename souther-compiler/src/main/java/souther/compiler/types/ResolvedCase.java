@@ -29,8 +29,12 @@ import java.util.List;
  * resolved one; what stops it is that the one caller is the descent itself, and a second maker
  * would be a second answer to what a case covers ({@code check.CaseSpace#resolve}).
  *
- * <p>What is emitted downstream is the selector — {@link #selector()} — which is all {@code Core}
- * and the backend have ever needed.
+ * <p>What a backend emits is the selector — {@link #selector()} — and what {@code Core} carries is
+ * this. The two are not the same need. A backend tests and reads a value, which the selector says
+ * on its own; a reader asking which case of a subject an arm picked is asking about the leaves, and
+ * below the checker there are no declarations left to work them out from. Carried as a selector
+ * alone, that reader answered from the name, and one name over two leaves became a place nothing
+ * else in the compiler holds.
  */
 public final class ResolvedCase {
 

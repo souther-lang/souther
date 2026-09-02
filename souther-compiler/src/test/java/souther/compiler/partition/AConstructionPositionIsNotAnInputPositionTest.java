@@ -239,7 +239,14 @@ class AConstructionPositionIsNotAnInputPositionTest {
     /** The requirement a class of {@code d} states by being the {@code Approved} case of it. */
     private static Requirements throughApproved(Read read) {
         return Requirements.NONE.and(TermPath.of(read.spec().params().get(0).name()),
-                Refinement.of(CaseSelector.direct(caseNamed(SUM, "probe"))));
+                toLeaf(caseNamed(SUM, "probe")));
+    }
+
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(TypeSymbol leaf) {
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(leaf), java.util.List.of(leaf)));
     }
 
     /** The name of the case to build through, taken off a behavior that is declared to take one. */

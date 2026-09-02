@@ -3,9 +3,7 @@ package souther.compiler.reading;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.NumericMeasures;
-import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeView;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -16,7 +14,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 
 import java.util.List;
@@ -66,16 +63,17 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
                     | None -> No
             """;
 
-    /** The position the arm's name stands at, spelled by the narrowing the optional's own carrier
-     *  is. */
-    private static TermPath underSome(Read read) {
-        TermPath optional = TermPath.of("b").then("held");
-        // What the optional holds, which is what its present carrier is written for. Taken off the
-        // type rather than passed the optional itself: the two spell one narrowing today, and a
-        // carrier written for the wrong type is a selector no checker would build.
-        Shape.Optional shape = (Shape.Optional) TypeView.of(
-                read.inputs.at(optional).view().declared(), read.symbols).shape();
-        return optional.refine(Refinement.of(CaseSelector.optionPresent(shape.element())))
+    /**
+     * The position the arm's name stands at.
+     *
+     * <p>Spelled in the reading's own vocabulary — the distinction an optional's type states — and
+     * not in the arm's. What is being claimed is that the two meet, so naming the place from the
+     * side the body is compared against leaves the body's side with nothing written here to agree
+     * with.
+     */
+    private static TermPath underSome() {
+        return TermPath.of("b").then("held")
+                .refine(Refinement.of(new souther.compiler.inputs.Case.Presence(true)))
                 .then("c");
     }
 
@@ -90,7 +88,7 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
     void theComparisonInsideTheArmIsAboutThePositionUnderThePresence() {
         Read read = read(THROUGH_AN_OPTIONAL);
 
-        assertEquals(List.of(read.lengthAt(underSome(read))),
+        assertEquals(List.of(read.lengthAt(underSome())),
                 read.sides().stream().map(Condition.Side::at).distinct().toList(),
                 "the number is the length of the field under the optional's present carrier");
     }
@@ -104,7 +102,7 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
         // Said with each narrowing's kind on it, because that is the whole of what goes wrong here:
         // a position spelled `b.held@Some` is in the list either way, and only the kind tells the
         // one the reading holds from the one a body would have written at.
-        assertNotNull(read.inputs.at(underSome(read)),
+        assertNotNull(read.inputs.at(underSome()),
                 () -> "the body writes at a position the reading does not hold: "
                         + read.inputs.positions().stream()
                                 .map(each -> each.path().discriminated()).toList());

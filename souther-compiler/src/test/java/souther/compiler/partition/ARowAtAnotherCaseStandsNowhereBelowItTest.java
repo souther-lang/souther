@@ -99,10 +99,16 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
         return read.subject().axes().where(each -> each.id().equals(axis.id()));
     }
 
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(leaf), java.util.List.of(leaf)));
+    }
+
     private static TermPath under(String module, String leaf, String field) {
         return TermPath.of("query")
-                .refine(Refinement.of(CaseSelector.direct(
-                        TypeSymbols.declared(new TypeKey(module, leaf)))))
+                .refine(toLeaf(TypeSymbols.declared(new TypeKey(module, leaf))))
                 .then(field);
     }
 
