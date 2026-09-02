@@ -418,7 +418,7 @@ public final class CallElaborator {
      * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
      * with itself and not something an author can act on.
      */
-    static RuntimeException noCallee(Hir.Apply call) {
+    static RuntimeException noCallee(Hir.Apply call, Symbols symbols) {
         if (call.answered() == null) {
             return new IllegalStateException("`" + call.written()
                     + "` applies something that is not a name, at " + call.pos());
@@ -430,8 +430,17 @@ public final class CallElaborator {
                             .hint(new BehaviorMessage.WhatReachesABehavior(call.written()))
                             .say(new BehaviorMessage.ABehaviorCannotBeCalledFromHere(call.written())).build());
             // A type applied to an argument is a construction, and every place a construction is
-            // allowed rewrites it before the check reads it. Reaching here means it was written
-            // somewhere no rewrite covers, so say what it is rather than what it is not.
+            // allowed rewrites it before the check reads it — where what was written is one. A
+            // newtype wraps a single value, so an application of one to any other count is not a
+            // construction of it and is left as it was written; it reaches here from a place the
+            // rewrite covers, and what is wrong with it is the count and not the place.
+            case ValueName.OfType named when isANewtype(named, symbols) && call.args().size() != 1 ->
+                    CompileException.of(Diagnostic.at(call.appliedAt())
+                            .say(new DataMessage.ANewtypeWrapsOneValue(
+                                    call.written(), String.valueOf(call.args().size())))
+                            .build());
+            // Any other application of a type reached here from somewhere no rewrite covers, so say
+            // what it is rather than what it is not.
             case ValueName.OfType named -> CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new DataMessage.AConstructionCannotBeWrittenHere(named.name())).build());
             // A binding applied to arguments, whose type here is not a function. Either it is not one
@@ -449,6 +458,13 @@ public final class CallElaborator {
                             .at(call.appliedAt()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
             case null -> unelaborated("nothing", call);
         };
+    }
+
+    /** Whether the applied name is a newtype — read from the declaration, which says so, and not
+     *  from the shape of what was written. */
+    private static boolean isANewtype(ValueName.OfType named, Symbols symbols) {
+        return symbols != null
+                && symbols.declaredNode(named.type()) instanceof Hir.Data data && data.newtype();
     }
 
     private static IllegalStateException unelaborated(String what, Hir.Apply call) {
@@ -683,7 +699,7 @@ public final class CallElaborator {
             if (bareLibraryName != null) {
                 throw bareLibraryName;
             }
-            throw noCallee(call);
+            throw noCallee(call, ctx.symbols());
         }
         arity(call, required.params().size());
         for (int i = 0; i < required.params().size(); i++) {

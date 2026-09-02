@@ -1,64 +1,60 @@
 package souther.compiler.derive;
 
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 
 /**
- * Derives default boundary codecs (decoders/encoders and sum discriminators) from the shape
- * of the domain data. Decoders/encoders are not part of the domain syntax (they are a
- * boundary concern); this pass fills them in from field names and types so a domain
- * definition needs only {@code data}/{@code invariant}/{@code behavior}. Conventions:
- * JSON key = field name; single-primitive-field data is a newtype (bare primitive).
+ * Derives the default boundary representation of a product from the shape of the domain data.
+ * Decoders/encoders are not part of the domain syntax (they are a boundary concern); this reads one
+ * off field names and types so a domain definition needs only {@code data}/{@code invariant}/
+ * {@code behavior}. Conventions: JSON key = field name; single-primitive-field data is a newtype
+ * (bare primitive).
  *
- * <p>A sum passes through. How its alternatives are written at the boundary is derived too, but it
- * is derived where it is read ({@code check.Boundary}) rather than filled in on the declaration.
+ * <p>A product only. What a sum's alternatives are called at the boundary and the form they travel
+ * in are derived too, but they are derived where they are read ({@code check.Boundary}) rather than
+ * carried on the declaration, and a unit has none to carry (#994).
+ *
+ * <p>The algorithm and not the stage. What holds a derived representation is
+ * {@code check.Derived.Data}, which is reached by deriving a declaration; this answers the question
+ * that operation asks.
  */
 public final class Deriver {
 
     private Deriver() {}
 
-    public static Hir.Module derive(Hir.Module module, Stdlib stdlib) {
-        return derive(module, TypeChecker.symbols(module, stdlib));
-    }
+    /**
+     * The decoder and the encoder of one product, which are two halves of one reading and are
+     * carried together for that reason.
+     */
+    public record Codecs(Hir.DecoderDef decoder, Hir.EncoderDef encoder) {
 
-    /** Derives codecs using {@code symbols} for type resolution (own definitions plus any
-     * imported ones, for cross-module fields — spec §modules). */
-    public static Hir.Module derive(Hir.Module module, Symbols symbols) {
-        List<Hir.Def> defs = new ArrayList<>();
-        for (Hir.Def def : module.defs()) {
-            defs.add(switch (def) {
-                case Hir.Data d -> deriveData(d, symbols);
-                // A sum keeps nothing derived. What its alternatives are called at the boundary and
-                // the form they travel in are worked out from the declaration wherever they are
-                // wanted (`check.Boundary`), so there is nothing to fill in here (#994).
-                case Hir.SumData s -> s;
-                case Hir.UnitData u -> u;
-            });
+        public Codecs {
+            java.util.Objects.requireNonNull(decoder, "a derived representation reads");
+            java.util.Objects.requireNonNull(encoder, "a derived representation writes");
         }
-        return module.withDefs(defs);
     }
 
-    private static Hir.Data deriveData(Hir.Data d, Symbols symbols) {
+    /**
+     * The boundary representation of {@code d}, or null where its fields do not all name a type.
+     *
+     * <p>Null and not a report. A field whose type nobody could name was reported where the name is
+     * written, and saying it again here would say the same thing twice; what a caller does with the
+     * absence is answer nothing about the declaration, which is what a module holding one is worth.
+     */
+    public static Codecs derive(Hir.Data d, Symbols symbols) {
         Map<String, Type> fields = TypeOps.fieldTypes(d, symbols);
         if (fields.values().stream().anyMatch(t -> t instanceof Type.Erroneous)) {
-            // A field whose type nobody could name has no external representation, and saying so
-            // would be saying the same thing twice: the name that denotes nothing was reported where
-            // it was written. The declaration keeps no codec, which costs nothing — a module holding
-            // a type like this is never emitted.
-            return d;
+            return null;
         }
         // One walk decides what each field carries, and the decoder and the encoder are both lowered
         // from it. Asked separately they would agree only by coincidence: a builder with an arm the
@@ -78,9 +74,7 @@ public final class Deriver {
         Hir.EncoderDef encoder = deriveEncoder(d, shapes,
                 new Hir.Binders(new BindingOwner.Synthesized(declared,
                         BindingOwner.Pass.DERIVER, 1)));
-        return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                d.invariants(),
-                Optional.of(decoder), Optional.of(encoder), d.pos());
+        return new Codecs(decoder, encoder);
     }
 
     // --- decoder derivation ---

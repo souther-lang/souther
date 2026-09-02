@@ -65,7 +65,7 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
+        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `Length` declared");
         FieldDomains domains = FieldDomains.of(named, data, symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

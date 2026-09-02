@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Prepared;
 
 import java.util.List;
@@ -128,8 +129,8 @@ class AnAnsweredMeasureAnswersForEveryBehaviorTest {
      */
     @Test
     void aMapperThatAnswersNothingIsRefused() {
-        Prepared prepared =
-                measured().db().ask(new Shapes.Prepared("example.shapes")).value();
+        CheckSurface prepared =
+                measured().db().ask(new Shapes.CheckSurface("example.shapes")).value();
         assertThrows(NullPointerException.class,
                 () -> Adequacy.answerEveryBehavior(prepared,
                         behavior -> behavior.name().equals("one") ? null : behavior.name()),

@@ -32,7 +32,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.meta.ModuleMetadata;
-import souther.compiler.check.Prepared;
+import souther.compiler.check.CheckSurface;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
@@ -395,7 +395,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<ModuleReport> modules = new ArrayList<>();
         WeakeningSet overall = WeakeningSet.none();
         for (String name : compilation.modules()) {
-            Prepared module = compilation.module(name);
+            // The assembly and not the state built on it. A report says what could and could not be
+            // measured, so a module one of whose declarations did not come out is one it has
+            // something to say about — left out, every measure of it would read as a measure nobody
+            // asked for.
+            CheckSurface module = compilation.db()
+                    .ask(new souther.compiler.query.Shapes.CheckSurface(name)).value();
             if (module == null) {
                 continue;   // a module that did not get far enough to have behaviors
             }
@@ -410,7 +415,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 held, overall, List.copyOf(modules));
     }
 
-    private static ModuleReport moduleReport(Compilation compilation, String name, Prepared module) {
+    private static ModuleReport moduleReport(Compilation compilation, String name,
+                                             CheckSurface module) {
         // The same reading every measure beside them reads, asked for rather than made again. Two
         // evaluations of one model can disagree — a row that ran out of time under the instrumented
         // one and held under the other — and a report whose counts came from one while its coverage

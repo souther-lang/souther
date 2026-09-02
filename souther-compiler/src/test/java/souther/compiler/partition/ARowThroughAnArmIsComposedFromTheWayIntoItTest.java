@@ -234,7 +234,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                         switch (claim.at()) {
                             case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
                             case ControlPointId.ComparisonPoint point -> {
-                                taken.add(point.at().emissionSite());
+                                taken.add(point.at().value());
                                 ways.add(point.way());
                             }
                         }
@@ -263,8 +263,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                    checked.supplied());
+            CoverageSites.Plan plan = checked.plan();
             Partitions.Partitioning partitioning =
                     Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),

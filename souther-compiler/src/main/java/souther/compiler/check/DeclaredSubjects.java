@@ -36,12 +36,12 @@ import java.util.Set;
 public final class DeclaredSubjects {
 
     /** The numbers the rules on {@code type} and on the types it wraps are written about. */
-    public static Set<FieldDomains.CoordinateKind> of(Type type, Symbols symbols,
-                                                      ReadingPolicy policy) {
-        Set<FieldDomains.CoordinateKind> out = new LinkedHashSet<>();
-        for (FieldDomains.Coordinate each : Rules.of(type, symbols, policy).bounds().writtenAbout()) {
-            if (each.path().isTheValueItself()) {
-                out.add(each.kind());
+    public static Set<NumberAt.OfWhatNumber> of(Type type, Symbols symbols,
+                                                ReadingPolicy policy) {
+        Set<NumberAt.OfWhatNumber> out = new LinkedHashSet<>();
+        for (NumberAt<RuleKey> each : Rules.of(type, symbols, policy).bounds().writtenAbout()) {
+            if (each.position().isTheValueItself()) {
+                out.add(each.of());
             }
         }
         return Collections.unmodifiableSet(out);

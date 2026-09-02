@@ -56,7 +56,7 @@ class ABranchDeadOnlyByItsPatternsLeavesNothingBehindTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Pair"));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols,
+                (Hir.Data) symbols.declaredNode(name.key()), symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

@@ -107,8 +107,9 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
     private static Hir.Module derive(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        Hir.Module resolved = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+        // The module as it is below the derivation, which is the resolved one: what deriving
+        // establishes is carried by the declarations and not written back into the tree.
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .db().ask(new Names.Resolved("m")).value();
-        return Deriver.derive(resolved, DefaultStdlib.get());
     }
 }

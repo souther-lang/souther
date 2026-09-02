@@ -3,7 +3,8 @@ package souther.compiler.codegen;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.Elaborator;
 import souther.compiler.check.Lower;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.Derived;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
@@ -52,7 +53,7 @@ import static souther.compiler.codegen.JvmTypes.*;
 final class CodecGen {
 
     private final CodegenContext ctx;
-    private final Symbols symbols;
+    private final DerivedSymbols symbols;
     /** The $Dec class currently being generated — the owner of the {@code __rekey} helpers a
      * newtype-keyed map decoder references. Set per {@link #generateDecoderClass}. */
     private ClassDesc decoderClass;
@@ -245,7 +246,7 @@ final class CodecGen {
     }
 
     private void invokeCodec(CodeBuilder code, TypeSymbol type, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type) instanceof Hir.SumData);
+        code.invokestatic(cd(type), method, mtd, symbols.declaredNode(type) instanceof Hir.SumData);
     }
 
     byte[] generateSumEncoder(Hir.SumData sum, Boundary.Alternatives alternatives) {
@@ -496,8 +497,8 @@ final class CodecGen {
 
     /** The runtime type a data's {@code encode} returns: a {@code Map} for objects/sums, the bare
      * boxed scalar (or {@code Object} for a nested/list/optional value) for a newtype. */
-    private static ClassDesc encoderOutput(Hir.Data data) {
-        return data.encoder().map(enc -> rawOutputType(enc.result())).orElse(CD_Map);
+    private ClassDesc encoderOutput(Hir.Data data) {
+        return rawOutputType(symbols.derived(data).encoder().result());
     }
 
     private static ClassDesc rawOutputType(Hir.RawExpr raw) {
@@ -545,7 +546,7 @@ final class CodecGen {
             }
             for (Hir.Name written : sum.cases()) {
                 TypeSymbol caseName = Backend.names(written);
-                Hir.Def caseDef = symbols.declarations().declaration(caseName);
+                Hir.Def caseDef = symbols.declaredNode(caseName);
                 if (caseDef instanceof Hir.UnitData) continue;   // the discriminator alone, no column
                 if (!(caseDef instanceof Hir.Data d)) return false;   // a nested sum is not a row
                 // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
@@ -561,7 +562,7 @@ final class CodecGen {
     }
 
     private boolean isFlatObject(Hir.Data data) {
-        if (!(data.decoder().orElse(null) instanceof Hir.ObjectDecoder)) {
+        if (!(symbols.derived(data).decoder() instanceof Hir.ObjectDecoder)) {
             return false;   // a newtype is a bare column, not a whole-row object
         }
         for (Type t : fieldTypes(data).values()) {
@@ -575,8 +576,8 @@ final class CodecGen {
         if (t instanceof Type.ListOf || t instanceof Type.MapOf || t instanceof Type.SetOf
                 || t instanceof Type.Union) return false;
         if (t instanceof Type.Ref r) {
-            return symbols.declarations().declaration(r.name()) instanceof Hir.Data d
-                    && d.decoder().orElse(null) instanceof Hir.PrimDecoder;   // newtype column only
+            return symbols.declarations().declaration(r.name()) instanceof Derived.Data d
+                    && d.decoder() instanceof Hir.PrimDecoder;   // newtype column only
         }
         return true;   // primitive scalar
     }
@@ -863,7 +864,7 @@ final class CodecGen {
     }
 
     boolean isMapInput(TypeSymbol type) {
-        return isMapInputOf(symbols.declarations().declaration(type));
+        return isMapInputOf(symbols.declaredNode(type));
     }
 
     /**
@@ -885,7 +886,7 @@ final class CodecGen {
             return !readsABareTag(sum);
         }
         if (def instanceof Hir.Data data) {
-            Hir.DecoderDef d = data.decoder().orElse(null);
+            Hir.DecoderDef d = symbols.derived(data).decoder();
             if (d instanceof Hir.ObjectDecoder) {
                 return true;
             }

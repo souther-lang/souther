@@ -69,9 +69,8 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
         assertNotNull(checked, () -> "the model under test compiles: " + condition);
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        return GuardThresholds.of("pick", body, plan,
+        CoverageSites.Plan plan = checked.plan();
+        return GuardThresholds.of(body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module))
                         .value().get("pick"), symbols).rulesWithoutALine();
     }

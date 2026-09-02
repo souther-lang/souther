@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.ResolvedSymbols;
 
 /**
  * A scope, for a test standing where a compute stands.
@@ -19,12 +20,12 @@ public final class Scopes {
     private Scopes() {}
 
     /** What names mean in {@code module}, over the declarations as they were derived. */
-    public static Answer<Symbols> derived(Db db, String module) {
+    public static Answer<DerivedSymbols> derived(Db db, String module) {
         return Names.derivedSymbols(db, module);
     }
 
     /** The same, over the declarations as resolution left them. */
-    public static Answer<Symbols> resolved(Db db, String module) {
+    public static Answer<ResolvedSymbols> resolved(Db db, String module) {
         return Names.resolvedSymbols(db, module);
     }
 }

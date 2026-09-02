@@ -36,8 +36,8 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
     @Test
     void aNewtypesClauseIsAboutTheValueItWraps() {
         var line = lineAt("String.length(u) = 1");
-        assertEquals("String.length(the value)",
-                declaredBy("UserId").at(line.rule(), line.conjunct()).toString());
+        assertEquals("String.length(value)",
+                declaredBy("UserId").nameOf(line.rule(), line.conjunct()));
     }
 
     /**
@@ -52,8 +52,8 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
         DeclaredBorders lines = declaredBy("Pair");
         var name = lineAt("String.length(p.name) = 1");
         var code = lineAt("String.length(p.code) = 1");
-        assertEquals("String.length(name)", lines.at(name.rule(), name.conjunct()).toString());
-        assertEquals("String.length(code)", lines.at(code.rule(), code.conjunct()).toString());
+        assertEquals("String.length(name)", lines.nameOf(name.rule(), name.conjunct()));
+        assertEquals("String.length(code)", lines.nameOf(code.rule(), code.conjunct()));
     }
 
     /** Both ends of a range are the one number, which is what tells this from the case above. */
@@ -62,8 +62,8 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
         DeclaredBorders lines = declaredBy("Range");
         var bottom = lineAt("r = 1");
         var top = lineAt("r = 10");
-        assertEquals("the value", lines.at(bottom.rule(), bottom.conjunct()).toString());
-        assertEquals("the value", lines.at(top.rule(), top.conjunct()).toString());
+        assertEquals("value", lines.nameOf(bottom.rule(), bottom.conjunct()));
+        assertEquals("value", lines.nameOf(top.rule(), top.conjunct()));
         org.junit.jupiter.api.Assertions.assertNotEquals(bottom.conjunct(), top.conjunct(),
                 "the two ends are the one number and different lines");
     }

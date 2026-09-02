@@ -101,8 +101,8 @@ public sealed interface ControlPointId {
             }
         }
 
-        /** Which comparison this is a way out of. */
-        public ComparisonOccurrence at() {
+        /** Where a run through this is recorded, which is what a claim about it is answered from. */
+        public ComparisonEmissionSite at() {
             return way.at();
         }
 

@@ -76,13 +76,21 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
     private static List<Class<?>> states() {
         List<Class<?>> found = new ArrayList<>();
+        Set<Class<?>> walked = new LinkedHashSet<>();
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(Prepared.class, Expandable.class));
         while (!pending.isEmpty()) {
             Class<?> one = pending.poll();
-            if (!isState(one) || found.contains(one)) {
+            // An assembly is walked through and not counted: it holds states and is not one, which
+            // is a thing the class says of itself ({@link Assembly}) rather than a thing this
+            // reading works out from its shape. Skipping it whole would take the states it holds
+            // out of the family with it.
+            boolean assembly = Assembly.class.isAssignableFrom(one);
+            if (!(assembly || isState(one)) || !walked.add(one)) {
                 continue;
             }
-            found.add(one);
+            if (!assembly) {
+                found.add(one);
+            }
             for (Field f : one.getDeclaredFields()) {
                 mentioned(f.getGenericType(), pending);
             }
@@ -95,11 +103,47 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         return List.copyOf(found);
     }
 
-    /** Arrived at rather than built: a final class of this package with no way in from outside but
-     *  the operations these propositions are about. */
+    /**
+     * An assembly is not among the states, and what it holds still is.
+     *
+     * <p>Held because of what the reading below it is worth. A state is found here by its shape — a
+     * final class of this package nobody outside can build — and an assembly is written that way
+     * too, so without the distinction the family would carry a value that claims nothing and a rule
+     * about states failing on it would say neither which. Walked through all the same: the states an
+     * assembly holds are states wherever they are reached from.
+     */
+    @Test
+    void anAssemblyIsNotAStateAndTheStatesItHoldsAre() {
+        assertFalse(STATES.contains(CheckSurface.class),
+                "an assembly claims nothing, so what a state is held to is not asked of it");
+        assertTrue(STATES.contains(Desugared.Fn.class),
+                "and a state it holds is one, or the assembly took it out of the family");
+    }
+
+    /**
+     * Arrived at rather than built: a type of this package with no way in from outside but the
+     * operations these propositions are about.
+     *
+     * <p>Two shapes qualify, and for one reason. A final class with no public constructor is one,
+     * and so is a sealed interface every case of which is — a state that says which kind of thing it
+     * is has to be several classes, and closing the set is what makes "no way in but the operation"
+     * true of all of them at once. Read as a conjunction over the cases rather than asserted of the
+     * interface: a case that could be built from outside would be a way into the state, and the
+     * interface being sealed would not say so.
+     */
     private static boolean isState(Class<?> c) {
-        return c != null && Modifier.isFinal(c.getModifiers())
-                && "souther.compiler.check".equals(c.getPackageName())
+        if (c == null || !"souther.compiler.check".equals(c.getPackageName())) {
+            return false;
+        }
+        if (c.isSealed() && c.isInterface()) {
+            for (Class<?> permitted : c.getPermittedSubclasses()) {
+                if (!isState(permitted)) {
+                    return false;
+                }
+            }
+            return c.getPermittedSubclasses().length > 0;
+        }
+        return Modifier.isFinal(c.getModifiers())
                 && c.getConstructors().length == 0
                 && !Modifier.isAbstract(c.getModifiers());
     }
@@ -153,7 +197,18 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(Set.of("settle(Expandable, Symbols, Map)"), waysInto(InvariantSettled.class));
         assertEquals(Set.of(), waysInto(InvariantSettled.Def.class),
                 "a settled declaration is projected from the module it is one of");
-        assertEquals(Set.of("derive(Def, Symbols)"), waysInto(Derived.Def.class));
+        assertEquals(Set.of("of(Def, ResolvedSymbols)", "ofLanguage(Def)"),
+                waysInto(Normalized.Def.class),
+                "the second is for what the language declares, whose clauses hold no construction "
+                        + "left to write as one. Every kind of declaration goes through it, a "
+                        + "product among them: what a product needs derived is a representation, "
+                        + "which is the rung below and not this one");
+        assertEquals(Set.of("derive(Def, ResolvedSymbols)", "ofLanguage(Def)"),
+                waysInto(Derived.Def.class),
+                "the second is for what the language declares, where there is no representation to "
+                        + "derive: a sum's is worked out where it is read and a unit has none, so "
+                        + "the proposition holds of the declaration as it stands. It refuses a "
+                        + "product, which would need one derived like any other");
         assertEquals(Set.of("assemble(InvariantSettled, Map)"), waysInto(Derived.Module.class));
         assertEquals(Set.of("desugar(FnDef, Symbols)", "reestablish(FnDef, Symbols)"),
                 waysInto(Desugared.Fn.class),
@@ -161,10 +216,11 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                         + "proves the proposition again of what came out, and refuses where the "
                         + "rewrite would have changed it");
         assertEquals(Set.of("assemble(Module, Map)"), waysInto(Desugared.Module.class));
-        assertEquals(Set.of("prepare(Module, Symbols, Map, Map)"), waysInto(Prepared.class),
-                "the second map is what each behavior takes and answers with, which the rung that "
-                        + "settles it worked out: a row's positions are read from it rather than "
-                        + "off the forms this module wrote");
+        assertEquals(Set.of("prepare(Module, CheckSurface)"), waysInto(Prepared.class),
+                "the assembly and the witness that every declaration and definition came out. The "
+                        + "parts are joined once, where a best-effort reading of the module is "
+                        + "given them too, and this is that assembly beside the claim it does not "
+                        + "make");
         assertEquals(Set.of(), waysInto(Prepared.Example.class),
                 "an example block is projected from the module it is one of");
         assertEquals(Set.of(), waysInto(Prepared.FakeTable.class),
@@ -194,7 +250,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                     constructs Amount
                 let go (n) = Amount(n)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
+        ResolvedSymbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         Hir.FnDef written = resolved.fns().stream()
                 .filter(f -> f.name().equals("go")).findFirst().orElseThrow();
 
@@ -512,7 +568,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 let go (n) = wrap(n)
                 let wrap (n) = Wrapped(n)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
+        ResolvedSymbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         Hir.FnDef unsettled = resolved.fns().stream()
                 .filter(f -> f.name().equals("wrap")).findFirst().orElseThrow();
 
@@ -574,7 +630,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
                 let isOk (n: Int) : Bool = Wrapped(n) == Wrapped(0)
                 """);
-        Symbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
+        ResolvedSymbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         InvariantSettled settled =
                 InvariantSettled.settle(Expandable.check(resolved, Map.of(), DefaultStdlib.get()), scope, Map.of());
         InvariantSettled.Def amount = settled.defs().stream()
@@ -582,8 +638,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
         assertEquals(2, applications(clauseOf(List.of(amount.def()), "Amount")),
                 "the constructions are written as applications until this rewrites them");
-        assertEquals(0, applications(clauseOf(List.of(Derived.Def.derive(amount, scope).read()),
-                        "Amount")),
+        assertEquals(0, applications(clauseOf(
+                        List.of(Normalized.Def.of(amount, scope).node()), "Amount")),
                 "and none is left as one afterwards");
     }
 
@@ -627,9 +683,16 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      * <p>What can be read exactly is who is in a position to call it at all. Java has it down to this
      * package; within it, a class that can reach a projection is one that holds a state or is handed
      * one. The states themselves are governed by the routes they answer with; what is left is the
-     * boundary where the module leaves the ladder, and there is one — {@code Lower}, which hands the
-     * whole of it to the pass that settles helper parameter types across it and answers with a tree
-     * carrying no proposition ({@code Bodies.Settled}, measured in #710).
+     * boundary where the module leaves the ladder, and there is one class it is in —
+     * {@code CheckSurface}, which is handed the settling, keeps it as what it was joined over, and
+     * projects a tree from it. Three entries and one place: taking it, holding it, and the field it
+     * is held in. What is done with the payload afterwards drops no claim, because there was none on
+     * it to drop.
+     *
+     * <p>It keeps the settling rather than the tree because of what it is compared against.
+     * {@code Prepared} pairs this assembly with the witness that the module is whole, and the two
+     * belong together when they were made from one settling — which a tree does not say, two
+     * settlings that left different recursive calls standing having the same one.
      *
      * <p>Of the states that say something about a part, because those are the ones with something to
      * lose. {@code Expandable} answers whether a body of the module may be expanded and claims
@@ -670,7 +733,11 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 }
             }
         }
-        assertEquals(List.of("Lower.settle(Prepared, Symbols, Map)"), handling,
+        assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map, Symbols, Map)",
+                        "CheckSurface.<init>(InvariantSettled, List, List, List, List, List, List,"
+                                + " Map)",
+                        "CheckSurface.settling"),
+                handling,
                 "a class here that is handed a state can reach its projection, and taking a part "
                         + "off that is the claim thrown away with nothing saying so");
     }
@@ -798,15 +865,15 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      */
     @Test
     void anAssemblyRefusesAnAnswerForAnotherModulesDeclaration() {
-        Symbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
+        ResolvedSymbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         InvariantSettled a = InvariantSettled.settle(
                 Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of());
-        Symbols scopeB = TypeChecker.symbols(resolvedB(), DefaultStdlib.get());
+        ResolvedSymbols scopeB = TypeChecker.symbols(resolvedB(), DefaultStdlib.get());
         InvariantSettled b = InvariantSettled.settle(
                 Expandable.check(resolvedB(), Map.of(), DefaultStdlib.get()), scopeB, Map.of());
 
-        Derived.Def ofA = Derived.Def.derive(defNamed(a, "Amount"), scopeA);
-        Derived.Def ofB = Derived.Def.derive(defNamed(b, "Amount"), scopeB);
+        Derived.Def ofA = Derived.Def.derive(Normalized.Def.of(defNamed(a, "Amount"), scopeA), scopeA);
+        Derived.Def ofB = Derived.Def.derive(Normalized.Def.of(defNamed(b, "Amount"), scopeB), scopeB);
         assertEquals("Amount", ofB.name(), "the same bare name, so the map key does not tell them apart");
         assertNotEquals(ofA.declaredKey(), ofB.declaredKey());
 
@@ -820,11 +887,11 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      *  shape — so the key tells them apart even less there. */
     @Test
     void anAssemblyRefusesAnAnswerForAnotherModulesDefinition() {
-        Symbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
+        ResolvedSymbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         Derived.Module a = Derived.Module.assemble(
                 InvariantSettled.settle(Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()),
-                Map.of("Amount", Derived.Def.derive(defNamed(InvariantSettled.settle(
-                        Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()), "Amount"), scopeA)));
+                Map.of("Amount", Derived.Def.derive(Normalized.Def.of(defNamed(InvariantSettled.settle(
+                        Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()), "Amount"), scopeA), scopeA)));
         Hir.FnDef ofA = a.fns().get(0);
         Hir.FnDef ofB = new Hir.FnDef(ofA.written(), "b", ofA.params(), ofA.declaredReturn(),
                 ofA.body(), ofA.modifiers(), ofA.pos());

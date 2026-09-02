@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.core.Core;
+import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.CoverageSites;
 
 import java.util.Optional;
@@ -118,7 +118,7 @@ final class BoundaryPolicy {
      *         what is passed in and nothing else: the reading of the comparison is made by the
      *         caller, and only where this is empty
      */
-    static Optional<NotABoundary> refuses(Core.Binary comparison, CoverageSites.Plan plan,
+    static Optional<NotABoundary> refuses(ComparisonOccurrence comparison, CoverageSites.Plan plan,
                                           boolean live) {
         if (!live) {
             return Optional.of(NotABoundary.NOTHING_READS_IT);
@@ -126,7 +126,7 @@ final class BoundaryPolicy {
         // Meeting a line takes getting the comparison to answer, and whether it answered is what a
         // site records — and the plan numbers no site where the expression the comparison decides
         // never answers, so a comparison with no site is one no run answers through.
-        if (plan.comparisonAt(comparison).isEmpty()) {
+        if (!plan.instruments(comparison)) {
             return Optional.of(NotABoundary.NO_RUN_ANSWERS_THROUGH_IT);
         }
         return Optional.empty();

@@ -7,6 +7,7 @@ import souther.compiler.check.Comparison;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
@@ -78,7 +79,8 @@ class WhatAComparisonIsARuleAboutTest {
         for (Contract.Param param : stated.params()) {
             roots.putIfAbsent(param.binding(), param.name());
         }
-        return ComparisonAssessment.of("f", comparison, inputs.reading(symbols),
+        return ComparisonAssessment.of("f", comparison, Citation.of(binary.pos()),
+                inputs.reading(symbols),
                 InputReads.ofWhatIsDeclared(roots), rule.value(), false,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());
     }

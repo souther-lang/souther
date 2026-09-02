@@ -31,12 +31,12 @@ class WhatARuleIsAboutIsReadWithoutItsEndTest {
     private static final ValueName LENGTH = ValueName.Stdlib.operation("String", "length");
 
     /** The number an operation answers of the value, as a coordinate names it. */
-    private static final FieldDomains.CoordinateKind ITS_LENGTH =
-            new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(LENGTH);
+    private static final NumberAt.OfWhatNumber ITS_LENGTH =
+            new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(LENGTH);
 
     /** And the value's own. */
-    private static final FieldDomains.CoordinateKind ITSELF =
-            new FieldDomains.CoordinateKind.OfItsOwnValue();
+    private static final NumberAt.OfWhatNumber ITSELF =
+            new NumberAt.OfWhatNumber.OfItsOwnValue();
 
     @Test
     void anOrderingOfTheLengthIsAboutTheLength() {
@@ -92,8 +92,7 @@ class WhatARuleIsAboutIsReadWithoutItsEndTest {
         assertEquals(Set.of(), subjectsOf("Int", "1 >= 0"));
     }
 
-    private static Set<FieldDomains.CoordinateKind> subjectsOf(String carrier,
-                                                               String... invariants) {
+    private static Set<NumberAt.OfWhatNumber> subjectsOf(String carrier, String... invariants) {
         StringBuilder source = new StringBuilder("""
                 module example.subject
 

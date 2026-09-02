@@ -27,7 +27,7 @@ import java.util.function.Predicate;
  * @param number     the number of the value the conjunct is written about
  * @param comparison the conjunct as a comparison, with {@code number} on the left
  */
-public record ClauseSubject(FieldDomains.CoordinateKind number, ClauseComparison comparison) {
+public record ClauseSubject(NumberAt.OfWhatNumber number, ClauseComparison comparison) {
 
     /** The one name a newtype's own clause has for the value it is written on. */
     private static final String VALUE = "value";
@@ -58,12 +58,12 @@ public record ClauseSubject(FieldDomains.CoordinateKind number, ClauseComparison
             ClauseComparison taken = onTheLeft(read, e -> takesSizeOf(e, measure));
             if (taken != null) {
                 return new ClauseSubject(
-                        new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(measure), taken);
+                        new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(measure), taken);
             }
         }
         ClauseComparison own = onTheLeft(read, ClauseSubject::isValue);
         return own == null ? null
-                : new ClauseSubject(new FieldDomains.CoordinateKind.OfItsOwnValue(), own);
+                : new ClauseSubject(new NumberAt.OfWhatNumber.OfItsOwnValue(), own);
     }
 
     /** {@code read} with the side {@code is} recognises on the left, or null where neither side is

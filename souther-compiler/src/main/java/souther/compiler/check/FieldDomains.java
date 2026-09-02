@@ -149,7 +149,7 @@ public final class FieldDomains {
     private final TypeSymbol.AtModule named;
     private final Hir.Data data;
     private final Symbols symbols;
-    private final Map<Coordinate, Count> settled;
+    private final Map<NumberAt<RuleKey>, Count> settled;
     /** What this value was read under, so that reading it again for what one rule did reads it the
      *  same way. A second reading of one declaration under another policy would answer a name
      *  differently while both stayed sound, and what moved would be read as what the rule did. */
@@ -181,7 +181,7 @@ public final class FieldDomains {
                          SequencedMap<FactSubject, RuleKey> namedBy,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
-                         Map<Coordinate, Count> settled,
+                         Map<NumberAt<RuleKey>, Count> settled,
                          Set<RuleKey> unreadOfEveryValue,
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy,
@@ -301,9 +301,9 @@ public final class FieldDomains {
 
     /** Settlings written as names, read as what stands at each. What a caller naming a place means
      *  is the value there; a count taken of one is a coordinate it has to name. */
-    private static Map<Coordinate, Count> atValues(Map<RuleKey, Count> settled) {
-        Map<Coordinate, Count> out = new LinkedHashMap<>();
-        settled.forEach((path, at) -> out.put(Coordinate.value(path), at));
+    private static Map<NumberAt<RuleKey>, Count> atValues(Map<RuleKey, Count> settled) {
+        Map<NumberAt<RuleKey>, Count> out = new LinkedHashMap<>();
+        settled.forEach((path, at) -> out.put(NumberAt.valueOf(path), at));
         return out;
     }
 
@@ -325,7 +325,7 @@ public final class FieldDomains {
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                                   ReadingPolicy policy, Map<Coordinate, Count> settled,
+                                   ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the value it is, so there are no siblings to relate. Everything else is the same
@@ -468,13 +468,13 @@ public final class FieldDomains {
      *              other kind of rule reaches this reading
      * @param lower whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(Coordinate at, RuleRef.Invariant from, boolean lower, Endpoint end,
+    public record Placed(NumberAt<RuleKey> at, RuleRef.Invariant from, boolean lower, Endpoint end,
                         int conjunct) {
 
         /** What the value's rules call where the end sits. Never which number it is on: that is
          *  {@link #at}, and reading one off the other is what the pair exists to stop. */
         public RuleKey path() {
-            return at.path();
+            return at.position();
         }
     }
 
@@ -542,7 +542,7 @@ public final class FieldDomains {
      * @param part     the conjunct itself, which is what a counterfactual reading is asked without
      * @param conjunct which of the clause's conjuncts it is
      */
-    public record AboutOneCoordinate(Coordinate at, RuleRef.Invariant from, Core part,
+    public record AboutOneCoordinate(NumberAt<RuleKey> at, RuleRef.Invariant from, Core part,
                                      int conjunct) {
 
         public AboutOneCoordinate {
@@ -593,13 +593,13 @@ public final class FieldDomains {
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record NoLine(Coordinate at, RuleRef.Invariant from,
+    public record NoLine(NumberAt<RuleKey> at, RuleRef.Invariant from,
                          Core part, int conjunct,
                          souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
 
         /** What the value's rules call where the end was to have been placed. */
         public RuleKey path() {
-            return at.path();
+            return at.position();
         }
     }
 
@@ -611,7 +611,7 @@ public final class FieldDomains {
      * this — held under them, an answer had to be put back together from whatever rows a finer key
      * happened to hold.
      */
-    public record BoundaryQuestion(RuleRef.Invariant from, Coordinate at) {}
+    public record BoundaryQuestion(RuleRef.Invariant from, NumberAt<RuleKey> at) {}
 
     /**
      * A boundary question the reading of ends did not answer, and everything behind it.
@@ -726,11 +726,11 @@ public final class FieldDomains {
      * recomputed and is not offered, so nothing can read a settled state for an answer that was
      * worked out before the settling.
      */
-    public Settled given(Map<Coordinate, Count> fixed) {
+    public Settled given(Map<NumberAt<RuleKey>, Count> fixed) {
         ConstraintState<FactSubject> taken = constraints;
-        for (Map.Entry<Coordinate, Count> each : fixed.entrySet()) {
-            Coordinate where = each.getKey();
-            FactSubject atom = subjectAt(where.path(), where.kind());
+        for (Map.Entry<NumberAt<RuleKey>, Count> each : fixed.entrySet()) {
+            NumberAt<RuleKey> where = each.getKey();
+            FactSubject atom = subjectAt(where.position(), where.of());
             souther.compiler.numeric.Granularity spaced =
                     atom == null ? null : spacing.get(atom);
             // A coordinate no range is taken of here settles nothing, which is less than the caller
@@ -798,12 +798,13 @@ public final class FieldDomains {
          * renaming of its own — and is whatever the caller's names carry of where a subject came
          * from.
          */
-        public <B> Carried<B> constraintsOver(java.util.function.Function<Coordinate, B> named,
+        public <B> Carried<B> constraintsOver(
+                java.util.function.Function<NumberAt<RuleKey>, B> named,
                                               java.util.function.Function<Object, B> otherwise) {
-            Map<FactSubject, Coordinate> where = new LinkedHashMap<>();
-            atomAt.forEach((path, atom) -> at(where, atom, Coordinate.value(path)));
+            Map<FactSubject, NumberAt<RuleKey>> where = new LinkedHashMap<>();
+            atomAt.forEach((path, atom) -> at(where, atom, NumberAt.valueOf(path)));
             countAt.forEach((path, counted) -> at(where, counted.atom(),
-                    Coordinate.takenBy(path, counted.by())));
+                    NumberAt.takenOf(path, counted.by())));
             // And every other subject this reading knows a name for, which is what a caller can
             // name and what these two maps are narrower than: they hold the numbers, and a name
             // holds whatever stands there. Left to `otherwise`, a subject of a name would be
@@ -813,12 +814,12 @@ public final class FieldDomains {
             // narrowing.
             namedBy.forEach((atom, path) -> {
                 if (!where.containsKey(atom)) {
-                    at(where, atom, Coordinate.value(path));
+                    at(where, atom, NumberAt.valueOf(path));
                 }
             });
             InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
-                Coordinate coordinate = where.get(atom);
-                return coordinate == null ? otherwise.apply(atom) : named.apply(coordinate);
+                NumberAt<RuleKey> claim = where.get(atom);
+                return claim == null ? otherwise.apply(atom) : named.apply(claim);
             });
             // Spelled, because what a caller does with these is name a place to a reader. The
             // names themselves belong to the value whose rules these are, and a caller holding the
@@ -836,12 +837,12 @@ public final class FieldDomains {
          * whichever of them went unnamed would be a coordinate the constraints say nothing about —
          * so what the caller was told the rules leave there would be everything.
          */
-        private static void at(Map<FactSubject, Coordinate> where, FactSubject atom,
-                               Coordinate coordinate) {
-            Coordinate had = where.put(atom, coordinate);
-            if (had != null && !had.equals(coordinate)) {
-                throw new IllegalStateException("one number is at `" + had.path() + "` and at `"
-                        + coordinate.path() + "`, so neither name is the whole of it");
+        private static void at(Map<FactSubject, NumberAt<RuleKey>> where, FactSubject atom,
+                               NumberAt<RuleKey> claim) {
+            NumberAt<RuleKey> had = where.put(atom, claim);
+            if (had != null && !had.equals(claim)) {
+                throw new IllegalStateException("one number is at `" + had.position() + "` and at `"
+                        + claim.position() + "`, so neither name is the whole of it");
             }
         }
     }
@@ -956,7 +957,7 @@ public final class FieldDomains {
      * question's word depend on a table nobody had asked it of, and left every reader downstream
      * looking at a list where the model has one answer.
      */
-    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, Coordinate where) {
+    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, NumberAt<RuleKey> where) {
         BoundaryStanding said = rule instanceof RuleRef.Invariant invariant
                 ? standing.get(new BoundaryQuestion(invariant, where)) : null;
         return said == null
@@ -1077,7 +1078,7 @@ public final class FieldDomains {
                 if (!needsAttributing(candidates)) {
                     return;
                 }
-                NumericDomain.Bounds with = leftAt(at.path(), at.kind());
+                NumericDomain.Bounds with = leftAt(at.position(), at.of());
                 if (with == null) {
                     return;
                 }
@@ -1091,8 +1092,8 @@ public final class FieldDomains {
     }
 
     /** Every conjunct about one number, gathered by the number it is about. */
-    private Map<Coordinate, List<AboutOneCoordinate>> byCoordinate() {
-        Map<Coordinate, List<AboutOneCoordinate>> byNumber = new LinkedHashMap<>();
+    private Map<NumberAt<RuleKey>, List<AboutOneCoordinate>> byCoordinate() {
+        Map<NumberAt<RuleKey>, List<AboutOneCoordinate>> byNumber = new LinkedHashMap<>();
         aboutOneCoordinate.forEach(each ->
                 byNumber.computeIfAbsent(each.at(), _ -> new ArrayList<>()).add(each));
         return byNumber;
@@ -1141,8 +1142,8 @@ public final class FieldDomains {
      * the rules that drew it — so a candidate named here and placing an end there comes out as one
      * debt at one place.
      */
-    private void accountedFor(Coordinate at, List<AboutOneCoordinate> candidates, Endpoint end,
-                              boolean lower, List<Placed> out) {
+    private void accountedFor(NumberAt<RuleKey> at, List<AboutOneCoordinate> candidates,
+                              Endpoint end, boolean lower, List<Placed> out) {
         if (end == null) {
             return;
         }
@@ -1153,8 +1154,9 @@ public final class FieldDomains {
     }
 
     /** Where the coordinate stops on one side with these conjuncts taken away. */
-    private Endpoint sideWithout(Set<AboutOneCoordinate> removed, Coordinate at, boolean lower) {
-        NumericDomain.Bounds without = without(removed).leftAt(at.path(), at.kind());
+    private Endpoint sideWithout(Set<AboutOneCoordinate> removed, NumberAt<RuleKey> at,
+                                 boolean lower) {
+        NumericDomain.Bounds without = without(removed).leftAt(at.position(), at.of());
         return without == null ? null : lower ? without.min() : without.max();
     }
 
@@ -1239,8 +1241,8 @@ public final class FieldDomains {
      * model with nothing here to pick between — said as a set, the reader that has to choose is the
      * one that knows what it does where there is no choice to make.
      */
-    public Set<Coordinate> writtenAbout() {
-        Set<Coordinate> out = new java.util.LinkedHashSet<>();
+    public Set<NumberAt<RuleKey>> writtenAbout() {
+        Set<NumberAt<RuleKey>> out = new java.util.LinkedHashSet<>();
         directs.forEach(each -> out.add(each.at()));
         aboutOneCoordinate.forEach(each -> out.add(each.at()));
         return java.util.Collections.unmodifiableSet(out);
@@ -1369,9 +1371,9 @@ public final class FieldDomains {
      * value — and a caller asking the first for the second is told there is no count wherever the
      * clause that mentions it is written about something else as well.
      */
-    public Coordinate countedAt(RuleKey path) {
+    public NumberAt<RuleKey> countedAt(RuleKey path) {
         Counted counted = countAt.get(path);
-        return counted == null ? null : Coordinate.takenBy(path, counted.by());
+        return counted == null ? null : NumberAt.takenOf(path, counted.by());
     }
 
     /**
@@ -1626,7 +1628,7 @@ public final class FieldDomains {
      * clause placing an end at 0 beside one that takes the 0 away leaves a number whose first
      * value is 1, and the end as written is not where it starts.
      */
-    public NumericDomain.Bounds leftAt(RuleKey path, CoordinateKind kind) {
+    public NumericDomain.Bounds leftAt(RuleKey path, NumberAt.OfWhatNumber kind) {
         // The axis the caller is on, and not whichever of the two this name happens to have. A
         // `String` is measured two ways — its own order, and the length of it — and answering with
         // the wrong one clamps a line drawn on one axis by the range of the other.
@@ -1665,95 +1667,13 @@ public final class FieldDomains {
      * {@code Time.hour(t)} names a number the declarations never mention, so what they say about it
      * is nothing — and nothing is what a lookup finding no subject already means everywhere here.
      */
-    private FactSubject subjectAt(RuleKey path, CoordinateKind kind) {
+    private FactSubject subjectAt(RuleKey path, NumberAt.OfWhatNumber kind) {
         return switch (kind) {
-            case CoordinateKind.OfItsOwnValue _ -> atomAt.get(path);
-            case CoordinateKind.OfWhatAnOperationAnswers taken ->
+            case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(path);
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                     souther.compiler.check.NumericMeasures.isMeasure(taken.operation())
                             ? atomOf(countAt.get(path)) : null;
         };
-    }
-
-    /**
-     * One thing at one name: what stands at the name, or a number taken of it.
-     *
-     * <p>The pair {@link #leftAt} already asks by, written down so that a form over several names
-     * can be. A name measured two ways is two coordinates at one name, and a form naming the other
-     * one is a form about another quantity.
-     *
-     * <p><b>What stands at a name is not always a number.</b> A string is bounded on its order and
-     * admits a set of values and is at a name like anything else, and a caller that has to say what
-     * two readings of one name come to needs it under the same coordinate whichever of those the
-     * rules happened to reach. So this says where a subject sits and which of the things there it
-     * is; a reader that only has numbers to give finds nothing at a name it takes none of
-     * ({@link Settled#given}), which is the answer rather than a case to rule out.
-     *
-     * <p><b>A name the rules of this value write, and never a place a row writes a value at.</b>
-     * The two part at a sum whose cases share a spread, and a coordinate is on the side the rules
-     * are read from: what is at a name here is what a rule of this value could have said something
-     * about, which is why a position inside a sequence or under a case has no coordinate rather
-     * than one nothing is written at.
-     */
-    public record Coordinate(RuleKey path, CoordinateKind kind) {
-
-        public Coordinate {
-            if (path == null) {
-                throw new IllegalArgumentException("a coordinate is at a name of the value");
-            }
-            java.util.Objects.requireNonNull(kind, "and is one of the things that are there");
-        }
-
-        /** What stands at the name. */
-        public static Coordinate value(RuleKey path) {
-            return new Coordinate(path, new CoordinateKind.OfItsOwnValue());
-        }
-
-        /** The number {@code operation} answers of what is there. */
-        public static Coordinate takenBy(RuleKey path, ValueName operation) {
-            return new Coordinate(path, new CoordinateKind.OfWhatAnOperationAnswers(operation));
-        }
-
-        /**
-         * The number, named. The operation and not a word for the kind of thing it is: two
-         * operations over one name are two of these, and "count of" spells them the same.
-         */
-        @Override
-        public String toString() {
-            // The value itself is at no name, which reads as nothing at all where it is printed.
-            String where = path.isTheValueItself() ? "the value" : path.toString();
-            return switch (kind) {
-                case CoordinateKind.OfItsOwnValue _ -> where;
-                case CoordinateKind.OfWhatAnOperationAnswers taken ->
-                        taken.operation() + "(" + where + ")";
-            };
-        }
-    }
-
-    /**
-     * Which number at a name a coordinate is.
-     *
-     * <p>A boolean while a name had two numbers — the value there and the count taken of it — and
-     * the count was the only thing anything ever took. It is not: {@code Int.abs(x)} is a third
-     * number at the same name, and told apart by a flag it would arrive as the count of {@code x} and be
-     * read against clauses written about how many {@code x} holds. Two terms coming to one name is
-     * what a coordinate exists to stop, so what makes them two is carried rather than summarised
-     * (#1027).
-     *
-     * <p>The operation as it resolved and not as it was written. Two spellings that reach one
-     * operation are one coordinate, and comparing renderings is reading a name back out of its text.
-     */
-    public sealed interface CoordinateKind {
-
-        /** What the location holds. */
-        record OfItsOwnValue() implements CoordinateKind {}
-
-        /** What an operation answers of what the location holds. */
-        record OfWhatAnOperationAnswers(ValueName operation) implements CoordinateKind {
-
-            public OfWhatAnOperationAnswers {
-                java.util.Objects.requireNonNull(operation, "this one names the operation");
-            }
-        }
     }
 
     /**
@@ -1773,25 +1693,25 @@ public final class FieldDomains {
      * about this reading rather than about the form: the atom that would carry it does not exist, so
      * there is no relation to project and the caller is left with whatever it knows beside this.
      */
-    public NumericDomain.Bounds boundsOf(Map<Coordinate, java.math.BigDecimal> form) {
+    public NumericDomain.Bounds boundsOf(Map<NumberAt<RuleKey>, java.math.BigDecimal> form) {
         return boundsOfForm(constraints, atomAt, countAt, form);
     }
 
     private static NumericDomain.Bounds boundsOfForm(ConstraintState<FactSubject> constraints,
                                                      Map<RuleKey, FactSubject> atomAt,
                                                      Map<RuleKey, Counted> countAt,
-                                                     Map<Coordinate, java.math.BigDecimal> form) {
+                                                     Map<NumberAt<RuleKey>, java.math.BigDecimal> form) {
         if (form.isEmpty()) {
             return null;
         }
         Map<FactSubject, java.math.BigDecimal> coefs = new LinkedHashMap<>();
-        for (Map.Entry<Coordinate, java.math.BigDecimal> each : form.entrySet()) {
-            Coordinate at = each.getKey();
-            FactSubject atom = switch (at.kind()) {
-                case CoordinateKind.OfItsOwnValue _ -> atomAt.get(at.path());
-                case CoordinateKind.OfWhatAnOperationAnswers taken ->
+        for (Map.Entry<NumberAt<RuleKey>, java.math.BigDecimal> each : form.entrySet()) {
+            NumberAt<RuleKey> at = each.getKey();
+            FactSubject atom = switch (at.of()) {
+                case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(at.position());
+                case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         NumericMeasures.isMeasure(taken.operation())
-                                ? atomOf(countAt.get(at.path())) : null;
+                                ? atomOf(countAt.get(at.position())) : null;
             };
             if (atom == null) {
                 return null;
@@ -1876,7 +1796,7 @@ public final class FieldDomains {
                     required.obligations().forEach(owed -> {
                         switch (owed) {
                             case Owed.AdmittedValues it -> said.add(it.path());
-                            case Owed.Boundary it -> said.add(it.on().path());
+                            case Owed.Boundary it -> said.add(it.on().position());
                         }
                     });
                 }

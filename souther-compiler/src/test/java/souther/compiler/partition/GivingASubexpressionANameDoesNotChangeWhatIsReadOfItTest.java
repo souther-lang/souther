@@ -6,7 +6,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Bodies;
@@ -221,9 +220,8 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get(spec.name());
-        GuardThresholds.Guards guards = GuardThresholds.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                        checked.supplied()),
+        GuardThresholds.Guards guards = GuardThresholds.of(body,
+                checked.plan(),
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior), symbols);
         List<String> out = new java.util.ArrayList<>();
         // The quantity a line is on and where it cuts it, with what names the behavior left out:

@@ -554,7 +554,7 @@ public final class InvariantChecker {
      * still take, which is where a row completing that assignment has to look.
      */
     static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy, Map<FieldDomains.Coordinate, Count> settled) {
+                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled) {
         return seedFields(named, data, symbols, policy, settled, Reach.EVERYTHING);
     }
 
@@ -569,7 +569,7 @@ public final class InvariantChecker {
      * says, and it is not that one — see {@link Reach}.
      */
     static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy, Map<FieldDomains.Coordinate, Count> settled,
+                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
                              Reach reach) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
         Map<String, Type> fields = c.clauses.fieldsOf(data);
@@ -812,21 +812,21 @@ public final class InvariantChecker {
             });
             held.forEach((path, counted) ->
                     spacing.put(counted.atom(), souther.compiler.numeric.Granularity.DISCRETE));
-            for (Map.Entry<FieldDomains.Coordinate, Count> each : settled.entrySet()) {
-                FieldDomains.Coordinate where = each.getKey();
+            for (Map.Entry<NumberAt<RuleKey>, Count> each : settled.entrySet()) {
+                NumberAt<RuleKey> where = each.getKey();
                 // The number the caller settled, which is the position's own value or the count
                 // taken of it. Two coordinates at one path and two atoms: a reading that resolved
                 // only the first left a rule over two counts unconditioned while the same rule was
                 // read whole when it was asked about.
-                FactSubject atom = switch (where.kind()) {
-                    case FieldDomains.CoordinateKind.OfItsOwnValue _ -> atoms.get(where.path());
+                FactSubject atom = switch (where.of()) {
+                    case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atoms.get(where.position());
                     // A count and nothing else. What a clause of a value has words for is the
                     // position and how much it holds; a number some other operation answers of the
                     // same location is a quantity the declarations never mention, so what they say
                     // about it is nothing rather than whatever stands in the count's slot (#1027).
-                    case FieldDomains.CoordinateKind.OfWhatAnOperationAnswers taken ->
+                    case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                             NumericMeasures.isMeasure(taken.operation())
-                                    ? atomOf(held.get(where.path())) : null;
+                                    ? atomOf(held.get(where.position())) : null;
                 };
                 if (atom == null) {
                     continue;
@@ -995,13 +995,13 @@ public final class InvariantChecker {
      *                 one value are two rules a row could be owed to, and held as declarations
      *                 they came back as one
      */
-    record Direct(FieldDomains.Coordinate at, RuleRef.Invariant from,
+    record Direct(NumberAt<RuleKey> at, RuleRef.Invariant from,
                   InvariantBound bound, Core part, int conjunct) {
 
         /** What the value's rules call where the end was placed. Never which end it is: one name
          *  carries more than one number and {@link #at} is what says which of them this is. */
         RuleKey path() {
-            return at.path();
+            return at.position();
         }
     }
 
@@ -1230,12 +1230,12 @@ public final class InvariantChecker {
      *                position no line is drawn on named nothing, and the reading that could say so
      *                had never heard of the position
      */
-    private record Coordinate(FieldDomains.Coordinate at, Carrier carrier) {
+    private record Coordinate(NumberAt<RuleKey> at, Carrier carrier) {
 
         /** What the value's rules call it. Never what it is: two numbers can be taken at one name,
          *  and {@link #at} is what tells them apart. */
         RuleKey path() {
-            return at.path();
+            return at.position();
         }
     }
 
@@ -1279,10 +1279,10 @@ public final class InvariantChecker {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
-            byName.put(key, new Coordinate(FieldDomains.Coordinate.value(path), carrier));
+            byName.put(key, new Coordinate(NumberAt.valueOf(path), carrier));
             FactSubject atom = atoms.get(path);
             if (atom != null) {
-                byName.put(atom, new Coordinate(FieldDomains.Coordinate.value(path), carrier));
+                byName.put(atom, new Coordinate(NumberAt.valueOf(path), carrier));
             }
         });
         // A count is a whole number whatever it counts, so nothing about the container decides how
@@ -1290,7 +1290,7 @@ public final class InvariantChecker {
         // it: dropped here and rebuilt as "a number was taken", two operations over one path were
         // one coordinate and a report could not tell them apart.
         held.forEach((path, counted) -> byName.put(counted.atom(),
-                new Coordinate(FieldDomains.Coordinate.takenBy(path, counted.by()),
+                new Coordinate(NumberAt.takenOf(path, counted.by()),
                         Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
@@ -1587,7 +1587,7 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            noLineDrawn(read, from, part, at, byName, noLines);
+            noLineDrawn(read, from, bin, part, at, byName, noLines);
             // The hand-over beside the finding, and not read off it. Both come of this conjunct
             // having no end, and they answer different questions: what an author is owed a word
             // about, and what the next reading is given to read.
@@ -1701,6 +1701,20 @@ public final class InvariantChecker {
     }
 
     /**
+     * The same for a comparison, which is the two sides one after the other.
+     *
+     * <p>A comparison stands at no place of the value, so what it names is what its sides name and
+     * the sides are what there is to walk. Read off a node holding both, this would be the same
+     * walk reached through a value the readers below have no reason to hold.
+     */
+    private List<Coordinate> coordinatesIn(Comparison comparison, Denotations at,
+                                           Map<FactSubject, Coordinate> byName) {
+        List<Coordinate> out = new ArrayList<>(coordinatesIn(comparison.left(), at, byName));
+        out.addAll(coordinatesIn(comparison.right(), at, byName));
+        return out;
+    }
+
+    /**
      * What one expression is made of here, and which coordinate each place it named turned out to
      * be.
      *
@@ -1796,13 +1810,13 @@ public final class InvariantChecker {
      * what the arithmetic made of them are three readings of one comparison, and handed over as
      * three arguments they are as much one comparison as the caller left them.
      */
-    private void noLineDrawn(Arithmetic read, RuleRef.Invariant from, int conjunct,
+    private void noLineDrawn(Arithmetic read, RuleRef.Invariant from, Core clause, int conjunct,
                             Denotations at,
                             Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out) {
         if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
             return;
         }
-        Core.Binary comparison = read.comparison().at();
+        Comparison comparison = read.comparison();
         Places left = placesIn(comparison.left(), at, byName);
         Places right = placesIn(comparison.right(), at, byName);
         Predicate<RuleKey> ordered = place -> carrierAt(place, left, right) != null;
@@ -1815,14 +1829,14 @@ public final class InvariantChecker {
                 BlockReason.RuleWithoutLineReason why =
                         UnreadComparison.ofTheQuantity(quantity, ordered);
                 for (RuleKey path : UnreadComparison.filedAt(quantity, List.copyOf(met.keySet()))) {
-                    file(met.get(path), from, comparison, conjunct, why, out);
+                    file(met.get(path), from, clause, conjunct, why, out);
                 }
             }
             // Where the reading stopped there is no quantity to be a subject, so every place the
             // walk met is asked, and asked for itself.
             case UnreadComparison.Quantity.NotRead<RuleKey> notRead -> {
                 for (Coordinate each : met.values()) {
-                    file(each, from, comparison, conjunct,
+                    file(each, from, clause, conjunct,
                             UnreadComparison.whereItStopped(ruleAt(each, left, right), notRead,
                                     ordered),
                             out);
@@ -1848,7 +1862,7 @@ public final class InvariantChecker {
      *
      * <p>Which calls those are is {@link StringPredicates}' and is asked rather than spelled: the
      * same table says what such a call means about the strings at a position, and a second list of
-     * spellings here would be a second answer to which rules this compiler reads (issue #1249).
+     * spellings here would be a second answer to which rules this compiler reads.
      *
      * <p>Only where the position is one this reading names. A predicate about something deeper than
      * the coordinates in hand states nothing this walk can file, and filing it against the position
@@ -1875,19 +1889,31 @@ public final class InvariantChecker {
         if (stated == null) {
             return null;
         }
-        return switch (StringPredicates.divides(atom, symbols)) {
-            case StringPredicates.Divides.IntoTwo _ -> byName.get(nameOf(stated.subject(), at));
+        return switch (stated.reading()) {
+            case StringPredicates.Reading.Accepting accepting ->
+                    dividedBy(accepting, stated.subject(), at, byName);
+            // A rule this did not read says nothing here: the reading that stopped is the one that
+            // reports being stopped, and a second account of it from this side would be a limit
+            // filed as a fact about the model.
+            case StringPredicates.Reading.PatternNotRead _ -> null;
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
+        };
+    }
+
+    /** The same, off the strings the rule was read as. */
+    private Coordinate dividedBy(StringPredicates.Reading.Accepting accepting, Core subject,
+                                 Denotations at, Map<FactSubject, Coordinate> byName) {
+        return switch (StringPredicates.divides(accepting)) {
+            case StringPredicates.Divides.IntoTwo _ -> byName.get(nameOf(subject, at));
             // Every string, so the rule tells no value here from another and the position is one
             // the model divides no way — which is what it comes back as when nothing is filed.
             case StringPredicates.Divides.NothingIsRuledOut _ -> null;
             // No string, so the rules leave no value here. That is a fact about the values and is
             // said where emptiness is, not as a division with no line through it.
             case StringPredicates.Divides.NothingIsLeft _ -> null;
-            // And where this compiler could not tell, it says nothing here: the reading that spent
-            // the allowance is the one that reports being stopped, and a second account of it from
-            // this side would be a limit filed as a fact about the model.
-            case StringPredicates.Divides.CouldNotTell _ -> null;
-            case null -> null;
+            // And where a limit stopped the machine, the same as above: what it cost is reported by
+            // whoever spent it.
+            case StringPredicates.Divides.StoppedByLimit _ -> null;
         };
     }
 
@@ -1918,11 +1944,11 @@ public final class InvariantChecker {
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
-    private static void file(Coordinate where, RuleRef.Invariant from, Core.Binary comparison,
+    private static void file(Coordinate where, RuleRef.Invariant from, Core clause,
                              int conjunct, BlockReason.RuleWithoutLineReason why,
                              List<FieldDomains.NoLine> out) {
         FieldDomains.NoLine said =
-                new FieldDomains.NoLine(where.at(), from, comparison, conjunct, why);
+                new FieldDomains.NoLine(where.at(), from, clause, conjunct, why);
         if (!out.contains(said)) {
             out.add(said);
         }
@@ -2033,15 +2059,14 @@ public final class InvariantChecker {
      */
     private Arithmetic arithmeticOf(Comparison recognised, Denotations at,
                                     Map<FactSubject, Coordinate> byName) {
-        Core.Binary comparison = recognised.at();
         // Named against this reader's own coordinates rather than against every number the
         // discharge procedure can identify. A value that is a number and is no coordinate of the
         // subject is one the walk stops at, so the expression and its environment come back
         // together — read as an atom and found unprojectable afterwards, both were already gone.
         AffineForms.Outcome<FactSubject, Denotations> left =
-                terms.outcomeOf(comparison.left(), at, byName::containsKey);
+                terms.outcomeOf(recognised.left(), at, byName::containsKey);
         AffineForms.Outcome<FactSubject, Denotations> right =
-                terms.outcomeOf(comparison.right(), at, byName::containsKey);
+                terms.outcomeOf(recognised.right(), at, byName::containsKey);
         for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
                 return new Arithmetic.NotRead(recognised, new UnreadComparison.Quantity.NotRead<>(
@@ -2589,7 +2614,7 @@ public final class InvariantChecker {
      * what it builds and what each of its fields is given came with it.
      */
     private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
-        if (!(symbols.declarations().declaration(made.typeName()) instanceof Hir.Data type)) {
+        if (!(symbols.declaredNode(made.typeName()) instanceof Hir.Data type)) {
             return null;
         }
         Judgment judged = verdictOf(made, type, k, at);

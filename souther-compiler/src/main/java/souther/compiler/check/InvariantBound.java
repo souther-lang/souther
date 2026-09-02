@@ -103,7 +103,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
     public static Read ofSize(Hir.Expr clause, ValueName measure) {
         ClauseSubject about = ClauseSubject.of(clause, measure);
         if (about == null
-                || !(about.number() instanceof FieldDomains.CoordinateKind.OfWhatAnOperationAnswers)
+                || !(about.number() instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)
                 || !(about.comparison().claim() instanceof ComparisonClaim.Cut cut)) {
             return NO_END;
         }
