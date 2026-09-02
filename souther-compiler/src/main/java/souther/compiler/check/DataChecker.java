@@ -692,9 +692,11 @@ public final class DataChecker {
                             c.typeName().written()))
                     .build());
         }
-        // a decoder's construction gives every field a value of its own; nothing builds one with a
-        // spread, so there is no binding to copy from here
-        checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(), fields, env, ctx);
+        // nothing builds a decoder's construction with a spread, so there is no binding to copy from
+        // here; whether a field left out is one it had to write is the node's answer, as it is for
+        // the construction a body writes
+        checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(), fields, env, ctx,
+                c.mayOmitOptionalFields());
     }
 
     /**
@@ -706,21 +708,15 @@ public final class DataChecker {
      *
      * <p>Where several spreads carry one field, the first of them supplies it — one field is given
      * one value, and which is decided here and not by whichever reader looks.
+     *
+     * <p>{@code mayOmitOptionals} is the construction's own answer and is asked of it, not worked
+     * out here: whether a field left out is the absent value the declaration holds was settled when
+     * the source was read, and both kinds of construction that reach this answer it for themselves.
      */
     static List<Core.FieldValue> checkConstruction(String typeName, List<Hir.FieldInit> inits,
                                           List<Core.Read> spreads,
                                           SourcePos pos, Map<String, Type> fields, Scope env,
-                                          CheckContext ctx) {
-        return checkConstruction(typeName, inits, spreads, pos, fields, env, ctx,
-                Hir.Fields.EVERY_ONE_WRITTEN);
-    }
-
-    /** As above, where {@code written} says whether a field left out is one the construction had to
-     *  write. Only a row leaves an optional out (spec §example-evaluable). */
-    static List<Core.FieldValue> checkConstruction(String typeName, List<Hir.FieldInit> inits,
-                                          List<Core.Read> spreads,
-                                          SourcePos pos, Map<String, Type> fields, Scope env,
-                                          CheckContext ctx, Hir.Fields mayOmit) {
+                                          CheckContext ctx, boolean mayOmitOptionals) {
         Map<String, Core.FieldValue> written = new LinkedHashMap<>();
         for (Hir.FieldInit init : inits) {
             if (written.containsKey(init.name())) {
@@ -784,10 +780,9 @@ public final class DataChecker {
                 continue;
             }
             Spread from = supplying(spread, f.getKey());
-            if (from == null && mayOmit == Hir.Fields.OPTIONALS_MAY_BE_OMITTED
-                    && f.getValue() instanceof Type.OptionOf) {
-                // A row writes the value a field holds and writes nothing where it holds none, so a
-                // field left out is the absent value it declares rather than a field with no value.
+            if (from == null && mayOmitOptionals && f.getValue() instanceof Type.OptionOf) {
+                // A fixture writes the value a field holds and writes nothing where it holds none,
+                // so a field left out is the absent value it declares rather than one with no value.
                 values.add(new Core.FieldValue(f.getKey(),
                         new Core.OptionNone(f.getValue(), pos), pos));
                 continue;

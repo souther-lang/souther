@@ -296,8 +296,8 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         }
         return new FixtureTemplate(
                 type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(spread), NOWHERE,
-                        NO_SOURCE));
+                Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
+                        List.of(spread), NOWHERE, NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared. */
@@ -309,7 +309,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
             inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
         }
         return new FixtureTemplate(type.rendered() + " { " + String.join(", ", written) + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(), NOWHERE,
-                        NO_SOURCE));
+                Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
+                        List.of(), NOWHERE, NO_SOURCE));
     }
 }

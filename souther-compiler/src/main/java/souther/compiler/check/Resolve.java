@@ -4,6 +4,7 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.Reading;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -86,16 +87,6 @@ public final class Resolve {
     /** The definition whose text is being read. Every binding met belongs to it. */
     private BindingOwner owner;
 
-    /**
-     * Whether what is being resolved was written in an {@code example} or {@code fake} row.
-     *
-     * <p>The one thing this decides is which node a bracketed literal becomes: in a row the brackets
-     * are the notation for whichever collection the position declares, and which one that is has no
-     * answer until the position is known, so the node says so rather than being read as a list here
-     * (spec §example-evaluable). Nothing else about a row is resolved differently, and nothing here
-     * reads a type.
-     */
-    private boolean inARow;
     /** Whether the definition being read is a value an attached file declares. */
     private boolean readingAnAttachedValue;
     /**
@@ -124,7 +115,7 @@ public final class Resolve {
     }
 
     /** A binder answered, and the bindings that hold under it. */
-    private record Answered(Hir.Binder binder, Bindings bound) {}
+    private record Answered(Hir.Binder binder, InForce bound) {}
 
     /**
      * {@code binder} given a binding of its own, and {@code bound} extended with it.
@@ -133,7 +124,7 @@ public final class Resolve {
      * are two answers however they were written. Where it was written is kept aside, for a reader
      * that is asking about the source rather than about the program.
      */
-    private Answered bind(Bindings bound, Ast.Binder binder) {
+    private Answered bind(InForce bound, Ast.Binder binder) {
         int ordinal = counts.merge(owner, 1, Integer::sum) - 1;
         BindingId id = new BindingId(owner, ordinal);
         if (binder.namePos() != null) {
@@ -148,10 +139,10 @@ public final class Resolve {
     }
 
     /** Several binders answered, and the bindings that hold under all of them. */
-    private record AnsweredAll(List<Hir.Binder> binders, Bindings bound) {}
+    private record AnsweredAll(List<Hir.Binder> binders, InForce bound) {}
 
     /** The same as {@link #bind}, for the names one binder writes at once — a block's parameters. */
-    private AnsweredAll bindAll(Bindings bound, List<Ast.Binder> written) {
+    private AnsweredAll bindAll(InForce bound, List<Ast.Binder> written) {
         List<Hir.Binder> out = new ArrayList<>();
         for (Ast.Binder b : written) {
             Answered a = bind(bound, b);
@@ -589,17 +580,18 @@ public final class Resolve {
             fns.add(r.fn(fn));
         }
         List<Hir.Example> examples = new ArrayList<>();
-        r.inARow = true;   // every operand below is written in a row (spec §example-evaluable)
         for (Ast.Example e : m.examples()) {
             r.owner = r.ownerOfValue(e.target());
             List<Hir.ExampleRow> rows = new ArrayList<>();
             for (Ast.ExampleRow row : e.rows()) {
                 List<Hir.With> withs = new ArrayList<>();
                 for (Ast.With w : row.withs()) {
-                    withs.add(new Hir.With(r.standsInFor(w.dep()), r.expr(w.value()), w.pos()));
+                    withs.add(new Hir.With(r.standsInFor(w.dep()),
+                            r.expr(w.value(), Reading.A_FIXTURE), w.pos()));
                 }
-                rows.add(new Hir.ExampleRow(row.identity(), r.exprs(row.inputs()), withs,
-                        r.expr(row.expected()), row.pos()));
+                rows.add(new Hir.ExampleRow(row.identity(),
+                        r.exprs(row.inputs(), Reading.A_FIXTURE), withs,
+                        r.expr(row.expected(), Reading.A_FIXTURE), row.pos()));
             }
             examples.add(new Hir.Example(e.target(), rows, e.pos()));
         }
@@ -611,12 +603,12 @@ public final class Resolve {
             Hir.Var target = r.standsInFor(f.target());
             List<Hir.FakeRow> rows = new ArrayList<>();
             for (Ast.FakeRow row : f.rows()) {
-                rows.add(new Hir.FakeRow(row.inputs() == null ? null : r.exprs(row.inputs()),
-                        r.expr(row.output()), row.isDefault(), row.pos()));
+                rows.add(new Hir.FakeRow(
+                        row.inputs() == null ? null : r.exprs(row.inputs(), Reading.A_FIXTURE),
+                        r.expr(row.output(), Reading.A_FIXTURE), row.isDefault(), row.pos()));
             }
             fakes.add(new Hir.Fake(target, rows, f.pos()));
         }
-        r.inARow = false;
         Map<String, Hir.RetType> exposedOutputs = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.RetType> e : m.exposedOutputs().entrySet()) {
             exposedOutputs.put(e.getKey(), r.retType(e.getValue()));
@@ -863,7 +855,7 @@ public final class Resolve {
         owner = ownerOfValue(f.name());
         readingAnAttachedValue = !f.role().isTheModels();
         List<Hir.FnParam> params = new ArrayList<>();
-        Bindings bound = Bindings.NONE;
+        InForce bound = InForce.of(Reading.THE_MODELS_OWN);
         for (Ast.FnParam p : f.params()) {
             Answered a = bind(bound, p.binder());
             params.add(new Hir.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()));
@@ -891,7 +883,7 @@ public final class Resolve {
     private List<Hir.EnsuresClause> ensures(Ast.SpecBehavior behavior) {
         owner = new BindingOwner.OfSignature(
                 new ValueName.Behavior(reachable.module(), behavior.name()));
-        Bindings params = Bindings.NONE;
+        InForce params = InForce.of(Reading.THE_MODELS_OWN);
         for (Ast.Param p : behavior.params()) {
             params = bind(params, Ast.Binder.of(Ast.Name.written(p.written()))).bound();
         }
@@ -914,7 +906,7 @@ public final class Resolve {
     }
 
     /** A declaration's invariant clauses, each read against the fields it constrains. */
-    private List<Hir.InvariantClause> clauses(List<Ast.InvariantClause> clauses, Bindings bound) {
+    private List<Hir.InvariantClause> clauses(List<Ast.InvariantClause> clauses, InForce bound) {
         List<Hir.InvariantClause> out = new ArrayList<>();
         for (Ast.InvariantClause clause : clauses) {
             out.add(new Hir.InvariantClause(clause.name(), expr(clause.expr(), bound),
@@ -1055,8 +1047,8 @@ public final class Resolve {
      * the ones a spread brings in, which are as much this declaration's fields as the written ones
      * (and are what a spread-in invariant was written against).
      */
-    private Bindings boundFields(Ast.Data d, TypeSymbol.AtModule declared) {
-        Bindings bound = Bindings.NONE;
+    private InForce boundFields(Ast.Data d, TypeSymbol.AtModule declared) {
+        InForce bound = InForce.of(Reading.THE_MODELS_OWN);
         // which binding each field is is answered in one place, so the pass that emits this
         // invariant reaches the same ones without working them out again
         for (Map.Entry<String, BindingId> f
@@ -1069,8 +1061,10 @@ public final class Resolve {
 
     // --- expressions ---
 
-    private Hir.Expr expr(Ast.Expr e) {
-        return expr(e, Bindings.NONE);
+    /** An expression written where nothing is bound over it, read under {@code reading} — which a
+     *  fixture is, a row writing its values where no parameter of anything stands over them. */
+    private Hir.Expr expr(Ast.Expr e, Reading reading) {
+        return expr(e, InForce.of(reading));
     }
 
     /**
@@ -1081,7 +1075,7 @@ public final class Resolve {
      * answer at all — and an expression kind added later stops the build here, which is the one
      * place it has to be accounted for.
      */
-    private Hir.Expr expr(Ast.Expr e, Bindings bound) {
+    private Hir.Expr expr(Ast.Expr e, InForce bound) {
         return switch (e) {
             case Ast.Var v -> reached(v, bound);
             // Applying a name is answered as a name: which of a binding, a helper, a library
@@ -1102,12 +1096,8 @@ public final class Resolve {
             }
             // the type being built is this case's business; everything under it is a slot like any
             // other
-            // A construction written in a row does not write out an optional field it leaves
-            // absent; one written anywhere else says what each of its fields is.
-            case Ast.NewData nd -> new Hir.NewData(type(nd.typeName()), inits(nd.inits(), bound),
-                    vars(nd.spreads(), bound),
-                    inARow ? Hir.Fields.OPTIONALS_MAY_BE_OMITTED : Hir.Fields.EVERY_ONE_WRITTEN,
-                    nd.pos(), nd.region());
+            case Ast.NewData nd -> Hir.NewData.read(nd, type(nd.typeName()),
+                    inits(nd.inits(), bound), vars(nd.spreads(), bound), bound.reading());
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
             case Ast.LetIn li -> {
@@ -1135,7 +1125,7 @@ public final class Resolve {
                 List<Hir.Case> cases = new ArrayList<>();
                 for (Ast.Case c : m.cases()) {
                     Answered a = c.binding() == null ? null : bind(bound, c.binding());
-                    Bindings inArm = a == null ? bound : a.bound();
+                    InForce inArm = a == null ? bound : a.bound();
                     cases.add(new Hir.Case(caseNames(c.caseTypes()),
                             a == null ? null : a.binder(), expr(c.body(), inArm),
                             c.unwrapAsserts() == null ? null : names(c.unwrapAsserts()), c.pos()));
@@ -1152,7 +1142,7 @@ public final class Resolve {
                     expr(x.left(), bound), expr(x.right(), bound), x.origin(), x.pos(), x.region());
             case Ast.If x -> new Hir.If(expr(x.cond(), bound), expr(x.then(), bound),
                     expr(x.els(), bound), x.origin(), x.pos(), x.region());
-            case Ast.ListLit x -> inARow
+            case Ast.ListLit x -> bound.readingAFixture()
                     ? new Hir.RowCollection(exprs(x.elements(), bound), x.pos(), x.region())
                     : new Hir.ListLit(exprs(x.elements(), bound), x.pos(), x.region());
             case Ast.ListComp x -> new Hir.ListComp(expr(x.element(), bound),
@@ -1195,7 +1185,7 @@ public final class Resolve {
     }
 
     /** A construction's field values, each a slot like any other. */
-    private List<Hir.FieldInit> inits(List<Ast.FieldInit> inits, Bindings bound) {
+    private List<Hir.FieldInit> inits(List<Ast.FieldInit> inits, InForce bound) {
         List<Hir.FieldInit> out = new ArrayList<>();
         for (Ast.FieldInit i : inits) {
             out.add(new Hir.FieldInit(i.written(), expr(i.value(), bound)));
@@ -1204,7 +1194,7 @@ public final class Resolve {
     }
 
     /** The names in a construction's spreads — a name slot, where only a name may stand. */
-    private List<Hir.Var> vars(List<Ast.Var> vars, Bindings bound) {
+    private List<Hir.Var> vars(List<Ast.Var> vars, InForce bound) {
         List<Hir.Var> out = new ArrayList<>();
         for (Ast.Var v : vars) {
             out.add(name(v, bound));
@@ -1218,13 +1208,13 @@ public final class Resolve {
      * declaration in a spread as everywhere else.
      *
      */
-    private Hir.Var name(Ast.Var written, Bindings bound) {
+    private Hir.Var name(Ast.Var written, InForce bound) {
         return reached(written, bound);
     }
 
     /** An application of a name, with what the name denotes and how this module reaches it answered
      * here — the same pair, from the same place, as a name standing on its own. */
-    private Hir.Expr applied(Ast.Apply call, Bindings bound) {
+    private Hir.Expr applied(Ast.Apply call, InForce bound) {
         ValueName denotes = calledName(call, bound);
         // Answered rather than rebuilt: what the callee means is settled here and where it is
         // written is not this pass's to decide. Building one from the name would take its extent
@@ -1253,7 +1243,7 @@ public final class Resolve {
      * spelling would answer differently depending on which rewrites had run — which is the defect
      * this carries the answer to avoid.
      */
-    private Hir.Var reached(Ast.Var v, Bindings bound) {
+    private Hir.Var reached(Ast.Var v, InForce bound) {
         ValueName denotes = valueName(v.written(), bound);
         if (denotes == null) {
             return new Hir.Var.Unanswered(v.written(), v.region());
@@ -1263,7 +1253,7 @@ public final class Resolve {
                 ReachName.of(denotes, v.name(), reachable.module()), v.region());
     }
 
-    private List<Hir.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {
+    private List<Hir.ElseArm> arms(List<Ast.ElseArm> arms, InForce bound) {
         List<Hir.ElseArm> out = new ArrayList<>();
         for (Ast.ElseArm arm : arms) {
             out.add(new Hir.ElseArm(arm.clause(), expr(arm.body(), bound), arm.pos()));
@@ -1271,11 +1261,11 @@ public final class Resolve {
         return out;
     }
 
-    private List<Hir.Expr> exprs(List<Ast.Expr> es) {
-        return exprs(es, Bindings.NONE);
+    private List<Hir.Expr> exprs(List<Ast.Expr> es, Reading reading) {
+        return exprs(es, InForce.of(reading));
     }
 
-    private List<Hir.Expr> exprs(List<Ast.Expr> es, Bindings bound) {
+    private List<Hir.Expr> exprs(List<Ast.Expr> es, InForce bound) {
         List<Hir.Expr> out = new ArrayList<>();
         for (Ast.Expr e : es) {
             out.add(expr(e, bound));
@@ -1303,7 +1293,7 @@ public final class Resolve {
      * construction of a unit data and records where it came from; applied, it is a newtype taking
      * what it wraps, and the application is what says that.
      */
-    private Reach lookup(WrittenName name, boolean applied, Bindings bound) {
+    private Reach lookup(WrittenName name, boolean applied, InForce bound) {
         String written = name.canonical();
         // a binding in force wins over everything else: a body may bind a name a module declares,
         // and the binding is what the name means there
@@ -1344,7 +1334,7 @@ public final class Resolve {
         // definitions and what the import lines were left with.
         Reach reached = reachable.reachIn(reaches, written);
         if (!(reached instanceof Reach.NotInScope)) {
-            refuseAnAttachedValueOutsideTheRows(name, reached);
+            refuseAnAttachedValueOutsideTheRows(name, reached, bound);
             return reached;
         }
         // A type written as a value, which is the construction of what it denotes. Read after the
@@ -1382,8 +1372,9 @@ public final class Resolve {
      * right; the module is one whose names did not all come out, which is what stops it being
      * emitted.
      */
-    private void refuseAnAttachedValueOutsideTheRows(WrittenName written, Reach reached) {
-        if (inARow || readingAnAttachedValue
+    private void refuseAnAttachedValueOutsideTheRows(WrittenName written, Reach reached,
+                                                     InForce bound) {
+        if (bound.readingAFixture() || readingAnAttachedValue
                 || !(reached instanceof Reach.Reaches(ValueName.Helper helper))
                 || !reachable.attachedValues().contains(helper.name())) {
             return;
@@ -1404,7 +1395,7 @@ public final class Resolve {
      * it is a newtype taking what it wraps. Anything else is the expression it is, and what may be
      * applied is the check's to say.
      */
-    private Hir.Expr callee(Ast.Expr function, Bindings bound) {
+    private Hir.Expr callee(Ast.Expr function, InForce bound) {
         if (function instanceof Ast.FieldAccess fa) {
             Hir.Var name = qualifiedName(fa, true, bound);
             if (name != null) {
@@ -1431,7 +1422,7 @@ public final class Resolve {
      *
      * <p>Positioned at the root, so what a reader asks about covers every token of the name.
      */
-    private Hir.Var qualifiedName(Ast.FieldAccess fa, boolean applied, Bindings bound) {
+    private Hir.Var qualifiedName(Ast.FieldAccess fa, boolean applied, InForce bound) {
         Ast.Var root = rootName(fa);
         if (root == null || bound.binderOf(root.name()) != null) {
             return null;
@@ -1468,7 +1459,7 @@ public final class Resolve {
      * be.
      */
     private Hir.Var unknownMember(Ast.FieldAccess fa, WrittenName written, boolean applied,
-                                  Bindings bound) {
+                                  InForce bound) {
         WrittenName qualifier = dottedName(fa.target());
         if (qualifier == null || !isNamespace(qualifier.canonical())) {
             return null;
@@ -1506,7 +1497,7 @@ public final class Resolve {
     }
 
     /** What a name used as a value denotes, or null where nothing does — reported here. */
-    private ValueName valueName(WrittenName written, Bindings bound) {
+    private ValueName valueName(WrittenName written, InForce bound) {
         return switch (lookup(written, false, bound)) {
             case Reach.Reaches(ValueName named) -> named;
             // Already accounted for on the import line that could not bring it in. Counted, so the
@@ -1524,7 +1515,7 @@ public final class Resolve {
      * what a miss means does not. A name that resolved to nothing resolved to nothing, and the
      * position it was written in is a fact about the source rather than about the name.
      */
-    private ValueName calledName(Ast.Apply call, Bindings bound) {
+    private ValueName calledName(Ast.Apply call, InForce bound) {
         return switch (lookup(call.name(), true, bound)) {
             case Reach.Reaches(ValueName named) -> named;
             case Reach.StandsForNothing _ -> unanswered();
@@ -1583,7 +1574,7 @@ public final class Resolve {
     }
 
     /** The names a body could have written where it wrote one nothing answers to. */
-    private List<String> reachable(Bindings bound) {
+    private List<String> reachable(InForce bound) {
         List<String> names = new ArrayList<>(bound.byName().keySet());
         names.addAll(reachable.helpers().keySet());
         names.addAll(reachable.behaviors().keySet());
@@ -1606,7 +1597,7 @@ public final class Resolve {
                         .at(written.reportedAt()).say(new NameMessage.NotAStandardLibraryFunction(written.quoted())).build());
     }
 
-    private CompileException unknownIdentifier(WrittenName written, Bindings bound) {
+    private CompileException unknownIdentifier(WrittenName written, InForce bound) {
         String name = written.canonical();
         if (name.equals("null")) {
             return CompileException.of(Diagnostic.at(written.reportedAt()).say(new DeclarationMessage.NullIsNotPartOfTheLanguage()).build());
@@ -1641,21 +1632,36 @@ public final class Resolve {
 
 
     /**
-     * The names bound at a point in a body, each with the binding it is. Persistent: extending it
-     * leaves the outer scope as it was, which is what an inner binding shadowing an outer one is.
+     * What is in force where an expression is written: the names bound over it, each with the
+     * binding it is, and the reading it is being read under. Persistent: extending it leaves the
+     * outer scope as it was, which is what an inner binding shadowing an outer one is.
+     *
+     * <p>The reading travels with the bindings because it is in force the same way — it holds over
+     * everything written under the position that settled it, and nothing written there changes it.
+     * It is carried rather than remembered so that what a value is read as is an argument of the
+     * read and not a state the reader is left in: three rules turn on it, and each of them asks the
+     * value it was handed.
      */
-    record Bindings(Map<String, ValueName.Local> byName) {
+    record InForce(Map<String, ValueName.Local> byName, Reading reading) {
 
-        static final Bindings NONE = new Bindings(Map.of());
+        /** Nothing bound yet, under this reading — where a read of a written value starts. */
+        static InForce of(Reading reading) {
+            return new InForce(Map.of(), reading);
+        }
 
-        Bindings and(String name, ValueName.Local binding) {
+        InForce and(String name, ValueName.Local binding) {
             Map<String, ValueName.Local> next = new HashMap<>(byName);
             next.put(name, binding);
-            return new Bindings(Map.copyOf(next));
+            return new InForce(Map.copyOf(next), reading);
         }
 
         ValueName.Local binderOf(String name) {
             return byName.get(name);
+        }
+
+        /** Whether what is being read is a fixture. */
+        boolean readingAFixture() {
+            return reading == Reading.A_FIXTURE;
         }
     }
 

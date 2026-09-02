@@ -1156,7 +1156,19 @@ public interface Hir {
      * <p>Not an expression, and not what a body writes — a decoder is derived or written in the codec
      * grammar, and nothing there spreads. A construction a body writes is {@link NewData}.
      */
-    record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Hir {}
+    record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Hir {
+
+        /**
+         * Never: a decoder gives one value per field, so a field left out is a field with no value.
+         *
+         * <p>Held here rather than at the check that asks it, so that both kinds of construction
+         * answer the same question and neither reader decides for the node in front of it. This one
+         * needs nothing kept to answer it — what a decoder writes is what this node is.
+         */
+        public boolean mayOmitOptionalFields() {
+            return false;
+        }
+    }
 
     /** {@code field: expr}, or the shorthand {@code field}, in a construction. */
     record FieldInit(WrittenName written, Expr value) implements Hir {
@@ -1570,30 +1582,80 @@ public interface Hir {
      * not go back to matching the spelling against the module's own definitions.
      *
      * <p>{@code origin} says where the construction came from: written here, or carried in by a
-     * published body or by a value this body named.
+     * published body or by a value this body named. {@code fields} says whether every field of it
+     * had to be written, which is what the reading it was read under settled ({@link Reading}).
      *
-     * <p>Expansion makes the two look alike: a construction spliced in from another body is the same
-     * node the reader's own would be, and the permission check reading that body would ask the
-     * reader to answer for it. So the construction says where it came from — and a pass writing one
-     * does not answer that question. A construction is made where it is built, and it is built here:
-     * the constructors take no origin, and the two that carry it are the two crossings below. What a
-     * rebuild does with the origin it has is keep it, which is what stops a carried construction from
-     * quietly turning back into the reader's own.
+     * <p>Both are answered when the source is read, and no later place answers them again. Expansion
+     * is why: a construction spliced in from another body is the same node the reader's own would be,
+     * and a construction a row spreads in was read as the model's own however it stands now — so the
+     * position a node is found at says neither, and asking the node is what is left.
+     *
+     * <p>So there is no way to make one that says what it was not read as. A construction is either
+     * read from the source that spells it ({@link #read}), translated from the form that already
+     * answered for it ({@link #fromApply}), rebuilt from one that has the answers ({@link #with}),
+     * moved across a crossing that changes where it came from ({@link #publishedBy},
+     * {@link #carriedByValue}), or built by a pass out of no source at all
+     * ({@link #syntheticWithEveryFieldWritten}) — which is the one of these that answers for itself,
+     * and is named for the answer it gives.
      */
     record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
                    ConstructionOrigin origin, Fields fields, SourcePos pos, Region region)
             implements Expr {
 
-        /** A construction written where it stands, saying which of its fields are written out. */
-        public NewData(Name typeName, List<FieldInit> inits, List<Var> spreads, Fields fields,
-                       SourcePos pos, Region region) {
-            this(typeName, inits, spreads, Origins.Own.IT_IS, fields, pos, region);
+        /**
+         * The construction {@code surface} spells, read under {@code reading} — the one way a
+         * construction is made from a source that writes one.
+         *
+         * <p>{@code surface} is the run of characters this is the reading of, and what it answers is
+         * where the construction stands. A pass rewriting a body has no surface node, which is what
+         * puts this out of its reach: whatever a rewrite would say the reading was, it has nothing
+         * to say it about.
+         */
+        public static NewData read(Ast.NewData surface, Name typeName, List<FieldInit> inits,
+                                   List<Var> spreads, Reading reading) {
+            return new NewData(typeName, inits, spreads, Origins.Own.IT_IS,
+                    switch (reading) {
+                        case A_FIXTURE -> Fields.OPTIONALS_MAY_BE_OMITTED;
+                        case THE_MODELS_OWN -> Fields.EVERY_ONE_WRITTEN;
+                    },
+                    surface.pos(), surface.region());
         }
 
-        /** A construction written where every field of it is written out. */
-        public NewData(Name typeName, List<FieldInit> inits, List<Var> spreads, SourcePos pos,
-                       Region region) {
-            this(typeName, inits, spreads, Origins.Own.IT_IS, Fields.EVERY_ONE_WRITTEN, pos, region);
+        /**
+         * The construction {@code application} means — {@code T(v)} at a newtype, which the author
+         * wrote as an application and a desugaring reads as what it constructs.
+         *
+         * <p>The application is the argument because it is what already answered: where the
+         * construction came from is the application's answer and is carried, not asked again of the
+         * pass rewriting it. A newtype construction writes the one field the newtype declares, so
+         * every field of it is written — which this says, rather than a caller.
+         */
+        public static NewData fromApply(Apply application, Name typeName, List<FieldInit> inits) {
+            return new NewData(typeName, inits, List.of(), application.origin(),
+                    Fields.EVERY_ONE_WRITTEN, application.pos(), application.region());
+        }
+
+        /**
+         * A construction a pass composed, which no source spells and which gives every field of the
+         * type a value — written out or spread in, as {@link Fields#EVERY_ONE_WRITTEN} is.
+         *
+         * <p>The one construction that is nobody's reading. It says what it is in its name because
+         * there is no source to have said it: a pass building one is stating that it left no field
+         * to be filled in for it, and a pass that cannot state that has no construction to build.
+         */
+        public static NewData syntheticWithEveryFieldWritten(Name typeName, List<FieldInit> inits,
+                                                             List<Var> spreads, SourcePos pos,
+                                                             Region region) {
+            return new NewData(typeName, inits, spreads, Origins.Own.IT_IS,
+                    Fields.EVERY_ONE_WRITTEN, pos, region);
+        }
+
+        /**
+         * Whether a field this construction leaves out is the absent value its declaration holds —
+         * asked of the node, which is what was there when the source was read.
+         */
+        public boolean mayOmitOptionalFields() {
+            return fields == Fields.OPTIONALS_MAY_BE_OMITTED;
         }
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
@@ -1632,12 +1694,18 @@ public interface Hir {
     /**
      * Whether a construction has to write out every field it has.
      *
-     * <p>One rule reads this, and it is the one that reports a field with no value. A row writes a
-     * value the way it is read back rather than the way a body builds one, and there an unwritten
-     * optional field is the absent value it would otherwise spell out (spec §example-evaluable);
-     * everywhere else a construction says what each of its fields is, which is the rule a body is
-     * held to. Named for what it permits rather than for where it came from, so nothing else can
-     * come to rest on "this was written in a row".
+     * <p>One rule turns on this, and it is the one that reports a field with no value. A fixture
+     * writes a value the way it is read back rather than the way a body builds one, and there an
+     * unwritten optional field is the absent value it would otherwise spell out (spec
+     * §example-evaluable); everywhere else a construction says what each of its fields is, which is
+     * the rule a body is held to. Named for what it permits rather than for where it came from, so
+     * nothing else can come to rest on "this was written in a fixture".
+     *
+     * <p>Nothing outside this package names it. The rule that turns on it asks the construction
+     * ({@link NewData#mayOmitOptionalFields}, {@link Construct#mayOmitOptionalFields}), so a reader
+     * gets the answer from the node that holds it rather than from whichever value it had in hand,
+     * and a pass has nothing to spell that would make a construction say what it was not read as.
+     * What {@link Reading} settles is which of these a construction gets, and it settles it once.
      */
     enum Fields {
         /** Every field of the construction is written or spread — what a body writes. */
