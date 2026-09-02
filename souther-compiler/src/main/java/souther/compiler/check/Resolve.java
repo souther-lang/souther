@@ -1357,8 +1357,7 @@ public final class Resolve {
         // between them is reported, and what each means afterwards was decided by the order these
         // were consulted rather than by anything either says.
         if (symbols.scope().resolve(name) instanceof Denotation.Denotes d) {
-            return new Reach.Reaches(new ValueName.OfType(written, d.type(),
-                    applied ? null : ConstructionOrigin.own()));
+            return new Reach.Reaches(new ValueName.OfType(written, d.type()));
         }
         return reached;
     }

@@ -142,8 +142,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
     /** A case that carries nothing: naming it is constructing it. */
     public static FixtureTemplate unitCase(TypeReachName.Written type) {
         String written = type.rendered();
-        ValueName.OfType named =
-                new ValueName.OfType(written, type.denotes(), ConstructionOrigin.own());
+        ValueName.OfType named = new ValueName.OfType(written, type.denotes());
         return new FixtureTemplate(written,
                 Hir.Var.denoting(WrittenName.synthetic(written, NOWHERE),
                         new ReachName.InScope(named)));
@@ -200,13 +199,13 @@ public record FixtureTemplate(String text, Hir.Expr value) {
     /**
      * A newtype around one value, written in the call form a row writes it in (ADR-0032).
      *
-     * <p>The construction says where it came from and the name says what it is, which is how the
-     * same call reads when a source wrote it: applying a type is the newtype taking what it wraps,
-     * so the origin is the application's and the name carries none of its own.
+     * <p>The application says where the construction came from and the name says what is applied,
+     * which is how the same call reads when a source wrote it: applying a type is the newtype taking
+     * what it wraps.
      */
     public static FixtureTemplate newtype(TypeReachName.Written type, FixtureTemplate inner) {
         String written = type.rendered();
-        ValueName.OfType named = new ValueName.OfType(written, type.denotes(), null);
+        ValueName.OfType named = new ValueName.OfType(written, type.denotes());
         return new FixtureTemplate(written + "(" + inner.text() + ")",
                 new Hir.Apply(written, new ReachName.InScope(named), List.of(inner.value()),
                         ConstructionOrigin.own(), NOWHERE, NO_SOURCE));

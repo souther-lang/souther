@@ -190,23 +190,6 @@ public final class HelperNames {
         };
     }
 
-    /**
-     * The reference that reaches {@code marked}, for a pass that restated where a construction came
-     * from.
-     *
-     * <p>A whole reference and not the old one with a new denotation in it: what a name means is
-     * changed by replacing the reference it was answered with, so that a route and a declaration
-     * from two different references can never be paired.
-     *
-     * <p>Bare, because a type used as a value is reached by what this module calls it however the
-     * construction is marked — {@link ReachName#of} answers the same for every {@code OfType}, and
-     * the mark is not part of how the name is reached. So this is that answer and not a route
-     * carried over from what stood here.
-     */
-    private static ReachName.InScope reachingTheSameTypeAs(ValueName.OfType marked) {
-        return new ReachName.InScope(marked);
-    }
-
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
     private static Hir.Var qualified(Hir.Var name, Predicate<ValueName.Helper> which) {
         return name.answered() instanceof Hir.Var.Denoting named
@@ -258,21 +241,17 @@ public final class HelperNames {
      * name the reader has none of. The mark is what tells the two apart afterwards, and it names the
      * module rather than saying only that the construction came from somewhere: a body may build a
      * type of a third module, and that one is nobody's to hand over (ADR-0059).
+     *
+     * <p>A unit data is not marked. It is constructed by being named and the permission check
+     * collects no unit (spec §constructs-excludes-unit-data), so a mark on the name would be one
+     * nothing reads.
      */
     static Hir.Expr publishedBy(Hir.Expr e, String module) {
         // a spread names a value, and a value is not a construction: what it built was built where it
         // was defined, so the mark is already on it
         Hir.Expr rebuilt = alsoInGiven(Hir.mapChildren(e, c -> publishedBy(c, module), s -> s),
                 c -> publishedBy(c, module));
-        return switch (rebuilt) {
-            case Hir.NewData nd -> nd.publishedBy(module);
-            // a unit data is constructed by being named, so the name is where it says where it came
-            // from — there is no construction node to say it on. A name resolution answered with
-            // nothing was reported where it is written; there is no construction to mark on it.
-            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named ->
-                    v.withReachedAs(reachingTheSameTypeAs(named.publishedBy(module)));
-            default -> rebuilt;
-        };
+        return rebuilt instanceof Hir.NewData nd ? nd.publishedBy(module) : rebuilt;
     }
 
     /**
@@ -291,20 +270,18 @@ public final class HelperNames {
      * one that made it either way. A helper is the other case and stays the other case: its body is
      * checked as though it had been written inline, which is what tells a helper from a behavior.
      *
-     * <p>Three things can stand for a construction and each takes the mark. A construction node
-     * carries its own; a unit data is constructed by being named, so the name carries it; and a
-     * recursive helper is lowered to a method rather than expanded, so what it builds stays behind a
-     * call, and the call carries it. Without the third, whether a value's constructions belonged to
-     * the value would turn on whether a helper on the way could be expanded — the substitution
-     * showing through the rule again, in the one place expansion cannot reach.
+     * <p>Two things stand for a construction the permission check reads, and each takes the mark. A
+     * construction node carries its own; and a recursive helper is lowered to a method rather than
+     * expanded, so what it builds stays behind a call, and the call carries it. Without the second,
+     * whether a value's constructions belonged to the value would turn on whether a helper on the
+     * way could be expanded — the substitution showing through the rule again, in the one place
+     * expansion cannot reach.
      */
     static Hir.Expr carriedByValue(Hir.Expr e) {
         Hir.Expr rebuilt = alsoInGiven(Hir.mapChildren(e, HelperNames::carriedByValue, s -> s),
                 HelperNames::carriedByValue);
         return switch (rebuilt) {
             case Hir.NewData nd -> nd.carriedByValue();
-            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named ->
-                    v.withReachedAs(reachingTheSameTypeAs(named.carriedByValue()));
             case Hir.Apply call -> call.carriedByValue();
             default -> rebuilt;
         };

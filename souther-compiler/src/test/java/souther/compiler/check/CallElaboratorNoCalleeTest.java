@@ -68,7 +68,7 @@ class CallElaboratorNoCalleeTest {
     @Test
     void aTypeIsToldItConstructs() {
         RuntimeException e = answerFor(
-                new ValueName.OfType("Yen", TypeSymbols.declared(new TypeKey("m", "Yen")), null));
+                new ValueName.OfType("Yen", TypeSymbols.declared(new TypeKey("m", "Yen"))));
         CompileException c = assertInstanceOf(CompileException.class, e);
         assertInstanceOf(DataMessage.AConstructionCannotBeWrittenHere.class, c.diagnostic().said());
         assertEquals(List.of("Yen"), List.copyOf(c.diagnostic().values().values()));
