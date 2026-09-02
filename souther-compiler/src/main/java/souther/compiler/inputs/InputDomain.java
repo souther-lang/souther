@@ -1335,9 +1335,9 @@ public final class InputDomain {
         // off the spelling of a side answers nothing for `String.length(value) * 2 >= 4`, whose
         // sides are neither a name nor a measure of one.
         Set<NumberAt.OfWhatNumber> written = DeclaredSubjects.of(type, source, policy);
-        RulesWithNoLine found = new RulesWithNoLine();
+        RulesWithNoLine.Gathered found = new RulesWithNoLine.Gathered();
         if (undecidable(written, stated, taken, carried)) {
-            found = competingCoordinates(stated, path, type, source);
+            competingCoordinates(stated, path, type, source, found);
             stated = List.of();
         }
         boolean bySize = measuredHere(written, stated, taken);
@@ -1388,9 +1388,13 @@ public final class InputDomain {
                 : TypeBounds.admissible(own, projected.bounds(), term);
         RulesWithNoLine noLine = rulesWithoutALineAt(placed, path, type, source, found);
         List<RuleWithoutALine> withoutALine = noLine.stated();
+        // Everything left open about the rules of this position: what the accounting of the
+        // declaration's clauses could not classify, and what this walk itself could not — which of
+        // the position's two numbers it is measured at is decided here and nowhere else, so no
+        // accounting has it.
+        List<StandingQuestion> open = standingAt(placed, path, noLine);
 
-        ReadingResult reading = crossed(declared, view, admissible, admitted, source,
-                placed.unclassified(path),
+        ReadingResult reading = crossed(declared, view, admissible, admitted, source, open,
                 nothingExists, type);
         return new ReadPosition(path, view, term, admissible, own, projected,
                 // Where the position actually stops, which the ends as written do not say: a clause
@@ -1405,9 +1409,9 @@ public final class InputDomain {
                 // rules is that reading's business, and a rule another reading took in is not a
                 // rule left unread.
                 //
-                // And beside those, the rules this reading did not get far enough through to say
-                // what they raise, which the accounting holds at the same granularity.
-                standingAt(placed, path),
+                // And beside those, the rules nothing worked out the questions of, from both
+                // readings that can leave one.
+                open,
                 // And whether the rules were reached at all, asked of the gathering that knows.
                 // No question is raised where nothing was seen, so an empty list beside it would
                 // say every rule was accounted for. Read off the reading's own reason instead, a
@@ -1436,13 +1440,13 @@ public final class InputDomain {
     private static ReadingResult crossed(List<Case> declared, TypeView view,
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
                                          RuleReadingSource source,
-                                         List<PlacedRules.RuleUnclassifiedAt> unclassified,
+                                         List<StandingQuestion> open,
                                          boolean nothingExists, Type type) {
         BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {
             return new ReadingResult.Unsupported(unreadable);
         }
-        BlockReason.RuleReadingStopped here = stoppedOn(unclassified);
+        BlockReason.RuleReadingStopped here = stoppedOn(open);
         if (!declared.isEmpty()) {
             return Crossing.of(declared, view, admissible, admitted, source.symbols(), here);
         }
@@ -1477,9 +1481,13 @@ public final class InputDomain {
      * the values are an upper bound and there is no more or less of that — and which rule to go and
      * look at is the finding's to say, one per rule, where they are all named.
      */
-    private static BlockReason.RuleReadingStopped stoppedOn(
-            List<PlacedRules.RuleUnclassifiedAt> rules) {
-        return rules.isEmpty() ? null : rules.getFirst().at().why();
+    private static BlockReason.RuleReadingStopped stoppedOn(List<StandingQuestion> open) {
+        for (StandingQuestion each : open) {
+            if (each instanceof StandingQuestion.Unclassified it) {
+                return it.why();
+            }
+        }
+        return null;
     }
 
     /**
@@ -1521,10 +1529,10 @@ public final class InputDomain {
      * their clauses are in the way. A rule placing two ends is one rule and one finding, which is
      * what the key settles.
      */
-    private static RulesWithNoLine competingCoordinates(List<FieldDomains.Placed> stated,
-                                                         TermPath path, Type type,
-                                                         RuleReadingSource source) {
-        RulesWithNoLine out = new RulesWithNoLine();
+    private static void competingCoordinates(List<FieldDomains.Placed> stated,
+                                             TermPath path, Type type,
+                                             RuleReadingSource source,
+                                             RulesWithNoLine.Gathered out) {
         for (FieldDomains.Placed each : stated) {
             out.undetermined(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
@@ -1539,7 +1547,6 @@ public final class InputDomain {
                     CoverageObligation.BOUNDARY,
                     new BlockReason.CompetingCoordinates());
         }
-        return out;
     }
 
     /**
@@ -1627,9 +1634,16 @@ public final class InputDomain {
      * <p><b>And the rules nothing classified, which cross without any of that.</b> What such a rule
      * raises is the part that was not read, so there is no subject to translate and none is made:
      * the place crosses as where a reader is sent to look, which is not what the rule is about.
+     *
+     * <p>From both readings that can leave one. The accounting says what the declaration's clauses
+     * left undecided; this walk says what it could not decide itself, which no accounting has —
+     * which of a position's numbers it is measured at is settled here. Taken from the accounting
+     * alone, a position both of whose coordinates are spoken for came back with nothing standing at
+     * it and its measures closed over a rule this compiler could not use.
      */
-    private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path) {
-        List<StandingQuestion> out = new ArrayList<>();
+    private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path,
+                                                     RulesWithNoLine here) {
+        List<StandingQuestion> out = new ArrayList<>(here.unclassified());
         for (PlacedRules.RuleUnclassifiedAt each : placed.unclassified(path)) {
             out.add(StandingQuestion.ObligationUndetermined.of(each.rule(), each.cited(),
                     FilingCoordinate.at(path), each.at().which(), each.at().why()));
@@ -1702,7 +1716,8 @@ public final class InputDomain {
      * of them was dropped as a repeat of the first.
      */
     private static RulesWithNoLine rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
-                                                  RuleReadingSource source, RulesWithNoLine out) {
+                                                  RuleReadingSource source,
+                                                  RulesWithNoLine.Gathered out) {
         for (FieldDomains.NoLine each : placed.noLineAt(path)) {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
@@ -1715,6 +1730,6 @@ public final class InputDomain {
                     filedAt(path, each.at(), type, source),
                     each.why());
         }
-        return out;
+        return out.found();
     }
 }

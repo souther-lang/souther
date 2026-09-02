@@ -50,10 +50,10 @@ public sealed interface BodyCutInspection {
      * one read from end to end came out alike, and the first went out as the model stating
      * something.
      *
-     * <p><b>And the stop is this phase's to say, because the accounting does not say it.</b> A
-     * question is raised by a rule of a declaration and answered by whichever reading took it in; a
-     * comparison a body writes raises and answers in one breath, so no question of it ever stands.
-     * A verdict that asked only the accounting had nothing to go on for those rules.
+     * <p><b>Both halves are read off what the readers left, and neither off a verdict.</b> A rule
+     * read from end to end is a finding about the model; a rule whose reading did not finish is a
+     * question about that rule, and this phase asks the questions standing at the place rather than
+     * asking a word about the model which of the two happened.
      *
      * <p>Which rule it was is not here, and is not lost. A rule this phase could not use is a
      * {@link souther.compiler.inputs.RuleWithoutALine} made by the reader that read it, naming

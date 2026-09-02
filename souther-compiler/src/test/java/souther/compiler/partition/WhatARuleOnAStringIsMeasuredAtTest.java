@@ -179,7 +179,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                 Partitions.of(spec.name(), read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
                 guards.thresholds(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
-                new souther.compiler.inputs.RulesWithNoLine(), guards.singled());
+                souther.compiler.inputs.RulesWithNoLine.NONE, guards.singled());
 
         List<String> classes = new ArrayList<>();
         List<String> stands = new ArrayList<>();

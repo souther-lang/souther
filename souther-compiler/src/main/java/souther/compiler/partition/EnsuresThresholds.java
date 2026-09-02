@@ -82,7 +82,7 @@ public final class EnsuresThresholds {
                           List<LineDrawn> between, RulesWithNoLine noLine) {
 
         public static final Clauses NONE =
-                new Clauses(List.of(), List.of(), new RulesWithNoLine());
+                new Clauses(List.of(), List.of(), RulesWithNoLine.NONE);
 
         public Clauses {
             evidence = List.copyOf(evidence);
@@ -133,7 +133,7 @@ public final class EnsuresThresholds {
         }
         InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()));
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new RulesWithNoLine());
+                new RulesWithNoLine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
             String clause = labelOf(rule);
             // Which line of the clause each one is, counted over every comparison the clause states
@@ -150,14 +150,14 @@ public final class EnsuresThresholds {
                                 drawn);
             }
         }
-        return new Clauses(drawn.evidence(), drawn.between(), drawn.noLine());
+        return new Clauses(drawn.evidence(), drawn.between(), drawn.noLine().found());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<LineEvidence> evidence,
                          List<LineDrawn> between,
-                         RulesWithNoLine noLine) {}
+                         RulesWithNoLine.Gathered noLine) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -328,7 +328,7 @@ public final class EnsuresThresholds {
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      java.util.SequencedMap<FilingCoordinate,
                                              BlockReason.RuleWithoutLineReason> left,
-                                     RulesWithNoLine withoutALine) {
+                                     RulesWithNoLine.Gathered withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }

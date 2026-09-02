@@ -85,7 +85,7 @@ public final class LinesWhereTheyFall {
         Symbols symbols = read.symbols();
         List<LineEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
-        RulesWithNoLine notPlaced = new RulesWithNoLine();
+        RulesWithNoLine.Gathered notPlaced = new RulesWithNoLine.Gathered();
         // One pass in the order the rules were read, so what comes out is in that order too. A pass
         // per kind of thing a rule can say puts every range before every equality, whatever order a
         // body wrote them in, and every reader downstream takes the numbers in that order.
@@ -102,7 +102,7 @@ public final class LinesWhereTheyFall {
         for (LineDrawn each : between) {
             place(read, each, outBetween, notPlaced);
         }
-        return new Filed(out, outBetween, notPlaced);
+        return new Filed(out, outBetween, notPlaced.found());
     }
 
 
@@ -153,7 +153,7 @@ public final class LinesWhereTheyFall {
      * name left where it was written would be the same answer.
      */
     private static void place(InputReading read, LineDrawn line,
-                              List<LineDrawn> out, RulesWithNoLine notPlaced) {
+                              List<LineDrawn> out, RulesWithNoLine.Gathered notPlaced) {
         InputDomain inputs = read.domain();
         Quantities quantities = read.quantities();
         Symbols symbols = read.symbols();

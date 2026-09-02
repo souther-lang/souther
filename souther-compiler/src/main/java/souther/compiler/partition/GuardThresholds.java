@@ -76,7 +76,7 @@ public final class GuardThresholds {
                          ReachingCuts reaching) {
 
         public static final Guards NONE =
-                new Guards(List.of(), new RulesWithNoLine(), List.of(), ReachingCuts.NONE);
+                new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
@@ -149,7 +149,7 @@ public final class GuardThresholds {
         InputDomain inputs = read.domain();
         Symbols symbols = read.symbols();
         List<LineEvidence> found = new ArrayList<>();
-        RulesWithNoLine withoutALine = new RulesWithNoLine();
+        RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
         // One reading of the body, and everything below is that reading asked something. Where a
         // comparison is written, what its names point at, what a row had satisfied to get there,
@@ -168,7 +168,7 @@ public final class GuardThresholds {
                 case BoundaryPolicy.Standing.Refused _ -> { }
             }
         }
-        return new Guards(found, withoutALine, between, comparisons.reaching(plan));
+        return new Guards(found, withoutALine.found(), between, comparisons.reaching(plan));
     }
 
     /**
@@ -425,7 +425,7 @@ public final class GuardThresholds {
                                Symbols symbols, ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
-                               RulesWithNoLine withoutALine) {
+                               RulesWithNoLine.Gathered withoutALine) {
         publish(each, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
@@ -506,7 +506,7 @@ public final class GuardThresholds {
      * missing a border.
      */
     private static void publish(ComparisonCatalog.Catalogued comparison,
-                                ComparisonAssessment read, RulesWithNoLine out) {
+                                ComparisonAssessment read, RulesWithNoLine.Gathered out) {
         // Whose body it is, from the name the catalog issued. Taken from a caller beside it, the
         // rule this reports and the comparison it is read off would be free to be of two behaviors,
         // and the occurrence being one this plan holds would not refuse it.

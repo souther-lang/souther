@@ -274,11 +274,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     @Test
     void aReasonSaysWhatBecameOfTheReadingAndNotWhatAMeasureIsShortOf() {
         for (BlockReason.RuleWithoutLineReason each : everyRuleWithoutALine()) {
-            RulesWithNoLine filed = new RulesWithNoLine();
-            filed.add(new RuleRef.Comparison("b",
+            RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+            gathered.add(new RuleRef.Comparison("b",
                             new CoverageOrigin("m", 1, 1, CoverageConstruct.IF)),
                     new RuleCitation.Named("n"),
                     new FilingCoordinate.AtPosition(TermPath.of("x")), each);
+            RulesWithNoLine filed = gathered.found();
 
             assertEquals(1, filed.stated().size(), each.getClass().getSimpleName());
             assertEquals(List.of(), filed.unclassified(),

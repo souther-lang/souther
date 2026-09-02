@@ -318,7 +318,7 @@ public final class Partitions {
         Quantities quantities = input.quantities();
         RuleReadingSource ruleSource = input.rules();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
-        RulesWithNoLine rulesWithoutALine = new RulesWithNoLine();
+        RulesWithNoLine.Gathered rulesWithoutALine = new RulesWithNoLine.Gathered();
         // What the reading could not hold together, asked of every position it read rather than of
         // the ones left pending. This qualifies the classes and does not stand in for them: a
         // position with classes read from a product wider than the rules admit is exactly where it
@@ -373,15 +373,16 @@ public final class Partitions {
         // off the findings alone, a position whose only rule was one nothing worked out came back
         // as one no rule was written about.
         unclassifiedIn(standing, rulesWithoutALine);
-        List<RuleWithoutALine> refused = rulesWithoutALine.stated();
+        RulesWithNoLine cameToHere = rulesWithoutALine.found();
+        List<RuleWithoutALine> refused = cameToHere.stated();
         for (Drawn at : drawn) {
             BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
                 came = BodyCutInspection.combined(came,
-                        cameTo(axis.term(), axis.path(), rulesWithoutALine));
+                        cameTo(axis.term(), axis.path(), cameToHere));
             }
             if (came == null) {
-                came = cameTo(null, at.at().path(), rulesWithoutALine);
+                came = cameTo(null, at.at().path(), cameToHere);
             }
             settled.add(new PositionMeasurements(at.at(), at.axes(), came));
         }
@@ -462,7 +463,8 @@ public final class Partitions {
      * two readers of them want different things: one asks what holds a measure open and the other
      * asks what became of the rules written here. Neither is read off the other.
      */
-    private static void unclassifiedIn(List<StandingQuestion> asked, RulesWithNoLine into) {
+    private static void unclassifiedIn(List<StandingQuestion> asked,
+                                       RulesWithNoLine.Gathered into) {
         for (StandingQuestion each : asked) {
             if (each instanceof StandingQuestion.Unclassified it) {
                 into.asked(it);
@@ -697,8 +699,7 @@ public final class Partitions {
                                        Quantities reading,
                                        List<Threshold> thresholds,
                                        RuleReadingSource ruleSource, ReadingPolicy policy) {
-        return withThresholds(base, reading, thresholds, ruleSource, policy,
-                new RulesWithNoLine());
+        return withThresholds(base, reading, thresholds, ruleSource, policy, RulesWithNoLine.NONE);
     }
 
     /**
@@ -798,10 +799,11 @@ public final class Partitions {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
-        RulesWithNoLine gathered = new RulesWithNoLine();
-        gathered.addAll(base.rulesWithoutALine());
-        gathered.addAll(rulesWithoutALine);
-        unclassifiedIn(base.unanswered(), gathered);
+        RulesWithNoLine.Gathered found = new RulesWithNoLine.Gathered();
+        found.addAll(base.rulesWithoutALine());
+        found.addAll(rulesWithoutALine);
+        unclassifiedIn(base.unanswered(), found);
+        RulesWithNoLine gathered = found.found();
         List<RuleWithoutALine> rules = gathered.stated();
         // And what these readers could not classify, beside the questions the base reading already
         // had. One list of what holds a measure open, for the one reader of it.
@@ -1133,7 +1135,7 @@ public final class Partitions {
                                ReadingPolicy policy,
                                List<Drawn> drawn,
                                java.util.Set<NumericTerm> uncertain,
-                               RulesWithNoLine rulesWithoutALine) {
+                               RulesWithNoLine.Gathered rulesWithoutALine) {
         rulesWithoutALine.addAll(position.rulesWithoutALine());
         NumericTerm.FromOnePosition term = position.term();
         AxisId id = AxisId.of(behavior, term);

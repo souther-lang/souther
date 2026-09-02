@@ -39,38 +39,39 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
 
     @Test
     void oneRuleFoundTwiceIsOneFindingCitedBothWays() {
-        RulesWithNoLine gathered = new RulesWithNoLine();
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
         gathered.add(found(NAMED, "x"));
         gathered.add(found(PLACED, "x"));
 
-        assertEquals(1, gathered.stated().size(),
+        assertEquals(1, gathered.found().stated().size(),
                 () -> "one rule at one position for one reason is one finding: "
-                        + gathered.stated());
-        assertEquals(Set.of(NAMED, PLACED), gathered.stated().get(0).cited(),
+                        + gathered.found().stated());
+        assertEquals(Set.of(NAMED, PLACED), gathered.found().stated().get(0).cited(),
                 "and a reader can be sent to it either way either reader offered");
     }
 
     /** Which of the two was found first decides nothing about what comes out. */
     @Test
     void whichReaderFoundItFirstDecidesNothing() {
-        RulesWithNoLine one = new RulesWithNoLine();
+        RulesWithNoLine.Gathered one = new RulesWithNoLine.Gathered();
         one.add(found(NAMED, "x"));
         one.add(found(PLACED, "x"));
-        RulesWithNoLine theOtherWayRound = new RulesWithNoLine();
+        RulesWithNoLine.Gathered theOtherWayRound = new RulesWithNoLine.Gathered();
         theOtherWayRound.add(found(PLACED, "x"));
         theOtherWayRound.add(found(NAMED, "x"));
 
-        assertEquals(one.stated(), theOtherWayRound.stated());
+        assertEquals(one.found(), theOtherWayRound.found(),
+                "and what each hands on is one value, which compares by what is in it");
     }
 
     /** And two rules are two findings, so the fold is on the rule and not on everything at once. */
     @Test
     void twoRulesAreTwoFindings() {
-        RulesWithNoLine gathered = new RulesWithNoLine();
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
         gathered.add(found(NAMED, "x"));
         gathered.add(found(NAMED, "y"));
 
-        assertEquals(2, gathered.stated().size(), () -> gathered.stated().toString());
+        assertEquals(2, gathered.found().stated().size(), () -> gathered.found().stated().toString());
     }
 
     /** And nothing puts together two findings that are not one rule. */
@@ -91,19 +92,19 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
      */
     @Test
     void aQuestionAboutAnUnclassifiedRuleIsFoldedBesideTheFindings() {
-        RulesWithNoLine gathered = new RulesWithNoLine();
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
         gathered.unclassified(comparison(), NAMED, at("x"), new BlockReason.UnreadComparisonForm());
         gathered.unclassified(comparison(), PLACED, at("x"),
                 new BlockReason.UnreadComparisonForm());
         gathered.add(comparison(), NAMED, at("x"), new BlockReason.ComparisonBetweenPositions());
 
-        assertEquals(1, gathered.unclassified().size(),
-                () -> "one rule, one place, one limit: " + gathered.unclassified());
-        assertEquals(Set.of(NAMED, PLACED), gathered.unclassified().get(0).cited(),
+        assertEquals(1, gathered.found().unclassified().size(),
+                () -> "one rule, one place, one limit: " + gathered.found().unclassified());
+        assertEquals(Set.of(NAMED, PLACED), gathered.found().unclassified().get(0).cited(),
                 "and both handles are kept, as they are for a finding");
-        assertEquals(1, gathered.stated().size(),
+        assertEquals(1, gathered.found().stated().size(),
                 () -> "the rule read to the end is beside it and not folded into it: "
-                        + gathered.stated());
+                        + gathered.found().stated());
     }
 
     /** A question two readers cited two ways is one question with both handles, and what the author

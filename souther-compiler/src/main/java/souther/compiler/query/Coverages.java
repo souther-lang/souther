@@ -138,11 +138,7 @@ final class Coverages {
     private static RulesWithNoLine everyRuleWithNoLine(
             EnsuresThresholds.Clauses clauses, GuardThresholds.Guards guards,
             LinesWhereTheyFall.Filed filed) {
-        RulesWithNoLine out = new RulesWithNoLine();
-        out.addAll(clauses.noLine());
-        out.addAll(guards.noLine());
-        out.addAll(filed.notPlaced());
-        return out;
+        return clauses.noLine().and(guards.noLine()).and(filed.notPlaced());
     }
 
     /** The two producers' lines, in one list. */

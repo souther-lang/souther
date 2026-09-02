@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.BlockReason;
+
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -293,8 +295,13 @@ public sealed interface Required {
                 if (bound != null) {
                     yield new Presence.Raised(new Owed.Boundary(bound.line()));
                 }
-                yield states instanceof ClauseStates.SomethingElse it && it.unread() != null
-                        ? new Presence.Undetermined(it.unread()) : new Presence.NotRaised();
+                if (!(states instanceof ClauseStates.SomethingElse it)) {
+                    yield new Presence.NotRaised();
+                }
+                // Asked at this name, because the reading is answered at each of them. A name it
+                // settled is settled whatever it left beside it.
+                BlockReason.RuleReadingStopped why = it.unread().get(at);
+                yield why == null ? new Presence.NotRaised() : new Presence.Undetermined(why);
             }
         };
     }

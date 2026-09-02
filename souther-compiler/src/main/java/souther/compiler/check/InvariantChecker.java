@@ -1677,7 +1677,8 @@ public final class InvariantChecker {
         })) {
             return new ClauseStates.ARelation();
         }
-        return ClauseStates.SomethingElse.naming(found).unread(stoppedOnTheFormOf(read, byName));
+        return ClauseStates.SomethingElse.naming(found)
+                .unread(stoppedOnTheFormOf(found, read, byName));
     }
 
     /**
@@ -1696,17 +1697,25 @@ public final class InvariantChecker {
      * classification is given in, and taking one would put the answer inside the thing it is an
      * answer about.
      */
-    private BlockReason.RuleReadingStopped stoppedOnTheFormOf(
-            CanonicalForm read, Map<FactSubject, Coordinate> byName) {
+    private SequencedMap<RuleKey, BlockReason.RuleReadingStopped> stoppedOnTheFormOf(
+            List<RuleKey> found, CanonicalForm read, Map<FactSubject, Coordinate> byName) {
+        SequencedMap<RuleKey, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
         // Only a rule that orders the values. An equality singles one out and puts no end anywhere,
         // which is what it states and not what a reading of it managed — so however little of the
         // form was read, there is no line for anything to be undecided about.
         if (!(read instanceof CanonicalForm.NotRead stopped)
                 || !(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
-            return null;
+            return out;
         }
-        return UnreadComparison.notAboutOwnValues(
+        // The same answer at each name the conjunct writes, because the form is what would settle
+        // any of them: one comparison has one arithmetic, and where that stopped no name it writes
+        // has a line worked out. What differs between names is settled per conjunct and arrives
+        // here as separate readings of separate comparisons, which is why this is asked per name
+        // rather than said once of the clause.
+        BlockReason.RuleReadingStopped why = UnreadComparison.notAboutOwnValues(
                 placesIn(stopped.stoppedAt(), stopped.under(), byName).origin());
+        found.forEach(each -> out.put(each, why));
+        return out;
     }
 
     /**

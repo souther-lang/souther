@@ -12,10 +12,11 @@ import souther.compiler.inputs.BlockReason;
  * saying so is what keeps a measure from closing over it. Written as "raises it or does not", the
  * second is whichever of the two whoever wrote the classification happened to reach for.
  *
- * <p><b>Asked for every question and at every place, and answered by a switch with no
- * {@code default}.</b> A question added to {@link CoverageObligation} is one this has to be given
- * an answer for at each shape a clause can be read into; left out, it would arrive as "does not
- * raise it" at every place, and a measure would be complete over a model nobody had classified.
+ * <p><b>Asked for every question and at every place.</b> What refuses a question nobody classified
+ * is the switch over {@link CoverageObligation} that answers this, which has no {@code default}: a
+ * word added there stops the build until somebody says what a clause raises under it. What this
+ * type adds is that the answer they have to write is one of three and not the absence of one — a
+ * place that raises nothing says so, rather than being a place nothing was recorded about.
  */
 sealed interface Presence {
 
