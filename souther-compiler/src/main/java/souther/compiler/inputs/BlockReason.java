@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.CoverageObligation;
+import souther.compiler.observe.RunSensitivity;
 
 /**
  * Why a derivation did not finish, in this compiler's own terms.
@@ -41,7 +42,23 @@ public sealed interface BlockReason {
      * used to be a comment saying which reasons a caller must not be handed is now the parameter
      * type.
      */
-    sealed interface ReadingStopReason extends BlockReason {}
+    sealed interface ReadingStopReason extends BlockReason {
+
+        /**
+         * Whether a run of this compiler that allows more could get past this.
+         *
+         * <p>Asked of a stop and of {@link AboutARule}, and of nothing else. Between them those two
+         * hold exactly the reasons a measurement can be left open by — the stops, and the rule
+         * nothing claimed — and the five that are in neither are the ones read from end to end,
+         * which leave no measure short of anything and so have nothing here to be asked about. A
+         * reason answering for a measure it does not weaken is an answer a report could reach for.
+         *
+         * <p>The question is the allowances and never the person: did a figure this compiler
+         * compared something against stop it. What an author or an operator may go on to do is what
+         * the reasons themselves say, one word at a time.
+         */
+        RunSensitivity runSensitivity();
+    }
 
     /**
      * A reading that ran to the end of the rules and could not work out what they leave.
@@ -57,7 +74,17 @@ public sealed interface BlockReason {
      * remember which arms are the exception, and the day one forgot it would name a rule that
      * nothing was wrong with.
      */
-    sealed interface AnswerRealizationStopped extends ReadingStopReason {}
+    sealed interface AnswerRealizationStopped extends ReadingStopReason {
+
+        /** The answer was larger than the allowance it was built under, which is a figure a run may
+         *  allow more of. */
+        @Override
+        default RunSensitivity runSensitivity() {
+            return switch (this) {
+                case ExactValuesTooCostly _ -> RunSensitivity.MAY_CHANGE;
+            };
+        }
+    }
 
     /**
      * A rule of the model that is no line at a position it is about, however that came about.
@@ -104,7 +131,12 @@ public sealed interface BlockReason {
      * takes a stop, a line that came to nothing, or a position's verdict would take that answer as
      * well.
      */
-    sealed interface AboutARule extends BlockReason {}
+    sealed interface AboutARule extends BlockReason {
+
+        /** Whether a run that allows more could get past this — see
+         *  {@link ReadingStopReason#runSensitivity()}, which this half is asked alongside. */
+        RunSensitivity runSensitivity();
+    }
 
     /**
      * A rule a reading stopped on, which is the half of {@link RuleWithoutLineReason} that says
@@ -165,6 +197,27 @@ public sealed interface BlockReason {
                 };
             };
         }
+
+        /**
+         * The same switch, and the same reason for it being one: a division of these nine into two
+         * is only reviewable where all nine answers are visible together.
+         */
+        @Override
+        default RunSensitivity runSensitivity() {
+            return switch (this) {
+                // Two figures this compiler compared a rule against: the states a pattern is built
+                // into, and how deeply one may be bracketed. A run allowed more of either need not
+                // stop at the same rule.
+                case PatternTooCostly _, PatternTooDeeplyNested _ -> RunSensitivity.MAY_CHANGE;
+                // And seven where nothing was compared against anything. A form nothing takes
+                // apart, values no line can be drawn on, a rule about a value made from this one, a
+                // relation between two positions, two rules about two coordinates and a pairing
+                // nothing worked out are all met again by a run allowed more of everything.
+                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                     UnreadValueRule _, ValueRuleRelatingTwoPositions _, CompetingCoordinates _,
+                     CasePairingNotDetermined _ -> RunSensitivity.UNAFFECTED;
+            };
+        }
     }
 
     /**
@@ -217,7 +270,23 @@ public sealed interface BlockReason {
      * rules and reports one of these, so this whole half sits inside {@link ReadingStopReason} and
      * the two questions meet only at {@link RuleReadingStopped}.
      */
-    sealed interface AboutThePosition extends ReadingStopReason {}
+    sealed interface AboutThePosition extends ReadingStopReason {
+
+        /** The same switch over the five ways a reading never got to a position's rules. */
+        @Override
+        default RunSensitivity runSensitivity() {
+            return switch (this) {
+                // A type nothing could interpret, a path returning to a declaration it has been
+                // through, and a place this does not reach into. None of them is a figure anything
+                // was compared against.
+                case TypeUnresolved _, RecursiveExpansion _, UnsupportedTraversal _,
+                     ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
+                // And the one figure among them: a reading that stopped at the depth it could
+                // afford, which a run allowed to read further need not stop at.
+                case ValueRulesNotReachedPastDepthLimit _ -> RunSensitivity.MAY_CHANGE;
+            };
+        }
+    }
 
     /**
      * What a value reading's account of a rule it could not use comes to here.
@@ -257,8 +326,8 @@ public sealed interface BlockReason {
             case PATTERN_TOO_DEEPLY_NESTED -> new PatternTooDeeplyNested();
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
-            case EXACT_VALUES_TOO_COSTLY, NOT_REACHED -> throw new IllegalStateException(
-                    "refused above: " + why);
+            case EXACT_VALUES_TOO_COSTLY, NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
+                    throw new IllegalStateException("refused above: " + why);
         };
     }
 
@@ -277,6 +346,7 @@ public sealed interface BlockReason {
     static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
         return switch (why) {
             case NOT_REACHED -> new ValueRulesNotReached();
+            case NOT_REACHED_PAST_DEPTH_LIMIT -> new ValueRulesNotReachedPastDepthLimit();
             // The one a reading can be short of that is about no rule at all, and the reason this
             // answers a wider type than the one below. A caller here is asking what stopped the
             // reading of a position, which this is; asking which rule it was is the other question
@@ -436,7 +506,15 @@ public sealed interface BlockReason {
      * the rules a position was left with, and a {@link RuleWithoutALine} cannot be built carrying
      * it. What is true of it is that there is a rule to name, which is {@link AboutARule}.
      */
-    record NoReadingTookItIn() implements AboutARule {}
+    record NoReadingTookItIn() implements AboutARule {
+
+        /** Nothing was compared against a figure: no reading claimed the rule, and a run allowed
+         *  more of everything has as many readers as this one. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
 
     /**
      * A rule about the position says how it stands against another position, and what is held here
@@ -460,12 +538,31 @@ public sealed interface BlockReason {
      * The reading of what the position may hold never reached the rules about it.
      *
      * <p>Not a rule it read and could not use. The walk that gathers a value's clauses stopped
-     * somewhere — at a depth, at a type it had already been through, at one with no declaration to
-     * read — or a clause could not be typed and so arrived nowhere. None of those is a fact about
-     * the rule, and all of them leave the same hole: what is written about this position is not
-     * known to have been read.
+     * somewhere — at a type it had already been through, at one with no declaration to read — or a
+     * clause could not be typed and so arrived nowhere. None of those is a fact about the rule, and
+     * all of them leave the same hole: what is written about this position is not known to have
+     * been read.
+     *
+     * <p>And none of them is a figure this compiler stopped at, which is what
+     * {@link ValueRulesNotReachedPastDepthLimit} is beside this for.
      */
     record ValueRulesNotReached() implements AboutThePosition {}
+
+    /**
+     * The same, where what stopped the reading was how far down it could afford to read.
+     *
+     * <p>Its own reason and the same hole. A depth this compiler could not afford is a figure it
+     * compared something against, so a run allowed to read further need not stop at this position;
+     * every other way of never reaching one is met again whatever a run allows. Held as one reason,
+     * nothing could say which of the two a reader was looking at.
+     *
+     * <p><b>And the same published word.</b> Which figure stopped a walk is this compiler's
+     * business — a document promises a reader the hole and not the route to it — so
+     * {@link ReportedReason} takes both to {@code RULES_NOT_READ_AT_ALL}. That is what this
+     * vocabulary being apart from the published one is for: the precision is recorded without a
+     * reader being promised it.
+     */
+    record ValueRulesNotReachedPastDepthLimit() implements AboutThePosition {}
 
     /**
      * Each of two rules is read, and they are about different coordinates of one position, so

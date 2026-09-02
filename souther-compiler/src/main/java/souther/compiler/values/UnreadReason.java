@@ -87,16 +87,41 @@ public enum UnreadReason {
      * a fact about what the rules leave either.
      *
      * <p>A different thing from a rule it read and could not use. The walk that gathers clauses
-     * stopped — at a depth, at a type it had already been through — or a clause could not be typed
-     * and so never arrived. Which of those it was is not recorded: none of them is a fact about the
-     * rule, and all of them leave the same hole.
+     * stopped at a type it had already been through, a clause could not be typed and so never
+     * arrived, a reading was told not to open the position, a rule of it was not asked for, nothing
+     * read the declaration at all, or the reading fell over. Which of those it was is not recorded:
+     * none of them is a fact about the rule, and all of them leave the same hole.
+     *
+     * <p><b>And none of them is a figure this compiler stopped at</b>, which is what tells this
+     * from {@link #NOT_REACHED_PAST_DEPTH_LIMIT} and is the whole of why the two are apart. A
+     * reading that met one of these meets it again however much a run is allowed.
      *
      * <p>Not every way a walk can stop. One of them hands the rules to a reading one position down,
      * where a row meets them, and the position above admits what it admits (#1072). Which stops
      * those are is settled in one place and not restated here — see {@code PathEngine.leftBy} in
      * {@code souther.compiler.check}, which this package may not name.
      */
-    NOT_REACHED;
+    NOT_REACHED,
+
+    /**
+     * The reading did not reach the rules about this position, and what stopped it was how far
+     * down it could afford to read.
+     *
+     * <p>The same hole as {@link #NOT_REACHED} and not the same news. What stopped here is a figure
+     * this compiler compared a depth against, so a run allowed to read further need not stop at
+     * this position at all; every other way of never reaching a position is met again whatever a
+     * run allows. Held as one reason, nothing downstream could tell a reader which of the two they
+     * were looking at, and a person was as good as told to measure the same thing twice.
+     *
+     * <p>Said only where the depth is the whole of it. A position some other stop also reaches is
+     * one that stays short after the depth is raised, so it is {@link #NOT_REACHED} — the reason
+     * is about what a wider reading would leave, and not about which stop happened to be first.
+     *
+     * <p>About neither a rule nor what the rules leave, like the one above: there is no rule in
+     * hand for it to be about. What a document calls it is also the same word, since which figure
+     * stopped a walk is this compiler's business and not a promise to a reader.
+     */
+    NOT_REACHED_PAST_DEPTH_LIMIT;
 
     /**
      * What a reason is a fact about, which decides who may be shown it.
@@ -163,7 +188,7 @@ public enum UnreadReason {
             case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ,
                  PATTERN_TOO_DEEPLY_NESTED, PATTERN_TOO_COSTLY -> About.A_RULE;
             case EXACT_VALUES_TOO_COSTLY -> About.THE_ANSWER;
-            case NOT_REACHED -> About.NEITHER;
+            case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> About.NEITHER;
         };
     }
 }

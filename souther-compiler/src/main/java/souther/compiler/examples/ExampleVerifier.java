@@ -667,13 +667,28 @@ public final class ExampleVerifier {
      * <p>A switch with no default, so a phase added later is a compile error here. What it asks for
      * is what a reader of a measure is to be told when a row stops that way, which is not something
      * to be defaulted into whatever the nearest existing answer happens to be.
+     *
+     * <p><b>The three limits are their own word.</b> A figure this compiler compared the row against
+     * and a row the evaluation had no answer for are the same loss and not the same news: the first
+     * is met again or not depending on what the run allows, and the second is met again whatever it
+     * allows. Said alike, a person was told a row did not come back and could not tell which of the
+     * two they were holding. The stack running out is not among them — nothing here compared
+     * anything against it — so it stays with the rest.
+     *
+     * @throws IllegalStateException for {@link FailurePhase#NONE}, which is a row that ended
+     *         undecided with nothing having gone wrong. This is reached from a row of that
+     *         disposition alone, so the state is one nothing produces; admitted into an arm beside
+     *         the real causes, it was a word for it all the same
      */
     private static Incompleteness.Code leftUndecidedBy(FailurePhase phase) {
         return switch (phase) {
             case ANSWERER_ESTABLISHMENT -> Incompleteness.Code.ANSWERER_NOT_ESTABLISHED;
-            case NONE, INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION,
-                 COMPARISON, STEP_LIMIT, DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, VALUE_CROSSING ->
-                    Incompleteness.Code.ROW_UNDECIDED;
+            case STEP_LIMIT, DEPTH_LIMIT, TIMEOUT ->
+                    Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED;
+            case INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION, COMPARISON,
+                 STACK_EXHAUSTED, VALUE_CROSSING -> Incompleteness.Code.ROW_UNDECIDED;
+            case NONE -> throw new IllegalStateException(
+                    "a row that ended undecided says what stopped it, and nothing went wrong here");
         };
     }
 

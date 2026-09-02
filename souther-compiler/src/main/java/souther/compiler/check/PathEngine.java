@@ -644,7 +644,7 @@ final class PathEngine {
             // than never reached: a reader answering for the clauses it was handed would otherwise
             // answer for a rule it never saw.
             if (gathering != null) {
-                gathering.missed(path, InvariantChecker.Borne.BY_EVERY_VALUE);
+                gathering.missed(path, new RulesMissed.ClauseLost());
             }
         }
 
@@ -692,7 +692,7 @@ final class PathEngine {
         if (gathering == null || type == null || !guarantees.anyRuleUnder(type)) {
             return;
         }
-        gathering.missed(path, leftBy(why));
+        gathering.missed(path, new RulesMissed.WalkStopped(why));
     }
 
     /**

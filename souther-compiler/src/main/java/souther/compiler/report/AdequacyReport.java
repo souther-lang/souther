@@ -711,6 +711,154 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What the verdict is open on: what the things it rests on went without, and the ones nobody
+     * made.
+     *
+     * <p>Read from the same three lists {@link #adequacy()} is decided by, and never from
+     * {@code weakenedBy}. What left this whole report weaker than it looks and what holds this
+     * verdict open are not one set: a measure this build is not held to may be as partial as it
+     * likes without a bar being any less settled by it, and the report says so of itself either
+     * way. Taken from the wider list, a reader would be shown causes that no answer here rests on.
+     *
+     * <p>A set and so counted once per fact, however many measures went without it. One rule this
+     * compiler could not read is one thing to tell a person whichever measure noticed, and counting
+     * the measures would be counting the paths a fact arrived by ({@link WeakeningSet}).
+     *
+     * <p><b>Empty where the verdict is settled, and that is what the name says.</b> A gap outranks
+     * everything about how much was measured, so a refused build has an answer and is open on
+     * nothing — whatever else about it went unmeasured, which the measures themselves say. Answered
+     * the other way, this said a settled verdict was held open by something; asked only where a
+     * reader was rendering, the same report came to one answer on the page and another in the
+     * document.
+     */
+    public List<AdequacyOpening> whatKeepsTheVerdictOpen() {
+        if (adequacy() != AdequacyStatus.UNDETERMINED) {
+            return List.of();
+        }
+        // The facts first, folded once. Two measures that went without the same thing went without
+        // one thing, and putting them together is what says so.
+        WeakeningSet facts = WeakeningSet.none();
+        List<AdequacyOpening> rest = new ArrayList<>();
+        for (Measurement<?> each : requiredSupport()) {
+            facts = facts.union(each.weakening());
+            openedBy(rest, each);
+        }
+        for (Measure<?> each : requiredEvidence()) {
+            facts = facts.union(each.weakening());
+            if (each instanceof Measurement<?> measured) {
+                openedBy(rest, measured);
+            }
+        }
+        for (ObligationAssessment each : requiredObligations()) {
+            facts = facts.union(each.weakening());
+            openedBy(rest, each.disposition());
+        }
+        List<AdequacyOpening> out = new ArrayList<>();
+        facts.causes().forEach(each -> out.add(new AdequacyOpening.ByWeakening(each)));
+        out.addAll(rest);
+        return out;
+    }
+
+    /**
+     * What one measurement opens the verdict on beside the facts it went without.
+     *
+     * <p>A {@code switch} over the states with no {@code default}, because this is the same question
+     * {@link #adequacy()} asks of the same value and the two must not be able to answer differently.
+     * Asked as "what did it go without", a measurement nobody made answered nothing while the
+     * verdict over it stayed open — and the arm that says so is the one a fold would never reach.
+     *
+     * <p>The other three states need nothing here. A complete measurement opens nothing, and the
+     * two that are short of something refuse an empty {@code WeakeningSet} at construction, so the
+     * union above already holds at least one fact for each of them.
+     */
+    static void openedBy(List<AdequacyOpening> out, Measurement<?> measured) {
+        switch (measured) {
+            case Measurement.NotMeasured<?> never ->
+                    out.add(new AdequacyOpening.NotMeasured(never.why()));
+            case Measurement.Complete<?> _, Measurement.Partial<?> _,
+                 Measurement.FailedToMeasure<?> _ -> { }
+        }
+    }
+
+    /**
+     * And what one obligation opens it on, which is what it is undecided about.
+     *
+     * <p>Read from the disposition and never from the coverage beneath it. Those are two questions
+     * and {@link #adequacy()} asks the first: whether a row can be written at a point is settled
+     * from the coverage <em>and</em> what showed a row is writable, so three of the four ways an
+     * obligation is undecided leave the coverage with nothing to have gone without. Asked of the
+     * coverage, a point nothing could show a row for held the verdict open and named nothing.
+     *
+     * <p>A reading that stopped adds nothing here, and that is not an omission: what it met is the
+     * coverage's own {@code WeakeningSet}, which the union above already holds. Counted again it
+     * would be one fact said twice, which is what a set is for.
+     *
+     * <p>{@code Undecided} refuses an empty list at construction and every arm below yields an
+     * entry, so an obligation that holds the verdict open cannot come back with nothing.
+     */
+    static void openedBy(List<AdequacyOpening> out, ObligationDisposition disposition) {
+        if (!(disposition instanceof ObligationDisposition.Undecided undecided)) {
+            return;
+        }
+        for (ObligationDisposition.Uncertainty each : undecided.because()) {
+            switch (each) {
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped _ -> { }
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead it ->
+                        out.add(new AdequacyOpening.NotMeasured(it.why()));
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped it ->
+                        it.by().by().forEach(gap ->
+                                out.add(new AdequacyOpening.ShowingStopped(gap)));
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
+                        out.add(new AdequacyOpening.NothingShowedARowCanBeWritten());
+            }
+        }
+    }
+
+    /**
+     * How much of that a run of this compiler allowed more could answer, and how much it could not.
+     *
+     * <p>The question a reader of {@code undetermined} has and the report could not answer. The
+     * word means a measure that could have found a gap and was not made, which is as true of a
+     * space too large to walk as of a rule this compiler has no reading for — and the first is a
+     * number away while nothing anybody writes reaches the second. Told apart nowhere, a person
+     * reading a model that forks on a list it computed was left to work out for themselves that
+     * measuring again would find exactly the same thing.
+     *
+     * <p>Counted over the facts and not over the words a document writes for them. Two facts a
+     * document calls the same thing can differ here — a pattern too large to build and a rule about
+     * a value made from this one are both {@code rule_unread} — so a count taken off the printed
+     * words would be a count of something else.
+     *
+     * @param mayChange how many of them an allowance of this compiler's stopped
+     * @param unaffected how many no allowance stopped, which is what allowing more does not reach.
+     *                   Not "how many it had no reading for": a measure nobody made and a point
+     *                   nothing showed a row writable at are both here and neither is a reading.
+     *                   Which kind of thing each was, is what the kind beside it says
+     */
+    public record UnderAWiderRun(int mayChange, int unaffected) {
+
+        /** Whether there is anything to say, which is whether anything is open at all. */
+        public boolean isEmpty() {
+            return mayChange == 0 && unaffected == 0;
+        }
+    }
+
+    /** {@link #whatKeepsTheVerdictOpen()}, split by whether a wider run could answer it. */
+    public UnderAWiderRun underAWiderRun() {
+        int mayChange = 0;
+        int unaffected = 0;
+        for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
+            // A switch with no default, so a third answer is a compile error here rather than one
+            // more thing silently counted among what no allowance reaches.
+            switch (each.runSensitivity()) {
+                case MAY_CHANGE -> mayChange++;
+                case UNAFFECTED -> unaffected++;
+            }
+        }
+        return new UnderAWiderRun(mayChange, unaffected);
+    }
+
+    /**
      * What the verdict rests on that is not a measure of the model: the reading of the rows.
      *
      * <p>Every domain measure below is counted over the rows, so how far they were read is what
@@ -962,6 +1110,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // other question, and the two were one word until they disagreed in front of a reader.
         out.append(String.format("adequacy: %s%n",
                 adequacy().name().toLowerCase(Locale.ROOT).replace('_', ' ')));
+        // And what it is open on, split by the one thing a reader of `undetermined` wants to know:
+        // whether measuring again allowing more would answer any of it. The word covers a space too
+        // large to walk and a rule this compiler has no reading for alike, and the first is a number
+        // away while nothing anybody writes reaches the second.
+        //
+        // Under the verdict and not under the measurement line above, because it is read from what
+        // that verdict rests on. What left the whole report weaker than it looks is the other
+        // question and is said per module, where the measures are.
+        UnderAWiderRun open = underAWiderRun();
+        if (!open.isEmpty()) {
+            out.append("  what keeps it open\n");
+            out.append(String.format("    may change in a wider run   %3d%n", open.mayChange()));
+            out.append(String.format("    unaffected by a wider run   %3d%n", open.unaffected()));
+        }
         // What the mark above means, said by the report that wrote it. The count was said only by
         // `--strict`, on standard error, in a run a reader had to ask for — so a reader of the report
         // alone had a mark with nothing to read it by, and one who did ask got a number pointing at a
@@ -2469,6 +2631,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         root.put("status", wire(status()));
         weakening(root, weakenedBy);
         root.put("adequacy", word(adequacy()));
+        // Beside the verdict rather than inside it. What `adequacy` is has not changed — a word
+        // every document since the fifth version has carried — and what is new is the facts that
+        // word is open on, which is a second thing to read and not a different spelling of the
+        // first.
+        keptOpenBy(root);
         ArrayNode modulesOut = root.putArray("modules");
         for (ModuleReport module : modules) {
             ObjectNode m = modulesOut.addObject();
@@ -3359,11 +3526,91 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         Set<String> words = new LinkedHashSet<>();
         for (Weakening each : weakenedBy.causes()) {
-            words.add(each instanceof Weakening.ObservationIncomplete gap
-                    ? word(gap.cause().code()) : word(wordFor(each)));
+            words.add(kindOf(each));
         }
         ArrayNode out = of.putArray("weakening");
         words.forEach(out::add);
+    }
+
+    /**
+     * The published word for one weakening, whichever vocabulary it is written in.
+     *
+     * <p>An observation writes the {@code Incompleteness} code's own word rather than a second
+     * spelling of it, which is what {@link #wordFor} refuses to answer for. Both surfaces that name
+     * a weakening ask this, so a reader meeting one in either place meets the same word.
+     */
+    static String kindOf(Weakening weakening) {
+        return weakening instanceof Weakening.ObservationIncomplete gap
+                ? word(gap.cause().code()) : word(wordFor(weakening));
+    }
+
+    /**
+     * The facts holding the adequacy verdict open, one entry each, as what a document may say of
+     * them.
+     *
+     * <p><b>Not the array beside it, and the difference is the unit.</b> A {@code weakening} is
+     * about one measure or one module, its unit is the published kind, and it says each kind once —
+     * which is right, because which rule or which position it was is named where the document
+     * already names that thing. This is about the verdict, its unit is a fact, and it says each
+     * fact once.
+     *
+     * <p><b>So nothing here is folded.</b> Two rules this compiler could not read are two entries
+     * even where the two objects are equal, because the multiplicity is the fact's. Folded on the
+     * pair written out, two facts one document calls the same thing would come back as one, which
+     * is the collapse this whole field exists to have avoided — and the entries would then count
+     * kinds, which the other array already does.
+     *
+     * <p>The one fold there is happens before this: {@link WeakeningSet#union} keeps one of two
+     * equal facts, so a rule found from three behaviors is one thing to tell a person. That is a
+     * fold on what the facts are and not on what they are printed as.
+     *
+     * <p>Written whether or not the verdict is open, and empty where it is not. What it holds is
+     * what keeps the status undetermined, so a satisfied model has none and a refused one has none
+     * either — a build refused over a gap has a verdict, whatever else went unmeasured.
+     */
+    private void keptOpenBy(ObjectNode root) {
+        ArrayNode out = root.putArray("keptOpenBy");
+        for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
+            ObjectNode fact = out.addObject();
+            fact.put("kind", kindOf(each));
+            // The reason beside it, where the kind is one that has one. A measure nobody made says
+            // what it was waiting for, and that word is one this document already writes wherever a
+            // measure has no number — so a reader meets one vocabulary and not two.
+            if (each instanceof AdequacyOpening.NotMeasured it) {
+                fact.put("reason", word(it.why()));
+            }
+            fact.put("runSensitivity", word(each.runSensitivity()));
+        }
+    }
+
+    /**
+     * The published word for one thing keeping the verdict open.
+     *
+     * <p>Here rather than inside the writer, so that the words are a vocabulary and not a set of
+     * literals spelled where they happen to be printed. What is written and what the schema allows
+     * were kept in step by hand until this — the check that holds every other enumerated field of
+     * the document against its enum had nothing to be pointed at.
+     *
+     * <p>A {@code switch} with no {@code default}, so an opening added later has to be given a
+     * word; the word has to be one of {@link AdequacyOpeningWord}, which the schema is held
+     * against. An opening that is a measure going without something writes that weakening's own
+     * word instead, for the reason {@link AdequacyOpeningWord} gives.
+     */
+    static String kindOf(AdequacyOpening opening) {
+        return switch (opening) {
+            case AdequacyOpening.ByWeakening it -> kindOf(it.cause());
+            case AdequacyOpening.NotMeasured _ -> word(AdequacyOpeningWord.NOT_MEASURED);
+            // Two words for the two gaps, rather than one word and a reason beside it. Which of
+            // them it was is what a reader acts on and what the sensitivity is read from, so it is
+            // the kind: a value read for the point that did not come back, and a composing this
+            // compiler declined to do, are not one kind of news.
+            case AdequacyOpening.ShowingStopped it -> word(switch (it.by()) {
+                case EstablishmentGap.Observation _ -> AdequacyOpeningWord.SHOWING_STOPPED;
+                case EstablishmentGap.Composition _ -> AdequacyOpeningWord.NOTHING_WAS_COMPOSED;
+            });
+            case AdequacyOpening.NothingShowedARowCanBeWritten _ ->
+                    word(AdequacyOpeningWord.NOTHING_SHOWED_IT);
+        };
     }
 
     /**
