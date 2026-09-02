@@ -5,8 +5,14 @@ import souther.compiler.ast.Hir;
 import souther.test.RepositoryLayout;
 
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
-import java.io.File;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
@@ -87,29 +93,25 @@ class WhereAConstructionCameFromIsNotAPassesToWriteTest {
      * Every module of the repository is depended on from here, which is what has them built when
      * this runs and so what makes the answer above about all of them.
      *
-     * <p>Asked of the classpath these tests run on, which Maven builds from the dependencies this
-     * module declares: a module missing from it is a module this build had no reason to compile
-     * before running these, and what the walk would find of it is whatever an earlier build left.
-     *
-     * <p>Not asked of the build order. A module is built before this one because something depends
-     * on it, and a dependency left out is only sometimes visible there: what sends this module to
-     * the end is every edge it has, so an omitted edge is covered whenever another module it does
-     * depend on is written after the one it forgot. Measured — dropping the dependency on
-     * {@code souther-cli} left the build order unchanged.
+     * <p>Asked of what this module declares, because that is what Maven orders the reactor on. Not
+     * of the build order, which shows an omission only sometimes: what sends this module to the end
+     * is every edge it has, so a missing edge is covered whenever another module it does depend on
+     * is written after the one it forgot — measured, dropping {@code souther-cli} left the order
+     * unchanged. And not of the classpath these tests run on, which says where each dependency was
+     * resolved from rather than which are declared: run to {@code test} it holds each module's
+     * {@code target/classes}, and run to {@code verify} it holds their jars, so a check reading it
+     * answers about how the build was invoked.
      */
     @Test
     void andEveryModuleTheRepositoryHoldsIsDependedOnFromHere() {
-        Set<String> built = new TreeSet<>();
-        for (String entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
-            Path where = Path.of(entry);
-            if (where.endsWith(Path.of("target", "classes")) && where.startsWith(REPOSITORY.root())) {
-                built.add(where.getParent().getParent().getFileName().toString());
-            }
-        }
+        Set<String> declared = new TreeSet<>(dependenciesOfThisModule());
+        Set<String> repository = new TreeSet<>(everyModule());
+        repository.remove(here().getFileName().toString());
 
-        assertEquals(new TreeSet<>(everyModule()), built,
-                "a module this does not depend on is one nothing has built when this runs, and one"
-                        + " this then says nothing about");
+        assertEquals(repository, declared,
+                "a module this does not depend on is one Maven need not build before these tests"
+                        + " run, and one the walk above then reads whatever an earlier build left"
+                        + " of");
     }
 
     /** The control: the walk found forms to watch and sees the reference where they make it
@@ -200,5 +202,41 @@ class WhereAConstructionCameFromIsNotAPassesToWriteTest {
     private static Set<String> everyModule() {
         return REPOSITORY.modules().stream().map(each -> each.getFileName().toString())
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** This module, named because it is this one: what the repository is made of is
+     *  {@link RepositoryLayout}'s answer, and which of those this is, is this module's own. */
+    private static Path here() {
+        return REPOSITORY.root().resolve("souther-architecture-test");
+    }
+
+    /** The modules of this repository that this module's pom names as dependencies. */
+    private static Set<String> dependenciesOfThisModule() {
+        Set<String> modules = everyModule();
+        Set<String> named = new LinkedHashSet<>();
+        Document pom = read(here().resolve("pom.xml"));
+        NodeList dependencies = pom.getElementsByTagName("dependency");
+        for (int i = 0; i < dependencies.getLength(); i++) {
+            NodeList parts = ((Element) dependencies.item(i)).getElementsByTagName("artifactId");
+            for (int part = 0; part < parts.getLength(); part++) {
+                String artifact = parts.item(part).getTextContent().trim();
+                if (modules.contains(artifact)) {
+                    named.add(artifact);
+                }
+            }
+        }
+        return named;
+    }
+
+    private static Document read(Path pom) {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        try {
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            return factory.newDocumentBuilder().parse(pom.toFile());
+        } catch (ParserConfigurationException | SAXException | IOException e) {
+            throw new IllegalStateException("a pom that cannot be read: " + pom, e);
+        }
     }
 }
