@@ -432,6 +432,22 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * The ends a rule naming a value moved at the value this reading is opened at.
+     *
+     * <p>What {@link #placedAt} leaves out. The ends of a value's own coordinates are read off the
+     * clauses as they are written, which is a reading that sees no end where no comparison places
+     * one — so an end a rule naming a value moved is invisible there, and is here.
+     *
+     * <p>Only the value's own. Everything under it is a position of its own and is answered at that
+     * position, by {@link #placedAt}, which does not leave these out.
+     */
+    List<FieldDomains.Placed> movedAtTheValue() {
+        return bounds().movedEnds().stream()
+                .filter(each -> each.path().isTheValueItself())
+                .toList();
+    }
+
+    /**
      * The rules saying where the coordinate at {@code path} stops that no end came out of.
      *
      * <p>At every path the value has, its own included — unlike {@link #placedAt}, whose empty

@@ -64,7 +64,7 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(),
-                    List.of(), List.of(), Map.of(),
+                    List.of(), List.of(), PartsLeftOut.NONE, Map.of(),
                     Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
                     Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
@@ -84,6 +84,17 @@ public final class FieldDomains {
     private final List<WithoutAnEnd> withoutAnEnd;
     /** The conjuncts that name a value of one coordinate — see {@link #namesAValue}. */
     private final List<NamesAValue> namesAValue;
+    /**
+     * Which conjunct this reading was asked to leave out, so that a reading standing in for a
+     * counterfactual is not asked one of its own.
+     *
+     * <p>What a conjunct was holding is read by comparing two readings, and the one being compared
+     * against has no such question of its own to answer: asked, it would read itself again without
+     * one of its conjuncts, and again, and never come back.
+     */
+    private final PartsLeftOut withoutParts;
+    /** The ends the naming conjuncts moved, worked out once — see {@link #placed}. */
+    private volatile List<Placed> placed;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
     /** The same per part of each clause. A reader that found one conjunct wanting names what that
@@ -160,6 +171,7 @@ public final class FieldDomains {
                          Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          List<WithoutAnEnd> withoutAnEnd, List<NamesAValue> namesAValue,
+                         PartsLeftOut withoutParts,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
                          Map<BoundaryQuestion, BoundaryStanding> standing, ReadingEvidence took,
@@ -182,6 +194,7 @@ public final class FieldDomains {
         this.noLines = noLines;
         this.withoutAnEnd = List.copyOf(withoutAnEnd);
         this.namesAValue = List.copyOf(namesAValue);
+        this.withoutParts = withoutParts;
         this.raised = raised;
         this.raisedByPart = raisedByPart;
         this.standing = standing;
@@ -426,6 +439,7 @@ public final class FieldDomains {
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
                 seeded.reading().withoutAnEnd(), seeded.reading().namesAValue(),
+                reach.withoutParts(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(),
                 seeded.reading().standing(), seeded.took(),
                 seeded.reading().narrowers(),
@@ -991,12 +1005,55 @@ public final class FieldDomains {
                 .map(Map.Entry::getKey).toList();
     }
 
-    /** Every end the rules place, wherever it is. */
+    /**
+     * Every end the rules place, wherever it is.
+     *
+     * <p>The ends read off an ordering, and the ends a rule naming a value moved. Both are ends the
+     * declaration's rules put where they are, and which of the two an end came from is not a
+     * difference a reader of ends has any use for: {@code String.length(value) /= 0} leaves the
+     * length starting at one exactly as {@code String.length(value) >= 1} does, and a row at one is
+     * owed to whichever of them the author wrote.
+     *
+     * <p>Not read off the comparison, which is what tells them apart at the other end of the
+     * question. Where an ordering places an end is in the rule; where a rule naming a value places
+     * one is in everything else the rules say, and it is read by asking what they leave without
+     * this conjunct ({@link #movedEndsOf}).
+     *
+     * <p>Worked out once. Each of them costs a reading of the declaration, and every reader of ends
+     * asks for the list.
+     */
     public List<Placed> placed() {
-        return directs.stream()
+        List<Placed> had = placed;
+        if (had != null) {
+            return had;
+        }
+        List<Placed> out = new ArrayList<>(directs.stream()
                 .map(each -> new Placed(each.at(), each.from(),
                         each.bound().lower(), each.bound().end(), each.conjunct()))
-                .toList();
+                .toList());
+        out.addAll(movedEnds());
+        List<Placed> answer = List.copyOf(out);
+        placed = answer;
+        return answer;
+    }
+
+    /**
+     * The ends the rules naming a value moved.
+     *
+     * <p>Apart from the ends an ordering placed, because one reader wants them apart. A newtype's
+     * own value has its ends read off the clauses as they are written ({@link DeclaredBounds#of}),
+     * and an end that reader cannot see is exactly one no comparison places — so what is handed to
+     * it is these, and handing it the whole list would state every other end twice.
+     */
+    public List<Placed> movedEnds() {
+        List<Placed> moved = new ArrayList<>();
+        for (NamesAValue names : namesAValue) {
+            for (InvariantBound end : movedEndsOf(names)) {
+                moved.add(new Placed(names.at(), names.from(), end.lower(), end.end(),
+                        names.conjunct()));
+            }
+        }
+        return List.copyOf(moved);
     }
 
     /** The ends the rules place on the coordinates at {@code path}, in the order they were read. */
@@ -1069,6 +1126,12 @@ public final class FieldDomains {
      * a hole with something to side it is a hole, and no end of a range says where it is.
      */
     public List<InvariantBound> movedEndsOf(NamesAValue names) {
+        // A reading standing in for a counterfactual has no such question of its own. Asked, it
+        // would read itself again without one of its conjuncts and never come back — and what it
+        // is for is answering what one conjunct of the reading above it was holding.
+        if (!(withoutParts instanceof PartsLeftOut.Nothing)) {
+            return List.of();
+        }
         NumericDomain.Bounds with = leftAt(names.at().path(), names.at().kind());
         if (with == null) {
             return List.of();

@@ -1343,10 +1343,20 @@ public final class InputDomain {
                     "this reading decided " + path + " is measured by " + taken
                             + ", which is not what its type is measured by: " + Type.show(type));
         }
+        // And the ends a rule naming a value moved, which the reading of the clauses as they are
+        // written cannot see: no comparison places them, and where they are is in what the other
+        // rules leave.
+        List<FieldDomains.Placed> moved = placed.movedAtTheValue();
         DeclaredBounds.Bounds own = bySize
-                ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
+                ? DeclaredBounds.and(
+                        DeclaredBounds.and(ofType,
+                                DeclaredBounds.placed(moved, answeredBy(taken), Carrier.WHOLE)),
+                        DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
                 : carried == null ? null
-                        : DeclaredBounds.and(valueOfType, DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));
+                        : DeclaredBounds.and(
+                                DeclaredBounds.and(valueOfType,
+                                        DeclaredBounds.placed(moved, ITS_OWN_VALUE, carried)),
+                                DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed.bounds().infeasible();
