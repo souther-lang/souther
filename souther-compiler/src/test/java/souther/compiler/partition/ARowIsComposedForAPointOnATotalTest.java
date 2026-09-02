@@ -415,10 +415,23 @@ class ARowIsComposedForAPointOnATotalTest {
         return lines;
     }
 
+    /** What each model measured here answered, which is the model's and not the asking's. */
+    private static final Map<String, Compilation> MEASURED = new LinkedHashMap<>();
+
+    /**
+     * A model measured, and the same answers wherever it is asked for again.
+     *
+     * <p>The claims here walk every point of every line and read a model back for each, so the same
+     * few sources are asked for many times over. A measure is settled once and read from then on:
+     * what is answered does not depend on who asked, and a compile of the whole model per reading
+     * is the same answer worked out again.
+     */
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(source, _ -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
     }
 }
