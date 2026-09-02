@@ -138,6 +138,12 @@ public final class CheckSurface {
         return Requirements.writesItsOwnBody(module(), behavior);
     }
 
+    /** Where {@code behavior}'s body comes from. How the behavior is written, which is a question
+     *  about the source and not about what a compile made of it. */
+    public BehaviorImplementation implementationOf(Hir.BehaviorDef behavior) {
+        return Requirements.implementationOf(module(), behavior);
+    }
+
     /** Its declarations, each written in the form the derived stage writes one in. */
     public List<Hir.Def> declarations() {
         return declarations;

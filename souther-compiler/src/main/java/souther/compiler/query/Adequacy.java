@@ -651,7 +651,8 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, InputDomain>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
@@ -859,7 +860,8 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, souther.compiler.check.PathReachability.Answers>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
@@ -1173,7 +1175,8 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, RowReading>> compute(Db db) {
             if (!levelOf(db).readsRows()) {
-                Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+                Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
                 if (!prepared.present()) {
                     return Answer.absent();
                 }
@@ -1399,7 +1402,11 @@ public final class Adequacy {
 
         @Override
         public Answer<souther.compiler.partition.Partitions.Partitioning> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            // The assembly. What says whether there is anything to divide is the behavior's own
+            // signature: a module one of whose declarations did not come out still has behaviors
+            // whose boundary was built, and those are divided like any other.
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -1489,7 +1496,8 @@ public final class Adequacy {
             if (measured == null) {
                 return Answer.absent();
             }
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             souther.compiler.partition.Partitions.Partitioning divided =
@@ -1668,7 +1676,8 @@ public final class Adequacy {
      * the one before it.
      */
     public static Map<String, Filling> generatedOf(Db db, String module) {
-        souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
+        souther.compiler.check.CheckSurface prepared =
+                db.ask(new Shapes.CheckSurface(module)).value();
         if (prepared == null) {
             return null;
         }
@@ -1852,7 +1861,8 @@ public final class Adequacy {
     private static Map<String, List<BorderAssessment>> byBehavior(
             Db db, String module, java.util.function.Function<String,
                     Key<List<BorderAssessment>>> asked) {
-        souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
+        souther.compiler.check.CheckSurface prepared =
+                db.ask(new Shapes.CheckSurface(module)).value();
         if (prepared == null) {
             return null;
         }
@@ -1883,7 +1893,8 @@ public final class Adequacy {
      */
     static souther.compiler.partition.MeasuredInput subjectOf(Db db, String module,
                                                               String behavior) {
-        souther.compiler.check.Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
+        souther.compiler.check.CheckSurface prepared =
+                db.ask(new Shapes.CheckSurface(module)).value();
         if (prepared == null) {
             return null;
         }
@@ -1893,7 +1904,8 @@ public final class Adequacy {
 
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
      *  first stage's and are divided there. */
-    private static Hir.SpecBehavior specOf(souther.compiler.check.Prepared prepared, String name) {
+    private static Hir.SpecBehavior specOf(souther.compiler.check.CheckSurface prepared,
+                                           String name) {
         for (Hir.BehaviorDef each : prepared.behaviors()) {
             if (each instanceof Hir.SpecBehavior spec && spec.name().equals(name)) {
                 return spec;
@@ -2699,7 +2711,8 @@ public final class Adequacy {
 
         @Override
         public Answer<Filling> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             // What a row is offered for is what the coverage found, so a coverage that did not
@@ -3184,18 +3197,18 @@ public final class Adequacy {
          */
         private static List<Generator.Baseline> baselines(
                 String module, Hir.SpecBehavior spec, Sig sig, Map<String, Hir.FnDef> values,
-                souther.compiler.check.Prepared prepared, Symbols symbols,
+                souther.compiler.check.CheckSurface prepared, Symbols symbols,
                 souther.compiler.observe.FieldTypes fields) {
             List<Generator.Baseline> out = new ArrayList<>();
             // What the author has already written, first and whole. A row of theirs names a set of
             // values that go together, which is more than this can say of one value chosen per
             // position on its own — and it is the set they reached for, which is what makes a row
             // written against it read as one column moved.
-            for (souther.compiler.check.Prepared.Example block : prepared.examples()) {
+            for (Hir.Example block : prepared.examples()) {
                 if (!block.target().equals(spec.name())) {
                     continue;
                 }
-                for (Hir.ExampleRow row : block.read().rows()) {
+                for (Hir.ExampleRow row : block.rows()) {
                     Generator.Baseline named = namesIn(module, spec, row.inputs());
                     if (!named.isEmpty() && !out.contains(named)) {
                         out.add(named);
@@ -4098,7 +4111,8 @@ public final class Adequacy {
 
         @Override
         public Answer<List<BorderObligationPointAssessment>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !sigs.present()) {
                 return Answer.absent();
@@ -4192,7 +4206,8 @@ public final class Adequacy {
 
         @Override
         public Answer<List<Finding>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             if (!prepared.present()) {
                 return Answer.absent();
             }
