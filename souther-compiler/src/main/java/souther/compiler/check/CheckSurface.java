@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.CompileException;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -75,22 +74,27 @@ public final class CheckSurface implements Assembly {
      * <p>{@code normalized} is the declarations as the one producer of that form answered for them
      * ({@code Shapes.NormalizedDeclarations}), handed in rather than worked out again here. Worked
      * out here, this would be a second producer of the normalized form, and a declaration read off
-     * this surface could differ from the same one read anywhere else. {@code desugared} is the
-     * definitions that came out, which may be short of what the module wrote: a definition is worked
-     * out whether or not the one before it came out.
+     * this surface could differ from the same one read anywhere else. {@code desugared} is the same
+     * of the definitions, answered for by {@code Shapes.DesugaredFns}.
      *
      * <p>{@code scope} is what a name means below the derivation, which is what a definition is held
      * to after it is rewritten; {@code signatures} is what each behavior takes and answers with,
      * which says where a row's values stand.
      *
-     * <p>Null where a part the module writes is not among what was handed in — a declaration that
-     * was not normalized, a definition that did not desugar. What this carries is the module, and a
-     * module short of something it writes is read as one that does not write it, which is how a name
-     * a module exposes came back as a name it must have imported. That a representation could not be
-     * derived for a declaration is the other thing entirely, and costs this nothing: the declaration
-     * is here, and what it says about itself is read from it.
+     * <p>Which answer stands in for which part is checked and not taken from the key it arrived
+     * under. Both tables are keyed by the name written here, and a name is a name in some module —
+     * so an answer about another declaration or another definition of the same spelling would
+     * otherwise be built in, and a reader would be handed something about one part under the name of
+     * another.
      *
-     * @throws CompileException where a definition cannot be held to what it was rewritten to
+     * <p>Null where a part the module writes is not among what was handed in. Both producers answer
+     * for everything a module writes, so this is a module handed parts that are not its own rather
+     * than a module something failed on. What it would carry otherwise is a module short of
+     * something it writes, which is read as one that does not write it — which is how a name a
+     * module exposes came back as a name it must have imported.
+     *
+     * @throws IllegalArgumentException where an answer is for a part other than the one it stands in
+     *     for
      */
     public static CheckSurface assemble(InvariantSettled settling,
                                         Map<String, Normalized.Def> normalized,

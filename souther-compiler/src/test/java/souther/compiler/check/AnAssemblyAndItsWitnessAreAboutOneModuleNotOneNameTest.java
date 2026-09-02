@@ -144,14 +144,59 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         assertTrue(refused.getMessage().contains("first"), refused.getMessage());
     }
 
-    /** Two definitions, so that one answer standing in for the other is a thing to write. */
+    /**
+     * And an assembly of one reading of the bodies does not pair with a witness about another.
+     *
+     * <p>The third antecedent, at the pairing rather than at the assembly. What stands in for
+     * {@code first} here says it is {@code first} and is a definition whose constructions are
+     * constructions, so the assembly takes it — every check the assembly makes is about the part it
+     * stands in for and not about which answer it is. What tells the two apart is the witness, which
+     * holds the answer the desugaring gave for that definition; the settling and the declarations
+     * are the same on both sides and say nothing about the bodies.
+     */
+    @Test
+    void anAssemblyOfOtherBodiesDoesNotPairWithTheWitness() {
+        Desugared.Module declarations = declarationsOf(TWO_DEFINITIONS);
+        CheckSurface itsOwn = assemblyOf(TWO_DEFINITIONS);
+        InvariantSettled settling = itsOwn.settling();
+
+        Map<String, Normalized.Def> normalized = new LinkedHashMap<>();
+        for (Normalized.Def each : itsOwn.declarations()) {
+            normalized.put(each.name(), each);
+        }
+        // `first` under its own name, with the body the module wrote for `second`. It is the
+        // definition it says it is and holds no construction, so nothing the assembly asks refuses
+        // it.
+        Hir.FnDef first = settling.module().fns().get(0);
+        Hir.FnDef second = settling.module().fns().get(1);
+        Hir.FnDef otherBody = first.withBody(second.body());
+        Map<String, Desugared.Fn> read = new LinkedHashMap<>();
+        read.put(first.name(),
+                Desugared.Fn.desugar(otherBody, ResolvedSymbols.none(DefaultStdlib.get())));
+        read.put(second.name(), itsOwn.desugaredFrom().get(1));
+
+        CheckSurface assembled = CheckSurface.assemble(settling, normalized, read,
+                Scopes.derived(Compilation.ofSource(TWO_DEFINITIONS, "Main").db(), "m").value(),
+                Map.of());
+        assertNotNull(assembled, "the assembly is made, so the refusal below is about the pairing");
+        assertNotEquals(declarations.fns(), assembled.desugaredFrom(),
+                "the two readings are two sets of definitions, or this says nothing");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> Prepared.prepare(declarations, assembled),
+                "the witness says what the desugaring answered for each definition, and the"
+                        + " assembly was joined from something else");
+    }
+
+    /** Two definitions with different bodies, so that one standing in for the other is a thing to
+     *  write and a thing to tell apart. */
     private static final String TWO_DEFINITIONS = """
             module m exposing ( Wrapped )
 
             data Wrapped = Int
 
             let first (n: Int) : Int = n
-            let second (n: Int) : Int = n
+            let second (n: Int) : Int = 0
             """;
 
     /** A module whose clause writes a construction, so that what a name denotes decides what the

@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.CompileException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,7 +67,6 @@ public final class Desugared {
          * re-transformation wearing a re-proof's name, and this is where it stops.
          *
          * @throws IllegalArgumentException where the definition is not one this state holds of
-         * @throws CompileException where a construction written in the body cannot be read as one
          */
         public static Fn reestablish(Hir.FnDef rewritten, Symbols scope) {
             Hir.FnDef again = NewtypeDesugar.rewriteOf(rewritten, scope);
