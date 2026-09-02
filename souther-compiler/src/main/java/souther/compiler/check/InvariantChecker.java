@@ -103,7 +103,15 @@ public final class InvariantChecker {
      * either way — but a test asserting that a construction is discharged is asserting something
      * about an analysis that ran, and without this it would pass just as well on one that did not.
      */
-    record Findings(List<CompileException> errors, List<Diagnostic> warnings, Status status) {}
+    record Findings(List<CompileException> errors, List<Diagnostic> warnings, Status status) {
+
+        /** What an analysis that was never run has to say, which is nothing and says so. A caller
+         *  without the representation this reads takes this rather than running the analysis over
+         *  an empty one — the same findings, and the opposite claim about the module. */
+        static Findings notRun() {
+            return new Findings(List.of(), List.of(), Status.ABANDONED);
+        }
+    }
 
     /** Whether an analysis produced all of the findings there were. {@code ABANDONED} covers both a
      * walk that fell over and a body there was none of: neither ran to the end, and the findings are
@@ -195,7 +203,7 @@ public final class InvariantChecker {
      * author wrote, so where a declaration was written does not decide what can be discharged
      * against it (spec §invariant-discharge-representation).
      */
-    public record Source(Hir.Expr body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants,
+    public record Source(Hir.Expr body, AnalysisInvariants invariants,
                          Map<ValueName.Behavior, StatedContract> contracts) {
 
         public Source {
@@ -233,13 +241,13 @@ public final class InvariantChecker {
     private final List<Diagnostic> warnings = new ArrayList<>();
 
     private InvariantChecker(Symbols symbols,
-                             Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                             AnalysisInvariants dischargeInvariants,
                              ReadingPolicy policy) {
         this(symbols, dischargeInvariants, Map.of(), policy);
     }
 
     private InvariantChecker(Symbols symbols,
-                             Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                             AnalysisInvariants dischargeInvariants,
                              Map<ValueName.Behavior, StatedContract> contracts,
                              ReadingPolicy policy) {
         this.engine = new PathEngine(symbols, dischargeInvariants, contracts, policy);
@@ -259,9 +267,10 @@ public final class InvariantChecker {
      * in the representation the check reads.
      */
     public static ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
-                                               TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                                               ReadingPolicy policy) {
-        InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
+                                               TypeSymbol.AtModule named, Hir.Data data,
+                                               RuleReadingSource source, ReadingPolicy policy) {
+        InvariantChecker c =
+                new InvariantChecker(source.symbols(), source.invariants(), policy);
         // Read over the declaration's own fields, each standing for itself: a construction hands one
         // value per field, so a clause naming a field names something wherever it is built. These
         // stand for a value rather than holding one, so they are entered as locations and nothing is
@@ -304,9 +313,9 @@ public final class InvariantChecker {
      * @param describing what is being read, for the record a fail-open leaves behind
      */
     static ClauseDischarge capabilityOf(StatedContract.Conjunct conjunct,
-                                        Denotations locations, Symbols symbols,
+                                        Denotations locations, RuleReadingSource source,
                                         ReadingPolicy policy, String describing) {
-        return new InvariantChecker(symbols, Map.of(), policy)
+        return new InvariantChecker(source.symbols(), source.invariants(), policy)
                 .capabilityOf(conjunct.stated(), conjunct.at(), locations, describing);
     }
 
@@ -542,9 +551,9 @@ public final class InvariantChecker {
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
      * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration and is not
      * caught ({@link #gaveUp}). */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                              ReadingPolicy policy) {
-        return seedFields(named, data, symbols, policy, Map.of());
+        return seedFields(named, data, source, policy, Map.of());
     }
 
     /**
@@ -554,9 +563,9 @@ public final class InvariantChecker {
      * field is one more assertion into it — so what comes back is the range each remaining field can
      * still take, which is where a row completing that assignment has to look.
      */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                              ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled) {
-        return seedFields(named, data, symbols, policy, settled, Reach.EVERYTHING);
+        return seedFields(named, data, source, policy, settled, Reach.EVERYTHING);
     }
 
     /**
@@ -569,10 +578,11 @@ public final class InvariantChecker {
      * declaration was holding. Supposing a declaration has values is the other thing {@code reach}
      * says, and it is not that one — see {@link Reach}.
      */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                              ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
                              Reach reach) {
-        InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
+        Symbols symbols = source.symbols();
+        InvariantChecker c = new InvariantChecker(symbols, source.invariants(), policy);
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
         Denotations at = Denotations.none()
@@ -2184,7 +2194,7 @@ public final class InvariantChecker {
      * is not something the body is and is not caught ({@link #gaveUp}). A {@code null} body is one
      * the analysis representation could not be built or typed for, and is not analyzed at all.
      */
-    static Findings analyze(Core body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants,
+    static Findings analyze(Core body, AnalysisInvariants invariants,
                             Map<ValueName.Behavior, StatedContract> contracts,
                             Scope params, Symbols symbols, ReadingPolicy policy) {
         InvariantChecker c = new InvariantChecker(symbols, invariants, contracts, policy);

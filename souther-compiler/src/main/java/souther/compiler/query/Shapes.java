@@ -1,7 +1,9 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.ClauseDischarge;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
@@ -459,7 +461,9 @@ public final class Shapes {
         public Answer<Map<TypeSymbol, List<ClauseDischarge>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
             Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
-            if (!expandable.present() || !scope.present()) {
+            Answer<RuleReadingSource> reading =
+                    db.ask(new RuleReading(name));
+            if (!expandable.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
@@ -484,7 +488,8 @@ public final class Shapes {
                         for (ClausesForDischarge.ClauseReading written
                                 : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named))) {
                             clauses.add(InvariantChecker.capabilityOf(written, named, data,
-                                    scope.value(), db.ask(new Front.Reading()).value()).named(declared.name()));
+                                    reading.value(),
+                                    db.ask(new Front.Reading()).value()).named(declared.name()));
                         }
                     }
                     out.put(named, List.copyOf(clauses));
@@ -493,6 +498,35 @@ public final class Shapes {
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * What reading this module's declarations as a static analysis takes: its scope, and its clauses
+     * in the representation that analysis reads.
+     *
+     * <p>Where the two meet, and the reason they meet in a node of their own. The representation's
+     * own answer is computed from the scope, so a scope that carried it would be a query depending on
+     * itself; asked separately, a reader that needs both can be given one. What a reader below is
+     * handed is the pair or nothing.
+     */
+    public record RuleReading(String name)
+            implements Key<RuleReadingSource> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<RuleReadingSource> compute(Db db) {
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+            Answer<AnalysisInvariants> clauses =
+                    db.ask(new InvariantsForDischarge(name));
+            if (!scope.present() || !clauses.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(new RuleReadingSource(
+                    scope.value(), clauses.value()));
         }
     }
 
@@ -506,16 +540,21 @@ public final class Shapes {
      * analysis reads what it is given, and there the operations have already become the folds they
      * are. A clause declared here that names an imported definition is this module's clause and stays
      * inside the fragment — the definition is substituted, as it is everywhere the invariant is read.
+     *
+     * <p>Answered as {@link AnalysisInvariants} and not as the map it holds, so that a caller with no
+     * answer cannot write an empty one. The two are the same shape and mean opposite things — a
+     * module whose representation could not be built, and one that reads as stating nothing — and
+     * nothing about a map stops a reader confusing them.
      */
     public record InvariantsForDischarge(String name)
-            implements Key<Map<TypeSymbol, List<Hir.InvariantClause>>> {
+            implements Key<AnalysisInvariants> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> compute(Db db) {
+        public Answer<AnalysisInvariants> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
             Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {

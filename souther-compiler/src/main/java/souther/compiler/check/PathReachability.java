@@ -178,7 +178,7 @@ public final class PathReachability {
      * what it would say about the model. A caller without one measures nothing here.
      */
     public static Answers of(Core body, ReadingPolicy policy, Hir.SpecBehavior spec, Hir.FnDef fn,
-                             CoverageSites.Plan plan, InputDomain read, Symbols symbols) {
+                             CoverageSites.Plan plan, InputDomain read, RuleReadingSource source) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (fn == null || spec == null) {
             return Answers.NONE;
@@ -188,7 +188,7 @@ public final class PathReachability {
             params = params.with(fn.params().get(i).binder(),
                     TypeOps.successType(spec.params().get(i).type()));
         }
-        return of(body, params, plan, read, symbols, policy);
+        return of(body, params, plan, read, source, policy);
     }
 
     /**
@@ -199,13 +199,14 @@ public final class PathReachability {
      * answers about what it had reached and no more.
      */
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan, InputDomain read,
-                             Symbols symbols, ReadingPolicy policy) {
+                             RuleReadingSource source, ReadingPolicy policy) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (body == null) {
             return Answers.NONE;
         }
         PathEngine engine =
-                new PathEngine(symbols, Map.of(), Terms.Of.THE_TREE_THAT_RUNS, policy);
+                new PathEngine(source.symbols(), source.invariants(),
+                        Terms.Of.THE_TREE_THAT_RUNS, policy);
         Map<ControlPointId, Reachability> out = new LinkedHashMap<>();
         Map<souther.compiler.coverage.ComparisonOccurrence,
                 souther.compiler.reach.ComparisonArrival> arriving = new LinkedHashMap<>();
@@ -217,7 +218,7 @@ public final class PathReachability {
                         p.getValue().type(), body.pos()), in.known(), in.at());
             }
             PathReachability reading =
-                    new PathReachability(engine, plan, read, symbols, out, arriving);
+                    new PathReachability(engine, plan, read, source.symbols(), out, arriving);
             reading.entry = in.known();
             reading.entered = in.at();
             reading.walk(body, in.known(), in.at(),

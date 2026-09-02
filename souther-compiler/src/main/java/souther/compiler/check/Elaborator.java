@@ -1557,7 +1557,7 @@ public final class Elaborator {
             return;
         }
         List<Hir.InvariantClause> clauses = symbols.declaredNode(typeName) instanceof Hir.Data data
-                ? TypeOps.effectiveInvariants(data, symbols) : List.of();
+                ? TypeOps.settledInvariants(data, symbols) : List.of();
         LinkedHashSet<String> named = new LinkedHashSet<>();
         boolean unnamed = false;
         for (Hir.InvariantClause clause : clauses) {

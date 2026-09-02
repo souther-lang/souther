@@ -15,6 +15,7 @@ import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
@@ -36,7 +37,6 @@ import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -126,7 +126,7 @@ public final class Output {
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
                       Map<ValueName.Behavior, souther.compiler.core.Composition> compositions,
-                      Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses,
+                      AnalysisInvariants dischargeClauses,
                       Map<souther.compiler.types.TypeSymbol.AtModule,
                               souther.compiler.core.ValueShape> shapes,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
@@ -156,7 +156,7 @@ public final class Output {
                     db.ask(new Bodies.Requirements(name));
             // A derived decoder maps a clause onto the Raoh constraint that says the same thing, and it
             // is written against the operations an author wrote — which the lowered module no longer has.
-            Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeClauses =
+            Answer<AnalysisInvariants> dischargeClauses =
                     db.ask(new Shapes.InvariantsForDischarge(name));
             // Where each behavior of this module has its clause checked. A decision of the
             // language's, so it is asked for rather than made here: the emitter and the checked
@@ -621,7 +621,7 @@ public final class Output {
             for (souther.compiler.check.Derived.Def declared : declaring.value().defs()) {
                 if (declared instanceof souther.compiler.check.Derived.Data data
                         && data.declaration().node().name().equals(check.type().name())) {
-                    clauses = TypeOps.effectiveInvariants(data.declaration().node(), scope.value());
+                    clauses = TypeOps.settledInvariants(data.declaration().node(), scope.value());
                 }
             }
             if (clauses == null) {

@@ -51,18 +51,19 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
      * author's. One of these serves every debt of one declaration, so a caller printing a report
      * asks once per declaration rather than once per line.
      */
-    public static DeclaredBorders of(TypeSymbol declaredOn, Symbols symbols, ReadingPolicy policy) {
+    public static DeclaredBorders of(TypeSymbol declaredOn, RuleReadingSource source,
+                                     ReadingPolicy policy) {
         // Where the declaration is, read here with what it draws. A caller that asked one thing for
         // the name and another for the place would have two ways of finding one declaration, and a
         // policy of its own for the one that came back empty.
-        if (!(symbols.declaredNode(declaredOn) instanceof souther.compiler.ast.Hir.Data
+        if (!(source.symbols().declaredNode(declaredOn) instanceof souther.compiler.ast.Hir.Data
                 data)) {
             throw new IllegalArgumentException(
                     "there is no declaration of " + declaredOn.name() + " to read");
         }
         souther.compiler.diag.Citation at = souther.compiler.diag.Citation.of(data.pos());
         Map<Key, NumberAt<RuleKey>> forms = new LinkedHashMap<>();
-        for (FieldDomains.Placed placed : Rules.of(declaredOn, symbols, policy).bounds().placed()) {
+        for (FieldDomains.Placed placed : Rules.of(declaredOn, source, policy).bounds().placed()) {
             // A clause reaching this declaration through a spread is written on another one and is
             // that one's to name, the way a line is named by the rule that drew it (ADR-0090). Its
             // own reading answers for it.

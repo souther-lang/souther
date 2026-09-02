@@ -145,16 +145,16 @@ public sealed interface Rules {
      *
      * @param named the declaration the value is read under, or null where the type names none
      */
-    static Rules of(TypeSymbol named, Symbols symbols, ReadingPolicy policy) {
+    static Rules of(TypeSymbol named, RuleReadingSource source, ReadingPolicy policy) {
         if (named == null) {
             return new NoneWritten();
         }
-        return switch (symbols.declaredNode(named)) {
+        return switch (source.symbols().declaredNode(named)) {
             // A data is a declaration a module wrote, and this asked the declaration world with
             // the identity to get one, so the test below never decides anything. It is how the
             // name says which kind it is rather than a reader assuming it.
             case Hir.Data data -> named instanceof TypeSymbol.AtModule at
-                    ? new Read(FieldDomains.of(at, data, symbols, policy))
+                    ? new Read(FieldDomains.of(at, data, source, policy))
                     : Declared.notAModules(named, data);
             // A sum names which cases a value can be and carries no clause of its own; a unit data
             // has one value and may write no rule about it (spec §unit-data). Both are declarations
@@ -174,7 +174,7 @@ public sealed interface Rules {
     }
 
     /** The same, for a value whose type may name no declaration at all. */
-    static Rules of(Type type, Symbols symbols, ReadingPolicy policy) {
-        return of(type instanceof Type.Ref ref ? ref.name() : null, symbols, policy);
+    static Rules of(Type type, RuleReadingSource source, ReadingPolicy policy) {
+        return of(type instanceof Type.Ref ref ? ref.name() : null, source, policy);
     }
 }

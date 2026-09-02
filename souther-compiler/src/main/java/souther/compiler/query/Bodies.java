@@ -1,6 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -505,12 +507,14 @@ public final class Bodies {
         public Answer<Map<String, ContractDischarge>> compute(Db db) {
             Answer<Map<String, StatedContract>> stated = db.ask(new StatedContracts(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            if (!stated.present() || !scope.present()) {
+            Answer<RuleReadingSource> reading =
+                    db.ask(new Shapes.RuleReading(name));
+            if (!stated.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
             Map<String, ContractDischarge> out = new LinkedHashMap<>();
-            stated.value().forEach((behavior, rules) ->
-                    out.put(behavior, ContractDischarge.of(rules, scope.value(), db.ask(new Front.Reading()).value())));
+            stated.value().forEach((behavior, rules) -> out.put(behavior, ContractDischarge.of(
+                    rules, reading.value(), db.ask(new Front.Reading()).value())));
             return Answer.of(Ordered.map(out));
         }
     }
@@ -1928,7 +1932,7 @@ public final class Bodies {
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
-            Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeInvariants =
+            Answer<AnalysisInvariants> dischargeInvariants =
                     db.ask(new Shapes.InvariantsForDischarge(module));
             // What the behaviors this body reaches state about their answers, and only those: a
             // relation declared by a behavior it does not call is no part of what it is checked
@@ -1941,11 +1945,15 @@ public final class Bodies {
                 return Answer.absent();
             }
             // The invariant-discharge analysis reads its own representation of the body and of the
-            // invariants (spec §invariant-discharge). Where it is not available the check is skipped
-            // rather than run against the emitted tree, whose operations are no longer operations.
-            InvariantChecker.Source dischargeSource = discharge.present()
+            // invariants (spec §invariant-discharge). Where either is not available the check is
+            // skipped rather than run against the emitted tree, whose operations are no longer
+            // operations — so the source is made where both arrived and nowhere else. An empty
+            // representation cannot stand for a missing one: they are the same value and opposite
+            // facts, a module stating nothing and a module nothing could be read of.
+            InvariantChecker.Source dischargeSource =
+                    discharge.present() && dischargeInvariants.present()
                     ? new InvariantChecker.Source(discharge.value().writtenBody(),
-                            dischargeInvariants.present() ? dischargeInvariants.value() : Map.of(),
+                            dischargeInvariants.value(),
                             contracts.present() ? contracts.value() : Map.of())
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
@@ -2018,7 +2026,9 @@ public final class Bodies {
         Answer<Map<String, InputDomain>> inputs =
                 db.ask(new souther.compiler.query.Adequacy.Inputs(module));
         Answer<Map<String, Sig>> sigs = db.ask(new Signatures(module));
-        if (!scope.present() || !inputs.present() || !sigs.present()) {
+        Answer<RuleReadingSource> reading =
+                db.ask(new Shapes.RuleReading(module));
+        if (!scope.present() || !inputs.present() || !sigs.present() || !reading.present()) {
             return Map.of();
         }
         // The same numbering every measure is taken over, so a claim and the reading that judges it
@@ -2048,7 +2058,7 @@ public final class Bodies {
             out.put(spec.name(), souther.compiler.claims.Claims.of(
                     souther.compiler.claims.UnreachableClaims.of(body, read, scope.value(), plan),
                     souther.compiler.check.PathReachability.of(
-                            body, policy, spec, fn, plan, read, scope.value())));
+                            body, policy, spec, fn, plan, read, reading.value())));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
@@ -2115,9 +2125,11 @@ public final class Bodies {
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
+            Answer<RuleReadingSource> reading =
+                    db.ask(new Shapes.RuleReading(name));
             if (!lowering.present() || !scope.present()
                     || !injected.present() || !unwritten.present()
-                    || !reqSigs.present() || !sigs.present()
+                    || !reqSigs.present() || !sigs.present() || !reading.present()
                     || !calleeSigs.present() || !published.present()) {
                 return Answer.absent();
             }
@@ -2140,7 +2152,7 @@ public final class Bodies {
                     }
                 }
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
-                        db.ask(new Front.Reading()).value(),
+                        reading.value(), db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), unwritten.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),

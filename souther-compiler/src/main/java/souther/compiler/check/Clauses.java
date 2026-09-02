@@ -31,7 +31,7 @@ import java.util.Set;
 final class Clauses {
 
     private final Symbols symbols;
-    private final Map<TypeSymbol, List<Hir.InvariantClause>> inTheAnalysisRepresentation;
+    private final AnalysisInvariants inTheAnalysisRepresentation;
     private final Map<Hir.Data, Map<String, Type>> fields = new HashMap<>();
     private final Map<TypeSymbol.AtModule, Map<String, BindingId>> bindings =
             new HashMap<>();
@@ -52,16 +52,22 @@ final class Clauses {
      *        discharged against a clause is the same either way.
      */
     Clauses(Symbols symbols,
-            Map<TypeSymbol, List<Hir.InvariantClause>> inTheAnalysisRepresentation) {
+            AnalysisInvariants inTheAnalysisRepresentation) {
         this.symbols = symbols;
         this.inTheAnalysisRepresentation = inTheAnalysisRepresentation;
+    }
+
+    /** The representation this reads a declaration's clauses in, for a reader that has to hand it
+     *  on rather than ask for one of its own. */
+    AnalysisInvariants analysisRepresentation() {
+        return inTheAnalysisRepresentation;
     }
 
     /** Every invariant that applies to {@code named}, each in the analysis representation where this
      * module declares it. */
     List<Hir.InvariantClause> of(TypeSymbol.AtModule named, Hir.Data data) {
         return effective.computeIfAbsent(named, name ->
-                TypeOps.effectiveInvariants(name, data, symbols, inTheAnalysisRepresentation::get));
+                TypeOps.analysisInvariants(name, data, symbols, inTheAnalysisRepresentation));
     }
 
     private final Map<TypeSymbol.AtModule, List<TypeOps.Declared>> declaredClauses =
@@ -197,7 +203,7 @@ final class Clauses {
     /** Every clause of {@code named}, each with the declaration that wrote it. */
     List<TypeOps.Declared> declared(TypeSymbol.AtModule named, Hir.Data data) {
         return declaredClauses.computeIfAbsent(named, name ->
-                TypeOps.declaredInvariants(name, data, symbols, inTheAnalysisRepresentation::get));
+                TypeOps.declaredForAnalysis(name, data, symbols, inTheAnalysisRepresentation));
     }
 
     /** Which of {@code data}'s own fields {@code clause} reads, remembered: a clause is read at every

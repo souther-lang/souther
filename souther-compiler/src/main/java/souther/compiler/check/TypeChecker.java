@@ -76,7 +76,7 @@ public final class TypeChecker {
      * because the body check reads the same two and they must be the same two.
      */
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
-                                       ReadingPolicy policy,
+                                       RuleReadingSource rules, ReadingPolicy policy,
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
@@ -90,7 +90,7 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, policy, sigs, importedInjected, importedUnwritten,
+            checkRecovering(module, symbols, rules, policy, sigs, importedInjected, importedUnwritten,
                     lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled, shapes);
         } catch (Unanswerable e) {
@@ -200,7 +200,8 @@ public final class TypeChecker {
      * phase reads (the {@code fns} map, the {@code exposed} set, {@code reqSigs}, {@code sigs}) may
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
-    static void checkRecovering(Hir.Module module, DerivedSymbols symbols, ReadingPolicy policy,
+    static void checkRecovering(Hir.Module module, DerivedSymbols symbols,
+                                        RuleReadingSource rules, ReadingPolicy policy,
                                         Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
@@ -335,7 +336,7 @@ public final class TypeChecker {
             List<CompileException> withNoValue = new ArrayList<>();
             collect(errors, abandoned,
                     () -> withNoValue.addAll(
-                            DataChecker.typesWithNoValue(module.defs(), symbols, policy)));
+                            DataChecker.typesWithNoValue(module.defs(), rules, policy)));
             errors.addAll(withNoValue);
         }
         Map<String, Hir.FnDef> fns = new HashMap<>();

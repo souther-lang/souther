@@ -40,9 +40,9 @@ public final class OccurrenceValues {
     }
 
     /** What {@code data}, declared as {@code named}, leaves the values at each of its names. */
-    public static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                                       ReadingPolicy policy) {
-        return of(named, data, symbols, policy, _ -> false);
+    public static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data,
+                                      RuleReadingSource source, ReadingPolicy policy) {
+        return of(named, data, source, policy, _ -> false);
     }
 
     /**
@@ -52,11 +52,11 @@ public final class OccurrenceValues {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                                  ReadingPolicy policy,
                                  java.util.function.Predicate<TypeSymbol> granted) {
         return new OccurrenceValues(
-                InvariantChecker.seedFields(named, data, symbols, policy, java.util.Map.of(),
+                InvariantChecker.seedFields(named, data, source, policy, java.util.Map.of(),
                         InvariantChecker.Reach.stoppingAt(granted)));
     }
 

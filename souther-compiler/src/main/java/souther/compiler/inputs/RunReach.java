@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueGuarantees;
 import souther.compiler.numeric.Count;
@@ -140,10 +141,11 @@ final class RunReach {
      */
     private static NumericDomain.Bounds ofTheValuesWalked(RunSource source,
                                                           Function<TermPath, Type> typeAt,
-                                                          Symbols symbols, ReadingPolicy policy) {
+                                                          RuleReadingSource rules,
+                                                          ReadingPolicy policy) {
         Type walked = typeAt.apply(source.subjectPath());
         return walked == null ? null
-                : ValueGuarantees.of(walked, symbols, policy).get(RuleKey.THE_VALUE);
+                : ValueGuarantees.of(walked, rules, policy).get(RuleKey.THE_VALUE);
     }
 
     /** The value the walk starts from, as a range, or null where this reading has no number for it.

@@ -82,7 +82,7 @@ public final class DataChecker {
 
     public static boolean isInvariantBearing(TypeSymbol typeName, Symbols symbols) {
         return typeName != null && symbols.declaredNode(typeName) instanceof Hir.Data d
-                && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
+                && !TypeOps.settledInvariants(d, symbols).isEmpty();
     }
 
     /**
@@ -93,7 +93,7 @@ public final class DataChecker {
      */
     private static void checkClauseNames(Hir.Data data, Symbols symbols) {
         Set<String> seen = new HashSet<>();
-        for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+        for (Hir.InvariantClause clause : TypeOps.settledInvariants(data, symbols)) {
             String name = clause.name().orElse(null);
             if (name != null && !seen.add(name)) {
                 throw CompileException.of(Diagnostic
@@ -450,10 +450,11 @@ public final class DataChecker {
      * sentences by looking at the declaration a second time would be a second reader of a question
      * the count already answered, free to pick the sentence the count did not mean.
      */
-    static List<CompileException> typesWithNoValue(List<Hir.Def> declarations, Symbols symbols,
+    static List<CompileException> typesWithNoValue(List<Hir.Def> declarations,
+                                                   RuleReadingSource source,
                                                    ReadingPolicy policy) {
         List<UninhabitableTypes.UninhabitableGroup> groups = UninhabitableTypes.withNoValueOfTheirOwn(
-                declarations, TypeCardinality.solve(declarations, symbols, policy));
+                declarations, TypeCardinality.solve(declarations, source, policy));
         // How many of the lacks reported here each declaration is part of. A declaration in one of
         // them is a declaration whose lack the group accounts for entirely, and a suggestion about
         // that group is a way out. A declaration in two is in neither's: what a group is established
@@ -465,7 +466,7 @@ public final class DataChecker {
         }
         List<CompileException> found = new ArrayList<>();
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
-            Hir.Def at = symbols.declaredNode(group.reportedAt());
+            Hir.Def at = source.symbols().declaredNode(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
                     new Emptiness.AtAField.Where.TheValueItself(), group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));

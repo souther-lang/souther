@@ -65,29 +65,35 @@ public final class ClauseHelpers {
     /**
      * Each declaration's invariant in the representation the invariant-discharge analysis reads: the
      * helpers it can name expanded, the language's own operations left standing
-     * ({@link InliningPolicy#DISCHARGE}). Keyed by the declaration's name in {@code m}.
+     * ({@link InliningPolicy#DISCHARGE}), for every declaration {@code m} makes.
      *
      * <p>This is the same settling {@link #withSettledInvariants} does, stopped one step earlier, and
      * it reads the same table: what the clause names is substituted whether this module declared it or
-     * imported it. An importer reads an imported invariant in the settled form and finds nothing here
-     * for it, which is where an imported clause falls outside the statically dischargeable fragment
-     * (spec §invariant-discharge).
+     * imported it. What another module declares is not in here and is read in the settled form that
+     * travels with it, which is where an imported clause falls outside the statically dischargeable
+     * fragment (spec §invariant-discharge) — a rule {@link AnalysisInvariants} states off where the
+     * declaration was written rather than off whether a lookup found anything.
      */
-    public static Map<TypeSymbol, List<Hir.InvariantClause>> invariantsForDischarge(
+    public static AnalysisInvariants invariantsForDischarge(
             Expandable expandable, Symbols symbols, Map<String, Hir.FnDef> published) {
         Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
                 published, InliningPolicy.DISCHARGE, symbols.library());
-        Map<TypeSymbol, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
+        Map<TypeSymbol.AtModule, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
+        // Every declaration this module makes, and not the ones with something to say. What is
+        // filed for a declaration is its reading, and a declaration whose reading is nothing has
+        // one — so an absent entry is this module's reading having failed to arrive rather than a
+        // declaration that wrote no clause, which is the difference {@link AnalysisInvariants}
+        // rests on.
         for (Hir.Def def : settled.defs()) {
-            if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
+            if (def instanceof Hir.Data d) {
                 TypeSymbol.AtModule declared = d.declares();
                 out.put(declared, Hir.mapClauses(d.invariants(),
                         clause -> inliner.inline(clause, new BindingOwner.OfData(declared))));
             }
         }
-        return out;
+        return new AnalysisInvariants(m.name(), out);
     }
 
     /** {@code m} with its helper parameter types settled and the names in its invariants written
