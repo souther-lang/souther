@@ -127,8 +127,9 @@ class OneReadingTakesBothRoadsToAPositionTest {
     }
 
     private static Refinement caseOf(InputDomain read, String name) {
-        return Refinement.sumCase(souther.compiler.types.TypeSymbols.declared(
-                new souther.compiler.types.TypeKey("g", name)));
+        return Refinement.of(souther.compiler.types.CaseSelector.direct(
+                souther.compiler.types.TypeSymbols.declared(
+                        new souther.compiler.types.TypeKey("g", name))));
     }
 
     private static InputDomain reading(TermPath demanded) {

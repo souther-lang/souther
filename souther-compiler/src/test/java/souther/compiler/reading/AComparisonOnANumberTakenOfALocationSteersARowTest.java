@@ -153,9 +153,11 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
                         | Empty -> No
                 """;
         Read read = read(inArm);
-        TermPath underNamed = TermPath.of("slot").refine(souther.compiler.inputs.Refinement.sumCase(
-                souther.compiler.types.TypeSymbols.declared(
-                        new souther.compiler.types.TypeKey("example.arm", "Named")))).then("c");
+        TermPath underNamed = TermPath.of("slot").refine(souther.compiler.inputs.Refinement.of(
+                souther.compiler.types.CaseSelector.direct(
+                        souther.compiler.types.TypeSymbols.declared(
+                                new souther.compiler.types.TypeKey("example.arm", "Named")))))
+                .then("c");
 
         assertEquals(List.of(read.lengthAt(underNamed)),
                 read.sides().stream().map(Condition.Side::at).distinct().toList(),

@@ -14,6 +14,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeKey;
 
@@ -217,7 +218,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
     }
 
     private static Refinement caseOf(String leaf) {
-        return Refinement.sumCase(TypeSymbols.declared(new TypeKey("g", leaf)));
+        return Refinement.of(CaseSelector.direct(TypeSymbols.declared(new TypeKey("g", leaf))));
     }
 
     /** The behavior's one parameter type, and the names it is read against. */

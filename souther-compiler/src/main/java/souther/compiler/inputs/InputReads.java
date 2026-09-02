@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CaseSelector;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -135,9 +136,16 @@ public final class InputReads {
      * it names is as many spellings of one position as there are walks, of which the axes carry
      * one.
      *
-     * <p>Only where the arm selects one case. An arm answering for several narrows to none of them
-     * in particular, and a name that stands for no position is what a reader is given for it —
-     * which is what it was given before there was anything to say.
+     * <p>Only where the arm selects one case, which the arm says ({@link Core.Case#selectedCase}).
+     * An arm answering for several narrows to none of them in particular, and a name that stands
+     * for no position is what a reader is given for it — which is what it was given before there
+     * was anything to say.
+     *
+     * <p><b>And the narrowing is the selector's, not one worked out from it here.</b> Which case an
+     * arm took was decided by the checker, together with what the value turns out to be once it is
+     * taken; a reader that took the case's name instead would have an optional's present carrier
+     * and a sum's case declared under the same word arriving as one thing. So what crosses into
+     * this vocabulary is the selector, and nothing here asks what the scrutinee's type was.
      *
      * <p><b>And where the scrutinee stands for one of several written values, the arm narrows that
      * set.</b> Which is a different answer from the one above and not a weaker copy of it: a
@@ -151,7 +159,8 @@ public final class InputReads {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }
-        if (arm.caseTypes().size() != 1) {
+        CaseSelector selected = arm.selectedCase().orElse(null);
+        if (selected == null) {
             return admitting(match, arm, symbols);
         }
         // What the arm narrows is a position of the input, and a scrutinee that stands at none
@@ -163,7 +172,7 @@ public final class InputReads {
         if (scrutinee == null) {
             return admitting(match, arm, symbols);
         }
-        TermPath narrowed = scrutinee.refine(Refinement.sumCase(arm.caseTypes().get(0)));
+        TermPath narrowed = scrutinee.refine(Refinement.of(selected));
         // And nothing is asked of the reading. What this answers is which location the arm's name
         // stands for, which the arm and the scrutinee's path settle between them: the value that was
         // matched, read as the case the arm selects. Whether a row is ever written there — whether
@@ -206,7 +215,7 @@ public final class InputReads {
         if (one == null) {
             return this;
         }
-        for (souther.compiler.types.CaseSelector selector : arm.pattern().selectors()) {
+        for (CaseSelector selector : arm.pattern().selectors()) {
             if (!(selector.refinement() instanceof souther.compiler.types.Refinement.Direct)) {
                 return this;
             }

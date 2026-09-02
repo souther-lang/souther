@@ -18,6 +18,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -238,7 +239,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
     /** The requirement a class of {@code d} states by being the {@code Approved} case of it. */
     private static Requirements throughApproved(Read read) {
         return Requirements.NONE.and(TermPath.of(read.spec().params().get(0).name()),
-                Refinement.sumCase(caseNamed(SUM, "probe")));
+                Refinement.of(CaseSelector.direct(caseNamed(SUM, "probe"))));
     }
 
     /** The name of the case to build through, taken off a behavior that is declared to take one. */

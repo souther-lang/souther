@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeSymbol;
 
 /**
@@ -14,6 +15,14 @@ import souther.compiler.types.TypeSymbol;
  * anything, and {@link Case} already reads both as distinctions of one kind; a refinement written
  * for cases alone would be a second reading of that, and the optional would arrive later as a
  * shape of its own with nothing to be an instance of.
+ *
+ * <p><b>Made only from a value that already settles which narrowing it is.</b> Two vocabularies
+ * decide that — what a position's type divides into ({@link Case}) and what a written pattern
+ * selects ({@link CaseSelector}) — and each has a way in here. What has no way in is a name: an
+ * optional's present carrier and a sum's case are both called {@code Some} where one is written,
+ * so a narrowing built from the name alone is one of the two chosen by whoever built it. Every
+ * reader below compares narrowings by equality, so the two spellings of one place never meet, and
+ * what a body wrote through such a path is about a position nothing else in this compiler names.
  */
 public sealed interface Refinement {
 
@@ -21,12 +30,26 @@ public sealed interface Refinement {
     String spelled();
 
     /**
+     * The same, with which kind of narrowing it is said as well.
+     *
+     * <p>For a message about this compiler and never for a report about a model. Two narrowings of
+     * unlike kinds can be written the same way — {@code @Some} is an optional's present carrier
+     * where an optional stands and a sum's case where one is declared with that name — so a
+     * diagnostic that spelled only the path would say two unequal positions are one, which is what
+     * an author is told when the compiler is the one that is confused.
+     */
+    String discriminated();
+
+    /**
      * The narrowing {@code one} is, or null where sitting in that distinction narrows no position.
      *
-     * <p>The one place the two vocabularies are related. What a position divides into and what a
-     * position under it stands beneath are the same statement read twice — a row whose value is an
-     * {@code Approved} is a row at every position {@code Approved} declares — and a second relating
-     * of them would be the classes and the branches disagreeing about which is which.
+     * <p>The one way in for a reader that has what a position's type divides into. What a position
+     * divides into and what a position under it stands beneath are the same statement read twice —
+     * a row whose value is an {@code Approved} is a row at every position {@code Approved} declares
+     * — and a second relating of them would be the classes and the branches disagreeing about which
+     * is which. {@link #of(CaseSelector)} is beside this and is not that second relating: it takes
+     * what a checked pattern selected, which is the other value that settles a narrowing, and the
+     * two are held to one answer where a type states a division a pattern can select.
      *
      * <p>Exhaustive over {@link Case}, with no {@code default}: a distinction the reading learns to
      * make later stops this compiling rather than arriving as a branch that is quietly never walked.
@@ -37,26 +60,36 @@ public sealed interface Refinement {
      */
     static Refinement of(Case one) {
         return switch (one) {
-            case Case.SumCase sum -> sumCase(sum.leaf());
+            case Case.SumCase sum -> new SumCase(sum.leaf());
             case Case.Presence presence -> new Presence(presence.present());
             case Case.Truth _, Case.Named _ -> null;
         };
     }
 
     /**
-     * The narrowing to {@code leaf}, for a caller that already has the case and not the distinction.
+     * The narrowing {@code selected} is, for a reader holding what a written pattern selects.
      *
-     * <p>Not a second correspondence. {@link #of} relates two vocabularies — what a position divides
-     * into, and what a position under it stands beneath — and a caller holding a {@code match} arm's
-     * case has not asked that question: which case the arm selected was settled where the arm was
-     * read. Sent back through {@link Distinctions} to be turned into a {@link Case} first, it would
-     * be a reader re-deriving what it was already told, which is the arrangement this vocabulary
-     * exists to stop.
+     * <p>The same relating of vocabularies as {@link #of(Case)} and from the other end. A position's
+     * type says what it divides into; a checked pattern says which of those divisions the arm took.
+     * Both settle a narrowing on their own, and a reader that has one of them has no second question
+     * to ask.
      *
-     * <p>Here rather than at a constructor, so that what a narrowing is stays this type's to say.
+     * <p><b>Read off what the selector refines the value to, and never off its name.</b> The two are
+     * made together and cannot disagree ({@link CaseSelector}), and only the first tells an
+     * optional's present carrier from a sum's case declared under the same word. A reader taking the
+     * name would build the sum's narrowing for both, so an optional's arm would write a path the
+     * reading of the position never spells.
+     *
+     * <p>Exhaustive over {@link souther.compiler.types.Refinement}, with no {@code default}: a way
+     * of selecting a case added later stops this compiling rather than arriving as whichever arm is
+     * nearest.
      */
-    static Refinement sumCase(TypeSymbol leaf) {
-        return new SumCase(leaf);
+    static Refinement of(CaseSelector selected) {
+        return switch (selected.refinement()) {
+            case souther.compiler.types.Refinement.Direct _ -> new SumCase(selected.name());
+            case souther.compiler.types.Refinement.OptionPresent _ -> new Presence(true);
+            case souther.compiler.types.Refinement.OptionAbsent _ -> new Presence(false);
+        };
     }
 
     /**
@@ -88,6 +121,11 @@ public sealed interface Refinement {
         @Override
         public String spelled() {
             return leaf.name();
+        }
+
+        @Override
+        public String discriminated() {
+            return spelled() + "[sum-case]";
         }
 
         @Override
@@ -132,6 +170,11 @@ public sealed interface Refinement {
         @Override
         public String spelled() {
             return present ? "Some" : "None";
+        }
+
+        @Override
+        public String discriminated() {
+            return spelled() + "[presence]";
         }
 
         @Override

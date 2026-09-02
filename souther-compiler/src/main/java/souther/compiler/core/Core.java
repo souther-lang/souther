@@ -538,6 +538,21 @@ public sealed interface Core {
         List<CaseSelector> selectors();
 
         /**
+         * The one case this arm selects, or empty where it selects no one case.
+         *
+         * <p>Asked here rather than worked out from the shape of the pattern. What a narrowing of
+         * the subject is follows from the selector — its name and what the value turns out to be
+         * are made together and cannot disagree ({@link CaseSelector}) — so a reader that decided
+         * from the pattern's shape that one selector must be there, and then took its name, would
+         * be rebuilding a decision this already holds out of less than it was made from. That is
+         * how an optional's {@code Some} came to be read as a sum's case named {@code Some}.
+         *
+         * <p>Empty is an answer and not an absence of one: an or-pattern narrows the subject to no
+         * one case, so there is no narrowing for a reader to have.
+         */
+        Optional<CaseSelector> selectedCase();
+
+        /**
          * What the value is read as once the arm is taken.
          *
          * <p>Derived rather than carried. What an arm binds follows from what it selects — one case
@@ -577,6 +592,11 @@ public sealed interface Core {
             }
 
             @Override
+            public Optional<CaseSelector> selectedCase() {
+                return Optional.of(selector);
+            }
+
+            @Override
             public Refinement binding() {
                 return selector.refinement();
             }
@@ -599,6 +619,11 @@ public sealed interface Core {
             }
 
             @Override
+            public Optional<CaseSelector> selectedCase() {
+                return Optional.empty();
+            }
+
+            @Override
             public Refinement binding() {
                 return new Refinement.Direct(subject);
             }
@@ -616,6 +641,11 @@ public sealed interface Core {
         /** The cases this arm answers for. */
         public List<TypeSymbol> caseTypes() {
             return pattern.caseTypes();
+        }
+
+        /** The one case this arm selects, or empty where it selects no one case. */
+        public Optional<CaseSelector> selectedCase() {
+            return pattern.selectedCase();
         }
 
         /** The type the binding takes inside this arm. */

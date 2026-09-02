@@ -17,6 +17,7 @@ import souther.compiler.query.Output;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -100,7 +101,8 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
 
     private static TermPath under(String module, String leaf, String field) {
         return TermPath.of("query")
-                .refine(Refinement.sumCase(TypeSymbols.declared(new TypeKey(module, leaf))))
+                .refine(Refinement.of(CaseSelector.direct(
+                        TypeSymbols.declared(new TypeKey(module, leaf)))))
                 .then(field);
     }
 

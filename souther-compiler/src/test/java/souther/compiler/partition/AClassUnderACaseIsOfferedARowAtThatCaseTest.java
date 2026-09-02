@@ -15,6 +15,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -75,8 +76,8 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     }
 
     private static TermPath under(String leaf) {
-        return TermPath.of("query").refine(Refinement.sumCase(
-                TypeSymbols.declared(new TypeKey("example.q", leaf))));
+        return TermPath.of("query").refine(Refinement.of(CaseSelector.direct(
+                TypeSymbols.declared(new TypeKey("example.q", leaf)))));
     }
 
     /** Every class of every position, including the ones only one case has. */
@@ -129,8 +130,8 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         assertFalse(tag.requirements().compatibleWith(sum.requiring(classOf(sum, "FeedQuery"))),
                 "and a row that is a FeedQuery is at none of them");
         assertEquals(Requirements.NONE.and(TermPath.of("query"),
-                        Refinement.sumCase(
-                                TypeSymbols.declared(new TypeKey("example.q", "GlobalQuery")))),
+                        Refinement.of(CaseSelector.direct(
+                                TypeSymbols.declared(new TypeKey("example.q", "GlobalQuery"))))),
                 tag.requirements(),
                 "which the path says on its own, with nothing kept beside it");
     }

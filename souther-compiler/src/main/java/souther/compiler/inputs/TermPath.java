@@ -299,7 +299,24 @@ public record TermPath(String head, List<Step> steps) {
     private static String spelled(List<Step> steps) {
         StringBuilder out = new StringBuilder();
         for (Step step : steps) {
-            spell(out, step);
+            spell(out, step, false);
+        }
+        return out.toString();
+    }
+
+    /**
+     * The same path, with each narrowing saying which kind it is.
+     *
+     * <p>For a message about this compiler and never for one about a model. Two paths spelled alike
+     * can hold narrowings that are not equal — an optional's present carrier and a sum's case
+     * declared as {@code Some} are both written {@code @Some} — and a message that spelled only the
+     * path would say two positions this compiler holds apart are one place, which leaves an author
+     * reading a sentence that is true of the words and false of the model.
+     */
+    public String discriminated() {
+        StringBuilder out = new StringBuilder(head);
+        for (Step step : steps) {
+            spell(out, step, true);
         }
         return out.toString();
     }
@@ -311,7 +328,7 @@ public record TermPath(String head, List<Step> steps) {
      * separator is decided. A step added later stops this compiling rather than arriving in a
      * report under a dot that says it is a field.
      */
-    private static void spell(StringBuilder out, Step step) {
+    private static void spell(StringBuilder out, Step step, boolean discriminating) {
         switch (step) {
             case Step.Field field -> {
                 if (!out.isEmpty()) {
@@ -319,9 +336,11 @@ public record TermPath(String head, List<Step> steps) {
                 }
                 out.append(field);
             }
-            // Neither wears a separator: what a list holds follows the list, and a narrowing of a
-            // position follows the position, and a dot before either would read as a field of it.
-            case Step.Element _, Step.Refine _ -> out.append(step);
+            case Step.Refine refine -> out.append('@').append(discriminating
+                    ? refine.refinement().discriminated() : refine.refinement().spelled());
+            // No separator: what a list holds follows the list, and a dot before it would read as a
+            // field of it. The same is true of a narrowing, which wears its own `@` above.
+            case Step.Element _ -> out.append(step);
         }
     }
 
@@ -329,7 +348,7 @@ public record TermPath(String head, List<Step> steps) {
     public String toString() {
         StringBuilder out = new StringBuilder(head);
         for (Step step : steps) {
-            spell(out, step);
+            spell(out, step, false);
         }
         return out.toString();
     }

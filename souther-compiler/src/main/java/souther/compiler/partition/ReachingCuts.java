@@ -14,6 +14,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.types.CaseSelector;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -134,6 +135,11 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * arrive at one — a scrutinee no position holds, an arm answering for several cases, a case the
      * declarations leave no position at — nothing is invented and the arm is declined.
      *
+     * <p>And the narrowing is the one the arm's selector settles, taken as it is rather than built
+     * again from the case's name: the name alone does not say whether an optional's present carrier
+     * or a sum's case was selected, and a narrowing spelled the wrong way is a position the reading
+     * of the input never holds.
+     *
      * <p>Never empty, for the reason {@link #stating} is never empty: an arm that established
      * nothing and an arm nothing could be read of are the two answers a walk has to tell apart, and
      * a silence is both of them.
@@ -141,7 +147,8 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
     static OnTheWay entering(Core.Match match, Core.Case arm, InputDomain inputs, InputReads reads,
                              Symbols symbols) {
         Citation at = Citation.of(arm.pos());
-        if (arm.caseTypes().size() != 1) {
+        CaseSelector selected = arm.selectedCase().orElse(null);
+        if (selected == null) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
         // The arm is declined for either answer: a search composes against a position read as one
@@ -161,8 +168,7 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
         if (scrutinee == null || inputs.at(scrutinee) == null) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
-        return new OnTheWay.Narrowed(at,
-                scrutinee.refine(Refinement.sumCase(arm.caseTypes().get(0))));
+        return new OnTheWay.Narrowed(at, scrutinee.refine(Refinement.of(selected)));
     }
 
     /**

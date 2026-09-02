@@ -188,8 +188,8 @@ final class ReadQuantities implements Quantities {
         // something about a place it has never been.
         if (position == null) {
             throw new IllegalArgumentException(
-                    "`" + at + "` is no position of this input, so there is nothing here to say"
-                            + " how many it holds");
+                    "`" + at.at().discriminated() + "` is no position of this input, so there is"
+                            + " nothing here to say how many it holds");
         }
         NumericTerm counted = howManyItHolds(at.at());
         if (counted == null) {
@@ -1047,9 +1047,9 @@ final class ReadQuantities implements Quantities {
     private NumericTerm held(NumericTerm term) {
         if (rootOf(term.subjectPath()) == null) {
             throw new IllegalArgumentException(
-                    "`" + term.subjectPath() + "` is under no value whose rules this reading holds"
-                            + " and can name it by, so there is nothing here to answer about "
-                            + term);
+                    "`" + term.subjectPath().discriminated() + "` is under no value whose rules this"
+                            + " reading holds and can name it by, so there is nothing here to answer"
+                            + " about " + term);
         }
         return term;
     }

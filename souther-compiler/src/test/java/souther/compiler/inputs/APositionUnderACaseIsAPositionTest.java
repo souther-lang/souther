@@ -180,7 +180,8 @@ class APositionUnderACaseIsAPositionTest {
                 behavior open : (b: Box) -> Ack
                 """, "open");
         Position least = read.at(TermPath.of("b").refine(
-                Refinement.sumCase(caseNamed(read, "Held"))).then("least"));
+                Refinement.of(souther.compiler.types.CaseSelector.direct(
+                        caseNamed(read, "Held")))).then("least"));
         assertNotNull(least, "a field of the case is a position");
         assertTrue(least.rulesLeftUnread().isEmpty(),
                 "and the clause relating it to the field beside it was reached");
