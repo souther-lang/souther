@@ -111,9 +111,13 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                     new ObligationCoverage.Missed(),
                     WritabilityKnowledge.of(nothingShown(), SearchOutcomes.of(attempt)));
             if (attempt instanceof ItemAssessment.Attempt.Prevented) {
-                assertEquals(new ObligationDisposition.Undecided(
-                                EnumSet.of(ObligationDisposition.Uncertainty.WRITABILITY)),
-                        disposition,
+                // Which question is open, rather than what it is open on. What stopped the showing
+                // is the attempt's own and is read back from it two rows above; asserted here it
+                // would move with whatever this table produced.
+                assertEquals(List.of(
+                                ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.class),
+                        assertInstanceOf(ObligationDisposition.Undecided.class, disposition)
+                                .because().stream().map(Object::getClass).toList(),
                         () -> leaf.getSimpleName() + " is this compiler being stopped, which is not"
                                 + " the model refusing a row and may not take one out of the count");
             } else {

@@ -46,8 +46,9 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
 
         assertInstanceOf(ObligationDisposition.Counted.class, disposition,
                 "a point whose showing a limit stopped is one the model still owes a row at");
-        assertEquals(new ObligationDisposition.Undecided(
-                        EnumSet.of(ObligationDisposition.Uncertainty.WRITABILITY)),
+        assertEquals(new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
+                                prevented()))),
                 disposition,
                 "and the question left open is whether a row can be written, not whether one is");
     }
@@ -92,9 +93,12 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                 prevented());
 
-        assertEquals(new ObligationDisposition.Undecided(EnumSet.of(
-                        ObligationDisposition.Uncertainty.COVERAGE,
-                        ObligationDisposition.Uncertainty.WRITABILITY)),
+        assertEquals(new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere(
+                                new ReadingReasons(List.of(
+                                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
+                                prevented()))),
                 disposition,
                 "the rows left one question open and the search left the other");
     }
@@ -191,7 +195,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT)));
     }
 
-    private static WritabilityKnowledge prevented() {
+    private static WritabilityKnowledge.Prevented prevented() {
         return WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
                 EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
     }
