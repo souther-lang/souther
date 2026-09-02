@@ -97,10 +97,9 @@ public final class NewtypeDesugar {
                         && nt.newtype() && args.size() == 1) {
                     // `T(v)` is what the author wrote and a construction is what it means, so the
                     // node that replaces the application stands over the same characters.
-                    yield new Hir.NewData(
+                    yield Hir.NewData.fromApply(call,
                             new Hir.Name.Denoting(call.name(), built),
-                            List.of(new Hir.FieldInit("value", args.get(0), call.pos())),
-                            List.of(), call.pos(), call.region());
+                            List.of(new Hir.FieldInit("value", args.get(0), call.pos())));
                 }
                 yield call.withArgs(args);
             }

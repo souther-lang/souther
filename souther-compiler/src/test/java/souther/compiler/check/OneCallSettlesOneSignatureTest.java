@@ -39,7 +39,7 @@ class OneCallSettlesOneSignatureTest {
     private static Hir.Expr filterOverAnEmptyList() {
         Hir.Block predicate = new Hir.Block(List.of(BINDERS.binder("x", POS)),
                 new Hir.BoolLit(true, POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
-        return new Hir.Apply("List.filter",
+        return Hir.Apply.synthetic("List.filter",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "filter")),
                 List.of(predicate, new Hir.ListLit(List.of(), POS, null)), POS, null);
     }
@@ -127,10 +127,10 @@ class OneCallSettlesOneSignatureTest {
         // Option.withDefault : ('a, Option<'a>) -> 'a. The empty list states nothing about what it
         // holds, so the option beside it is what decides — the other order holds the option to the
         // element type of nothing.
-        Hir.Expr call = new Hir.Apply("Option.withDefault",
+        Hir.Expr call = Hir.Apply.synthetic("Option.withDefault",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("Option", "withDefault")),
                 List.of(new Hir.ListLit(List.of(), POS, null),
-                        new Hir.Apply("List.get",
+                        Hir.Apply.synthetic("List.get",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "get")),
                                 List.of(new Hir.IntLit(0, POS, null),
                                         new Hir.ListLit(List.of(new Hir.ListLit(

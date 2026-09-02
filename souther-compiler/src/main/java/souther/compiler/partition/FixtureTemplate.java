@@ -125,7 +125,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         // the reference says namespace, and no reader that emits calls can be handed it.
         ValueName.Stdlib.Namespace namespace = ValueName.Stdlib.namespace(type);
         return new FixtureTemplate(type + "(\"" + iso + "\")",
-                new Hir.Apply(type, new ReachName.TheNamespace(namespace),
+                Hir.Apply.synthetic(type, new ReachName.TheNamespace(namespace),
                         List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)), NOWHERE, NO_SOURCE));
     }
 
@@ -205,7 +205,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         String written = type.rendered();
         ValueName.OfType named = new ValueName.OfType(written, type.denotes());
         return new FixtureTemplate(written + "(" + inner.text() + ")",
-                new Hir.Apply(written, new ReachName.InScope(named), List.of(inner.value()),
+                Hir.Apply.synthetic(written, new ReachName.InScope(named), List.of(inner.value()),
                         NOWHERE, NO_SOURCE));
     }
 
@@ -296,8 +296,8 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         }
         return new FixtureTemplate(
                 type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(spread), NOWHERE,
-                        NO_SOURCE));
+                Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
+                        List.of(spread), NOWHERE, NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared. */
@@ -309,7 +309,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
             inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
         }
         return new FixtureTemplate(type.rendered() + " { " + String.join(", ", written) + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(), NOWHERE,
-                        NO_SOURCE));
+                Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
+                        List.of(), NOWHERE, NO_SOURCE));
     }
 }

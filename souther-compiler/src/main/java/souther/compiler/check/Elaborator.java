@@ -267,7 +267,8 @@ public final class Elaborator {
                 }
                 List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),
                         nd.inits(), spreads, nd.pos(),
-                        TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx, nd.fields());
+                        TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx,
+                        nd.mayOmitOptionalFields());
                 yield new Core.Construct(constructed, values, Type.ref(constructed), nd.pos());
             }
             case Hir.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
@@ -444,7 +445,7 @@ public final class Elaborator {
     private static Hir.Expr fromList(String collection, Hir.Expr written, Hir.RowCollection row) {
         souther.compiler.types.ValueName.Stdlib.Operation fromList =
                 souther.compiler.types.ValueName.Stdlib.operation(collection, "fromList");
-        return new Hir.Apply(collection + ".fromList",
+        return Hir.Apply.synthetic(collection + ".fromList",
                 new souther.compiler.types.ReachName.OfLibrary(fromList), List.of(written),
                 row.pos(), row.region());
     }

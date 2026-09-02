@@ -84,7 +84,7 @@ class ANameAnsweredHalfwayIsRefusedTest {
     @Test
     void anApplicationAPassWritesCannotLeaveItsNameUnanswered() {
         assertThrows(NullPointerException.class,
-                () -> new Hir.Apply("spin", null, List.of(), POS, null));
+                () -> Hir.Apply.synthetic("spin", null, List.of(), POS, null));
     }
 
     /** Answered, it says both. */

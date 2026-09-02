@@ -53,7 +53,7 @@ class WhatCarriesADeclarationSaysSoInItsTypeTest {
             "souther.compiler.ast.Hir$Var$Denoting.reachedAs",
             "souther.compiler.ast.Hir$Var.denoting",
             "souther.compiler.ast.Hir$Var.respelled",
-            "souther.compiler.ast.Hir$Apply.<init>",
+            "souther.compiler.ast.Hir$Apply.synthetic",
             // The one place a route is worked out, and the copy of one a rewrite moves.
             "souther.compiler.types.ReachName.of",
             "souther.compiler.check.HelperInliner$Copy.of",

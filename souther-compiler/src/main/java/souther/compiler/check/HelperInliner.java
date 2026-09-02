@@ -646,7 +646,7 @@ public final class HelperInliner {
             args.add(new Hir.IntLit(supplied, call.pos(), null));
         }
         // The library name this reaches for is the pass's; where it stands is the callee's.
-        return new Hir.Apply(
+        return Hir.Apply.synthetic(
                 Hir.Var.respelled(rewrite.target().qualified(),
                         new ReachName.OfLibrary(rewrite.target()), call.function().pos(),
                         call.function().region()),
@@ -1587,7 +1587,7 @@ public final class HelperInliner {
         // The block and the application in it are this pass's: what the author wrote there is a
         // name, and these are the parameters and the call it stands for.
         return new Hir.Block(params,
-                new Hir.Apply(function, args, function.pos(), null),
+                Hir.Apply.synthetic(function, args, function.pos(), null),
                 souther.compiler.types.RuleOrigin.unwritten(), function.pos(), null);
     }
 

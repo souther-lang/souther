@@ -51,7 +51,7 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
         for (int i = 0; i < args; i++) {
             given.add(new Hir.IntLit(i, POS, null));
         }
-        return new Hir.Apply(name.qualified(), new ReachName.OfLibrary(name), given, POS, null);
+        return Hir.Apply.synthetic(name.qualified(), new ReachName.OfLibrary(name), given, POS, null);
     }
 
     /** The library's helpers as a table is keyed: under the operation each is the body of, which

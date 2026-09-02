@@ -2645,7 +2645,7 @@ final class Terms {
             case Core.PreservedCall call -> {
                 List<Hir.Expr> args = written(call.args());
                 yield args == null ? null
-                        : new Hir.Apply(call.operation().name(), reachOf(call.operation()), args,
+                        : Hir.Apply.synthetic(call.operation().name(), reachOf(call.operation()), args,
                                 call.pos(), null);
             }
             // A temporal is written as a literal with its text spelled out (spec
@@ -2661,7 +2661,7 @@ final class Terms {
             case Core.Temporal t -> {
                 ValueName.Stdlib.Namespace namespace =
                         ValueName.Stdlib.namespace(t.kind().shown());
-                yield new Hir.Apply(namespace.qualified(),
+                yield Hir.Apply.synthetic(namespace.qualified(),
                         new ReachName.TheNamespace(namespace),
                         List.of(new Hir.StringLit(t.text(), t.pos(), null)), t.pos(), null);
             }
