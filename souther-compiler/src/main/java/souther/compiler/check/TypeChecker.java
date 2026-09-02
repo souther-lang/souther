@@ -76,7 +76,8 @@ public final class TypeChecker {
      * because the body check reads the same two and they must be the same two.
      */
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
-                                       RuleReadingSource rules, ReadingPolicy policy,
+                                       List<UninhabitableTypes.UninhabitableGroup> withNoValue,
+                                       ReadingPolicy policy,
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
@@ -90,7 +91,8 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, rules, policy, sigs, importedInjected, importedUnwritten,
+            checkRecovering(module, symbols, withNoValue, policy, sigs, importedInjected,
+                    importedUnwritten,
                     lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled, shapes);
         } catch (Unanswerable e) {
@@ -201,7 +203,8 @@ public final class TypeChecker {
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
     static void checkRecovering(Hir.Module module, DerivedSymbols symbols,
-                                        RuleReadingSource rules, ReadingPolicy policy,
+                                        List<UninhabitableTypes.UninhabitableGroup> withNoValue,
+                                       ReadingPolicy policy,
                                         Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
@@ -333,11 +336,10 @@ public final class TypeChecker {
         // That reading is not made here — it is made once, where the clause a construction runs
         // comes from — so this asks it rather than repeating it.
         if (errors.isEmpty() && everyClauseWasRead(module, settled, shapes)) {
-            List<CompileException> withNoValue = new ArrayList<>();
+            List<CompileException> said = new ArrayList<>();
             collect(errors, abandoned,
-                    () -> withNoValue.addAll(
-                            DataChecker.typesWithNoValue(module.defs(), rules, policy)));
-            errors.addAll(withNoValue);
+                    () -> said.addAll(DataChecker.typesWithNoValue(withNoValue, symbols)));
+            errors.addAll(said);
         }
         Map<String, Hir.FnDef> fns = new HashMap<>();
         for (Hir.FnDef fn : module.fns()) {

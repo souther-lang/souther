@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputReads;
@@ -69,12 +71,11 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
         souther.compiler.inputs.InputDomain inputs = compilation.db()
                 .ask(new Adequacy.Inputs(module)).value().get("read");
 
-        souther.compiler.check.Symbols symbols =
-                souther.compiler.query.Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
 
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
         for (ComparisonReadings.Reading each
-                : ComparisonReadings.of(body, plan, inputs.reading(symbols),
+                : ComparisonReadings.of(body, plan, inputs.reading(rules),
                         InputReads.ofParameters(inputs.parameterReads(),
                                 checked.elementBindings().get("read")),
                         // What arrives is not what this is about: read with nothing said about it,

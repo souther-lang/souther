@@ -2,11 +2,11 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Classification;
@@ -71,13 +71,15 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");
-        InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return MeasuredInput.of(spec.name(), domain.reading(symbols),
-                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+        InputDomain domain = InputDomain.of(spec, sig, rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return MeasuredInput.of(spec.name(), domain.reading(rules),
+                Partitions.of(spec.name(), domain, rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     private static String written(souther.compiler.partition.FillResult result) {

@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
@@ -30,7 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class AFillIsTotalOverThePlanItWasAskedWithTest {
 
-    private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+    private static final RuleReadingSource SYMBOLS =
+            RuleReadings.ofNothingDeclared(Symbols.none(DefaultStdlib.get()));
 
     private static final Generator.ClassOwed A_CLASS =
             new Generator.ClassOwed(new AxisId("fee", "days"), "days/low");

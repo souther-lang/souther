@@ -2,17 +2,17 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -131,7 +131,7 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
         Read read = read(HOLDING);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(read.sig().inputTypes().get(0), TermPath.of("query"),
-                        read.symbols(), Set.of(), required, (_, _) -> 1),
+                        read.rules().symbols(), Set.of(), required, (_, _) -> 1),
                 "nothing here asks one position to be two things").plan();
     }
 
@@ -150,12 +150,12 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
     private static Partitions.Partitioning partitioningOf() {
         Read read = read(FLAGGED);
         return Partitions.of(read.spec().name(),
-                souther.compiler.inputs.InputDomain.of(read.spec(), read.sig(), read.symbols(),
+                souther.compiler.inputs.InputDomain.of(read.spec(), read.sig(), read.rules(),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
-    private record Read(Hir.SpecBehavior spec, Sig sig, Symbols symbols) {}
+    private record Read(Hir.SpecBehavior spec, Sig sig, RuleReadingSource rules) {}
 
     private static Read read(String source) {
         Compilation compilation =
@@ -166,6 +166,6 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("look")).findFirst().orElseThrow();
-        return new Read(spec, sigs.get("look"), Scopes.derived(compilation.db(), module).value());
+        return new Read(spec, sigs.get("look"), RuleReadings.of(compilation, module));
     }
 }

@@ -2,7 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.BlockedDescent;
 import souther.compiler.inputs.TermPath;
@@ -153,15 +154,14 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         return new BehaviorInputs(List.of("slot"),
                 compilation.db().ask(new souther.compiler.query.Bodies.Signatures(module)).value()
                         .get("gate").inputTypes(),
-                souther.compiler.query.Scopes.derived(compilation.db(), module).value(),
+                RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
-    private static Symbols symbolsOf() {
+    private static RuleReadingSource rulesOf() {
         Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
         compilation.answerEverything();
-        return souther.compiler.query.Scopes.derived(compilation.db(),
-                compilation.modules().get(0)).value();
+        return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     /** What the reading of that input says about its numbers, which is what a subject is asked
@@ -170,9 +170,9 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = souther.compiler.query.Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         return compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate")
-                .reading(symbols);
+                .reading(rules);
     }
 
     private static Partitions.Partitioning partitioningOf() {

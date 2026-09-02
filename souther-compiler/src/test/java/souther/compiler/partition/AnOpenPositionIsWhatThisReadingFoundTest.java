@@ -2,13 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.DefaultStdlib;
-import souther.compiler.ast.Ast;
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Resolve;
-import souther.compiler.check.SyntaxSymbols;
-import souther.compiler.check.Symbols;
-import souther.compiler.frontend.CstFrontend;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
@@ -62,15 +57,10 @@ class AnOpenPositionIsWhatThisReadingFoundTest {
             data Email = String invariant UNREAD
             """.replace("UNREAD", souther.compiler.ARuleNoReadingTakesIn.about("value"));
 
-    private final Symbols symbols = Symbols.of(resolved(), DefaultStdlib.get());
-
-    private static Hir.Module resolved() {
-        Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
-    }
+    private final RuleReadingSource rules = RuleReadings.ofSource(MODULE);
 
     private TypeSymbol named(String type) {
-        return TypeSymbols.declared(new TypeKey(symbols.module(), type));
+        return TypeSymbols.declared(new TypeKey(rules.symbols().module(), type));
     }
 
     /** As a parameter is read: under the declaration the signature wrote, with what is written
@@ -78,13 +68,13 @@ class AnOpenPositionIsWhatThisReadingFoundTest {
     private Position read(String type) {
         return InputDomain.of(
                         List.of(new InputDomain.Parameter("x", null, Type.ref(named(type)))),
-                        symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                        rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .at(TermPath.of("x"));
     }
 
     /** What the reading of {@code type} came to. */
     private LocalPartition partitionOf(String type) {
-        return LocalInspection.of(read(type), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return LocalInspection.of(read(type), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     /** A type that states cases divides the position, and no line is drawn through them. */

@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
@@ -35,6 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AsManyContainersAreOfferedAsAreWrittenDownTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+
+    private static final RuleReadingSource RULES = RuleReadings.ofNothingDeclared(SYMBOLS);
 
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
 
@@ -99,6 +103,6 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
                 .at(total, OF_WHOLE_NUMBERS, SYMBOLS);
         assertTrue(orders.answered() != null, "and the order it answers on is the elements'");
         return TermRealizations.at(OF_WHOLE_NUMBERS,
-                orders, SIX, NothingTheRulesSay.REGION, SYMBOLS, POLICY);
+                orders, SIX, NothingTheRulesSay.REGION, RULES, POLICY);
     }
 }

@@ -3,7 +3,6 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -46,12 +45,14 @@ class WhichRuleHoldsAnEndIsAskedOfTheRuleAndNotOfWhereItIsReadTest {
             let keep (h) = h
             """;
 
-    private final Symbols symbols = symbols();
+    private final RuleReadingSource rules = rules();
 
-    private static Symbols symbols() {
+    private final Symbols symbols = rules.symbols();
+
+    private static RuleReadingSource rules() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
-        return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
+        return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     private static TypeSymbol.AtModule named(String name) {
@@ -60,7 +61,7 @@ class WhichRuleHoldsAnEndIsAskedOfTheRuleAndNotOfWhereItIsReadTest {
 
     private FieldDomains reading() {
         Hir.Data data = (Hir.Data) symbols.declaredNode(named("Held"));
-        return FieldDomains.of(named("Held"), data, symbols,
+        return FieldDomains.of(named("Held"), data, rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

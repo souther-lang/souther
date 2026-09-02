@@ -2,7 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -10,7 +11,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -93,12 +93,13 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, () -> "the model under test writes " + behavior);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         souther.compiler.inputs.InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
                 checked.elementBindings().get(behavior));
-        return ReachingCuts.stating(Condition.of(body, reads, symbols), inputs, holding, symbols);
+        return ReachingCuts.stating(Condition.of(body, reads, rules.symbols()), inputs, holding,
+                rules);
     }
 
     /** Whether {@code cut} holds where {@code x} and {@code y} stand at these values. */

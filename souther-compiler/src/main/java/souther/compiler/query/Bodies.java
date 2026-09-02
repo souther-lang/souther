@@ -508,7 +508,7 @@ public final class Bodies {
             Answer<Map<String, StatedContract>> stated = db.ask(new StatedContracts(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<RuleReadingSource> reading =
-                    db.ask(new Shapes.RuleReading(name));
+                    Shapes.ruleReading(db, name);
             if (!stated.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
@@ -2027,7 +2027,7 @@ public final class Bodies {
                 db.ask(new souther.compiler.query.Adequacy.Inputs(module));
         Answer<Map<String, Sig>> sigs = db.ask(new Signatures(module));
         Answer<RuleReadingSource> reading =
-                db.ask(new Shapes.RuleReading(module));
+                Shapes.ruleReading(db, module);
         if (!scope.present() || !inputs.present() || !sigs.present() || !reading.present()) {
             return Map.of();
         }
@@ -2125,11 +2125,15 @@ public final class Bodies {
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
-            Answer<RuleReadingSource> reading =
-                    db.ask(new Shapes.RuleReading(name));
+            // Which of this module's declarations no value satisfies, asked for rather than worked
+            // out here. What the check reads is that fact; the clauses it was read from are not
+            // something a body's answer turns on, and depending on them would re-check every body
+            // beside a declaration that cannot change it.
+            Answer<List<souther.compiler.check.UninhabitableTypes.UninhabitableGroup>> withNoValue =
+                    db.ask(new Shapes.TypesWithNoValue(name));
             if (!lowering.present() || !scope.present()
                     || !injected.present() || !unwritten.present()
-                    || !reqSigs.present() || !sigs.present() || !reading.present()
+                    || !reqSigs.present() || !sigs.present() || !withNoValue.present()
                     || !calleeSigs.present() || !published.present()) {
                 return Answer.absent();
             }
@@ -2152,7 +2156,7 @@ public final class Bodies {
                     }
                 }
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
-                        reading.value(), db.ask(new Front.Reading()).value(),
+                        withNoValue.value(), db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), unwritten.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),

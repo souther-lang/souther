@@ -657,7 +657,7 @@ public final class Adequacy {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            Answer<RuleReadingSource> reading = db.ask(new Shapes.RuleReading(name));
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
             if (!prepared.present() || !scope.present() || !sigs.present() || !settled.present()
@@ -819,7 +819,7 @@ public final class Adequacy {
         souther.compiler.partition.Partitions.Partitioning divided =
                 db.ask(new Divided(module, spec.name())).value();
         Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
-        Answer<RuleReadingSource> reading = db.ask(new Shapes.RuleReading(module));
+        Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
         Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(module));
         if (divided == null || !scope.present() || !sigs.present() || !reading.present()) {
             return null;
@@ -870,7 +870,7 @@ public final class Adequacy {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            Answer<RuleReadingSource> reading = db.ask(new Shapes.RuleReading(name));
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             if (!prepared.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
@@ -1408,7 +1408,7 @@ public final class Adequacy {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            Answer<RuleReadingSource> reading = db.ask(new Shapes.RuleReading(name));
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()
                     || !reading.present()) {
@@ -1718,7 +1718,7 @@ public final class Adequacy {
                 db.ask(new Obligations(module, scope)).value();
         java.util.SequencedMap<souther.compiler.partition.BorderObligationPoint,
                 BorderAccount.Answer> resolved = new LinkedHashMap<>();
-        RuleReadingSource ruleReading = db.ask(new Shapes.RuleReading(module)).value();
+        RuleReadingSource ruleReading = Shapes.ruleReading(db, module).value();
         souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
         if (points == null || ruleReading == null || policy == null) {
             return new BorderAccount(module, scope, resolved);
@@ -2794,7 +2794,7 @@ public final class Adequacy {
                     planFor(subject, owed, partitions.get(behavior));
             souther.compiler.partition.FillResult composed;
             try {
-                composed = rowsFor(spec, sig, db.ask(new Shapes.RuleReading(name)).value(), asked,
+                composed = rowsFor(spec, sig, Shapes.ruleReading(db, name).value(), asked,
                         baselines(name, spec, sig,
                                 db.ask(new Bodies.ModuleDefinitions(name)).value(),
                                 prepared.value(), symbols,
@@ -3993,7 +3993,7 @@ public final class Adequacy {
             // Where a declaration is, which is what an owner is named by and is no part of what the
             // points are. Asked here, once, and its absence is this measure having no answer rather
             // than a debt built without it.
-            RuleReadingSource reading = db.ask(new Shapes.RuleReading(name)).value();
+            RuleReadingSource reading = Shapes.ruleReading(db, name).value();
             souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
             if (reading == null || policy == null) {
                 return Answer.absent();

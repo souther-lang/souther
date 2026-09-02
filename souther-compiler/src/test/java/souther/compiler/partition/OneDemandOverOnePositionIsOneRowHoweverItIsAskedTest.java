@@ -3,9 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
@@ -13,7 +14,6 @@ import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
@@ -145,7 +145,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(prepared);
             assertNotNull(sigs);
@@ -158,12 +158,12 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
-                    Partitions.of(spec.name(), inputs, symbols,
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
+                    Partitions.of(spec.name(), inputs, rules,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
                             checked.plan(), inputs,
-                            symbols));
+                            rules));
         }
     }
 }

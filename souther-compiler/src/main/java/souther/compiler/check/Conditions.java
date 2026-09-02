@@ -410,13 +410,6 @@ final class Conditions {
                 && call.args().size() == 1) {
             return new Restated(call.args().get(0), true);
         }
-        if (e instanceof Core.LetIn li) {
-            Restated inner = restated(li.body());
-            return inner != null && inner.denied()
-                    && inner.condition() instanceof Core.Read r
-                    && r.binding().equals(li.binder().binding())
-                    ? new Restated(li.value(), true) : null;
-        }
         if (e instanceof Core.If iff
                 && iff.then() instanceof Core.Bool t && !t.value()
                 && iff.els() instanceof Core.Bool f && f.value()) {

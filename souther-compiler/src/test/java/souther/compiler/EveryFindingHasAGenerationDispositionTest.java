@@ -2,6 +2,8 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.Adequacy;
@@ -929,11 +931,11 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     private static souther.compiler.partition.MeasuredInput nothingIsDivided() {
-        souther.compiler.check.Symbols symbols =
-                souther.compiler.check.Symbols.none(DefaultStdlib.get());
+        RuleReadingSource rules = RuleReadings.ofNothingDeclared(
+                souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         return souther.compiler.partition.MeasuredInput.of("pick",
-                souther.compiler.inputs.InputDomain.of(List.of(), symbols,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES).reading(symbols),
+                souther.compiler.inputs.InputDomain.of(List.of(), rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES).reading(rules),
                 souther.compiler.partition.AxesATestWrote.asAMeasurement("pick", List.of()));
     }
 

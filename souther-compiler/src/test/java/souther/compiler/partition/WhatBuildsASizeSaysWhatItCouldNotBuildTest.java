@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.types.Type;
 
@@ -25,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
 
-    private static final Symbols NONE = Symbols.none(DefaultStdlib.get());
+    private static final RuleReadingSource NONE =
+            RuleReadings.ofNothingDeclared(Symbols.none(DefaultStdlib.get()));
 
     @Test
     void aStringOfTheSizeAskedForIsBuilt() {

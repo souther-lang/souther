@@ -3,16 +3,16 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.math.BigDecimal;
@@ -129,8 +129,8 @@ class WhatRelatesTwoPositionsIsNotMovedByWhatIsReadUnderOneOfThemTest {
         TermPath at = TermPath.of("p").then(field);
         souther.compiler.types.Type type = read.inputs().at(at).type();
         NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
-                souther.compiler.check.NumericMeasures.takenOf(type, read.symbols()),
-                at, type, read.symbols());
+                souther.compiler.check.NumericMeasures.takenOf(type, read.rules().symbols()),
+                at, type, read.rules().symbols());
         assertNotNull(made, at + " is counted by what its type is counted by");
         return made;
     }
@@ -144,9 +144,9 @@ class WhatRelatesTwoPositionsIsNotMovedByWhatIsReadUnderOneOfThemTest {
                 Endpoint.inclusive(count(most)));
     }
 
-    private record Read(InputDomain inputs, Symbols symbols) {
+    private record Read(InputDomain inputs, RuleReadingSource rules) {
         Quantities quantities() {
-            return inputs.quantities(symbols);
+            return inputs.quantities(rules);
         }
     }
 
@@ -158,8 +158,8 @@ class WhatRelatesTwoPositionsIsNotMovedByWhatIsReadUnderOneOfThemTest {
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("take")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return new Read(InputDomain.of(spec, sigs.get("take"), symbols,
-                ReadAs.THE_COMPILATION_DOES), symbols);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return new Read(InputDomain.of(spec, sigs.get("take"), rules,
+                ReadAs.THE_COMPILATION_DOES), rules);
     }
 }

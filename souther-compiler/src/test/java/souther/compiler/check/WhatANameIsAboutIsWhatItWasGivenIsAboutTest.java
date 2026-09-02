@@ -15,7 +15,6 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -43,7 +42,9 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =
-            new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            new PathEngine(Symbols.none(DefaultStdlib.get()),
+                RuleReadings.nothingDeclared(Symbols.none(DefaultStdlib.get())),
+                Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
     @Test
     void aNameGivenAPlaceIsAboutThatPlace() {

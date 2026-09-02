@@ -2,11 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -93,7 +93,7 @@ class GeneratorTest {
                     | Some c -> c.number
             """;
 
-    private record Model(MeasuredInput subject, Symbols symbols) {}
+    private record Model(MeasuredInput subject, RuleReadingSource rules) {}
 
     private static Model modelOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -101,18 +101,18 @@ class GeneratorTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(prepared);
         assertNotNull(sigs);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(spec, sig, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(
-                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning),
-                symbols);
+                MeasuredInput.of(spec.name(), domain.reading(rules), partitioning),
+                rules);
     }
 
     private static List<String> texts(FillResult result) {
@@ -192,7 +192,7 @@ class GeneratorTest {
     // --- what a candidate says and what it does not ----------------------------------------------
 
     /** Two positions, each a bare number, so a hand-made class is the whole of what is at each. */
-    private static MeasuredInput twoNumbers(Symbols symbols, List<PartitionClass> left,
+    private static MeasuredInput twoNumbers(RuleReadingSource rules, List<PartitionClass> left,
                                                 List<PartitionClass> right) {
         NumericTerm.ValueOf atA = new NumericTerm.ValueOf(TermPath.of("a"));
         NumericTerm.ValueOf atB = new NumericTerm.ValueOf(TermPath.of("b"));
@@ -201,20 +201,20 @@ class GeneratorTest {
         // Axes written here rather than read off a model, so nothing counts a container of this
         // input. The reading is still the input's own: what a number at one of these positions is
         // measured on is what the declarations say, and the subject asks it for that.
-        return MeasuredInput.of("f", readingOf(symbols, "a", "b"),
+        return MeasuredInput.of("f", readingOf(rules, "a", "b"),
                 AxesATestWrote.asAMeasurement("f", List.of(a, b)));
     }
 
     /** The reading of an input whose parameters are bare numbers, which is what says what a number
      *  at one of them is measured on. */
-    private static souther.compiler.inputs.InputReading readingOf(Symbols symbols,
+    private static souther.compiler.inputs.InputReading readingOf(RuleReadingSource rules,
                                                                   String... parameters) {
         List<souther.compiler.inputs.InputDomain.Parameter> declared = new java.util.ArrayList<>();
         for (String each : parameters) {
             declared.add(new souther.compiler.inputs.InputDomain.Parameter(each, null, Type.INT));
         }
-        return souther.compiler.inputs.InputDomain.of(declared, symbols,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).reading(symbols);
+        return souther.compiler.inputs.InputDomain.of(declared, rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).reading(rules);
     }
 
     /** The classes said to be of the number the axis they are put on measures, which is what a
@@ -242,8 +242,8 @@ class GeneratorTest {
      */
     @Test
     void aRefusedValueIsFollowedByTheNextOne() {
-        Symbols symbols = modelOf(TRIP, "submit").symbols();
-        MeasuredInput subject = twoNumbers(symbols, List.of(number("low", 1, 2)),
+        RuleReadingSource rules = modelOf(TRIP, "submit").rules();
+        MeasuredInput subject = twoNumbers(rules, List.of(number("low", 1, 2)),
                 List.of(number("high", 10, 20)));
         Generator.CandidateCheck refusesTheFirst = Generator.CandidateCheck.refusing(
                 (at, candidate) -> candidate.text().equals("1") || candidate.text().equals("10")
@@ -266,8 +266,8 @@ class GeneratorTest {
      */
     @Test
     void everyCandidateRefusedIsSaidAsItsOwnReason() {
-        Symbols symbols = modelOf(TRIP, "submit").symbols();
-        MeasuredInput subject = twoNumbers(symbols, List.of(number("low", 1)),
+        RuleReadingSource rules = modelOf(TRIP, "submit").rules();
+        MeasuredInput subject = twoNumbers(rules, List.of(number("low", 1)),
                 List.of(number("high", 10)));
 
         FillResult filled =
@@ -288,8 +288,8 @@ class GeneratorTest {
     /** A class nothing can write a value for is still a class, and the row it wants is still owed. */
     @Test
     void aClassWithNoValueIsNamedRatherThanDropped() {
-        Symbols symbols = modelOf(TRIP, "submit").symbols();
-        MeasuredInput subject = twoNumbers(symbols,
+        RuleReadingSource rules = modelOf(TRIP, "submit").rules();
+        MeasuredInput subject = twoNumbers(rules,
                 List.of(PartitionClass.ungeneratable("opaque", "opaque", new Recognition.Nothing(), "no value")),
                 List.of(number("high", 10)));
 
@@ -311,8 +311,8 @@ class GeneratorTest {
      */
     @Test
     void whatHadNoValueIsNamedRatherThanTheCombinationsThatWantedIt() {
-        Symbols symbols = modelOf(TRIP, "submit").symbols();
-        MeasuredInput subject = twoNumbers(symbols,
+        RuleReadingSource rules = modelOf(TRIP, "submit").rules();
+        MeasuredInput subject = twoNumbers(rules,
                 List.of(PartitionClass.ungeneratable("opaque", "opaque", new Recognition.Nothing(), "no value"),
                         number("low", 1)),
                 List.of(number("high", 10), number("higher", 20)));
@@ -376,8 +376,8 @@ class GeneratorTest {
      */
     @Test
     void aClassThatSaidWhyNothingWasComposedIsNotReportedAsHavingNoValue() {
-        Symbols symbols = modelOf(TRIP, "submit").symbols();
-        MeasuredInput subject = twoNumbers(symbols,
+        RuleReadingSource rules = modelOf(TRIP, "submit").rules();
+        MeasuredInput subject = twoNumbers(rules,
                 List.of(PartitionClass.ungeneratable("empty", "empty", new Recognition.Nothing(),
                         "no value this position can hold lies inside this range")),
                 List.of(number("high", 10)));
@@ -402,11 +402,11 @@ class GeneratorTest {
      */
     @Test
     void onePositionHasNoPairsAndItsClassesStillOweRows() {
-        Symbols symbols = modelOf(TRIP, "submit").symbols();
+        RuleReadingSource rules = modelOf(TRIP, "submit").rules();
         NumericTerm.ValueOf atA = new NumericTerm.ValueOf(TermPath.of("a"));
         Axis only = new Axis(new AxisId("f", "a"), atA,
                 classesOf(List.of(number("low", 1), number("high", 9)), atA), List.of());
-        MeasuredInput subject = MeasuredInput.of("f", readingOf(symbols, "a"),
+        MeasuredInput subject = MeasuredInput.of("f", readingOf(rules, "a"),
                 AxesATestWrote.asAMeasurement("f", List.of(only)));
 
         FillResult filled =

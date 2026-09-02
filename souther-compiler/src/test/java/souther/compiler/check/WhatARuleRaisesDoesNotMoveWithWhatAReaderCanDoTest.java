@@ -95,6 +95,6 @@ class WhatARuleRaisesDoesNotMoveWithWhatAReaderCanDoTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "P"));
         Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `P` declared");
-        return FieldDomains.of(named, data, symbols, policy);
+        return FieldDomains.of(named, data, RuleReadings.of(compilation, module), policy);
     }
 }

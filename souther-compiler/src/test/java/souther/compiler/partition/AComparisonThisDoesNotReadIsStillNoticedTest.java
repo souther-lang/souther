@@ -2,10 +2,10 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.BlockReason;
@@ -66,7 +66,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
@@ -75,7 +75,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
         return GuardThresholds.of(body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), rules);
     }
 
     /** A comparison this reads is not also reported as one it did not. */

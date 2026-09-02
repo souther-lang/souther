@@ -114,6 +114,7 @@ class WhatARuleIsAboutIsReadWithoutItsEndTest {
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Type type = sigs.get("take").inputTypes().get(0);
-        return DeclaredSubjects.of(type, symbols, ReadAs.THE_COMPILATION_DOES);
+        return DeclaredSubjects.of(type, RuleReadings.of(compilation, module),
+                ReadAs.THE_COMPILATION_DOES);
     }
 }

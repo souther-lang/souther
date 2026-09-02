@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -28,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class ASubjectNamesTheBehaviorItsAxesAreOfTest {
 
-    private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+    private static final RuleReadingSource SYMBOLS =
+            RuleReadings.ofNothingDeclared(Symbols.none(DefaultStdlib.get()));
 
     /** The reading of an input of one parameter, which is what a subject is asked its numbers
      *  through. */

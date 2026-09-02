@@ -3,6 +3,8 @@ package souther.compiler.reading;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
@@ -12,7 +14,6 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.Type;
 
 import java.util.List;
@@ -139,11 +140,11 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("gate");
         assertNotNull(body, "the behavior under test has a body");
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate");
         assertNotNull(inputs, "the behavior's input is read");
         return new Read(CoverageRead.of("gate", body,
                 checked.plan(),
-                inputs, symbols), inputs, symbols);
+                inputs, rules), inputs, rules.symbols());
     }
 }

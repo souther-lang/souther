@@ -51,7 +51,8 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         assertTrue(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
                 "`" + reader + "` has no value while nothing is granted");
         assertFalse(solved.granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), granted))))
@@ -134,7 +135,8 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        assertTrue(TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+        assertTrue(TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                         .granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Granted")))).get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))).none(),
                 "and what it wraps was not granted anything");
     }
@@ -167,7 +169,8 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertEquals(List.of(true, true),
                 List.of(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "A"))).none(),

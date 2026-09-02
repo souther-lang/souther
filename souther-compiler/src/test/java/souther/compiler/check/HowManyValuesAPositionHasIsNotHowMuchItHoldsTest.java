@@ -39,7 +39,9 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
                         .map(each -> each.diagnostic().code().toString()).toList(),
                 "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        return OccurrenceValues.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)), data(compilation, name), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+        return OccurrenceValues.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
+                data(compilation, name), RuleReadings.of(compilation, "demo"),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .wholeValuesAt(path);
     }
 

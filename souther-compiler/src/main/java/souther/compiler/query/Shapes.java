@@ -5,6 +5,8 @@ import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.InvariantSettled;
+import souther.compiler.check.Lower;
+import souther.compiler.check.UninhabitableTypes;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
 import souther.compiler.check.ExecutableInvariants;
@@ -462,7 +464,7 @@ public final class Shapes {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
             Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             Answer<RuleReadingSource> reading =
-                    db.ask(new RuleReading(name));
+                    ruleReading(db, name);
             if (!expandable.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
@@ -502,32 +504,64 @@ public final class Shapes {
     }
 
     /**
-     * What reading this module's declarations as a static analysis takes: its scope, and its clauses
-     * in the representation that analysis reads.
+     * Which of this module's declarations no value satisfies, and what shows it.
      *
-     * <p>Where the two meet, and the reason they meet in a node of their own. The representation's
-     * own answer is computed from the scope, so a scope that carried it would be a query depending on
-     * itself; asked separately, a reader that needs both can be given one. What a reader below is
-     * handed is the pair or nothing.
+     * <p>An answer of its own so that what a body's check depends on is this and not the clauses it
+     * was worked out from. A body is refused where a type it names has no value, so the fact is one
+     * a body's check reads; the clauses of every declaration beside it are not, and a check that
+     * reached for them would be re-run by a declaration that cannot change its answer.
+     *
+     * <p>What is answered is the groups and not the diagnostics they are rendered as. A group is
+     * some names and what showed them empty, which two readings of the same module settle the same
+     * way; a diagnostic carries a position and a sentence, and comparing those would make this
+     * answer differ whenever the file moved.
      */
-    public record RuleReading(String name)
-            implements Key<RuleReadingSource> {
+    public record TypesWithNoValue(String name)
+            implements Key<List<UninhabitableTypes.UninhabitableGroup>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<RuleReadingSource> compute(Db db) {
-            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
-            Answer<AnalysisInvariants> clauses =
-                    db.ask(new InvariantsForDischarge(name));
-            if (!scope.present() || !clauses.present()) {
+        public Answer<List<UninhabitableTypes.UninhabitableGroup>> compute(Db db) {
+            Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
+            Answer<RuleReadingSource> reading = ruleReading(db, name);
+            Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
+            if (!lowering.present() || !reading.present() || !policy.present()) {
                 return Answer.absent();
             }
-            return Answer.of(new RuleReadingSource(
-                    scope.value(), clauses.value()));
+            List<Hir.Def> declarations = lowering.value().settled().defs();
+            try {
+                return Answer.of(UninhabitableTypes.withNoValueOfTheirOwn(declarations,
+                        souther.compiler.check.TypeCardinality.solve(
+                                declarations, reading.value(), policy.value())));
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
         }
+    }
+
+    /**
+     * What reading this module's declarations as a static analysis takes: its scope, and its clauses
+     * in the representation that analysis reads.
+     *
+     * <p>Where the two meet. The representation's own answer is computed from the scope, so a scope
+     * that carried it would be a query depending on itself; asked separately, a reader that needs
+     * both can be given one. What a reader below is handed is the pair or nothing.
+     *
+     * <p>Paired here and not memoised as an answer of its own. What a query answers has to say when
+     * two of them are the same thing, and a scope does not: made an answer, this pair would compare
+     * by identity, every recomputation would look like a change, and everything downstream of a
+     * module's clauses would be re-checked on a blank line. The two halves are answers and settle
+     * that between them; the pair is what a caller holds while it reads.
+     */
+    public static Answer<RuleReadingSource> ruleReading(Db db, String name) {
+        Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+        Answer<AnalysisInvariants> clauses = db.ask(new InvariantsForDischarge(name));
+        return scope.present() && clauses.present()
+                ? Answer.of(new RuleReadingSource(scope.value(), clauses.value()))
+                : Answer.absent();
     }
 
     /**

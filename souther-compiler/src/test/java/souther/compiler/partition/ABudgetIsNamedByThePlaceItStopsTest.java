@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
@@ -42,6 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class ABudgetIsNamedByThePlaceItStopsTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+
+    private static final RuleReadingSource RULES = RuleReadings.ofNothingDeclared(SYMBOLS);
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
 
     /**
@@ -55,10 +59,10 @@ class ABudgetIsNamedByThePlaceItStopsTest {
         int most = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
 
         assertEquals(Set.of(),
-                Witnesses.heldBackFor(Type.list(Type.INT), most, SYMBOLS, POLICY),
+                Witnesses.heldBackFor(Type.list(Type.INT), most, RULES, POLICY),
                 "a collection of exactly as many as a row carries is one this builds");
         assertEquals(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
-                Witnesses.heldBackFor(Type.list(Type.INT), most + 1, SYMBOLS, POLICY),
+                Witnesses.heldBackFor(Type.list(Type.INT), most + 1, RULES, POLICY),
                 "and one past it is this compiler declining, said as the figure it declined at");
     }
 
@@ -67,10 +71,10 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     void aProposalHoldsAsManyCharactersAsItsOwnFigure() {
         int most = CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum();
 
-        assertEquals(Set.of(), Witnesses.heldBackFor(Type.STRING, most, SYMBOLS, POLICY),
+        assertEquals(Set.of(), Witnesses.heldBackFor(Type.STRING, most, RULES, POLICY),
                 "a string of exactly as many characters as one is worth building");
         assertEquals(Set.of(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS),
-                Witnesses.heldBackFor(Type.STRING, most + 1, SYMBOLS, POLICY),
+                Witnesses.heldBackFor(Type.STRING, most + 1, RULES, POLICY),
                 "and one past it names the string's figure and not the collection's");
     }
 
@@ -105,7 +109,7 @@ class ABudgetIsNamedByThePlaceItStopsTest {
         TermOrders orders = souther.compiler.inputs.TermOrdersFixtures
                 .at(sum, ofWholeNumbers, SYMBOLS);
         return TermRealizations.at(ofWholeNumbers, orders, Count.of(total),
-                NothingTheRulesSay.REGION, SYMBOLS, POLICY);
+                NothingTheRulesSay.REGION, RULES, POLICY);
     }
 
     /** Every budget the enum names has a figure, and a figure nobody could reach is not one. */

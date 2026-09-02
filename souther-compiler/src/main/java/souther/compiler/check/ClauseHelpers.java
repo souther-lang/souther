@@ -81,13 +81,19 @@ public final class ClauseHelpers {
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
                 published, InliningPolicy.DISCHARGE, symbols.library());
         Map<TypeSymbol.AtModule, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
-        // Every declaration this module makes, and not the ones with something to say. What is
-        // filed for a declaration is its reading, and a declaration whose reading is nothing has
-        // one — so an absent entry is this module's reading having failed to arrive rather than a
-        // declaration that wrote no clause, which is the difference {@link AnalysisInvariants}
-        // rests on.
+        // The declarations that wrote a clause, which is what there is a reading of. A declaration
+        // that wrote none is left out and is not a gap: whether one is missing is asked of the
+        // declaration rather than of this map ({@link AnalysisInvariants#clausesOf}), so that
+        // writing a declaration with no clause leaves this answer where it was — and everything a
+        // module's clauses are read by with it.
         for (Hir.Def def : settled.defs()) {
-            if (def instanceof Hir.Data d) {
+            // With the constructions in the clauses written as constructions, which is the same
+            // normalising the settled form has had ({@link Normalized.Def}). What tells the two
+            // representations apart is what {@link InliningPolicy} says and nothing else: a value
+            // built by naming its declaration is a construction in either, and a reader that met it
+            // as an application here would read one clause in one form and not in the other.
+            if (NewtypeDesugar.rewriteInvariantsOf(def, symbols) instanceof Hir.Data d
+                    && !d.invariants().isEmpty()) {
                 TypeSymbol.AtModule declared = d.declares();
                 out.put(declared, Hir.mapClauses(d.invariants(),
                         clause -> inliner.inline(clause, new BindingOwner.OfData(declared))));

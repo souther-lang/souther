@@ -2,13 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.util.List;
 import java.util.Map;
@@ -68,7 +68,7 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
@@ -77,7 +77,7 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
         Map<String, souther.compiler.inputs.InputDomain> inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value();
         GuardThresholds.Guards guards =
-                GuardThresholds.of(body, plan, inputs.get(behavior), symbols);
+                GuardThresholds.of(body, plan, inputs.get(behavior), rules);
         // By what the walk came to and not by which site it is filed under, nor by where the
         // conditions are written. Two spellings number their comparisons differently and write
         // them in different places, and what they state is the same.

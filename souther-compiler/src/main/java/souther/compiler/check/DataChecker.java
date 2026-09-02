@@ -443,18 +443,16 @@ public final class DataChecker {
      *
      * <p>What that count is and how it is reached is {@link TypeCardinality}; which of the
      * declarations with no value to say so about, and what showed it of the one the report sits at,
-     * is {@link UninhabitableTypes}. What is left here is saying it.
+     * is {@link UninhabitableTypes}, asked for as an answer of its own. What is left here is saying
+     * it: the groups arrive worked out, and this writes the sentence and places it.
      *
      * <p>The proof arrives with the group and nothing here reads the declaration again to work out
      * which sentence to write. That is the whole of why it arrives: a reader that picked between two
      * sentences by looking at the declaration a second time would be a second reader of a question
      * the count already answered, free to pick the sentence the count did not mean.
      */
-    static List<CompileException> typesWithNoValue(List<Hir.Def> declarations,
-                                                   RuleReadingSource source,
-                                                   ReadingPolicy policy) {
-        List<UninhabitableTypes.UninhabitableGroup> groups = UninhabitableTypes.withNoValueOfTheirOwn(
-                declarations, TypeCardinality.solve(declarations, source, policy));
+    static List<CompileException> typesWithNoValue(
+            List<UninhabitableTypes.UninhabitableGroup> groups, Symbols symbols) {
         // How many of the lacks reported here each declaration is part of. A declaration in one of
         // them is a declaration whose lack the group accounts for entirely, and a suggestion about
         // that group is a way out. A declaration in two is in neither's: what a group is established
@@ -466,7 +464,7 @@ public final class DataChecker {
         }
         List<CompileException> found = new ArrayList<>();
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
-            Hir.Def at = source.symbols().declaredNode(group.reportedAt());
+            Hir.Def at = symbols.declaredNode(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
                     new Emptiness.AtAField.Where.TheValueItself(), group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));

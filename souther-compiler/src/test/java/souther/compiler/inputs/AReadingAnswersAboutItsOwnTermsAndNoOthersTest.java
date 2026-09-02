@@ -3,6 +3,8 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
@@ -31,11 +33,13 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
 
+    private static final RuleReadingSource RULES = RuleReadings.ofNothingDeclared(SYMBOLS);
+
     /** A reading of one behavior's input, which takes a string called {@code s}. */
     private static Quantities readingOfAString() {
         return InputDomain.of(
                 List.of(new InputDomain.Parameter("s", null, Type.STRING)),
-                SYMBOLS, ReadAs.THE_COMPILATION_DOES).quantities(SYMBOLS);
+                RULES, ReadAs.THE_COMPILATION_DOES).quantities(RULES);
     }
 
     /** A reading of another behavior's input, which takes a whole number called {@code n} and has
@@ -43,7 +47,7 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
     private static Quantities readingOfANumber() {
         return InputDomain.of(
                 List.of(new InputDomain.Parameter("n", null, Type.INT)),
-                SYMBOLS, ReadAs.THE_COMPILATION_DOES).quantities(SYMBOLS);
+                RULES, ReadAs.THE_COMPILATION_DOES).quantities(RULES);
     }
 
     /** How long the string at {@code s} is, which is a term of the first reading. */
@@ -96,10 +100,10 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
     void twoReadingsWithAParameterSpelledAlikeAreNotOneReading() {
         InputReading text = InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.STRING)),
-                SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS);
+                RULES, ReadAs.THE_COMPILATION_DOES).reading(RULES);
         InputReading number = InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.INT)),
-                SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS);
+                RULES, ReadAs.THE_COMPILATION_DOES).reading(RULES);
         NumericTerm at = new NumericTerm.ValueOf(TermPath.of("x"));
 
         assertEquals(souther.compiler.check.Carrier.TEXT,

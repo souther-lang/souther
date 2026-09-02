@@ -24,9 +24,11 @@ import java.util.Map;
  * because that is what its analysis representation <em>is</em> (spec §invariant-discharge), and
  * refuses to answer for one of this module's that is missing.
  *
- * <p>Total over this module's declarations, which is what makes that refusal mean something. A
- * declaration with no clauses is filed with none rather than left out, so an absent key is never a
- * declaration that had nothing to say.
+ * <p>What is filed is the declarations that wrote a clause. Whether an absent one is a gap is asked
+ * of the declaration — it wrote clauses or it did not — rather than by holding a key for every
+ * declaration a module makes. Held the other way this value would change when a declaration with no
+ * clause was written, and everything a module's clauses are read by would be worked out again for a
+ * declaration that cannot change any of it.
  *
  * <p>Refused as a disagreement and not as a limit. An analysis that meets a shape it has no rule for
  * falls open and the run-time check stands; this is the other kind, and swallowing it would leave a
@@ -66,6 +68,24 @@ public final class AnalysisInvariants {
     }
 
     /**
+     * Two of these are one where they are the same clauses of the same module.
+     *
+     * <p>An answer of a query, so what it is settled by decides what a reader downstream is asked
+     * to do again: read as one thing, a module whose clauses are what they were leaves everything
+     * that reads them where it was, and read as two, a blank line anywhere re-checks every body.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof AnalysisInvariants each
+                && module.equals(each.module) && written.equals(each.written);
+    }
+
+    @Override
+    public int hashCode() {
+        return module.hashCode() * 31 + written.hashCode();
+    }
+
+    /**
      * The clauses of {@code named} as the analysis reads them, with {@code data} the declaration
      * they were written on.
      *
@@ -80,10 +100,17 @@ public final class AnalysisInvariants {
             return data.invariants();
         }
         List<Hir.InvariantClause> clauses = written.get(named);
-        if (clauses == null) {
+        if (clauses != null) {
+            return clauses;
+        }
+        // Nothing filed, which the declaration itself tells apart: one that wrote no clause has
+        // none to read, and one that wrote clauses and has none here is this module's reading
+        // having failed to arrive. Asked of the declaration and not of a key for every one of them,
+        // so that writing a declaration with no clause leaves this value where it was.
+        if (!data.invariants().isEmpty()) {
             throw new NothingWasFiledFor(named, module);
         }
-        return clauses;
+        return List.of();
     }
 
     /**

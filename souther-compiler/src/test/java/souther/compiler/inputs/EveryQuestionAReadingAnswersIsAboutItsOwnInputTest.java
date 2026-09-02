@@ -3,6 +3,8 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
@@ -40,13 +42,15 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
 
+    private static final RuleReadingSource RULES = RuleReadings.ofNothingDeclared(SYMBOLS);
+
     /** The questions that are about the reading itself and name no place in it. */
     private static final List<String> ABOUT_THE_WHOLE_READING = List.of("region", "emptiness");
 
     /** A reading of an input that takes one whole number, and nothing called {@code s}. */
     private static Quantities reading() {
         return InputDomain.of(List.of(new InputDomain.Parameter("n", null, Type.INT)),
-                SYMBOLS, ReadAs.THE_COMPILATION_DOES).quantities(SYMBOLS);
+                RULES, ReadAs.THE_COMPILATION_DOES).quantities(RULES);
     }
 
     /** A term of another input, whose root this reading takes nothing under. */

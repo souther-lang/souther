@@ -171,6 +171,6 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.forms", name));
-        return DeclaredBorders.of(named, symbols, policy);
+        return DeclaredBorders.of(named, RuleReadings.of(compilation, module), policy);
     }
 }

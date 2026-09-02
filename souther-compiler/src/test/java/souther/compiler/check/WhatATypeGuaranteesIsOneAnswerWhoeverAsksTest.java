@@ -5,7 +5,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
@@ -66,17 +65,19 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
             let keep (m) = m
             """;
 
-    private final Symbols symbols = symbols();
+    private final RuleReadingSource rules = rules();
 
-    private final PathEngine engine = new PathEngine(symbols, Map.of(),
+    private final Symbols symbols = rules.symbols();
+
+    private final PathEngine engine = new PathEngine(symbols, rules.invariants(),
             Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
     private final GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees(), symbols);
 
-    private static Symbols symbols() {
+    private static RuleReadingSource rules() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
-        return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
+        return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     private static TypeSymbol named(String name) {
