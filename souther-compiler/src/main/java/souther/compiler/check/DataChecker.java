@@ -72,7 +72,7 @@ public final class DataChecker {
         if (e instanceof Hir.NewData nd
                 && nd.typeName().answered() instanceof Hir.Name.Denoting built
                 && built.type() instanceof TypeSymbol.AtModule constructed
-                && symbols.declarations().declaration(constructed) instanceof Hir.Data nt
+                && symbols.declaredNode(constructed) instanceof Hir.Data nt
                 && nt.newtype() && isInvariantBearing(constructed, symbols)) {
             CallElaborator.newtypeConstantArg(nd, symbols).ifPresent(v ->
                     out.add(new ConstCheck(nd.typeName().written(), constructed, v, nd.pos())));
@@ -81,7 +81,7 @@ public final class DataChecker {
     }
 
     public static boolean isInvariantBearing(TypeSymbol typeName, Symbols symbols) {
-        return typeName != null && symbols.declarations().declaration(typeName) instanceof Hir.Data d
+        return typeName != null && symbols.declaredNode(typeName) instanceof Hir.Data d
                 && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
     }
 
@@ -344,7 +344,7 @@ public final class DataChecker {
      * out — codec derivation runs before this check and stops at the repeat for the same reason. */
     private static List<String> sumCycle(TypeSymbol target, Symbols symbols,
                                          LinkedHashSet<TypeSymbol> path) {
-        if (!(symbols.declarations().declaration(
+        if (!(symbols.declaredNode(
                 path.isEmpty() ? target : last(path)) instanceof Hir.SumData s)) {
             return null;
         }
@@ -362,7 +362,7 @@ public final class DataChecker {
                 out.add(caseName.written());
                 return out;
             }
-            if (symbols.declarations().declaration(names.type()) instanceof Hir.SumData
+            if (symbols.declaredNode(names.type()) instanceof Hir.SumData
                     && path.add(names.type())) {
                 List<String> found = sumCycle(target, symbols, path);
                 if (found != null) {
@@ -470,7 +470,7 @@ public final class DataChecker {
         }
         List<CompileException> found = new ArrayList<>();
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
-            Hir.Def at = symbols.declarations().declaration(group.reportedAt());
+            Hir.Def at = symbols.declaredNode(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
                     new Emptiness.AtAField.Where.TheValueItself(), group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));
@@ -568,7 +568,15 @@ public final class DataChecker {
         };
     }
 
-    static void checkData(CheckContext ctx) {
+    /**
+     * The declaration, and the boundary representation derived for it.
+     *
+     * <p>The two together because the second is checked against the first. It arrives as
+     * {@link Derived.Data} rather than being looked for: a product that reached this stage has a
+     * decoder and an encoder, and taking them from what says so is what leaves no state here in
+     * which a check is skipped because a declaration turned out to have none.
+     */
+    static void checkData(Derived.Data derived, CheckContext ctx) {
         Map<String, Type> fields = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
 
         // A newtype wraps one value and takes its representation, so there is nothing for it to be
@@ -614,8 +622,8 @@ public final class DataChecker {
         // is what having one owner is for.
         checkClauseNames(ctx.data(), ctx.symbols());
 
-        ctx.data().decoder().ifPresent(dec -> checkDecoder(dec, ctx, fields));
-        ctx.data().encoder().ifPresent(enc -> checkEncoder(enc, ctx));
+        checkDecoder(derived.decoder(), ctx, fields);
+        checkEncoder(derived.encoder(), ctx);
     }
 
     private static Scope fieldScope(CheckContext ctx) {
@@ -665,53 +673,16 @@ public final class DataChecker {
         }
     }
 
-    /**
-     * Whether a codec is there to be reached for (spec {@code [#a-codec-reached-for-exists]}).
-     *
-     * <p>Read of the declaration and not of a node on it. A unit data carries no derived decoder — it
-     * has no field for one to read — and is decoded all the same, by the one its class is generated
-     * with, which ignores its input and answers the single value there is. Reading the node refused a
-     * field written from a unit data while the same type crossed a behavior's boundary, which is a
-     * disagreement about the compiler's representation rather than about the model.
-     *
-     * <p>Whose vocabulary the name is, is asked before this and elsewhere
-     * ({@code CrossingNominal}), so what is left here is the specification's other rule: a codec
-     * named where none was derived and none was given.
-     */
-    private static boolean hasDecoder(Hir.Def def) {
-        return switch (def) {
-            case Hir.Data d -> d.decoder().isPresent();
-            // A sum is always read: how its alternatives are told apart is derived from the
-            // declaration wherever it is wanted, so there is no state in which it has no decoder —
-            // the same reason a unit data has none to carry and is decoded all the same.
-            case Hir.SumData _ -> true;
-            case Hir.UnitData _ -> true;
-            case null -> false;
-        };
-    }
-
-    /** As {@link #hasDecoder}, for the other direction. */
-    private static boolean hasEncoder(Hir.Def def) {
-        return switch (def) {
-            case Hir.Data d -> d.encoder().isPresent();
-            case Hir.SumData _ -> true;
-            case Hir.UnitData _ -> true;
-            case null -> false;
-        };
-    }
-
     private static Type decRefType(Hir.DecRef ref, Symbols symbols) {
         return switch (ref) {
             case Hir.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
             case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
-            case Hir.DataDecRef d -> {
-                if (!hasDecoder(symbols.declarations().declaration(names(d.typeName())))) {
-                    throw CompileException.of(Diagnostic.at(d.pos())
-                            .say(new CodecMessage.HasNoDecoder(d.typeName().written()))
-                            .build());
-                }
-                yield Type.ref(names(d.typeName()));
-            }
+            // What a bind reads through is the named type, and that it is read at all is settled by
+            // the stage that made this reference: a declaration that came out has a decoder, and a
+            // reference to one is minted from the shape a declaration was found to have. Nothing is
+            // asked about the name here — whose vocabulary it is, is asked before this and
+            // elsewhere ({@code CrossingNominal}).
+            case Hir.DataDecRef d -> Type.ref(names(d.typeName()));
             case Hir.ListDecRef l -> Type.list(decRefType(l.element(), symbols));
             case Hir.OptionDecRef o -> Type.option(decRefType(o.element(), symbols));
             case Hir.MapDecRef mp -> Type.map(mp.key().type(), decRefType(mp.value(), symbols));
@@ -795,11 +766,11 @@ public final class DataChecker {
             String sp = read.name();
             Type bound = env.typeOf(read.binding());
             if (bound instanceof Type.Ref ref
-                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.SumData sum) {
+                    && ctx.symbols().declaredNode(ref.name()) instanceof Hir.SumData sum) {
                 fromSums.add(Type.show(bound));
                 spread.add(new Spread(read, spreadOfSum(sp, sum, bound, pos, ctx)));
             } else if (bound instanceof Type.Ref ref
-                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.Data sd) {
+                    && ctx.symbols().declaredNode(ref.name()) instanceof Hir.Data sd) {
                 spread.add(new Spread(read, TypeOps.fieldTypes(sd, ctx.symbols())));
             } else {
                 Diagnostic.Builder d = Diagnostic.at(pos)
@@ -938,12 +909,6 @@ public final class DataChecker {
                 }
             }
             case Hir.EncodeRaw e -> {
-                if (!hasEncoder(ctx.symbols().declarations()
-                        .declaration(names(e.typeName())))) {
-                    throw CompileException.of(Diagnostic.at(e.pos())
-                            .say(new CodecMessage.HasNoEncoder(e.typeName().written()))
-                            .build());
-                }
                 Elaborator.requireType(e.arg(), Type.ref(names(e.typeName())), env, ctx,
                         "argument of " + e.typeName().written() + ".encode");
             }
@@ -986,11 +951,20 @@ public final class DataChecker {
                 }
             }
             case Hir.DataEnc d -> {
-                // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec §encoder-derivation)
-                Hir.Def def = symbols.declarations().declaration(names(d.typeName()));
-                boolean hasEncoder = (def instanceof Hir.Data dd && dd.encoder().isPresent())
-                        || def instanceof Hir.SumData;
-                if (!elemType.equals(Type.ref(names(d.typeName()))) || !hasEncoder) {
+                // Which kind of declaration it is, and not whether one wrote a representation: the
+                // element may be a product or a sum (`List<事前承認理由>` holds a sum, spec
+                // §encoder-derivation), and a unit writes nothing of its own to stand as an element.
+                boolean writesAnElement = switch (symbols.declaredNode(names(d.typeName()))) {
+                    case Hir.Data _, Hir.SumData _ -> true;
+                    case Hir.UnitData _ -> false;
+                    // The reference was minted from a shape a declaration was found to have, so
+                    // there is one. Reported as this compiler's own rather than as a disagreement
+                    // between the encoder and the element, which is what it is not.
+                    case null -> throw new IllegalStateException(
+                            "nothing declares `" + d.typeName().written()
+                                    + "`, which an element encoder was written against");
+                };
+                if (!elemType.equals(Type.ref(names(d.typeName()))) || !writesAnElement) {
                     throw elemEncMismatch(d.typeName().written(), elemType, pos);
                 }
             }

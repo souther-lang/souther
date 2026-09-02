@@ -8,6 +8,7 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -225,13 +226,14 @@ public final class EnsuresThresholds {
         // No arrival either: a clause stands in no body, it is checked whenever the behavior
         // answers, so there is nothing on the way to it and what arrives is the declarations'
         // whole domain — which is what an arrival that restricts nothing reads as.
-        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, read,
+        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison,
+                Citation.of(e.pos()), read,
                 reads, rule.value(), false,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
-        reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison.at(), rule.value(),
+        reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
                 assessed.whatEachPlaceIsLeftWith(), out.rulesWithoutALine());
         // And the geometry, which is this reader's own. Only the two arms that draw something have
         // anything to add here.

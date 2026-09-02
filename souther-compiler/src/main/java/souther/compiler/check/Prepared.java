@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.CompileException;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -42,113 +41,90 @@ import java.util.Set;
  */
 public final class Prepared {
 
+    /** That every declaration this module writes came out and every definition it wrote did — the
+     *  half a reader wanting a whole module has, and the half {@link CheckSurface} does not claim. */
     private final Desugared.Module desugared;
-    private final List<Desugared.Fn> fns;
-    private final List<Example> examples;
-    private final List<FakeTable> fakes;
+    private final CheckSurface surface;
     private final List<Hir.FnDef> takenOn;
-    /**
-     * The definitions minted for this module's row operands.
-     *
-     * <p>Their own component, and not among what the module took on. A row's operand is a value this
-     * compilation writes for it, reached from a row and from nothing a source can spell — so it is
-     * not a declaration a name resolves to, and a table of what names reach has no business holding
-     * one. Carried here beside the correspondence they were built with, which is the one walk that
-     * knows both.
-     */
-    private final List<Hir.FnDef> rowDefs;
-    /** Which method each row operand's value runs as, by the operand — the correspondence the
-     *  emission constructed, held so the reader that invokes a method never counts the rows for
-     *  itself. Keyed on operand identity, over the very nodes {@link Example#read} answers with. */
-    private final Map<Hir.Expr, String> operandMethods;
     /** Worked out once, as the rungs below work theirs out. */
     private volatile Hir.Module projected;
 
-    private Prepared(Desugared.Module desugared, List<Desugared.Fn> fns, List<Example> examples,
-                     List<FakeTable> fakes, List<Hir.FnDef> takenOn, List<Hir.FnDef> rowDefs,
-                     Map<Hir.Expr, String> operandMethods) {
+    private Prepared(Desugared.Module desugared, CheckSurface surface) {
         this.desugared = desugared;
-        this.fns = List.copyOf(fns);
-        this.examples = List.copyOf(examples);
-        this.fakes = List.copyOf(fakes);
-        this.takenOn = List.copyOf(takenOn);
-        this.rowDefs = List.copyOf(rowDefs);
-        this.operandMethods = operandMethods;
-    }
-
-    /** The definitions this module's row operands are, in the order they were emitted. */
-    public List<Hir.FnDef> rowDefs() {
-        return rowDefs;
+        this.surface = surface;
+        this.takenOn = List.of();
     }
 
     /**
-     * {@code desugared} with its imports written out and what its artifact must carry taken on.
+     * The definitions minted for this module's row operands, in the order they were emitted.
      *
-     * <p>{@code published} is what the modules this one imports offer it, which is what a row
-     * applying one of their helpers is answered from. {@code scope} is what a name in it means,
-     * which is what the definitions are held to after they are rewritten. {@code signatures} is
-     * what each behavior takes and answers with, which says where a row's values stand — asked of
-     * the one place that settles it rather than read back off the forms this module wrote.
-     *
-     * <p>The rewriting is done a part at a time, and each part's state is established of what came
-     * out rather than carried over it. A definition is handed to
-     * {@link Desugared.Fn#reestablish}, which proves the proposition again of the rewritten node; a
-     * row and a fake table arrive at their state here, because this is the rung that says anything
-     * about them.
-     *
-     * <p>What it does not rewrite is the declarations. Their clauses were written qualified where
-     * they were settled, and nothing between there and here puts a name back into one — measured
-     * over a compile of the suite, and held by
-     * {@code AStateIsReachedOnlyThroughWhatEstablishesItTest}. So they are the answers the rung
-     * below gave, and no state is claimed of anything a second time.
-     *
-     * @throws CompileException where a helper this module reaches cannot be read
+     * <p>The assembly's, handed on. A row's operand is a value this compilation writes for it,
+     * reached from a row and from nothing a source can spell, and the walk that minted it is the one
+     * that knows which method is whose.
      */
-    public static Prepared prepare(Desugared.Module desugared, Symbols scope,
-                                   Map<String, Hir.FnDef> published,
-                                   Map<ValueName.Behavior, Sig> signatures) {
-        // An imported definition is written here bare and denotes the module that declares it.
-        // Spelling it out, once, settles the name this module reaches it by, which is what the table
-        // a call expands against is keyed by and what the method a recursive helper becomes is
-        // called. It settles nothing about where the definition came from: the fns below hold
-        // declarations of several modules under names of one shape, and which module wrote each is
-        // carried on the declaration (Hir.FnDef.declaredIn).
-        String self = desugared.name();
-        List<Desugared.Fn> fns = new ArrayList<>();
-        for (Desugared.Fn fn : desugared.fns()) {
-            fns.add(Desugared.Fn.reestablish(HelperNames.qualifyImportsIn(fn.read(), self), scope));
+    public List<Hir.FnDef> rowDefs() {
+        return surface.rowDefs();
+    }
+
+    /**
+     * The assembly, beside the witness that every declaration this module writes came out.
+     *
+     * <p>Two halves and neither is made here. {@link CheckSurface} is where the parts were joined —
+     * an imported name written out, a definition held to what it came out as, a row's operand given
+     * a method — and it is the same assembly a best-effort reading of the module is given, so
+     * nothing about the module is decided twice. {@link Derived.Module} is the claim the assembly
+     * does not make, and it is what everything reached from here rests on: a module one of whose
+     * declarations has no representation is one there is nothing to emit for.
+     *
+     * <p>Refused where the two were not made from one antecedent, and the antecedent is compared
+     * rather than anything read off it. Three of them, one for each part this answers with: what
+     * a reader gets from here is the assembly's definitions and the witness's declarations, so both
+     * have to have been made from the same things. The settling both
+     * were built over is compared as the state and not as its tree — a settling answers a module
+     * beside the recursive calls its clauses left standing, and two that left different calls
+     * standing share the tree. The normalized declarations are compared as themselves, because
+     * normalizing reads the names a module was resolved against and two readings of one tree against
+     * two scopes are two declarations.
+     *
+     * <p>A name is what a module is called and not which module it is, so without this two
+     * compilations each writing a {@code module m} pair: the fields of one module's declarations
+     * beside the claim made about another's, and every reader below told something true of a module
+     * it is not looking at.
+     *
+     * @throws IllegalArgumentException where the witness and the assembly were not made from one
+     *     settling and one reading of its declarations
+     */
+    public static Prepared prepare(Desugared.Module desugared, CheckSurface surface) {
+        if (!desugared.settledFrom(surface.settling())) {
+            throw new IllegalArgumentException("the declarations of `" + desugared.name()
+                    + "` were not derived from the settling `" + surface.name()
+                    + "` was assembled over");
         }
-        List<Example> examples = new ArrayList<>();
-        for (Hir.Example block : desugared.module().examples()) {
-            examples.add(new Example(HelperNames.qualifyImportsIn(block, self)));
+        List<Normalized.Def> derived = new ArrayList<>();
+        for (Derived.Def def : desugared.defs()) {
+            derived.add(def.declaration());
         }
-        List<FakeTable> fakes = new ArrayList<>();
-        for (Hir.Fake table : desugared.module().fakes()) {
-            fakes.add(new FakeTable(HelperNames.qualifyImportsIn(table, self)));
+        if (!derived.equals(surface.declarations())) {
+            throw new IllegalArgumentException("the declarations `" + desugared.name()
+                    + "` had a representation derived for are not the ones `" + surface.name()
+                    + "` was assembled from");
         }
-        Prepared written = new Prepared(desugared, fns, examples, fakes, List.of(), List.of(),
-                Map.of());
-        // What each row operand computes, emitted beside the module's own so a row runs its operand
-        // in the program the behavior it is about is applied in. Which method is whose is kept with
-        // the module: it is decided here and read wherever a row is run, never counted out again.
-        RowFixtures.Emitted rows = RowFixtures.emitted(written.module(), scope, signatures);
-        // Which recursions this module has to emit is not decided here and is not carried from here.
-        // It follows from what expanding this module's trees leaves standing, which none of them has
-        // been through yet — worked out here, it was a prediction about work not yet done, and it
-        // was wrong for every tree the prediction did not know to look at.
-        return rows.defs().isEmpty() ? written
-                : new Prepared(desugared, fns, examples, fakes, List.of(),
-                        List.copyOf(rows.defs().values()), rows.methods());
+        if (!desugared.fns().equals(surface.desugaredFrom())) {
+            throw new IllegalArgumentException("the definitions `" + desugared.name()
+                    + "` came out with are not the ones `" + surface.name()
+                    + "` was assembled from");
+        }
+        return new Prepared(desugared, surface);
     }
 
     /** What the module is called. */
     public String name() {
-        return desugared.name();
+        return surface.name();
     }
 
     /** The behaviors this module declares, which no rung at or below this one rewrites. */
     public List<Hir.BehaviorDef> behaviors() {
-        return desugared.behaviors();
+        return surface.behaviors();
     }
 
     /**
@@ -182,7 +158,7 @@ public final class Prepared {
 
     /** The names its source offers to whatever reads it, which no stage rewrites. */
     public List<String> exposing() {
-        return desugared.module().exposing();
+        return surface.exposing();
     }
 
     /**
@@ -199,24 +175,31 @@ public final class Prepared {
     /** The example blocks attached to this module, from its own file and from every file naming
      * it, each of them read the way this module reaches its names. */
     public List<Example> examples() {
-        return examples;
+        List<Example> blocks = new ArrayList<>();
+        for (Hir.Example block : surface.examples()) {
+            blocks.add(new Example(block));
+        }
+        return List.copyOf(blocks);
     }
 
     /** Its definitions, the taken-on ones not among them — those are what the artifact carries
      * beside what the module wrote. */
     public List<Desugared.Fn> fns() {
-        return fns;
+        return surface.fns();
+    }
+
+    /** The fake tables it writes, each read the way this module reaches its names. */
+    List<FakeTable> fakes() {
+        List<FakeTable> tables = new ArrayList<>();
+        for (Hir.Fake table : surface.fakes()) {
+            tables.add(new FakeTable(table));
+        }
+        return List.copyOf(tables);
     }
 
     /** Which module each imported name came from. */
     public Map<String, String> importedFrom() {
-        Map<String, String> packages = new LinkedHashMap<>();
-        for (Hir.Import imp : desugared.module().imports()) {
-            for (String imported : imp.names()) {
-                packages.put(imported, imp.module());
-            }
-        }
-        return packages;
+        return surface.importedFrom();
     }
 
     /**
@@ -228,14 +211,14 @@ public final class Prepared {
      * different numbering.
      */
     public Map<Hir.Expr, String> operandMethods() {
-        return operandMethods;
+        return surface.operandMethods();
     }
 
     /**
      * This module's artifact with all of its rows — what an example run over the module is given.
      */
     public ForExamples forExamples() {
-        return new ForExamples(this, examples);
+        return new ForExamples(this, examples());
     }
 
     /**
@@ -252,7 +235,7 @@ public final class Prepared {
      */
     public ForExamples forExamplesWrittenIn(SourceId sourceId) {
         List<Example> mine = new ArrayList<>();
-        for (Example block : examples) {
+        for (Example block : examples()) {
             if (block.read().pos().isIn(sourceId)) {
                 mine.add(block);
             }
@@ -413,7 +396,7 @@ public final class Prepared {
          * a module's own fakes are what its attached files' rows run against, and the other way
          * round. */
         public List<FakeTable> fakes() {
-            return module.fakes;
+            return module.fakes();
         }
 
         /**
@@ -443,7 +426,7 @@ public final class Prepared {
          * holding to anything.
          */
         public FakeTable standingInFor(ValueName.Behavior dependency) {
-            for (FakeTable table : module.fakes) {
+            for (FakeTable table : module.fakes()) {
                 if (dependency.equals(table.standsInFor())) {
                     return table;
                 }
@@ -455,7 +438,7 @@ public final class Prepared {
          *  in the order the tables are written. */
         public LinkedHashMap<ValueName.Behavior, FakeTable> tablesThatAnswer() {
             LinkedHashMap<ValueName.Behavior, FakeTable> answering = new LinkedHashMap<>();
-            for (FakeTable table : module.fakes) {
+            for (FakeTable table : module.fakes()) {
                 if (table.standsInFor() != null) {
                     answering.putIfAbsent(table.standsInFor(), table);
                 }
@@ -486,7 +469,7 @@ public final class Prepared {
          */
         public Set<ValueName.Behavior> standsInFor() {
             Set<ValueName.Behavior> named = new LinkedHashSet<>(tablesThatAnswer().keySet());
-            for (Example block : module.examples) {
+            for (Example block : module.examples()) {
                 for (Hir.ExampleRow row : block.read().rows()) {
                     for (Hir.With supplied : row.withs()) {
                         if (supplied.standsInFor() != null) {
@@ -524,20 +507,7 @@ public final class Prepared {
         if (built != null) {
             return built;
         }
-        List<Hir.FnDef> definitions = new ArrayList<>();
-        for (Desugared.Fn fn : fns) {
-            definitions.add(fn.read());
-        }
-        List<Hir.Example> blocks = new ArrayList<>();
-        for (Example block : examples) {
-            blocks.add(block.read());
-        }
-        List<Hir.Fake> tables = new ArrayList<>();
-        for (FakeTable table : fakes) {
-            tables.add(table.read());
-        }
-        projected = built = desugared.module().withFns(definitions).withExamples(blocks)
-                .withFakes(tables).withTakenOn(takenOn);
+        projected = built = surface.module().withTakenOn(takenOn);
         return built;
     }
 
@@ -572,12 +542,12 @@ public final class Prepared {
      */
     @Override
     public boolean equals(Object o) {
-        return o instanceof Prepared other && module().equals(other.module())
-                && rowDefs.equals(other.rowDefs);
+        return o instanceof Prepared other && desugared.equals(other.desugared)
+                && surface.equals(other.surface) && takenOn.equals(other.takenOn);
     }
 
     @Override
     public int hashCode() {
-        return module().hashCode() * 31 + rowDefs.hashCode();
+        return desugared.hashCode() * 31 + surface.hashCode();
     }
 }

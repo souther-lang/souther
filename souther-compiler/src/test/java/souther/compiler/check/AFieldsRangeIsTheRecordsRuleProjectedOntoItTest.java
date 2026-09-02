@@ -36,7 +36,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
+        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `" + type + "` in " + module);
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
@@ -316,7 +316,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
-        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declaredNode(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertTrue(domains.projection().isCertified(),
                 "the rule is `value >= 0.0m` wherever it is declared");
@@ -413,7 +413,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "example.pair").value();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
-        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declaredNode(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertBounds(at(domains, "a"), 0, 9);
         assertBounds(at(domains, "b"), 1, 10);
@@ -514,7 +514,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
-        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declaredNode(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertBounds(at(domains, "a"), 0, 9);
         assertBounds(at(domains, "b"), 1, 10);

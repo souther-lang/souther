@@ -42,9 +42,9 @@ public final class Lower {
      * <p>Settling comes before the expansion because inlining is what carries a parameter's type onto
      * the binding a call becomes (issue #178): a type settled afterwards would never reach it.
      */
-    public static Hir.Module settle(Prepared prepared, Symbols symbols,
+    public static Hir.Module settle(CheckSurface surface, Symbols symbols,
                                     Map<ValueName.Behavior, ReqSig> reqSigs) {
-        return HelperParams.settle(prepared.module(), symbols, reqSigs);
+        return HelperParams.settle(surface.module(), symbols, reqSigs);
     }
 
     /**

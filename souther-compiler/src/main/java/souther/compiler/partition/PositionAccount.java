@@ -1,9 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
+
+import java.util.List;
 
 /**
  * One position of a behavior's input, and what this phase is left answering for at it.
@@ -28,22 +31,21 @@ import souther.compiler.types.Type;
  * @param pending  where nothing has answered for this position yet, what the structural reading
  *                 found — and so what the position is left with if nothing else answers. Null where
  *                 the reading of the declarations already answered, which needs no fallback
- * @param leftWith what the position is left with where the local reading gave it no axis, or null
- *                 where nothing is. Which of the two it is comes with it: a reading stopped, or a
- *                 rule was read to the end and draws no line. Kept apart from {@link #pending}
- *                 because the two are lifted by different work and one outranks the other — where
- *                 the walk could not reach into what the position holds, a rule about what is
- *                 inside describes that same stop from the other end
+ * @param standing the questions the rules of this position raise that nothing answered, empty
+ *                 where every one of them was answered. The accounting's answer and not a reading's:
+ *                 a rule is answered by whichever reading took it in, so a reading that was short
+ *                 of a rule another one read leaves nothing standing here
  */
 public record PositionAccount(String behavior, TermPath path, Type type, ReadingResidue residue,
                               StructuralInspection.Continuation pending,
-                              LeftAtThePosition leftWith) {
+                              List<StandingQuestion> standing) {
 
     public PositionAccount {
         if (residue == null) {
             throw new IllegalArgumentException(
                     "a position with no account of what its reading came to");
         }
+        standing = List.copyOf(standing);
     }
 
     /**
@@ -59,16 +61,53 @@ public record PositionAccount(String behavior, TermPath path, Type type, Reading
         return new souther.compiler.inputs.PositionId(path);
     }
 
+    /**
+     * Why the reading did not get to the rules of this position, or null where it did.
+     *
+     * <p>Two ways of not getting there and one answer, because neither of them names a rule. The
+     * walk could not go into what the position holds, or it entered and lost a clause of its own —
+     * and what is written under either is whatever it is. Which of the two it was is this
+     * compiler's route to the hole rather than anything about the model, so a reader is told the
+     * hole.
+     *
+     * <p>Asked here, where both facts are, and read by everything that has to know. A verdict about
+     * the position and a finding written at it are the same question asked twice, and answered
+     * apart they answer differently the day one of them learns about an arm.
+     *
+     * <p>Over what the walk found, with no {@code default}, because that is what makes this the one
+     * place: a continuation added later says here whether the rules were got to, or does not
+     * compile. Asked with an {@code instanceof} and left to a caller to switch on the rest, the
+     * question would be answered in as many places as there are callers.
+     */
+    public souther.compiler.inputs.BlockReason.AboutThePosition notReachedInto() {
+        return switch (pending) {
+            case StructuralInspection.Continuation.Blocked blocked -> blocked.why();
+            // The walk went in, so what is left is whether this reading lost a clause of its own.
+            // A handing over nobody took over is the descent above said from the other end and is
+            // not one of these, for the reason it is not reported twice: the descent is the cause.
+            case StructuralInspection.Continuation.None _,
+                 StructuralInspection.Continuation.Elements _,
+                 StructuralInspection.Continuation.Branches _ -> residue.rulesLeftUnread().stream()
+                            .anyMatch(souther.compiler.inputs.RulesLeftUnread
+                                    .ClauseOfThisReadingWasUnread.class::isInstance)
+                    ? new souther.compiler.inputs.BlockReason.ValueRulesNotReached() : null;
+            // The reading of the declarations answered for the position, so there is no fallback
+            // and nothing here was not got to. Whether a position with no fallback and no evidence
+            // is one anything was read at is a different question, asked where that pair is
+            // ({@link PendingPosition#of}).
+            case null -> null;
+        };
+    }
+
     /** What one position's reading came to, as the reading itself answered it. */
     public static PositionAccount of(String behavior, Position position,
-                                     StructuralInspection.Continuation pending,
-                                     LeftAtThePosition leftWith) {
+                                     StructuralInspection.Continuation pending) {
         return new PositionAccount(behavior, position.path(), position.type(),
-                ReadingResidue.of(position), pending, leftWith);
+                ReadingResidue.of(position), pending, position.unansweredQuestions());
     }
 
     /** A position outside a reading of the declarations, which is where a test writes one. */
     static PositionAccount at(String behavior, TermPath path, Type type) {
-        return new PositionAccount(behavior, path, type, ReadingResidue.NOTHING, null, null);
+        return new PositionAccount(behavior, path, type, ReadingResidue.NOTHING, null, List.of());
     }
 }

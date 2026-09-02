@@ -89,15 +89,14 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("book")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("book");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         InputDomain read = InputDomain.of(spec, sigs.get("book"), symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.withThresholds(
                 Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(symbols),
-                GuardThresholds.of("book", body, plan,
+                GuardThresholds.of(body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), symbols).thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,

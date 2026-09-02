@@ -42,8 +42,7 @@ public sealed interface Owed {
 
         @Override
         public String toString() {
-            // The value itself is at no name, which reads as nothing at all where it is printed.
-            return path.isTheValueItself() ? "the value" : path.toString();
+            return spelled(path);
         }
     }
 
@@ -51,12 +50,23 @@ public sealed interface Owed {
      * Where a line falls on one number at one name.
      *
      * <p>The number itself, which is the value at the name or what an operation answers of it.
-     * Two operations over one name are two of these, and that is the whole reason the coordinate is
+     * Two operations over one name are two of these, and that is the whole reason the claim is
      * carried rather than a flag saying that a number was taken: told apart by the flag, a rule
      * about one operation's number was filed at another's, and every reader that wanted the name
      * reached past the question to whatever stood beside it.
+     *
+     * <p><b>A subject and never a term.</b> What names the number is the place the rules call it
+     * and the operation as it resolved, both of which a rule that nothing read still has. A term
+     * is what a reading makes of one, so a question carrying a term could only be raised where the
+     * reading had already succeeded.
+     *
+     * <p><b>A name the rules of the value write, and never a place a row writes a value at.</b> The
+     * two part at a sum whose cases share a spread, and a question is on the side the rules are
+     * read from: what is at a name here is what a rule of this value could have said something
+     * about, which is why a position inside a sequence or under a case is not one of these rather
+     * than one nothing is written at.
      */
-    record Boundary(FieldDomains.Coordinate on) implements Owed {
+    record Boundary(NumberAt<RuleKey> on) implements Owed {
 
         public Boundary {
             if (on == null) {
@@ -66,8 +76,26 @@ public sealed interface Owed {
 
         @Override
         public String toString() {
-            return on.toString();
+            String where = spelled(on.position());
+            return switch (on.of()) {
+                case NumberAt.OfWhatNumber.OfItsOwnValue _ -> where;
+                case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
+                        taken.operation() + "(" + where + ")";
+            };
         }
+    }
+
+    /**
+     * How a question spells the place it is about.
+     *
+     * <p>Once for both questions, so that the two of them do not come to call one place two things.
+     * What a document writes is not this — a report's own words for a line are
+     * {@code check.DeclaredBorders.nameOf}'s, and it spells this one differently on purpose; what
+     * is here is what a reader of a question sees.
+     */
+    private static String spelled(RuleKey path) {
+        // The value itself is at no name, which reads as nothing at all where it is printed.
+        return path.isTheValueItself() ? "the value" : path.toString();
     }
 
     /**

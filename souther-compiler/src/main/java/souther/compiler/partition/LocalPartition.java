@@ -1,24 +1,19 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.BlockReason;
-
 import java.util.List;
 
 /**
- * What a position's own type and rules divide it into, as one of three answers about the model.
+ * What a position's own type and rules divide it into.
  *
- * <p>Three answers and not a tally of the readers there happened to be. {@link Open} is not "the
- * lists came back empty" — it is <b>the position's local rules were read to the end and the model
- * states no division here</b>, which is a sentence about the model and the only one an absence may
- * be built on. Written as a count of empty producers, the sentence was one line of a caller away
- * from every position that happened to have nothing beside it, and a producer with the answer
- * stayed outside what "everything was asked" meant (issue #772).
+ * <p>Two answers about the reading of this position's own declarations, and neither is a verdict
+ * about the model. {@link Open} says this reading found no division, which is what licenses asking
+ * what a body's rules and the position's own questions come to; whether anything about the model
+ * follows from there being no class is answered where those are ({@link PendingPosition}).
  *
- * <p>None of these carries the reading it came from. Which is what holds the sentence: a reading is
- * completed and the answer derived from it ({@link LocalInspection}), and an {@code Open} has
- * nothing of its own with which to say the reading ran to the end when it did not. A fourth thing
- * to read arrives as another way to be {@link Divided} or {@link Blocked}, not as another empty
- * list to remember to check.
+ * <p>Neither carries the reading it came from. A reading is completed and the answer derived from
+ * it ({@link LocalInspection}), so an {@code Open} has nothing of its own with which to claim the
+ * reading ran to the end. A third thing to read arrives as another way to be {@link Divided}, not
+ * as another empty list to remember to check.
  */
 public sealed interface LocalPartition {
 
@@ -41,28 +36,11 @@ public sealed interface LocalPartition {
     }
 
     /**
-     * The position's local rules were read to the end, and the model divides it no way.
+     * Nothing this reading found divides the position.
      *
-     * <p>A conclusion rather than a tally. It says nothing about the rules a behavior's body
-     * writes — those have not been read — so it is what licenses the questions after it rather than
-     * a verdict of its own.
+     * <p>About this reading and not about the model. It says nothing about the rules a behavior's
+     * body writes, and nothing about whether the rules of the position leave a question standing —
+     * so it is what licenses the questions after it rather than a verdict of its own.
      */
     record Open() implements LocalPartition {}
-
-    /**
-     * A rule about this position was written and the reading did not take it in.
-     *
-     * <p>Not a division and not the absence of one. Nothing follows about what the model does here,
-     * which is the point: the values are as wide as the rules could be read as, and a rule this
-     * could not read can divide the position as easily as the ones it could.
-     */
-    record Blocked(BlockReason why) implements LocalPartition {
-
-        public Blocked {
-            if (why == null) {
-                throw new IllegalArgumentException(
-                        "a position blocked by nothing is an open one, which is a different answer");
-            }
-        }
-    }
 }

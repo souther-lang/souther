@@ -90,7 +90,7 @@ final class Coverages {
         // its lines like any other and there is no body for them to have come out of.
         EnsuresThresholds.Clauses clauses = EnsuresThresholds.of(stated, read);
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
-                : GuardThresholds.of(behavior.name(), body, plan, read, elements, arrives);
+                : GuardThresholds.of(body, plan, read, elements, arrives);
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
@@ -464,7 +464,7 @@ final class Coverages {
             case souther.compiler.inputs.InputQuestion.AboutAPosition it ->
                     it.path().equals(axis.path());
             case souther.compiler.inputs.InputQuestion.AboutANumber it ->
-                    it.term().equals(axis.term());
+                    it.about().equals(axis.subject());
         };
     }
 
@@ -764,8 +764,8 @@ final class Coverages {
     private static OneShapeOfBorder reading(
             souther.compiler.partition.MeasuredInput.BorderReading line,
             ItemAssessment.WritabilityProjection projection) {
-        java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
-                line.border().origin().comparisonAt();
+        java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> site =
+                line.border().origin().recordedAt();
         return new OneShapeOfBorder() {
 
             @Override
@@ -818,8 +818,8 @@ final class Coverages {
         souther.compiler.partition.MeasuredInput.BorderReading line = input.at(border);
         souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = line.quantity();
-        java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
-                border.origin().comparisonAt();
+        java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> site =
+                border.origin().recordedAt();
         // Built here and gone when the search is. What a row has to be to arrive is a way of asking
         // about values rather than something that says what it is, so it is what the walk runs
         // against and never what the answer keeps; the account it was built from is what travels.
@@ -976,7 +976,7 @@ final class Coverages {
     private static StandingAtAPoint.Met standingThere(
             Probe probe, souther.compiler.partition.MeasuredInput.BorderReading line,
             Criterion criterion,
-            java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site,
+            java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> site,
             souther.compiler.partition.Generator.BoundaryAttempt.Built built) {
         souther.compiler.partition.ObservedInputs read =
                 probe.read(built.row().inputs()).asInputs();

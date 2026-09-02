@@ -2,12 +2,19 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Clause;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -52,20 +59,27 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      *  below is about what a position is pending on, which is asked before this is read. */
     private static final BodyCutInspection READ_TO_THE_END = new BodyCutInspection.Exhausted();
 
+    /** A rule filed at the position, read from end to end, that came to no line. */
+    private static final BodyCutInspection READ_TO_THE_END_AND_NO_LINE =
+            new BodyCutInspection.NoLine(false, true);
+
+    /** And one a reading did not get through, which is a different thing about the same position. */
+    private static final BodyCutInspection A_READING_STOPPED =
+            new BodyCutInspection.NoLine(true, false);
+
     private static PositionMeasurements measured() {
         return at(new Axis(ID, new NumericTerm.ValueOf(AT),
                 List.of(PartitionClass.of("true", "true", new Recognition.Nothing(),
                                 RepresentativeSource.of(FixtureTemplate.bool(true)))
                         .ofTheNumber(new NumericTerm.ValueOf(AT))),
-                List.of()), null, null);
+                List.of()));
     }
 
-    /** One position with nothing left to answer for, measured at the one number. */
-    private static PositionMeasurements at(Axis axis, StructuralInspection.Continuation found,
-                                           BlockReason.RuleWithoutLineReason unread) {
+    /** One position with nothing left to answer for, measured at the one number. Its declarations
+     *  answered for it, so there is no fallback for it to be waiting on. */
+    private static PositionMeasurements at(Axis axis) {
         return new PositionMeasurements(
-                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
-                        unread == null ? null : LeftAtThePosition.of(unread)),
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, null, List.of()),
                 List.of(axis), READ_TO_THE_END);
     }
 
@@ -75,80 +89,86 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     }
 
     private static PositionMeasurements pending(StructuralInspection.Continuation found) {
-        return pending(found, null);
+        return pending(found, List.of());
     }
 
-    /** The same, with a rule about the position's own values that the local reading could not take
-     *  in — which is a second way a position can be left unable to reach an absence. */
+    /** The same, with the questions the rules of the position raise that nothing answered — which
+     *  is the other way a position is left unable to reach an absence. */
     private static PositionMeasurements pending(StructuralInspection.Continuation found,
-                                                BlockReason.RuleWithoutLineReason unread) {
+                                                List<StandingQuestion> standing) {
         return new PositionMeasurements(
-                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
-                        unread == null ? null : LeftAtThePosition.of(unread)),
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found, standing),
                 List.of(), READ_TO_THE_END);
     }
 
+    /** A question of a rule of this position that nothing answered. */
+    private static StandingQuestion standing() {
+        return StandingQuestion.of(
+                new RuleRef.Invariant(new Clause.Ref(
+                        new Clause.Id(TypeSymbols.declared(new TypeKey("probe", "N")), 0),
+                        java.util.Optional.empty())),
+                new RuleCitation.Named("invariant N"),
+                new InputQuestion.AboutAPosition(AT),
+                List.of(new BlockReason.UnreadValueRule()));
+    }
+
     /**
-     * A leaf carrying a rule the local reading could not take in cannot reach an absence either.
+     * A leaf whose rules leave a question standing cannot reach an absence.
      *
      * <p>The other way a position is left unable to say the model divides it no way. Nothing under
-     * it stopped the walk — it is a leaf — and a rule about its own values was written and not
-     * read, so what a body says next decides whether it is measured, and never that the model
-     * states nothing here.
+     * it stopped the walk — it is a leaf — and a rule of it raises a question nothing answered, so
+     * what a body says next decides whether it is measured, and never that the model states nothing
+     * here.
      */
     @Test
-    void aLeafCarryingAnUnreadRuleCompletesAsThatRule() {
-        BlockReason.RuleWithoutLineReason unread = new BlockReason.UnreadValueRule();
+    void aLeafWithAQuestionStandingCompletesAsThatQuestion() {
+        UndividedPosition said =
+                of(pending(new StructuralInspection.Continuation.None(), List.of(standing())))
+                        .complete(new BodyCutInspection.Exhausted());
 
-        UndividedPosition said = of(pending(new StructuralInspection.Continuation.None(), unread))
-                .complete(new BodyCutInspection.Exhausted());
-
-        assertFalse(said.why() instanceof UndividedPosition.Why.Absent, said.toString());
-        // And the verdict says only that: what stopped it is the rule's, said by the reader that
-        // read the rule and naming which rule it was.
-        assertNull(of(pending(new StructuralInspection.Continuation.None(), unread))
+        assertEquals(new UndividedPosition.Why.CannotDerive(), said.why());
+        // And the verdict says only that: what stands is the rule's, said by the accounting that
+        // holds the question and naming which rule raised it.
+        assertNull(of(pending(new StructuralInspection.Continuation.None(), List.of(standing())))
                         .reportable(),
-                "a rule this read and could not use is not a position nothing was reached at");
+                "a question a rule raises is not a position nothing was reached at");
     }
 
     /**
-     * And a leaf carrying a rule read from end to end completes as neither of the two above.
+     * And a leaf every question of which was answered says the other thing where a rule is filed at
+     * it.
      *
      * <p>Not an absence: the model states something at this position. Not a derivation this
-     * compiler could not make either — the reading ran to the end, and a reader sent after a limit
-     * would be looking for one that is not there. Held as the same state a stop puts a position in,
-     * every consumer of this chain went on saying the first of those about the second.
+     * compiler could not make either — a question stands only where no reading took the rule that
+     * raised it in, so a reading short of a rule another one read leaves nothing standing. Read off
+     * one reading's own completeness, every consumer of this chain went on saying the first of
+     * those about the second.
      */
     @Test
-    void aLeafCarryingARuleReadToTheEndSaysNeitherOfThose() {
-        BlockReason.RuleWithoutLineReason read = new BlockReason.ComparisonBetweenPositions();
-
-        UndividedPosition said = of(
-                        pending(new StructuralInspection.Continuation.None(), read))
-                .complete(new BodyCutInspection.Exhausted());
+    void aLeafWhoseQuestionsWereAllAnsweredSaysNeitherOfThose() {
+        UndividedPosition said = of(pending(new StructuralInspection.Continuation.None()))
+                .complete(READ_TO_THE_END_AND_NO_LINE);
 
         assertFalse(said.why() instanceof UndividedPosition.Why.Absent, said.toString());
-        assertInstanceOf(UndividedPosition.Why.StatedWithoutALine.class, said.why(), said.toString());
+        assertInstanceOf(UndividedPosition.Why.StatedWithoutALine.class, said.why(),
+                said.toString());
     }
 
     /**
-     * Neither of two rules becomes the position's account, where a body's comparison came to
-     * nothing as well.
+     * The position carries no account of its own of why anything stands.
      *
-     * <p>Both are rules this read and could not use, and each is said by the reader that read it,
-     * naming which rule. There used to be one line here and a precedence deciding which of the two
-     * reasons it carried — which is the shape of it: an author was told one limit and never
-     * learnt that the other rule existed. What the position itself has to say is that nothing was
-     * established, and no more.
+     * <p>There used to be one line here and a precedence deciding which of two reasons it carried —
+     * which is the shape of it: an author was told one limit and never learnt that the other rule
+     * existed. What the position itself has to say is that nothing was established, and no more.
      */
     @Test
-    void twoRulesLeaveThePositionWithNoAccountOfItsOwn() {
+    void thePositionHoldsNoAccountOfItsOwn() {
         PendingPosition pending = of(pending(new StructuralInspection.Continuation.None(),
-                new BlockReason.UnreadValueRule()));
+                List.of(standing())));
 
-        assertFalse(pending.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
-                        new BlockReason.UnreadValueRule()))).why() instanceof UndividedPosition.Why.Absent);
-        assertNull(pending.reportable(), "each rule is said with its rule, not as this position");
+        assertFalse(pending.complete(READ_TO_THE_END_AND_NO_LINE).why()
+                instanceof UndividedPosition.Why.Absent);
+        assertNull(pending.reportable(), "each question is said with its rule, not as this position");
     }
 
     // --- what can be pending at all -------------------------------------------------------------
@@ -165,7 +185,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     @Test
     void aPositionNothingReadIsNotAnsweredFor() {
         assertThrows(IllegalStateException.class, () -> of(new PositionMeasurements(
-                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, null, null),
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, null, List.of()),
                 List.of(), READ_TO_THE_END)));
     }
 
@@ -191,69 +211,82 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         assertEquals(AT, done.at());
     }
 
-    /** A rule about the position that went unread is what it is left with, and not an absence. */
-    @Test
-    void aLeafWhoseRuleWentUnreadSaysThat() {
-        UndividedPosition done = new PendingPosition.Leaf(AT).complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
-                        new BlockReason.UnreadValueRule())));
-
-        assertFalse(done.why() instanceof UndividedPosition.Why.Absent);
-        assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
-    }
-
     /**
-     * And a rule the body read from end to end says the other thing, as the same rule does where
-     * the declaration wrote it.
+     * A rule the body wrote that came to no line says the model states something here.
      *
-     * <p>The phase a rule was written in is no part of what it says. This one used to be the only
-     * answer the body could give — that something was left — and a verdict read it as the position
-     * having rules nothing looked at, over a {@code guard} this compiler understood completely.
+     * <p>The phase a rule was written in is no part of what it says, and neither is how far a
+     * reading of it got. This used to carry which of those it was, and a verdict read a
+     * {@code guard} this compiler understood completely as a position nothing had looked at.
      */
     @Test
-    void aLeafWhoseBodyRuleWasReadToTheEndSaysTheOtherThing() {
-        UndividedPosition done = new PendingPosition.Leaf(AT).complete(
-                new BodyCutInspection.NoLine(new LeftAtThePosition.ARuleWithNoLine(
-                        new BlockReason.ComparisonBetweenPositions())));
+    void aLeafWhoseBodyRuleCameToNoLineStatesSomething() {
+        UndividedPosition done = new PendingPosition.Leaf(AT)
+                .complete(READ_TO_THE_END_AND_NO_LINE);
 
         assertFalse(done.why() instanceof UndividedPosition.Why.Absent);
         assertEquals(new UndividedPosition.Why.StatedWithoutALine(), done.why());
     }
 
     /**
-     * A stop in the body outranks a rule the declaration read to the end.
+     * A rule filed here that a reading did not get through is the same news as a question standing.
      *
-     * <p>Both phases answer about one position and the verdict is one. Read off the first phase
-     * alone, a rule read to the end at the declaration hid a reading that stopped two lines into
-     * the body — and a position nothing had read came back as one the model states something at.
+     * <p>The half an accounting cannot answer. A question is raised by a rule of a declaration and
+     * answered by whichever reading took it in; a comparison a body writes raises and answers in
+     * one breath, so a reading that stopped on one leaves no question anywhere. Read as "a rule is
+     * filed here", such a rule came out as the model stating something, over a reading that never
+     * found out what it says.
      */
     @Test
-    void aStopInTheBodyOutranksARuleTheDeclarationReadToTheEnd() {
-        PendingPosition stated = new PendingPosition.ARuleWithNoLine(AT,
-                new BlockReason.ComparisonBetweenPositions());
+    void aLeafWhoseBodyRuleAReadingStoppedOnIsUnderivable() {
+        UndividedPosition done = new PendingPosition.Leaf(AT).complete(A_READING_STOPPED);
 
-        UndividedPosition done = stated.complete(new BodyCutInspection.NoLine(
-                new LeftAtThePosition.AReadingStopped(new BlockReason.UnreadValueRule())));
+        assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
+    }
+
+    /** And a stop beside a rule read to the end is still a stop, whichever was written first. */
+    @Test
+    void aStopBesideARuleReadToTheEndIsStillAStop() {
+        assertEquals(new UndividedPosition.Why.CannotDerive(),
+                new PendingPosition.Leaf(AT)
+                        .complete(new BodyCutInspection.NoLine(true, true)).why());
+        assertEquals(new UndividedPosition.Why.CannotDerive(),
+                new PendingPosition.Leaf(AT).complete(BodyCutInspection.combined(
+                        READ_TO_THE_END_AND_NO_LINE, A_READING_STOPPED)).why());
+        assertEquals(new UndividedPosition.Why.CannotDerive(),
+                new PendingPosition.Leaf(AT).complete(BodyCutInspection.combined(
+                        A_READING_STOPPED, READ_TO_THE_END_AND_NO_LINE)).why());
+    }
+
+    /**
+     * A question standing at the position outranks a rule of the body that came to no line.
+     *
+     * <p>Both are true of such a position and the verdict is one. A rule is filed here, so the
+     * model states something; a question of one of its rules is unanswered, so nothing follows from
+     * there being no class — and the second is the one a reader can act on.
+     */
+    @Test
+    void aQuestionStandingOutranksARuleTheBodyCameToNoLineOn() {
+        UndividedPosition done = new PendingPosition.AQuestionStands(AT)
+                .complete(READ_TO_THE_END_AND_NO_LINE);
 
         assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
     }
 
     /**
-     * A reading that stopped stays what the position is left with, whatever the rules came to.
+     * A walk that did not reach into the position outranks whatever the rules came to.
      *
      * <p>Both rows, because the precedence is only visible where the other side has something to
      * say: where the walk could not reach into what a position holds, a rule naming something
-     * inside it describes the same stop from the other end, and the first is the cause (issue
-     * #626).
+     * inside it describes the same stop from the other end, and the first is the cause.
      */
     @Test
-    void aReadingThatStoppedOutranksWhatTheRulesCameTo() {
+    void aWalkThatDidNotReachInOutranksWhatTheRulesCameTo() {
         PendingPosition blocked = new PendingPosition.Blocked(AT,
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT));
         UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive();
 
         assertEquals(expected, blocked.complete(new BodyCutInspection.Exhausted()).why());
-        assertEquals(expected, blocked.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
-                        new BlockReason.UnreadValueRule()))).why());
+        assertEquals(expected, blocked.complete(READ_TO_THE_END_AND_NO_LINE).why());
         // And the finding is the stop, whatever the rules came to: a rule naming something inside a
         // position the walk could not enter describes that same stop from the other end.
         assertEquals(new souther.compiler.inputs.PositionReadingBlocked(AT,

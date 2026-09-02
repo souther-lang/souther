@@ -74,7 +74,7 @@ public final class Boundary {
         return TypeOps.isSumType(subject, symbols)
                 && !atoms.isEmpty()
                 && atoms.stream().allMatch(atom ->
-                        symbols.declarations().declaration(atom) instanceof Hir.UnitData);
+                        symbols.declaredNode(atom) instanceof Hir.UnitData);
     }
 
     /**

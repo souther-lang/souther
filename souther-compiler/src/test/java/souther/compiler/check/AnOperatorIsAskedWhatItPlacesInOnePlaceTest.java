@@ -34,11 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * is part of what is declared, and a call added anywhere lands as a number that does not match.
  *
  * <p>What a count cannot say is who came through a door: a licence given to a method covers every
- * caller of it. So the doors are held apart by the language instead.
- * {@link souther.compiler.inputs.ComparedNumber#of} is the wide one and is package-private, which
- * makes {@code ComparedNumbers} the one way to it from outside and a body's binaries the one thing
- * that arrives; a reader holding a comparison takes {@code lineOf} and hands over the claim it
- * already has.
+ * caller of it. So the doors are held apart by the language instead. The wide ones are the readers
+ * that meet a binary nothing has recognised yet, and each is shut to a caller holding a comparison.
+ * {@link souther.compiler.inputs.ComparedNumber#of} is package-private, which makes
+ * {@code ComparedNumbers} the one way to it from outside and a body's binaries the one thing that
+ * arrives; a reader holding a comparison takes {@code lineOf} and hands over the claim it already
+ * has. {@code ConstEval.binary} is private, and the fold is the one thing that reaches it.
  *
  * <p>Read off the compiled classes, because what a method calls is what the class file says. A
  * reading of the sources would answer the same question a second way, and would not see a call
@@ -60,7 +61,11 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
                             + " the claim to the readings of what it bounds"),
             new Licence("souther.compiler.inputs.ComparedNumber.of", 1,
                     "reads any binary a walk met, so an operator that places nothing arrives here"
-                            + " and is answered rather than excluded"));
+                            + " and is answered rather than excluded"),
+            new Licence("souther.compiler.check.ConstEval.binary", 1,
+                    "folds any binary an expression is written with, so an operator that places"
+                            + " nothing arrives here too; what it placed is spent on the relation"
+                            + " the fold answers and is handed to nobody"));
 
     @Test
     void onlyARecognitionReadsAnOperatorForWhatItPlaces() throws IOException {

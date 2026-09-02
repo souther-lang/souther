@@ -31,7 +31,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -1005,9 +1004,6 @@ public final class Resolve {
                 yield new Hir.Data(d.written(), declared, d.newtype(), names(d.includes()),
                         fields(d.fields()),
                         clauses(d.invariants(), boundFields(d, declared)),
-                        // a codec is derived from the shape this answers with, by the pass that
-                        // derives it; nothing above answers with one
-                        Optional.empty(), Optional.empty(),
                         d.pos());
             }
             case Ast.SumData s -> new Hir.SumData(s.written(), declared, sumCases(s), s.pos());

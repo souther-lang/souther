@@ -443,8 +443,7 @@ class AGroupTooWideToWalkSaysSoTest {
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get("total");
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                    checked.supplied());
+            CoverageSites.Plan plan = checked.plan();
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
                     partitioning),
                     CoverageRead.of("total", body, plan, inputs, symbols));

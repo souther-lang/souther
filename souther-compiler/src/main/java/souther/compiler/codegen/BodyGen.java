@@ -241,7 +241,7 @@ final class BodyGen {
          */
         private void emitFieldRead(CodeBuilder code, TypeSymbol ownerName, String field, Type ft) {
             MethodTypeDesc mtd = MethodTypeDesc.of(jvmType(ft));
-            if (symbols.declarations().declaration(ownerName) instanceof Hir.SumData) {
+            if (symbols.declaredNode(ownerName) instanceof Hir.SumData) {
                 // a field every case spreads is declared on the sum's sealed interface (issue #160)
                 code.invokeinterface(cd(ownerName), field, mtd);
             } else {
@@ -254,7 +254,7 @@ final class BodyGen {
          * non-newtype operand untouched. Used so comparison operators read the value a newtype wraps. */
         private Type unwrapNewtypeValue(Type t) {
             if (t instanceof Type.Ref ref
-                    && symbols.declarations().declaration(ref.name()) instanceof Hir.Data d && d.newtype()) {
+                    && symbols.declaredNode(ref.name()) instanceof Hir.Data d && d.newtype()) {
                 Type inner = fieldTypes(d).get("value");
                 if (inner != null) {
                     emitFieldRead(code, ref.name(), "value", inner);
@@ -447,7 +447,7 @@ final class BodyGen {
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.Construct nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
-                    Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName()));
+                    Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
                     emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
@@ -601,14 +601,14 @@ final class BodyGen {
          * <p>Absent is ordinary here, unlike an arm's: what has a site is every comparison of a
          * condition this plan instruments, and the emitter walks comparisons everywhere else too.
          */
-        private void comparisonProbe(Comparison comparison) {
+        private void comparisonProbe(Core.Binary bin) {
             if (!armsAreCounted || !ctx.measuring()) {
                 return;
             }
-            ctx.comparisonSiteOf(comparison.at()).ifPresent(site -> {
-                ctx.emitted(site);
+            ctx.comparisonSiteOf(bin).ifPresent(site -> {
+                ctx.emitted(site.value());
                 code.dup();
-                code.loadConstant(site);
+                code.loadConstant(site.value());
                 code.invokestatic(CD_Probe, "compared", MTD_Probe_compared);
             });
         }
@@ -759,9 +759,8 @@ final class BodyGen {
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> {
-                    Comparison comparison = binary(bin);
-                    if (comparison != null) {
-                        comparisonProbe(comparison);
+                    if (binary(bin) != null) {
+                        comparisonProbe(bin);
                     }
                 }
                 case Core.Construct nd -> construct(nd);
@@ -946,7 +945,7 @@ final class BodyGen {
         }
 
         private void construct(Core.Construct nd) {
-            Hir.Data owner = (Hir.Data) symbols.declarations().declaration(nd.typeName());
+            Hir.Data owner = (Hir.Data) symbols.declaredNode(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
             TypeSymbol built = nd.typeName();
@@ -1019,7 +1018,7 @@ final class BodyGen {
          */
         private Attempt emitAttempt(Core.IfConstructed ic) {
             Core.Construct nd = ic.construct();
-            Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName()));
+            Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
             ClassDesc cdType = cd(nd.typeName());
             emitFieldValues(flds, nd.values());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
@@ -1804,8 +1803,8 @@ final class BodyGen {
          */
         private void emitComparison(Comparison comparison) {
             switch (comparison.claim()) {
-                case ComparisonClaim.Cut cut -> ordered(comparison.at(), cut);
-                case ComparisonClaim.Singled singled -> same(comparison.at(), singled);
+                case ComparisonClaim.Cut cut -> ordered(comparison, cut);
+                case ComparisonClaim.Singled singled -> same(comparison, singled);
             }
         }
 
@@ -1816,18 +1815,20 @@ final class BodyGen {
          * {@code StageN < StageN} fall past every ordering arm into an equality test, and an order
          * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
          */
-        private void ordered(Core.Binary bin, ComparisonClaim.Cut cut) {
+        private void ordered(Comparison comparison, ComparisonClaim.Cut cut) {
             // Whether the two may be compared at all was settled by BinaryElaborator against the
             // types as written; this reads what they open to.
-            Ordering how = Ordering.ofComparison(bin.left().type(), bin.right().type(), symbols);
+            Ordering how = Ordering.ofComparison(
+                    comparison.left().type(), comparison.right().type(), symbols);
             if (how == null) {
                 throw new IllegalStateException("a comparison the checker admitted has no order: "
-                        + bin.left().type() + " " + bin.op() + " " + bin.right().type());
+                        + comparison.left().type() + " " + cut.statedRelation() + " "
+                        + comparison.right().type());
             }
             switch (how.opened()) {
                 case Ordering.Longs _ -> {
-                    unwrapNewtypeValue(genExpr(bin.left()));
-                    unwrapNewtypeValue(genExpr(bin.right()));
+                    unwrapNewtypeValue(genExpr(comparison.left()));
+                    unwrapNewtypeValue(genExpr(comparison.right()));
                     comparisonMaterialize(cut.statedRelation(), true);
                 }
                 case Ordering.Natural _ -> {
@@ -1835,8 +1836,8 @@ final class BodyGen {
                     // LocalDateTime, Instant — so one compareTo reduces the order to its sign
                     // against 0. BigDecimal.compareTo ignores scale, which matches Decimal equality
                     // (spec §equality); the others order lexicographically / in time.
-                    unwrapNewtypeValue(genExpr(bin.left()));
-                    unwrapNewtypeValue(genExpr(bin.right()));
+                    unwrapNewtypeValue(genExpr(comparison.left()));
+                    unwrapNewtypeValue(genExpr(comparison.right()));
                     code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
                     code.iconst_0();
                     comparisonMaterialize(cut.statedRelation(), false);
@@ -1845,16 +1846,16 @@ final class BodyGen {
                     // An enumeration compares by where its case stands in the declaration, which
                     // the sum answers for both operands — `stage < Won` pairs a sum with one of its
                     // cases, and `x < StageN(Qualified)` two wrappers over one sum.
-                    unwrapNewtypeValue(genExpr(bin.left()));
+                    unwrapNewtypeValue(genExpr(comparison.left()));
                     code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
-                    unwrapNewtypeValue(genExpr(bin.right()));
+                    unwrapNewtypeValue(genExpr(comparison.right()));
                     code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
                     comparisonMaterialize(cut.statedRelation(), false);
                 }
                 // `opened` answers for the value the operands are opened to, which is never one a
                 // name is still worn over.
                 case Ordering.Wrapped _ -> throw new IllegalStateException(
-                        "an opened order is never a wrapped one: " + bin.left().type());
+                        "an opened order is never a wrapped one: " + comparison.left().type());
             }
         }
 
@@ -1865,9 +1866,9 @@ final class BodyGen {
          * comparison selects, so a comparison met where the value is not the one named is this test
          * inverted.
          */
-        private void same(Core.Binary bin, ComparisonClaim.Singled singled) {
-            Type lt = unwrapNewtypeValue(genExpr(bin.left()));
-            unwrapNewtypeValue(genExpr(bin.right()));
+        private void same(Comparison comparison, ComparisonClaim.Singled singled) {
+            Type lt = unwrapNewtypeValue(genExpr(comparison.left()));
+            unwrapNewtypeValue(genExpr(comparison.right()));
             if (lt == Type.STRING) {
                 code.invokevirtual(CD_String, "equals",
                         MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));

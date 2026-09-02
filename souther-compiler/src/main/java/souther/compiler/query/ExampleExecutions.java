@@ -6,6 +6,7 @@ import souther.compiler.check.CheckedDeclarations;
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
 import souther.compiler.core.ValueShape;
@@ -62,7 +63,7 @@ public final class ExampleExecutions {
      */
     private static ExampleExecution of(Db db, String module, boolean withDeclaring) {
         Answer<Prepared> prepared = db.ask(new Shapes.Prepared(module));
-        Answer<Symbols> scope = Names.derivedSymbols(db, module);
+        Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
         // Every behavior the rows may name, keyed by the declaration it is. A row targets one of
         // this module's own and a stand-in may name one another module declares, and both are asked
         // of this one answer — the narrower question, this module's own signatures under their bare

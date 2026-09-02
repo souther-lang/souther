@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleKey;
@@ -850,7 +851,7 @@ public final class InputDomain {
                 read.ownEnds(), read.narrowedEnds(), read.rangeLeft(),
                 read.nothingExists(), read.projection(),
                 read.declared(), read.reading(), read.obligations(), read.completeness(),
-                read.valuesUnread(), read.rulesWithoutALine(), read.unansweredQuestions(),
+                read.rulesWithoutALine(), read.unansweredQuestions(),
                 left, read.structure());
     }
 
@@ -1281,14 +1282,12 @@ public final class InputDomain {
     }
 
     /** The position's own value, as the reading of one coordinate names it. */
-    private static final souther.compiler.check.FieldDomains.CoordinateKind ITS_OWN_VALUE =
-            new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue();
+    private static final NumberAt.OfWhatNumber ITS_OWN_VALUE =
+            new NumberAt.OfWhatNumber.OfItsOwnValue();
 
     /** The number {@code operation} answers of what stands at a position. */
-    private static souther.compiler.check.FieldDomains.CoordinateKind answeredBy(
-            ValueName operation) {
-        return new souther.compiler.check.FieldDomains.CoordinateKind
-                .OfWhatAnOperationAnswers(operation);
+    private static NumberAt.OfWhatNumber answeredBy(ValueName operation) {
+        return new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(operation);
     }
 
     /**
@@ -1377,18 +1376,12 @@ public final class InputDomain {
                 placed.leftAt(path, bySize ? answeredBy(taken) : ITS_OWN_VALUE), nothingExists,
                 placed.projection(path), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
-                // What stopped the reading of which values stand here. A rule that went unread is
-                // said before the cost of the set they leave between them: both are true where both
-                // happened, and the first names something an author can rewrite while the second
-                // names no rule at all. Neither may be dropped in silence, which is why the second
-                // is asked here rather than left to `whyPartial`, whose answer is about rules.
-                valuesUnreadAt(admitted),
                 withoutALine,
                 // What the rules of this position raise that nothing answered. Asked of the
                 // accounting rather than read off the completeness beside it: one reading being
                 // short of a position's rules is that reading's business, and a rule another
                 // reading took in is not a rule left unread.
-                standingAt(placed, path, type, symbols),
+                standingAt(placed, path),
                 // And whether the rules were reached at all, asked of the gathering that knows.
                 // No question is raised where nothing was seen, so an empty list beside it would
                 // say every rule was accounted for. Read off the reading's own reason instead, a
@@ -1401,28 +1394,6 @@ public final class InputDomain {
                 placed.everyRuleReachedAt(path) ? java.util.Set.of()
                         : java.util.Set.of(new RulesLeftUnread.ClauseOfThisReadingWasUnread()),
                 structure);
-    }
-
-    /**
-     * What stopped the reading of which values a position holds, or null where nothing did.
-     *
-     * <p>Two ways of being short and one answer, because a position carries one. A rule this
-     * reading could not use is said first: it names something written, and what a reader does about
-     * it is look at that rule. The cost of the set the rules leave between them is said where no
-     * rule went unread, and it names none — two rules cheap on their own can have an answer that is
-     * not, so there is nothing here to send anybody to.
-     *
-     * <p>Asked here rather than left to {@link AdmissibleSet#whyPartial}, which answers about
-     * rules. A widening that reached this by no arm of that question would be one a position was
-     * given in silence, and every reader downstream would read the set as what the rules leave.
-     */
-    private static BlockReason.ReadingStopReason valuesUnreadAt(AdmissibleSet admitted) {
-        if (admitted.whyPartial() != null) {
-            return Crossing.stopped(admitted.whyPartial());
-        }
-        // And the same answer where it arrived as a qualification of the set rather than as a rule
-        // left standing, which is how a reading of two declarations records it.
-        return admitted.exactValuesTooCostly() ? new BlockReason.ExactValuesTooCostly() : null;
     }
 
     /**
@@ -1557,8 +1528,7 @@ public final class InputDomain {
      * and the reading of the position disagreeing about what stands here — which is this compiler
      * contradicting itself rather than something the model left out.
      */
-    private static FilingCoordinate filedAt(TermPath path,
-                                            souther.compiler.check.FieldDomains.Coordinate at,
+    private static FilingCoordinate filedAt(TermPath path, NumberAt<RuleKey> at,
                                             Type type, Symbols symbols) {
         return FilingCoordinate.of(termAt(path, at, type, symbols));
     }
@@ -1582,15 +1552,12 @@ public final class InputDomain {
      * term about something the model never wrote, and the reading of it would be applied to
      * whatever stood at the path.
      */
-    private static NumericTerm termAt(TermPath path,
-                                      souther.compiler.check.FieldDomains.Coordinate at,
+    private static NumericTerm termAt(TermPath path, NumberAt<RuleKey> at,
                                       Type type, Symbols symbols) {
-        return switch (at.kind()) {
-            case souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue _ ->
-                    new NumericTerm.ValueOf(path);
-            case souther.compiler.check.FieldDomains.CoordinateKind
-                    .OfWhatAnOperationAnswers answered -> takenBy(answered.operation(), path, type,
-                            symbols);
+        return switch (at.of()) {
+            case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers answered ->
+                    takenBy(answered.operation(), path, type, symbols);
         };
     }
 
@@ -1622,20 +1589,23 @@ public final class InputDomain {
      *
      * <p>Here, where the root the walk started at and the type standing at the position both are.
      * The reading that raised them knows its positions by a key relative to the value its clauses
-     * are written on and knows a number of one by the operation beside that key; what everything
-     * past here compares is a term path and a term.
+     * are written on; what everything past here compares is a term path. Which number of a position
+     * a question is about crosses unchanged — it is a resolved name, and no capability of either
+     * side is asked about it.
      */
-    private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path, Type type,
-                                                     Symbols symbols) {
+    private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path) {
         List<StandingQuestion> out = new ArrayList<>();
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
             out.add(StandingQuestion.of(each.rule(), each.cited(),
                     switch (each.owed()) {
                         case souther.compiler.check.Owed.AdmittedValues _ ->
                                 new InputQuestion.AboutAPosition(path);
+                        // The place and nothing else. Which number of it the rule is about is the
+                        // same value on both sides, so the crossing cannot lose it and cannot fail
+                        // to make it: a question about a number this compiler could not read is
+                        // asked here exactly as one it could.
                         case souther.compiler.check.Owed.Boundary it ->
-                                new InputQuestion.AboutANumber(
-                                        termAt(path, it.on(), type, symbols));
+                                new InputQuestion.AboutANumber(it.on().at(path));
                     },
                     // What the reading that would have answered was short of, in this compiler's
                     // own terms. The crossing is where the two readings' vocabularies become one:

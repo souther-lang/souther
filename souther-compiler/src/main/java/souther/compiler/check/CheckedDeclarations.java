@@ -48,7 +48,7 @@ public final class CheckedDeclarations implements Declarations {
 
     @Override
     public Composed of(TypeSymbol.AtModule declared) {
-        return switch (symbols.declarations().declaration(declared)) {
+        return switch (symbols.declaredNode(declared)) {
             // A module wrote this one and this reading cannot see it. Said as what it is: a
             // declaration out of reach is not a declaration with nothing under it.
             case null -> throw new IllegalStateException("`" + declared + "` is declared by a module"

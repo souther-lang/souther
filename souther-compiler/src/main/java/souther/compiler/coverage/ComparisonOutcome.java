@@ -14,10 +14,15 @@ package souther.compiler.coverage;
  * recorded and the third is neither of them being, and nothing else in a run's record can tell the
  * third from the other two.
  *
- * @param at   which comparison
+ * <p>Written in the emitter's vocabulary, which is the one a run is recorded in. What a probed class
+ * calls is {@code Probe.compared} with the number the emitter put in the call, and nothing running
+ * has a catalog to say which comparison that is. Which comparison a reading is talking about is
+ * {@link ComparisonOccurrence}, and the plan is what turns one into the other.
+ *
+ * @param at   where the run was recorded
  * @param held the way it came out
  */
-public record ComparisonOutcome(ComparisonOccurrence at, boolean held) {
+public record ComparisonOutcome(ComparisonEmissionSite at, boolean held) {
 
     public ComparisonOutcome {
         if (at == null) {

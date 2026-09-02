@@ -63,7 +63,7 @@ public final class Probe {
         if (recording != null) {
             recording.taken.set(site);
             recording.comparisons.add(
-                    new ComparisonOutcome(new ComparisonOccurrence(site), held));
+                    new ComparisonOutcome(new ComparisonEmissionSite(site), held));
         }
     }
 

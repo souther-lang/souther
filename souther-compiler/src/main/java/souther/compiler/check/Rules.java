@@ -149,7 +149,7 @@ public sealed interface Rules {
         if (named == null) {
             return new NoneWritten();
         }
-        return switch (symbols.declarations().declaration(named)) {
+        return switch (symbols.declaredNode(named)) {
             // A data is a declaration a module wrote, and this asked the declaration world with
             // the identity to get one, so the test below never decides anything. It is how the
             // name says which kind it is rather than a reader assuming it.

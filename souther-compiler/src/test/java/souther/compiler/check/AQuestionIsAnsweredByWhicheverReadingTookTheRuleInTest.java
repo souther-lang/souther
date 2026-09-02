@@ -52,7 +52,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
+        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `" + type + "` declared");
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).accounting();
     }
@@ -136,7 +136,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
         return FieldDomains.of(holder,
-                        (Hir.Data) symbols.declarations().declaration(holder.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                        (Hir.Data) symbols.declaredNode(holder.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .at(RuleKey.of("len")).bounds().min().at().toString();
     }
 
@@ -358,7 +358,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         FieldDomains read = FieldDomains.of(named,
-                (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                (Hir.Data) symbols.declaredNode(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertFalse(read.projection().isCertified(), "the bounds hold no hole");
         assertEquals(Set.of(), rule(read.accounting(), "said").unaccounted(),

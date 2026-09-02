@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
@@ -144,7 +143,7 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate");
         assertNotNull(inputs, "the behavior's input is read");
         return new Read(CoverageRead.of("gate", body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(), checked.supplied()),
+                checked.plan(),
                 inputs, symbols), inputs, symbols);
     }
 }

@@ -218,7 +218,7 @@ final class PartitionClasses {
         // no module declares and nothing composes field by field: naming it builds it, the same as
         // a unit data. So the two are told apart here, where the declaration is asked for.
         if (!(leaf instanceof TypeSymbol.AtModule declared)
-                || !(symbols.declarations().declaration(declared) instanceof Hir.Data data)) {
+                || !(symbols.declaredNode(declared) instanceof Hir.Data data)) {
             return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));

@@ -40,10 +40,14 @@ class CallElaboratorNoCalleeTest {
     private static RuntimeException answerFor(ValueName denotes) {
         // As this module reaches it, whichever kind of name it is — which is what the arm of the
         // reference then says, and what this is about is the ones that reach no callee.
+        // Over a scope with no module in it: which arm answers is what the name denotes, and the
+        // one case that reads a declaration is a newtype applied to a count other than one, which
+        // is not what any of these is.
         return CallElaborator.noCallee(
                 new Hir.Apply("f", ReachName.of(denotes, "f", "m"),
                         List.of(new Hir.IntLit(1, AT, null)),
-                        ConstructionOrigin.own(), AT, null));
+                        ConstructionOrigin.own(), AT, null),
+                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
     }
 
     /** A behavior named from a helper `let` or a `>->` composition, neither of which reaches one. */
@@ -125,7 +129,8 @@ class CallElaboratorNoCalleeTest {
     void anApplicationOfSomethingThatIsNotANameIsAnInternalError() {
         Hir.Expr block = new Hir.Block(List.of(), new Hir.IntLit(1, AT, null), souther.compiler.types.RuleOrigin.unwritten(), AT, null);
         RuntimeException e = CallElaborator.noCallee(new Hir.Apply(block,
-                List.of(new Hir.IntLit(1, AT, null)), ConstructionOrigin.own(), AT, null));
+                List.of(new Hir.IntLit(1, AT, null)), ConstructionOrigin.own(), AT, null),
+                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
 
         assertInstanceOf(IllegalStateException.class, e);
         assertTrue(e.getMessage().contains("7:3"), () -> "says where: " + e.getMessage());

@@ -7,6 +7,7 @@ import souther.compiler.check.BindingEvidence;
 import souther.compiler.check.DeclaredTypeEvidence;
 import souther.compiler.check.ResolvedFieldTypes;
 import souther.compiler.check.Sig;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -71,7 +72,7 @@ public final class SemanticSnapshot {
      */
     public static Optional<SemanticSnapshot> of(Db db, String module) {
         Answer<AuthoredSites> occurrences = db.ask(new Sites.Authored(module));
-        Answer<Symbols> scope = Names.derivedSymbols(db, module);
+        Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
         return occurrences.present() && scope.present()
                 ? Optional.of(new SemanticSnapshot(db, module, occurrences.value(), scope.value()))
                 : Optional.empty();

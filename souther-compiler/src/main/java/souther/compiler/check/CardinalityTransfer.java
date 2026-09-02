@@ -274,7 +274,7 @@ final class CardinalityTransfer {
                                      Set<TypeSymbol> worn) {
         Cardinality named = answers.of(ref.name());
         if (granted.test(ref.name())
-                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || !data.newtype()
+                || !(symbols.declaredNode(ref.name()) instanceof Hir.Data data) || !data.newtype()
                 || !worn.add(ref.name())) {
             return named;
         }
