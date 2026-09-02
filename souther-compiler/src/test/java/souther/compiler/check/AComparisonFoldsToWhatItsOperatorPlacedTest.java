@@ -9,7 +9,11 @@ import souther.compiler.types.CoverageOrigin;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -19,9 +23,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>The way from the operator to the answer, taken whole: what the operator placed
  * ({@link ComparisonPlacement}), the relation that placement states, and the fold of that relation
- * over two constants. Each of the six is put through it, because what is being fixed is the way and
- * not any one relation — a claim read off the wrong operator answers every question a reader can
- * ask of it, and answers them about a comparison nobody wrote.
+ * over two constants. Every operator that compares is put through it, because what is being fixed
+ * is the way and not any one relation — a claim read off the wrong operator answers every question
+ * a reader can ask of it, and answers them about a comparison nobody wrote.
+ *
+ * <p><b>Which operators those are is asked of the operator.</b> Written out here, this would be a
+ * second membership beside {@link BinOp#compares} — the one it is asked of everywhere else — and
+ * the two can be given different answers about an operator added later. Written out, the operator
+ * added later is folded by nothing here and this stays green while saying "every".
  *
  * <p>What the relations themselves come to is fixed against how two values stand, and not here.
  */
@@ -29,65 +38,85 @@ class AComparisonFoldsToWhatItsOperatorPlacedTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
 
-    /** The six as the language writes them. */
+    /** Every operator that compares, asked of the operator. */
     private static final List<BinOp> COMPARING =
-            List.of(BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.EQ, BinOp.NE);
+            Stream.of(BinOp.values()).filter(BinOp::compares).toList();
+
+    /** What a fold that answers no constant is said as, which is what the callers read empty as. */
+    private static final String NOT_A_CONSTANT = "not a constant";
+
+    /** Two written values, and what folding each comparison of them comes to. */
+    private record Written(String left, String right, Hir.Expr leftValue, Hir.Expr rightValue,
+                           Map<BinOp, String> folds) { }
+
+    private static final List<Written> PAIRS = List.of(
+            new Written("1", "2", intLit(1), intLit(2), Map.of(
+                    BinOp.LT, "true", BinOp.LE, "true", BinOp.GT, "false", BinOp.GE, "false",
+                    BinOp.EQ, "false", BinOp.NE, "true")),
+            new Written("2", "2", intLit(2), intLit(2), Map.of(
+                    BinOp.LT, "false", BinOp.LE, "true", BinOp.GT, "false", BinOp.GE, "true",
+                    BinOp.EQ, "true", BinOp.NE, "false")),
+            new Written("2", "1", intLit(2), intLit(1), Map.of(
+                    BinOp.LT, "false", BinOp.LE, "false", BinOp.GT, "true", BinOp.GE, "true",
+                    BinOp.EQ, "false", BinOp.NE, "true")),
+            // No order to answer an ordering by, and an equality all the same.
+            new Written("true", "true", boolLit(true), boolLit(true), Map.of(
+                    BinOp.LT, NOT_A_CONSTANT, BinOp.LE, NOT_A_CONSTANT,
+                    BinOp.GT, NOT_A_CONSTANT, BinOp.GE, NOT_A_CONSTANT,
+                    BinOp.EQ, "true", BinOp.NE, "false")),
+            new Written("true", "false", boolLit(true), boolLit(false), Map.of(
+                    BinOp.LT, NOT_A_CONSTANT, BinOp.LE, NOT_A_CONSTANT,
+                    BinOp.GT, NOT_A_CONSTANT, BinOp.GE, NOT_A_CONSTANT,
+                    BinOp.EQ, "false", BinOp.NE, "true")));
 
     @Test
     void everyComparingOperatorFoldsToWhatItPlacedOverTwoConstants() {
-        assertEquals(List.of(
-                "1 LT 2 = true", "1 LE 2 = true", "1 GT 2 = false", "1 GE 2 = false",
-                "1 EQ 2 = false", "1 NE 2 = true",
-                "2 LT 2 = false", "2 LE 2 = true", "2 GT 2 = false", "2 GE 2 = true",
-                "2 EQ 2 = true", "2 NE 2 = false",
-                "2 LT 1 = false", "2 LE 1 = false", "2 GT 1 = true", "2 GE 1 = true",
-                "2 EQ 1 = false", "2 NE 1 = true",
-                // No order to answer an ordering by, and an equality all the same.
-                "true LT true = not a constant", "true LE true = not a constant",
-                "true GT true = not a constant", "true GE true = not a constant",
-                "true EQ true = true", "true NE true = false",
-                "true LT false = not a constant", "true LE false = not a constant",
-                "true GT false = not a constant", "true GE false = not a constant",
-                "true EQ false = false", "true NE false = true"),
-                folded(List.of(
-                        new Pair(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)),
-                        new Pair(new Hir.IntLit(2, POS, null), new Hir.IntLit(2, POS, null)),
-                        new Pair(new Hir.IntLit(2, POS, null), new Hir.IntLit(1, POS, null)),
-                        new Pair(new Hir.BoolLit(true, POS, null), new Hir.BoolLit(true, POS, null)),
-                        new Pair(new Hir.BoolLit(true, POS, null),
-                                new Hir.BoolLit(false, POS, null)))));
-    }
-
-    /** Two written values a comparison is folded of. */
-    private record Pair(Hir.Expr left, Hir.Expr right) { }
-
-    /** Every comparing operator over every pair, as one row each. */
-    private static List<String> folded(List<Pair> pairs) {
-        List<String> rows = new ArrayList<>();
-        for (Pair pair : pairs) {
+        Map<String, String> written = new LinkedHashMap<>();
+        Map<String, String> folded = new LinkedHashMap<>();
+        for (Written pair : PAIRS) {
             for (BinOp op : COMPARING) {
-                rows.add(written(pair.left()) + " " + op + " " + written(pair.right())
-                        + " = " + fold(op, pair.left(), pair.right()));
+                String row = pair.left() + " " + op + " " + pair.right();
+                written.put(row, pair.folds().get(op));
+                folded.put(row, fold(op, pair.leftValue(), pair.rightValue()));
             }
         }
-        return rows;
+        assertEquals(written, folded);
     }
 
-    /** What {@code left op right} folds to, or that it folds to no constant. Folded against the
-     *  real library, which is what a fold is asked of, though a comparison of two literals names
-     *  none of it. */
+    /**
+     * What is written below is an answer for each operator that compares, and for no other.
+     *
+     * <p>The two sets are made differently on purpose — one is asked of the operator, the other is
+     * what somebody wrote out — so holding them against each other is what says an operator added
+     * to the language is folded here rather than passed over in silence. It is also what says the
+     * fold above ran at all: two empty sets agree, and these do not.
+     */
+    @Test
+    void whatIsWrittenOutCoversEveryOperatorThatCompares() {
+        List<Set<BinOp>> asked = new ArrayList<>();
+        List<Set<BinOp>> answered = new ArrayList<>();
+        for (Written pair : PAIRS) {
+            asked.add(Set.copyOf(COMPARING));
+            answered.add(pair.folds().keySet());
+        }
+        assertEquals(asked, answered,
+                "an operator that compares and is not written out here is folded by nothing");
+    }
+
+    /** What {@code left op right} folds to. Folded against the real library, which is what a fold
+     *  is asked of, though a comparison of two literals names none of it. */
     private static String fold(BinOp op, Hir.Expr left, Hir.Expr right) {
         return ConstEval.against(Symbols.none(DefaultStdlib.get()))
                 .eval(new Hir.Binary(op, left, right, CoverageOrigin.unwritten(), POS, null))
                 .map(String::valueOf)
-                .orElse("not a constant");
+                .orElse(NOT_A_CONSTANT);
     }
 
-    private static String written(Hir.Expr value) {
-        return switch (value) {
-            case Hir.IntLit i -> String.valueOf(i.value());
-            case Hir.BoolLit b -> String.valueOf(b.value());
-            default -> throw new IllegalArgumentException("not a value written here: " + value);
-        };
+    private static Hir.Expr intLit(long value) {
+        return new Hir.IntLit(value, POS, null);
+    }
+
+    private static Hir.Expr boolLit(boolean value) {
+        return new Hir.BoolLit(value, POS, null);
     }
 }

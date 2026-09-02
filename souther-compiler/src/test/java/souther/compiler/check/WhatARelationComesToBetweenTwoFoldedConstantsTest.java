@@ -6,12 +6,15 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * What each of the six relations comes to between two folded constants.
+ * What each relation comes to between two folded constants.
  *
  * <p>Two questions, held apart. What a relation answers is decided by how the two values stand —
  * below one another, at one another, above, or of no ordered kind at all — and by nothing else, so
@@ -21,29 +24,39 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>Read one table at a time, so a kind whose ordering moved is told apart from a relation whose
  * meaning did.
+ *
+ * <p><b>Which relations there are is asked of {@link Rel}.</b> Written out here, a relation added
+ * to it would be answered about by nothing while these tables went on saying "each".
  */
 class WhatARelationComesToBetweenTwoFoldedConstantsTest {
 
-    /** The six in one order, so a row is read the same way wherever it appears. */
-    private static final List<Rel> RELATIONS =
-            List.of(Rel.EQ, Rel.NE, Rel.LT, Rel.LE, Rel.GT, Rel.GE);
+    /** Every relation, asked of the type that has them. */
+    private static final List<Rel> RELATIONS = List.of(Rel.values());
 
-    /** A way two values can stand, and what each of the six answers of two values standing so. */
-    private record Standing(String name, List<String> answers) { }
+    /** What a relation two constants cannot answer is said as. */
+    private static final String UNDECIDED = "undecided";
+
+    /** A way two values can stand, and what each relation answers of two values standing so. */
+    private record Standing(String name, Map<Rel, String> answers) { }
 
     private static final List<Standing> STANDINGS = List.of(
-            new Standing("below",
-                    List.of("false", "true", "true", "true", "false", "false")),
-            new Standing("at",
-                    List.of("true", "false", "false", "true", "false", "true")),
-            new Standing("above",
-                    List.of("false", "true", "false", "false", "true", "true")),
+            new Standing("below", Map.of(
+                    Rel.EQ, "false", Rel.NE, "true", Rel.LT, "true", Rel.LE, "true",
+                    Rel.GT, "false", Rel.GE, "false")),
+            new Standing("at", Map.of(
+                    Rel.EQ, "true", Rel.NE, "false", Rel.LT, "false", Rel.LE, "true",
+                    Rel.GT, "false", Rel.GE, "true")),
+            new Standing("above", Map.of(
+                    Rel.EQ, "false", Rel.NE, "true", Rel.LT, "false", Rel.LE, "false",
+                    Rel.GT, "true", Rel.GE, "true")),
             // An equality answers of any two constants at all, and an ordering is not something to
             // decide where there is no order to decide it by.
-            new Standing("of no ordered kind, one value",
-                    List.of("true", "false", "undecided", "undecided", "undecided", "undecided")),
-            new Standing("of no ordered kind, two values",
-                    List.of("false", "true", "undecided", "undecided", "undecided", "undecided")));
+            new Standing("of no ordered kind, one value", Map.of(
+                    Rel.EQ, "true", Rel.NE, "false", Rel.LT, UNDECIDED, Rel.LE, UNDECIDED,
+                    Rel.GT, UNDECIDED, Rel.GE, UNDECIDED)),
+            new Standing("of no ordered kind, two values", Map.of(
+                    Rel.EQ, "false", Rel.NE, "true", Rel.LT, UNDECIDED, Rel.LE, UNDECIDED,
+                    Rel.GT, UNDECIDED, Rel.GE, UNDECIDED)));
 
     /** Two folded values, how they stand, and how they are named in a row. */
     private record Pair(String name, Object left, Object right, String stands) { }
@@ -66,35 +79,40 @@ class WhatARelationComesToBetweenTwoFoldedConstantsTest {
             new Pair("\"a\" and \"a\"", "a", "a", "at"),
             new Pair("\"b\" and \"a\"", "b", "a", "above"));
 
-    /** Values of no one ordered kind, which is where an equality answers alone. */
+    /** Pairs of no one ordered kind, which is where an equality answers alone. */
     private static final List<Pair> OF_NO_ORDERED_KIND = List.of(
             new Pair("false and false", false, false, "of no ordered kind, one value"),
             new Pair("false and true", false, true, "of no ordered kind, two values"),
             new Pair("1 and 1.0m", 1L, decimal("1.0"), "of no ordered kind, two values"));
 
     @Test
-    void howTheTwoStandDecidesWhatEachOfTheSixAnswers() {
-        assertEquals(expected(EACH_WAY_OF_STANDING), answered(EACH_WAY_OF_STANDING),
+    void howTheTwoStandDecidesWhatEachRelationAnswers() {
+        assertEquals(written(EACH_WAY_OF_STANDING), answered(EACH_WAY_OF_STANDING),
                 "what a relation answers is read off how the two values stand and nothing else");
     }
 
     @Test
-    void everyKindStandsTheWayItsOwnComparisonSays() {
-        List<Pair> pairs = new ArrayList<>(EACH_ORDERED_KIND);
-        pairs.addAll(OF_NO_ORDERED_KIND);
-        assertEquals(expected(pairs), answered(pairs),
+    void everyOrderedKindStandsTheWayItsOwnComparisonSays() {
+        assertEquals(written(EACH_ORDERED_KIND), answered(EACH_ORDERED_KIND),
                 "a kind whose values are put in the wrong order answers every relation about them"
                         + " consistently and about the wrong pair");
+    }
+
+    @Test
+    void twoValuesOfNoOneOrderedKindAnswerTheEqualityAlone() {
+        assertEquals(written(OF_NO_ORDERED_KIND), answered(OF_NO_ORDERED_KIND),
+                "an ordering of values there is no order over is undecided, and an equality of them"
+                        + " is not");
     }
 
     /**
      * Of two values of one ordered kind, the equality answers what being one value answers.
      *
      * <p>The two are asked in different words — where the values stand, and whether they are the
-     * one value ({@link ConstEval#equal}) — and an equality of such a pair is answered in the first,
-     * so what makes that the whole answer is that the two agree. A decimal is where they could come
-     * apart, since {@code 1.0m} and {@code 1.00m} are two ways of writing one amount, and both
-     * answers are the amount's.
+     * one value ({@link ConstEval#equal}) — and an equality of such a pair is answered in the
+     * first, so what makes that the whole answer is that the two agree. A decimal is where they
+     * could come apart, since {@code 1.0m} and {@code 1.00m} are two ways of writing one amount,
+     * and both answers are the amount's.
      */
     @Test
     void ofOneOrderedKindTheEqualityAnswersWhatBeingOneValueAnswers() {
@@ -111,6 +129,26 @@ class WhatARelationComesToBetweenTwoFoldedConstantsTest {
                 bothWays());
     }
 
+    /**
+     * What is written above is an answer for each relation there is, and for no other.
+     *
+     * <p>The two sets are made differently on purpose — one is asked of {@link Rel}, the other is
+     * what somebody wrote out — so holding them against each other is what says a relation added
+     * later is answered about here rather than passed over. It is also what says the tables above
+     * were read at all: two empty sets agree, and these do not.
+     */
+    @Test
+    void whatIsWrittenOutCoversEveryRelationThereIs() {
+        List<Set<Rel>> asked = new ArrayList<>();
+        List<Set<Rel>> answered = new ArrayList<>();
+        for (Standing each : STANDINGS) {
+            asked.add(Set.copyOf(RELATIONS));
+            answered.add(each.answers().keySet());
+        }
+        assertEquals(asked, answered,
+                "a relation no way of standing writes an answer for is fixed by nothing");
+    }
+
     private static List<String> bothWays() {
         List<Pair> pairs = new ArrayList<>(EACH_WAY_OF_STANDING.subList(0, 3));
         pairs.addAll(EACH_ORDERED_KIND);
@@ -120,32 +158,32 @@ class WhatARelationComesToBetweenTwoFoldedConstantsTest {
                 + ", one value = " + ConstEval.equal(each.left(), each.right())).toList();
     }
 
-    /** What the six answer of each pair, taken from the way it stands. */
-    private static List<String> expected(List<Pair> pairs) {
-        List<String> rows = new ArrayList<>();
+    /** What each relation answers of each pair, taken from the way it stands. */
+    private static Map<String, String> written(List<Pair> pairs) {
+        Map<String, String> rows = new LinkedHashMap<>();
         for (Pair pair : pairs) {
-            List<String> answers = standing(pair.stands()).answers();
-            for (int at = 0; at < RELATIONS.size(); at++) {
-                rows.add(row(pair, RELATIONS.get(at), answers.get(at)));
+            Map<Rel, String> answers = standing(pair.stands()).answers();
+            for (Rel rel : RELATIONS) {
+                rows.put(row(pair, rel), answers.get(rel));
             }
         }
         return rows;
     }
 
-    /** What the six answer of each pair, taken from the fold. */
-    private static List<String> answered(List<Pair> pairs) {
-        List<String> rows = new ArrayList<>();
+    /** What each relation answers of each pair, taken from the fold. */
+    private static Map<String, String> answered(List<Pair> pairs) {
+        Map<String, String> rows = new LinkedHashMap<>();
         for (Pair pair : pairs) {
             for (Rel rel : RELATIONS) {
                 Boolean stands = ConstEval.stands(rel, pair.left(), pair.right());
-                rows.add(row(pair, rel, stands == null ? "undecided" : String.valueOf(stands)));
+                rows.put(row(pair, rel), stands == null ? UNDECIDED : String.valueOf(stands));
             }
         }
         return rows;
     }
 
-    private static String row(Pair pair, Rel rel, String answer) {
-        return pair.name() + " (" + pair.stands() + ") " + rel + " = " + answer;
+    private static String row(Pair pair, Rel rel) {
+        return pair.name() + " (" + pair.stands() + ") " + rel;
     }
 
     private static Standing standing(String name) {
