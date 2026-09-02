@@ -76,13 +76,21 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
     private static List<Class<?>> states() {
         List<Class<?>> found = new ArrayList<>();
+        Set<Class<?>> walked = new LinkedHashSet<>();
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(Prepared.class, Expandable.class));
         while (!pending.isEmpty()) {
             Class<?> one = pending.poll();
-            if (!isState(one) || found.contains(one)) {
+            // An assembly is walked through and not counted: it holds states and is not one, which
+            // is a thing the class says of itself ({@link Assembly}) rather than a thing this
+            // reading works out from its shape. Skipping it whole would take the states it holds
+            // out of the family with it.
+            boolean assembly = Assembly.class.isAssignableFrom(one);
+            if (!(assembly || isState(one)) || !walked.add(one)) {
                 continue;
             }
-            found.add(one);
+            if (!assembly) {
+                found.add(one);
+            }
             for (Field f : one.getDeclaredFields()) {
                 mentioned(f.getGenericType(), pending);
             }
@@ -93,6 +101,23 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         }
         found.sort(Comparator.comparing(Class::getName));
         return List.copyOf(found);
+    }
+
+    /**
+     * An assembly is not among the states, and what it holds still is.
+     *
+     * <p>Held because of what the reading below it is worth. A state is found here by its shape — a
+     * final class of this package nobody outside can build — and an assembly is written that way
+     * too, so without the distinction the family would carry a value that claims nothing and a rule
+     * about states failing on it would say neither which. Walked through all the same: the states an
+     * assembly holds are states wherever they are reached from.
+     */
+    @Test
+    void anAssemblyIsNotAStateAndTheStatesItHoldsAre() {
+        assertFalse(STATES.contains(CheckSurface.class),
+                "an assembly claims nothing, so what a state is held to is not asked of it");
+        assertTrue(STATES.contains(Desugared.Fn.class),
+                "and a state it holds is one, or the assembly took it out of the family");
     }
 
     /**
@@ -607,8 +632,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
         assertEquals(2, applications(clauseOf(List.of(amount.def()), "Amount")),
                 "the constructions are written as applications until this rewrites them");
-        assertEquals(0, applications(clauseOf(List.of(Derived.Def.derive(amount, scope).declared()),
-                        "Amount")),
+        assertEquals(0, applications(clauseOf(
+                        List.of(Normalized.Def.of(amount, scope).node()), "Amount")),
                 "and none is left as one afterwards");
     }
 
@@ -652,9 +677,10 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      * <p>What can be read exactly is who is in a position to call it at all. Java has it down to this
      * package; within it, a class that can reach a projection is one that holds a state or is handed
      * one. The states themselves are governed by the routes they answer with; what is left is the
-     * boundary where the module leaves the ladder, and there is one — {@code Lower}, which hands the
-     * whole of it to the pass that settles helper parameter types across it and answers with a tree
-     * carrying no proposition ({@code Bodies.Settled}, measured in #710).
+     * boundary where the module leaves the ladder, and there is one — {@code CheckSurface.assemble},
+     * which is handed the settled module and joins its parts into a payload claiming nothing about
+     * them. What is done with that payload afterwards drops no claim, because there was none on it
+     * to drop.
      *
      * <p>Of the states that say something about a part, because those are the ones with something to
      * lose. {@code Expandable} answers whether a body of the module may be expanded and claims
@@ -695,7 +721,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 }
             }
         }
-        assertEquals(List.of("Lower.settle(CheckSurface, Symbols, Map)"), handling,
+        assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map, Symbols, Map)"),
+                handling,
                 "a class here that is handed a state can reach its projection, and taking a part "
                         + "off that is the claim thrown away with nothing saying so");
     }
@@ -830,8 +857,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         InvariantSettled b = InvariantSettled.settle(
                 Expandable.check(resolvedB(), Map.of(), DefaultStdlib.get()), scopeB, Map.of());
 
-        Derived.Def ofA = Derived.Def.derive(defNamed(a, "Amount"), scopeA);
-        Derived.Def ofB = Derived.Def.derive(defNamed(b, "Amount"), scopeB);
+        Derived.Def ofA = Derived.Def.derive(Normalized.Def.of(defNamed(a, "Amount"), scopeA), scopeA);
+        Derived.Def ofB = Derived.Def.derive(Normalized.Def.of(defNamed(b, "Amount"), scopeB), scopeB);
         assertEquals("Amount", ofB.name(), "the same bare name, so the map key does not tell them apart");
         assertNotEquals(ofA.declaredKey(), ofB.declaredKey());
 
@@ -848,8 +875,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         ResolvedSymbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         Derived.Module a = Derived.Module.assemble(
                 InvariantSettled.settle(Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()),
-                Map.of("Amount", Derived.Def.derive(defNamed(InvariantSettled.settle(
-                        Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()), "Amount"), scopeA)));
+                Map.of("Amount", Derived.Def.derive(Normalized.Def.of(defNamed(InvariantSettled.settle(
+                        Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA, Map.of()), "Amount"), scopeA), scopeA)));
         Hir.FnDef ofA = a.fns().get(0);
         Hir.FnDef ofB = new Hir.FnDef(ofA.written(), "b", ofA.params(), ofA.declaredReturn(),
                 ofA.body(), ofA.modifiers(), ofA.pos());

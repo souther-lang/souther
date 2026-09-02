@@ -631,8 +631,8 @@ public final class Output {
             List<Hir.InvariantClause> clauses = null;
             for (souther.compiler.check.Derived.Def declared : declaring.value().defs()) {
                 if (declared instanceof souther.compiler.check.Derived.Data data
-                        && data.declared().name().equals(check.type().name())) {
-                    clauses = TypeOps.effectiveInvariants(data.declared(), scope.value());
+                        && data.declaration().node().name().equals(check.type().name())) {
+                    clauses = TypeOps.effectiveInvariants(data.declaration().node(), scope.value());
                 }
             }
             if (clauses == null) {

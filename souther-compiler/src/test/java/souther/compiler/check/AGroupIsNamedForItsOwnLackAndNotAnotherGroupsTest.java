@@ -31,8 +31,8 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo").defs().stream().map(Derived.Def::declared).toList(),
-                        TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::declared).toList(),
+        return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(),
+                        TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(),
                                 Scopes.derived(compilation.db(), "demo").value(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
                 .stream().map(each -> each.members().stream().map(TypeSymbol::name).toList()).toList();
     }

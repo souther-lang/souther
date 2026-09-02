@@ -19,19 +19,19 @@ import java.util.Map;
  * whole module to walk over gets it from here, so those are decided once and never counted out
  * again.
  *
- * <p>Its declaration nodes are nevertheless written in the same declaration-local form the derived
- * stage uses ({@link Derived#normalized}): failing to derive a representation does not put an
- * earlier spelling back into the tree. A module holding one declaration that could not be derived is
- * still read for what its other definitions say, and the declaration that could not be derived is
- * here in the form every reader below the settling expects — not beside them in a spelling one rung
- * up, which nothing in a tree would say was different.
+ * <p>Its declarations are the ones {@link Normalized} answered for, handed in rather than worked out
+ * here: failing to derive a representation does not put an earlier spelling back into the tree. A
+ * module holding one declaration that could not be derived is still read for what its other
+ * definitions say, and the declaration that could not be derived is here in the form every reader
+ * below the settling expects — not beside them in a spelling one rung up, which nothing in a tree
+ * would say was different.
  *
- * <p>Not a rung. What a state of this package says is that something was established of a value;
- * what this says is where the parts were joined. {@link Prepared} is the state — it is this
- * assembly beside the witness that every declaration came out — and a reader that has to have a
- * whole module asks for that one.
+ * <p>Not a rung, and it says so ({@link Assembly}). What a state of this package says is that
+ * something was established of a value; what this says is where the parts were joined.
+ * {@link Prepared} is the state — it is this assembly beside the witness that every declaration came
+ * out — and a reader that has to have a whole module asks for that one.
  */
-public final class CheckSurface {
+public final class CheckSurface implements Assembly {
 
     private final Hir.Module settled;
     private final List<Hir.Def> declarations;
@@ -58,29 +58,37 @@ public final class CheckSurface {
     /**
      * The parts of {@code settling} joined.
      *
-     * <p>The declarations are normalised here rather than handed in, so what is on the surface is
-     * what {@link Derived#normalized} answers with for every declaration the module writes and
-     * cannot be anything else. {@code desugared} is the definitions that came out, which may be
-     * short of what the module wrote: a definition is worked out whether or not the one before it
-     * came out.
+     * <p>{@code normalized} is the declarations as the one producer of that form answered for them
+     * ({@code Shapes.NormalizedDeclarations}), handed in rather than worked out again here. Worked
+     * out here, this would be a second producer of the normalized form, and a declaration read off
+     * this surface could differ from the same one read anywhere else. {@code desugared} is the
+     * definitions that came out, which may be short of what the module wrote: a definition is worked
+     * out whether or not the one before it came out.
      *
-     * <p>{@code resolved} is the world a declaration is normalised against, which is the world the
-     * derived stage normalises against — the same operation over the same names, so a declaration
-     * here and the same one on a derived declaration are one node. {@code scope} is what a name
-     * means below the derivation, which is what a definition is held to after it is rewritten;
-     * {@code signatures} is what each behavior takes and answers with, which says where a row's
-     * values stand.
+     * <p>{@code scope} is what a name means below the derivation, which is what a definition is held
+     * to after it is rewritten; {@code signatures} is what each behavior takes and answers with,
+     * which says where a row's values stand.
      *
-     * @throws CompileException where a declaration cannot be read that way, or a definition cannot
-     *     be held to what it was rewritten to
+     * <p>Null where a declaration the module writes was not normalized. What this carries is the
+     * module, and a module short of a declaration it writes is read as one that does not declare it
+     * — which is how a name a module exposes came back as a name it must have imported. That a
+     * representation could not be derived for a declaration is the other thing entirely, and costs
+     * this nothing: the declaration is here, and what it says about itself is read from it.
+     *
+     * @throws CompileException where a definition cannot be held to what it was rewritten to
      */
-    public static CheckSurface assemble(InvariantSettled settling, ResolvedSymbols resolved,
+    public static CheckSurface assemble(InvariantSettled settling,
+                                        Map<String, Normalized.Def> normalized,
                                         Map<String, Desugared.Fn> desugared, Symbols scope,
                                         Map<ValueName.Behavior, Sig> signatures) {
         Hir.Module settled = settling.module();
         List<Hir.Def> declarations = new ArrayList<>();
         for (InvariantSettled.Def def : settling.defs()) {
-            declarations.add(Derived.normalized(def, resolved));
+            Normalized.Def came = normalized.get(def.name());
+            if (came == null) {
+                return null;
+            }
+            declarations.add(came.node());
         }
         // An imported definition is written here bare and denotes the module that declares it.
         // Spelling it out, once, settles the name this module reaches it by, which is what the table
@@ -119,6 +127,12 @@ public final class CheckSurface {
     /** What the module is called. */
     public String name() {
         return settled.name();
+    }
+
+    /** The settled module the parts were joined over — which module this is an assembly of, where a
+     *  name says only what it is called. */
+    Hir.Module settledModule() {
+        return settled;
     }
 
     /** The behaviors it declares, which no rung at or below this rewrites. */

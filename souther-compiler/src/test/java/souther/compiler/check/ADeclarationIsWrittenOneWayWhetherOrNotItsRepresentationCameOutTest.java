@@ -50,13 +50,13 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
 
     @Test
     void aDeclarationThatDerivedIsTheNormalisedDeclaration() {
-        InvariantSettled.Def amount = defNamed("Amount");
+        Normalized.Def amount = normalizedNamed("Amount");
 
         Derived.Def derived = Derived.Def.derive(amount, scope);
 
         assertNotNull(derived, "`Amount` has a representation to derive");
-        assertEquals(Derived.normalized(amount, scope), derived.declared(),
-                "what the derived declaration holds is what the normalisation answered with");
+        assertEquals(amount, derived.declaration(),
+                "what the derived declaration holds is the normalised declaration it was made from");
     }
 
     /**
@@ -68,23 +68,30 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
      */
     @Test
     void aDeclarationThatDidNotDeriveIsStillNormalised() {
-        InvariantSettled.Def broken = defNamed("Broken");
+        Normalized.Def broken = normalizedNamed("Broken");
 
         assertNull(Derived.Def.derive(broken, scope),
                 "nothing could be derived for a field whose type names nothing");
-        assertNotNull(Derived.normalized(broken, scope),
+        assertNotNull(broken.node(),
                 "and the declaration is still written in the form the stage below reads");
     }
 
-    /** The normalisation is one operation and not two readings that happen to agree today. */
+    /**
+     * The derivation does not normalise: it is handed a normalised declaration and hands the same
+     * one back.
+     *
+     * <p>Which is what makes the rung above the one producer. Normalising again here would be a
+     * second producer of that form, and the declaration a reader gets and the declaration a
+     * representation was derived for could stop being one node.
+     */
     @Test
     void everyDeclarationIsNormalisedByTheOneOperation() {
         for (InvariantSettled.Def def : settled.defs()) {
-            Hir.Def normalised = Derived.normalized(def, scope);
-            Derived.Def derived = Derived.Def.derive(def, scope);
+            Normalized.Def normalised = Normalized.Def.of(def, scope);
+            Derived.Def derived = Derived.Def.derive(normalised, scope);
             if (derived != null) {
-                assertEquals(normalised, derived.declared(),
-                        "`" + def.name() + "` is written the same way either way");
+                assertSame(normalised, derived.declaration(),
+                        "`" + def.name() + "` reached the derivation already written this way");
             }
         }
     }
@@ -95,7 +102,11 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
     void aDeclarationWithNothingToRewriteIsTheDeclarationItWas() {
         InvariantSettled.Def wrapped = defNamed("Wrapped");
 
-        assertSame(wrapped.def(), Derived.normalized(wrapped, scope));
+        assertSame(wrapped.def(), Normalized.Def.of(wrapped, scope).node());
+    }
+
+    private Normalized.Def normalizedNamed(String name) {
+        return Normalized.Def.of(defNamed(name), scope);
     }
 
     private InvariantSettled.Def defNamed(String name) {

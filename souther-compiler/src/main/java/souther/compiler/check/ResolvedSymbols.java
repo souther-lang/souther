@@ -32,7 +32,7 @@ public final class ResolvedSymbols implements Symbols {
     /** No module at all — for signatures written over primitives and type variables only. */
     static ResolvedSymbols none(Stdlib stdlib) {
         return new ResolvedSymbols(new SymbolTable<>("", Registry.empty(), Denoting.NONE,
-                Declarations.Vocabulary.of(stdlib), stdlib));
+                Declarations.Vocabulary.of(stdlib), stdlib, each -> each));
     }
 
     /**
@@ -58,7 +58,8 @@ public final class ResolvedSymbols implements Symbols {
         return new ResolvedSymbols(new SymbolTable<>(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
                         declared.declarations(), Registry.baseNames(m.exposing())))),
-                Denoting.of(names, Map.of()), Declarations.Vocabulary.of(stdlib), stdlib));
+                Denoting.of(names, Map.of()), Declarations.Vocabulary.of(stdlib), stdlib,
+                each -> each));
     }
 
     /** A module compiled over a registry that reads its declarations however it likes — the form a
@@ -73,7 +74,7 @@ public final class ResolvedSymbols implements Symbols {
     public static ResolvedSymbols over(String module, Registry<Hir.Def> registry, Denoting names,
                                        Stdlib stdlib) {
         return new ResolvedSymbols(new SymbolTable<>(module, registry, names,
-                Declarations.Vocabulary.of(stdlib), stdlib));
+                Declarations.Vocabulary.of(stdlib), stdlib, each -> each));
     }
 
     /**

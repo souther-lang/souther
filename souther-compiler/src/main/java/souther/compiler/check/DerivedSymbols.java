@@ -17,43 +17,68 @@ import java.util.Set;
  * reader that names this type is one that has to be below the derivation — and one that needs what
  * the derivation established about a declaration has nowhere else to ask.
  *
- * <p>Both sources it answers from are at this rung. The compilation's declarations come from the
- * derived registry, and the language's own vocabulary is lifted to the same representation
- * ({@link Declarations.Vocabulary#ofDerived}). Left at the rung below, it would be answerable for
- * only through the node the two could both be read as, and every reader here would hold
- * declarations with nothing saying they came out.
+ * <p>Three tables and each answers what it settled. A declaration is read as it was normalized,
+ * a representation is asked of what the derivation answered for, and whether a name is declared at
+ * all is resolution's. Written as one table with the others read where it came up empty, the
+ * derivation's failure on one declaration would choose the form every reader saw that declaration
+ * in, which is a question none of them asked.
+ *
+ * <p>Each table's second source is at the rung that table reads: the language's own vocabulary is
+ * lifted to the derived representation ({@link Declarations.Vocabulary#ofDerived}) and to the
+ * normalized one ({@link Declarations.Vocabulary#ofNormalized}), so a reader here is never handed a
+ * library declaration through a node the two could both be read as.
  */
 public final class DerivedSymbols implements Symbols {
 
+    /**
+     * The declarations a representation was derived for.
+     *
+     * <p>Read by the questions a representation answers and by no others. A declaration missing here
+     * is a product one of whose fields names no type, and what that costs is that nobody can be told
+     * how a value of it crosses.
+     */
     private final SymbolTable<Derived.Def> table;
+    /**
+     * The same names over the declarations as they were normalized.
+     *
+     * <p>What a declaration is read as here. Normalizing is answered for every declaration a module
+     * writes, so this is not missing the ones the derivation could not answer for — which is the
+     * whole point of its being a table of its own. Read from the derived table instead, a reader
+     * would be handed the constructions written as constructions where a codec came out and the
+     * calls the author typed where one did not, and nothing it held would say which.
+     */
+    private final SymbolTable<Normalized.Def> normalized;
     /**
      * The same names over the declarations as resolution left them.
      *
-     * <p>Two tables and each answers what it settled. What the derivation established is in the
-     * first, and a declaration it could not answer for is not there at all. What <em>resolution</em>
-     * established is in the second, and it is there whether or not the derivation got anywhere with
-     * it: which module declares a name, and what the declaration says about itself.
-     *
-     * <p>Asked of the first, those would come back as "nothing declares that" — and a reader would
-     * go on to say the name is the language's, or that the value has no field to read. Both are
-     * about a declaration this module writes, and neither is true of it.
+     * <p>Which names are declared, and by which module. Asked of resolution because that is what
+     * settled it: a declaration whose clauses cannot be read has no normalized form and is still a
+     * name this module declares, and a reader told otherwise would say the name is the language's
+     * or that the value has no field to read. What one achievement could not do does not decide what
+     * another established — which is the same reason the two tables above are two.
      */
     private final SymbolTable<Hir.Def> resolved;
 
-    private DerivedSymbols(SymbolTable<Derived.Def> table, SymbolTable<Hir.Def> resolved) {
+    private DerivedSymbols(SymbolTable<Derived.Def> table, SymbolTable<Normalized.Def> normalized,
+                           SymbolTable<Hir.Def> resolved) {
         this.table = table;
+        this.normalized = normalized;
         this.resolved = resolved;
     }
 
-    /** A module over a registry of derived declarations, with the language's vocabulary lifted to
-     * the same rung, and the resolution the declarations came from. */
+    /** A module over the three registries a reader below the derivation is answered from, each with
+     * the language's own vocabulary at the rung that registry reads. */
     public static DerivedSymbols over(String module, Registry<Derived.Def> registry,
+                                      Registry<Normalized.Def> normalized,
                                       Registry<Hir.Def> resolved, Denoting names, Stdlib stdlib) {
         return new DerivedSymbols(
                 new SymbolTable<>(module, registry, names,
-                        Declarations.Vocabulary.ofDerived(stdlib), stdlib),
+                        Declarations.Vocabulary.ofDerived(stdlib), stdlib,
+                        each -> each.declaration().node()),
+                new SymbolTable<>(module, normalized, names,
+                        Declarations.Vocabulary.ofNormalized(stdlib), stdlib, Normalized.Def::node),
                 new SymbolTable<>(module, resolved, names,
-                        Declarations.Vocabulary.of(stdlib), stdlib));
+                        Declarations.Vocabulary.of(stdlib), stdlib, each -> each));
     }
 
     /**
@@ -100,25 +125,22 @@ public final class DerivedSymbols implements Symbols {
     }
 
     /**
-     * What the derivation answered for, and what resolution left where it answered for nothing.
+     * The declaration {@code name} is, normalized.
      *
-     * <p>The first, because a declaration that came out is written in the form every reader here
-     * expects — the constructions in its clauses are constructions. The second, because a
-     * declaration the derivation could not answer for is declared all the same: answered with
-     * nothing, a reader would say the value has no field to read, or that the name is the
-     * language's, and both are about a declaration this module writes.
+     * <p>One table and one form. Every declaration a module writes is normalized, so which form this
+     * answers with is not decided by whether a representation could be derived for the declaration
+     * asked about — a reader here holds the constructions written as constructions, of every
+     * declaration, or the name is one nothing declares.
      */
     @Override
     public Hir.Def declaredNode(TypeSymbol name) {
-        Hir.Def came = table.declaredNode(name);
-        return came != null ? came : resolved.declaredNode(name);
+        return normalized.declaredNode(name);
     }
 
     /** The same, of an address. */
     @Override
     public Hir.Def declaredNode(TypeKey address) {
-        Hir.Def came = table.declaredNode(address);
-        return came != null ? came : resolved.declaredNode(address);
+        return normalized.declaredNode(address);
     }
 
     @Override

@@ -33,7 +33,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
         List<souther.compiler.ast.Hir.Def> defs =
-                compilation.module("demo").defs().stream().map(Derived.Def::declared).toList();
+                compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
         return UninhabitableTypes.withNoValueOfTheirOwn(defs,
                 TypeCardinality.solve(defs, Scopes.derived(compilation.db(), "demo").value(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
@@ -49,7 +49,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         List<souther.compiler.ast.Hir.Def> defs =
-                compilation.module("demo").defs().stream().map(Derived.Def::declared).toList();
+                compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return shape(TypeCardinality.solve(defs, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).of(
                 souther.compiler.types.TypeSymbols.declared(

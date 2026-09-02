@@ -311,7 +311,7 @@ final class CheckedProgramAssembler {
                         + " compile has nothing to say about what it declares");
             }
             for (Derived.Def def : defs.values()) {
-                declared.add(declaredAs(def.declared(), symbols, shapes));
+                declared.add(declaredAs(def.declaration().node(), symbols, shapes));
             }
         }
         return declared;

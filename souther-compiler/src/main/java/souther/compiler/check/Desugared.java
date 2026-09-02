@@ -156,6 +156,11 @@ public final class Desugared {
             return derived.name();
         }
 
+        /** The settled module this was built over, handed on from the rung below. */
+        Hir.Module settled() {
+            return derived.settled();
+        }
+
         /** Its declarations, which the rung below answered for and this one does not touch. */
         public List<Derived.Def> defs() {
             return derived.defs();

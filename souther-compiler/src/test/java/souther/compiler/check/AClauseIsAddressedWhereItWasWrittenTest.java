@@ -85,8 +85,8 @@ class AClauseIsAddressedWhereItWasWrittenTest {
         assertNotNull(prepared);
         for (Derived.Def def : prepared.defs()) {
             if (def instanceof Derived.Data derived
-                    && derived.declared().declares().equals(even(compilation))) {
-                return derived.declared().invariants();
+                    && derived.declaration().node().declares().equals(even(compilation))) {
+                return derived.declaration().node().invariants();
             }
         }
         throw new AssertionError("the module is supposed to declare `Even`");

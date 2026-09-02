@@ -65,7 +65,7 @@ class WhatTheLanguageDeclaresIsLiftedToTheDerivedWorldTest {
 
         List<String> mismatched = new ArrayList<>();
         LIBRARY.languageDeclarations().forEach((address, def) -> {
-            if (!def.equals(derived.declaration(address).declared())) {
+            if (!def.equals(derived.declaration(address).declaration().node())) {
                 mismatched.add(address.toString());
             }
         });
@@ -99,7 +99,7 @@ class WhatTheLanguageDeclaresIsLiftedToTheDerivedWorldTest {
      */
     @Test
     void aProductTheLanguageDeclaredWouldBeRefused() {
-        Hir.Def product = declared("Probe");
+        Normalized.Def product = Normalized.Def.ofLanguage(declared("Probe"));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> Derived.Def.ofLanguage(product));
@@ -112,8 +112,10 @@ class WhatTheLanguageDeclaresIsLiftedToTheDerivedWorldTest {
      *  the library. */
     @Test
     void aSumAndAUnitAreLifted() {
-        assertInstanceOf(Derived.Sum.class, Derived.Def.ofLanguage(declared("Band")));
-        assertInstanceOf(Derived.Unit.class, Derived.Def.ofLanguage(declared("Low")));
+        assertInstanceOf(Derived.Sum.class,
+                Derived.Def.ofLanguage(Normalized.Def.ofLanguage(declared("Band"))));
+        assertInstanceOf(Derived.Unit.class,
+                Derived.Def.ofLanguage(Normalized.Def.ofLanguage(declared("Low"))));
     }
 
     /** One declaration of a module written for these, resolved as any module is. */

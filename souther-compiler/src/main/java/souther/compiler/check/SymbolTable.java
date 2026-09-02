@@ -10,6 +10,7 @@ import souther.compiler.types.ValueName;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * A {@link TypeScope} and a {@link Declarations} together, in the representation the declarations
@@ -22,11 +23,19 @@ import java.util.Set;
  *
  * <p>{@code D} is the representation the declarations are in, and a representation is all it is.
  * Which rung a reader is at is which of the two carriers it was handed.
+ *
+ * <p>How a declaration is read off one of them is handed in rather than asked of {@code D}. A
+ * member every stage's carrier answers would have to mean the same thing at every stage, and it does
+ * not: what a resolved node hands over is what was written, and what a normalized declaration hands
+ * over has had its constructions rewritten. Written as an interface, the two would be one word for
+ * two things, which is what a reader at the far end of a table has no way to tell apart.
  */
-final class SymbolTable<D extends Hir.Declared> {
+final class SymbolTable<D> {
 
     private final TypeScope scope;
     private final Declarations<D> declarations;
+    /** How the declaration node is read off one of these. */
+    private final Function<D, Hir.Def> node;
     /** The library this module is compiled against. Held so that a reader already holding the
      *  symbol table has it — what a library operation is declared to be is part of what names mean
      *  here, and a reader that fetched its own could be reading a different library from the one
@@ -34,10 +43,11 @@ final class SymbolTable<D extends Hir.Declared> {
     private final Stdlib stdlib;
 
     SymbolTable(String module, Registry<D> registry, Denoting names,
-                Declarations.Vocabulary<D> language, Stdlib stdlib) {
+                Declarations.Vocabulary<D> language, Stdlib stdlib, Function<D, Hir.Def> node) {
         this.scope = new TypeScope(module, names, registry, stdlib.names().languageTypes());
         this.declarations = new Declarations<>(registry, language);
         this.stdlib = stdlib;
+        this.node = node;
     }
 
     TypeScope scope() {
@@ -52,16 +62,17 @@ final class SymbolTable<D extends Hir.Declared> {
         return stdlib;
     }
 
-    /** The declaration {@code name} is, as resolution left it, or null where nothing declares one. */
+    /** The declaration {@code name} is, in the representation this table holds, or null where
+     *  nothing declares one. */
     Hir.Def declaredNode(TypeSymbol name) {
         D def = declarations.declaration(name);
-        return def == null ? null : def.declared();
+        return def == null ? null : node.apply(def);
     }
 
     /** The same, of an address. */
     Hir.Def declaredNode(TypeKey address) {
         D def = declarations.declaration(address);
-        return def == null ? null : def.declared();
+        return def == null ? null : node.apply(def);
     }
 
     boolean declares(TypeKey address) {

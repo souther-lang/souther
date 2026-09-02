@@ -165,18 +165,85 @@ public final class Shapes {
     }
 
     /**
-     * A module's declarations by name, each in the form every later stage resolves a type against,
-     * and only the ones that came out.
+     * A module's declarations by name, each with the constructions in its clauses written as
+     * constructions.
      *
      * <p>This is where a newtype construction written {@code 金額(500)} becomes the construction it
      * is. A construction reaching an invariant through a helper is written in that helper's body,
      * which this module has not desugared yet, so normalizing here rather than with the bodies is
      * what leaves one spelling for every check over an invariant to read.
      *
+     * <p><b>The one producer of the normalized form.</b> What reads a declaration and what derives a
+     * representation for one are both answered from this, so a declaration is written one way
+     * whichever of them is asking. Worked out again by either, the two would be two producers of one
+     * form and a declaration could come back from them differently.
+     *
      * <p>A declaration at a time, so what is wrong with one clause is wrong with the declaration
      * that wrote it. Every declaration is worked out whether or not the one before it came out —
      * stopping at the first would leave the declarations after it without an answer, and each of
      * them owns what it has to say.
+     */
+    public record NormalizedDeclarations(String name)
+            implements Key<Map<String, souther.compiler.check.Normalized.Def>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, souther.compiler.check.Normalized.Def>> compute(Db db) {
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+            if (!settling.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            Map<String, souther.compiler.check.Normalized.Def> out = new LinkedHashMap<>();
+            List<Report> reports = new ArrayList<>();
+            for (InvariantSettled.Def def : settling.value().defs()) {
+                try {
+                    out.put(def.name(),
+                            souther.compiler.check.Normalized.Def.of(def, scope.value()));
+                } catch (CompileException e) {
+                    reports.addAll(Report.of(e));
+                }
+            }
+            return Answer.of(Map.copyOf(out), reports);
+        }
+    }
+
+    /**
+     * One normalized declaration, asked for by name.
+     *
+     * <p>What the registry a reader of declarations is answered from reads. Its own key so that a
+     * reader wanting one declaration depends on that declaration, the way {@link DerivedDef} does.
+     */
+    public record NormalizedDef(TypeKey named)
+            implements Key<souther.compiler.check.Normalized.Def> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<souther.compiler.check.Normalized.Def> compute(Db db) {
+            Answer<Map<String, souther.compiler.check.Normalized.Def>> defs =
+                    db.ask(new NormalizedDeclarations(named.module()));
+            if (!defs.present()) {
+                return Answer.absent();
+            }
+            souther.compiler.check.Normalized.Def def = defs.value().get(named.name());
+            return def == null ? Answer.absent() : Answer.of(def);
+        }
+    }
+
+    /**
+     * The same declarations with a boundary representation derived for each, and only the ones that
+     * came out.
+     *
+     * <p>Read off the normalized declarations rather than worked out from the settled ones, so the
+     * one thing this adds is the representation. A declaration missing here is missing for that
+     * reason alone, and what reads a declaration is answered from the rung above whether or not this
+     * could answer for it.
      */
     public record DerivedDeclarations(String name)
             implements Key<Map<String, souther.compiler.check.Derived.Def>> {
@@ -187,30 +254,26 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, souther.compiler.check.Derived.Def>> compute(Db db) {
-            Answer<InvariantSettled> settling = db.ask(new Settling(name));
+            Answer<Map<String, souther.compiler.check.Normalized.Def>> declarations =
+                    db.ask(new NormalizedDeclarations(name));
             Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
-            if (!settling.present() || !scope.present()) {
+            if (!declarations.present() || !scope.present()) {
                 return Answer.absent();
             }
             Map<String, souther.compiler.check.Derived.Def> out = new LinkedHashMap<>();
-            List<Report> reports = new ArrayList<>();
-            for (InvariantSettled.Def def : settling.value().defs()) {
-                try {
-                    souther.compiler.check.Derived.Def derived =
-                            souther.compiler.check.Derived.Def.derive(def, scope.value());
-                    // A declaration a field of which does not name a type has no answer here, and
-                    // it is left out rather than entered as one with nothing in it. What is missing
-                    // from this is what {@link Derived.Module#assemble} reads to say the module has
-                    // no answer either; the name that denotes nothing was reported where it was
-                    // written, and nothing further is said about the declaration that holds it.
-                    if (derived != null) {
-                        out.put(def.name(), derived);
-                    }
-                } catch (CompileException e) {
-                    reports.addAll(Report.of(e));
+            declarations.value().forEach((declared, def) -> {
+                // A product a field of which does not name a type has no representation to read off
+                // its shape, and it is left out rather than entered as one with nothing in it. What
+                // that costs is the readers that ask how a value of it crosses; what the declaration
+                // says about itself is read from the normalized declarations and is there either
+                // way.
+                souther.compiler.check.Derived.Def derived =
+                        souther.compiler.check.Derived.Def.derive(def, scope.value());
+                if (derived != null) {
+                    out.put(declared, derived);
                 }
-            }
-            return Answer.of(Map.copyOf(out), reports);
+            });
+            return Answer.of(Map.copyOf(out));
         }
     }
 
@@ -315,9 +378,9 @@ public final class Shapes {
      * readers that name it and no others — so this is answered where {@link Prepared} is not, and
      * the reading goes on.
      *
-     * <p>Its declarations are every one the module writes, each in the form the derived stage writes
-     * one in ({@code Derived.normalized}), so a declaration that could not be derived is here in the
-     * same spelling as the ones beside it.
+     * <p>Its declarations are every one the module writes, as {@link NormalizedDeclarations}
+     * answered for them, so a declaration no representation could be derived for is here in the same
+     * spelling as the ones beside it.
      */
     public record CheckSurface(String name) implements Key<souther.compiler.check.CheckSurface> {
         @Override
@@ -328,19 +391,27 @@ public final class Shapes {
         @Override
         public Answer<souther.compiler.check.CheckSurface> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<ResolvedSymbols> resolved = Names.resolvedSymbols(db, name);
+            Answer<Map<String, souther.compiler.check.Normalized.Def>> normalized =
+                    db.ask(new NormalizedDeclarations(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, souther.compiler.check.Desugared.Fn>> fns =
                     db.ask(new DesugaredFns(name));
             Answer<Map<souther.compiler.types.ValueName.Behavior, souther.compiler.check.Sig>>
                     signatures = db.ask(new Bodies.Reachable(name));
-            if (!settling.present() || !resolved.present() || !scope.present() || !fns.present()) {
+            if (!settling.present() || !normalized.present() || !scope.present()
+                    || !fns.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(souther.compiler.check.CheckSurface.assemble(
-                        settling.value(), resolved.value(), fns.value(), scope.value(),
-                        signatures.present() ? signatures.value() : Map.of()));
+                souther.compiler.check.CheckSurface assembled =
+                        souther.compiler.check.CheckSurface.assemble(
+                                settling.value(), normalized.value(), fns.value(), scope.value(),
+                                signatures.present() ? signatures.value() : Map.of());
+                // A declaration whose clauses could not be read is missing from the normalized
+                // declarations, and a surface without it would be this module read as one that does
+                // not declare it. Said where the clause is written, and nothing further is said
+                // about the module.
+                return assembled == null ? Answer.absent() : Answer.of(assembled);
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

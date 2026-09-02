@@ -117,8 +117,9 @@ class TheBoundaryRepresentationIsHeldWhereItWasDerivedTest {
                 answers.add(m.getName());
             }
         }
-        assertEquals(Set.of("declared", "decoder", "encoder"), answers,
-                "a derived product answers with what it declares and how it crosses, and no more");
+        assertEquals(Set.of("declaration", "decoder", "encoder"), answers,
+                "a derived product answers with the declaration it was made from and how a value of"
+                        + " it crosses, and no more");
     }
 
     private static boolean mentions(java.lang.reflect.Type type, Class<?> named) {

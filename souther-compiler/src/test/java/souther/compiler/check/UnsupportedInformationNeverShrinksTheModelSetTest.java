@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class UnsupportedInformationNeverShrinksTheModelSetTest {
 
     private static Hir.Data data(Compilation compilation, String name) {
-        for (Hir.Def def : compilation.module("demo").defs().stream().map(Derived.Def::declared).toList()) {
+        for (Hir.Def def : compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList()) {
             if (def instanceof Hir.Data found && found.name().equals(name)) {
                 return found;
             }

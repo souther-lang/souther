@@ -9,6 +9,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclarationRefusals;
 import souther.compiler.check.Derived;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.Normalized;
 import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.check.Denoting;
 import souther.compiler.check.DeclaredNames;
@@ -129,16 +130,56 @@ public final class Names {
     }
 
     /**
-     * A registry over this compilation, reading each module's declarations as they were derived.
+     * A registry over this compilation, reading each module's declarations as they were normalized.
+     *
+     * <p>What a reader of declarations below the settling is answered from. Every declaration a
+     * module writes is here, because normalizing one is declaration-local and asks nothing of the
+     * shapes its fields name — so which form a reader gets is not decided by whether a
+     * representation could be derived for the declaration it asked about.
+     */
+    static Registry<Normalized.Def> normalizedRegistry(Db db) {
+        return new Registry<Normalized.Def>() {
+            @Override
+            public Normalized.Def declaration(TypeKey address) {
+                Answer<Normalized.Def> def = db.ask(new Shapes.NormalizedDef(address));
+                return def.present() ? def.value() : null;
+            }
+
+            @Override
+            public Map<String, Normalized.Def> declaredIn(String moduleName) {
+                Answer<Map<String, Normalized.Def>> defs =
+                        db.ask(new Shapes.NormalizedDeclarations(moduleName));
+                return defs.present() ? defs.value() : Map.of();
+            }
+
+            @Override
+            public Set<String> exposedBy(String moduleName) {
+                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                return exposed == null ? Set.of() : exposed;
+            }
+
+            @Override
+            public Set<String> moduleNames() {
+                Set<String> names = db.ask(new Front.ModuleNames()).value();
+                return names == null ? Set.of() : names;
+            }
+        };
+    }
+
+    /**
+     * A registry over this compilation, reading each module's declarations with the representation
+     * derived for each.
      *
      * <p>What it hands over is the derived declaration and not the node it was derived from. A table
      * of nodes would say of every declaration below the stage what nothing established of it. Both
      * sources a reader is answered from are at this rung: the compilation's, here, and the
      * language's own vocabulary, which is lifted to the same representation
      * ({@link Declarations.Vocabulary#ofDerived}) rather than left resolved with no derived
-     * declaration to give. What says a reader is at the derived world is which registry it asked for:
-     * {@link #derivedSymbols} is built over this one and {@link #resolvedSymbols} over the
-     * resolved one.
+     * declaration to give.
+     *
+     * <p>Short of the declarations a module writes, by exactly the products whose representation
+     * could not be derived. Which is why it is not what a declaration is read through:
+     * {@link #normalizedRegistry} is, and it is missing none of them.
      */
     static Registry<Derived.Def> derivedRegistry(Db db) {
         return new Registry<Derived.Def>() {
@@ -547,7 +588,8 @@ public final class Names {
     public static Answer<DerivedSymbols> derivedSymbols(
             Db db, String name) {
         return symbols(db, name, (names, stdlib) -> DerivedSymbols
-                .over(name, derivedRegistry(db), resolvedRegistry(db), names, stdlib));
+                .over(name, derivedRegistry(db), normalizedRegistry(db), resolvedRegistry(db),
+                        names, stdlib));
     }
 
     /** The same, over the declarations as they were written — what {@code Resolve} resolves
