@@ -143,8 +143,10 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             return asked.rule();
         }
 
-        /** How a reader finds that rule, which is not what tells it from another. */
-        public souther.compiler.check.RuleCitation cited() {
+        /** How a reader finds that rule, which is not what tells it from another. Every handle the
+         *  readers offered, because one question found twice is one question a reader can be sent
+         *  to either way; which of them a document writes is that document's to decide. */
+        public java.util.Set<souther.compiler.check.RuleCitation> cited() {
             return asked.cited();
         }
 
@@ -287,8 +289,9 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 return finding.rule();
             }
 
-            /** And how a reader finds that rule, which is not what tells it from another. */
-            public souther.compiler.check.RuleCitation cited() {
+            /** And how a reader finds that rule, which is not what tells it from another. Every
+             *  handle offered, for the reason a standing question gives. */
+            public java.util.Set<souther.compiler.check.RuleCitation> cited() {
                 return finding.cited();
             }
         }

@@ -56,7 +56,8 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
         return partition().notRead().stream()
                 .filter(PartitionEvidence.NotRead.ARule.class::isInstance)
                 .map(PartitionEvidence.NotRead.ARule.class::cast)
-                .filter(each -> each.cited() instanceof RuleCitation.WrittenAt)
+                .filter(each -> each.cited().stream()
+                        .anyMatch(RuleCitation.WrittenAt.class::isInstance))
                 .toList();
     }
 
@@ -84,8 +85,10 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
     void itIsCitedByThePlaceAndNamedByNothing() {
         PartitionEvidence.NotRead.ARule one = writtenComparisons().getFirst();
 
-        RuleCitation.WrittenAt written =
-                assertInstanceOf(RuleCitation.WrittenAt.class, one.cited());
+        assertEquals(1, one.cited().size(),
+                () -> "one reader found it, so it is offered one way: " + one.cited());
+        RuleCitation.WrittenAt written = assertInstanceOf(RuleCitation.WrittenAt.class,
+                one.cited().iterator().next());
         assertTrue(written.said(SourceNameResolver.identity(), null).startsWith("comparison@"),
                 () -> "what the rule is and where it is written: "
                         + written.said(SourceNameResolver.identity(), null));
@@ -112,7 +115,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
                 .modules().get(0).behaviors().get(0).partition();
 
         RuleCitation.Named named = assertInstanceOf(RuleCitation.Named.class,
-                evidence.unanswered().get(0).cited());
+                evidence.unanswered().get(0).cited().iterator().next());
         assertEquals("invariant Length (square)", named.name());
     }
 }

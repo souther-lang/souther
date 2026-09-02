@@ -22,6 +22,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * What a measurement went without is a set of facts, and what tells two facts apart is what the
@@ -111,24 +112,53 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
                 "and the one question keeps every handle a reader was offered");
     }
 
+    /**
+     * A question two readers cited two ways is one question, and what the author wrote it short of
+     * is untouched.
+     *
+     * <p>The two things it carries beside the fact do not have one algebra. A handle is how a
+     * reader is sent to the rule, and two of them are two ways to the same place, so they join. The
+     * parts the author wrote are one answer about the model in the order they wrote it, so there is
+     * nothing there to join — what two readings of it come to is that they agree.
+     */
     @Test
-    void aQuestionShortOfTheSameTwoThingsIsOneFactWhicheverWasMetFirst() {
+    void aQuestionCitedTwoWaysKeepsTheAuthorsOneAccountOfWhatStoppedIt() {
         BlockReason.AboutARule form = new BlockReason.UnreadComparisonForm();
         BlockReason.AboutARule none = new BlockReason.NoReadingTookItIn();
         RuleCitation named = new RuleCitation.Named("n");
         RuleCitation placed = new RuleCitation.WrittenAt(Citation.of(new SourcePos(3, 3)));
-        WeakeningSet met = standingQuestion(named, List.of(form));
-        WeakeningSet metElsewhere = standingQuestion(placed, List.of(none, form));
+        WeakeningSet met = standingQuestion(named, List.of(form, none));
+        WeakeningSet metElsewhere = standingQuestion(placed, List.of(form, none));
 
         assertEquals(1, met.union(metElsewhere).causes().size(),
-                "what a question was short of is what it was short of, and not a sequence a reader"
-                        + " of the parts arrived at");
-        // Both of the things it carries beside the fact, joined in the one union. Written as two
-        // folds a reader would have to ask which of them a merge had got round to.
-        assertEquals(Set.of(form, none), questionIn(met.union(metElsewhere)).stopped(),
-                "and every one of them is still there to be seen away");
+                "which rule it is and what it asks are what tell one standing question from"
+                        + " another");
         assertEquals(Set.of(named, placed), questionIn(met.union(metElsewhere)).cited(),
                 "and both handles came with it");
+        assertEquals(List.of(form, none), questionIn(met.union(metElsewhere)).stopped(),
+                "and what the author wrote it short of is what it was, in their order");
+    }
+
+    /**
+     * And two accounts of one question cannot disagree about that order.
+     *
+     * <p>Not two things to put together. What a question stands for is the parts of the rule that
+     * raised it, in the order the author wrote them, and a document says it as that — so two
+     * readers that came back with two orders for one question are two readings one of which is
+     * wrong, and either taking one or joining them publishes a precedence nothing in the model
+     * decides.
+     */
+    @Test
+    void twoAccountsOfOneQuestionCannotDisagreeOnTheAuthorsOrder() {
+        BlockReason.AboutARule form = new BlockReason.UnreadComparisonForm();
+        BlockReason.AboutARule none = new BlockReason.NoReadingTookItIn();
+        WeakeningSet met = standingQuestion(new RuleCitation.Named("n"), List.of(form, none));
+        WeakeningSet theOtherWayRound =
+                standingQuestion(new RuleCitation.Named("m"), List.of(none, form));
+
+        assertThrows(IllegalArgumentException.class, () -> met.union(theOtherWayRound),
+                "two readings of one question that disagree about what the author wrote are not"
+                        + " something to put together");
     }
 
     /**
@@ -178,7 +208,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
 
     private static WeakeningSet ruleWithoutALine(RuleCitation cited) {
         return of(new Weakening.ModelReadingIncomplete(ClosureGap.RuleUnread.of(
-                new RuleWithoutALine(comparison(), cited,
+                RuleWithoutALine.of(comparison(), cited,
                         new FilingCoordinate.AtPosition(TermPath.of("x")),
                         new BlockReason.UnreadComparisonForm()))));
     }
@@ -186,7 +216,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
     private static WeakeningSet standingQuestion(RuleCitation cited,
                                                  List<BlockReason.AboutARule> stopped) {
         return of(new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
-                new StandingQuestion(comparison(), cited,
+                StandingQuestion.of(comparison(), cited,
                         new InputQuestion.AboutAPosition(TermPath.of("x")), stopped))));
     }
 

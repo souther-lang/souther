@@ -367,7 +367,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
     /** One rule this compiler stopped on, at {@code term}. */
     private static Weakening ruleUnread(BlockReason.RuleReadingStopped why, String term) {
         return new Weakening.ModelReadingIncomplete(ClosureGap.RuleUnread.of(
-                new RuleWithoutALine(
+                RuleWithoutALine.of(
                         new RuleRef.Comparison("go",
                                 new CoverageOrigin("m", 0, 0, CoverageConstruct.IF)),
                         new RuleCitation.Named(term),

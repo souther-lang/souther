@@ -201,7 +201,8 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         RuleWithoutALine said = read("p: Pair", "Int.multiply(p.x, p.x) < 10").rulesWithoutALine().getFirst();
 
         assertInstanceOf(RuleRef.Comparison.class, said.rule());
-        RuleCitation.WrittenAt cited = assertInstanceOf(RuleCitation.WrittenAt.class, said.cited());
+        RuleCitation.WrittenAt cited = assertInstanceOf(RuleCitation.WrittenAt.class,
+                said.cited().iterator().next());
         souther.compiler.diag.Citation.Written where = assertInstanceOf(
                 souther.compiler.diag.Citation.Written.class, cited.at(),
                 "a rule with no name is found where it is written");

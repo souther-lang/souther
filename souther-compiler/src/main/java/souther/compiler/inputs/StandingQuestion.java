@@ -3,6 +3,10 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
  * One question a rule of the model raises that nothing answered, as everything past the input
  * boundary carries it.
@@ -38,17 +42,59 @@ import souther.compiler.check.RuleRef;
  *                and an empty list here would say a rule went unaccounted for with nothing to act
  *                on.
  */
-public record StandingQuestion(RuleRef rule, RuleCitation cited, InputQuestion asks,
-                               java.util.List<BlockReason.AboutARule> stopped) {
+public record StandingQuestion(Fact fact, Set<RuleCitation> cited,
+                               List<BlockReason.AboutARule> stopped) {
 
     public StandingQuestion {
-        if (rule == null || cited == null || asks == null) {
+        if (fact == null) {
             throw new IllegalArgumentException("a standing question names a rule and what it asks");
+        }
+        cited = cited == null ? Set.of() : Set.copyOf(cited);
+        if (cited.isEmpty()) {
+            throw new IllegalArgumentException("a question names a rule a reader can be sent to");
         }
         if (stopped == null || stopped.isEmpty()) {
             throw new IllegalArgumentException("a question stands because something was short of it");
         }
-        stopped = java.util.List.copyOf(stopped);
+        stopped = List.copyOf(stopped);
+    }
+
+    /** One reader's account of it, as that reader produced it. */
+    public static StandingQuestion of(RuleRef rule, RuleCitation cited, InputQuestion asks,
+                                      List<BlockReason.AboutARule> stopped) {
+        return new StandingQuestion(new Fact(rule, asks), Set.of(cited), stopped);
+    }
+
+    /** Which rule raised it. */
+    public RuleRef rule() {
+        return fact.rule();
+    }
+
+    /** What it asks and what it asks it about. */
+    public InputQuestion asks() {
+        return fact.asks();
+    }
+
+    /**
+     * Both readers' accounts, as one: the question, with every handle either offered.
+     *
+     * <p>What each was short of is not accumulated and not chosen between. It is the author's
+     * order over the parts of the rule that raised the question, which is one answer about the
+     * model — so two accounts of one question that disagree about it are two accounts one of which
+     * is wrong, and taking either would publish a precedence nothing in the model decides.
+     */
+    public StandingQuestion mergedWith(StandingQuestion other) {
+        if (!fact.equals(other.fact)) {
+            throw new IllegalArgumentException("two accounts put together are of one question: "
+                    + fact + " and " + other.fact);
+        }
+        if (!stopped.equals(other.stopped)) {
+            throw new IllegalArgumentException("two accounts of one question disagree about what"
+                    + " the author wrote it short of: " + stopped + " and " + other.stopped);
+        }
+        Set<RuleCitation> both = new HashSet<>(cited);
+        both.addAll(other.cited);
+        return new StandingQuestion(fact, both, stopped);
     }
 
     /**
@@ -56,15 +102,8 @@ public record StandingQuestion(RuleRef rule, RuleCitation cited, InputQuestion a
      *
      * <p>Both of the others are left out, and each says so where it is declared. The citation is
      * how a reader finds the rule and not what tells it from another. What the question is short of
-     * is why it stands rather than which question it is — one raised by one rule about one position
-     * is that question however many parts of it a reading was short of, and a key holding those
-     * would file it under as many as the parts were met in orders.
+     * is why it stands rather than which question it is.
      */
-    public Fact fact() {
-        return new Fact(rule, asks);
-    }
-
-    /** A question that stands, with what it is short of and the handle for it left out. */
     public record Fact(RuleRef rule, InputQuestion asks) {
 
         public Fact {
@@ -77,11 +116,11 @@ public record StandingQuestion(RuleRef rule, RuleCitation cited, InputQuestion a
 
     /** What it asks, which follows from what it is about. */
     public souther.compiler.check.CoverageObligation obligation() {
-        return asks.obligation();
+        return asks().obligation();
     }
 
     @Override
     public String toString() {
-        return obligation() + " at " + asks;
+        return obligation() + " at " + asks();
     }
 }

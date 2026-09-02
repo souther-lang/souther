@@ -1525,21 +1525,18 @@ public final class InputDomain {
     private static List<RuleWithoutALine> competingCoordinates(List<FieldDomains.Placed> stated,
                                                          TermPath path, Type type,
                                                          Symbols symbols) {
-        List<RuleWithoutALine> out = new ArrayList<>();
+        RuleWithoutALine.Gathered out = new RuleWithoutALine.Gathered();
         for (FieldDomains.Placed each : stated) {
-            RuleWithoutALine said = new RuleWithoutALine(each.from(),
+            out.add(RuleWithoutALine.of(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
                     // Each rule at the coordinate that rule is about, which is what makes the two
                     // two. What is undecided is which of them the position is measured at, and that
                     // is a fact about the position rather than about either rule — this reading has
                     // chosen no term for the position, and each rule chose one for itself.
                     filedAt(path, each.at(), type, symbols),
-                    new BlockReason.CompetingCoordinates());
-            if (out.stream().noneMatch(had -> had.sameAs(said))) {
-                out.add(said);
-            }
+                    new BlockReason.CompetingCoordinates()));
         }
-        return List.copyOf(out);
+        return out.all();
     }
 
     /**
@@ -1632,7 +1629,7 @@ public final class InputDomain {
                                                      Symbols symbols) {
         List<StandingQuestion> out = new ArrayList<>();
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
-            out.add(new StandingQuestion(each.rule(), each.cited(),
+            out.add(StandingQuestion.of(each.rule(), each.cited(),
                     switch (each.owed()) {
                         case souther.compiler.check.Owed.AdmittedValues _ ->
                                 new InputQuestion.AboutAPosition(path);
@@ -1694,7 +1691,7 @@ public final class InputDomain {
      */
     private static List<RuleWithoutALine> rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
                                                   Symbols symbols, List<RuleWithoutALine> competing) {
-        List<RuleWithoutALine> out = new ArrayList<>(competing);
+        RuleWithoutALine.Gathered out = new RuleWithoutALine.Gathered(competing);
         for (FieldDomains.NoLine each : placed.noLineAt(path)) {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
@@ -1702,14 +1699,11 @@ public final class InputDomain {
             // At the number that rule is about, which the rule itself says. Nothing is missing here
             // for the position to stand in for: a clause was read far enough to be about one number
             // or the other, and it is only the line that nothing came of.
-            RuleWithoutALine said = new RuleWithoutALine(each.from(),
+            out.add(RuleWithoutALine.of(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
                     filedAt(path, each.at(), type, symbols),
-                    each.why());
-            if (out.stream().noneMatch(had -> had.sameAs(said))) {
-                out.add(said);
-            }
+                    each.why()));
         }
-        return List.copyOf(out);
+        return out.all();
     }
 }

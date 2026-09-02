@@ -1,5 +1,6 @@
 package souther.compiler.publish;
 
+import souther.compiler.check.RuleCitation;
 import souther.compiler.diag.Citation;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
@@ -145,6 +146,49 @@ public final class PublicationOrders {
      */
     public static Optional<PublishedAt> placeFor(Collection<Citation> met) {
         return met.stream().map(PublishedAt::of).flatMap(Optional::stream).min(PLACES);
+    }
+
+    /**
+     * How a document sends a reader to a rule that two readers each offered a handle for.
+     *
+     * <p>A name where the author gave one, before a place where they did not. A reader given a name
+     * has the word the model uses; a place is what there is instead, and a rule that has both is a
+     * rule a reader can be asked about in the author's own words.
+     *
+     * <p>Two names, or two places, are told apart by what a document writes of them — which is the
+     * text it prints, and comparing that is the same serialization order the identities of two
+     * sources are compared in.
+     */
+    private static final Comparator<RuleCitation> HANDLES = Comparator
+            .comparingInt(PublicationOrders::handleRank)
+            .thenComparing(PublicationOrders::handleWords);
+
+    private static int handleRank(RuleCitation handle) {
+        return switch (handle) {
+            case RuleCitation.Named _ -> 0;
+            case RuleCitation.WrittenAt _ -> 1;
+        };
+    }
+
+    /** What a document writes of one handle, which is what tells two of one kind apart. */
+    private static String handleWords(RuleCitation handle) {
+        return switch (handle) {
+            case RuleCitation.Named it -> it.name();
+            case RuleCitation.WrittenAt it -> PublishedAt.of(it.at())
+                    .map(at -> at.source().value() + ":" + at.line() + ":" + at.column())
+                    .orElseGet(() -> it.at().toString());
+        };
+    }
+
+    /**
+     * The one handle a document writes for a rule met with several, or nothing where none was
+     * offered.
+     *
+     * <p>The schema has room for one and a rule is one rule however many readers found it, so a
+     * choice is made and it is made here rather than by whichever reader a walk reached first.
+     */
+    public static Optional<RuleCitation> handleFor(Collection<RuleCitation> offered) {
+        return offered.stream().min(HANDLES);
     }
 
     /**

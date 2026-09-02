@@ -7,6 +7,7 @@ import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.observe.RunSensitivity;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -94,7 +95,7 @@ public sealed interface ClosureGap {
         /** One reader's finding, as that reader produced it: the rule it stopped on, and the handle
          *  it would send somebody to. */
         public static RuleUnread of(RuleWithoutALine found) {
-            return new RuleUnread(found.fact(), Set.of(found.cited()));
+            return new RuleUnread(found.fact(), found.cited());
         }
 
         /** The rule, the position and the limit. The handle is how a reader finds it and not what
@@ -138,11 +139,15 @@ public sealed interface ClosureGap {
      * incompleteness reaches this only as {@link RuleUnread}.
      */
     record QuestionUnanswered(StandingQuestion.Fact question, Set<RuleCitation> cited,
-                              Set<BlockReason.AboutARule> stopped) implements ClosureGap {
+                              List<BlockReason.AboutARule> stopped) implements ClosureGap {
 
         public QuestionUnanswered {
             cited = cited == null ? Set.of() : Set.copyOf(cited);
-            stopped = stopped == null ? Set.of() : Set.copyOf(stopped);
+            // In the order the author wrote the parts of the rule that raised it, carried and not
+            // gathered into a set. A document says these in that order, so a set here would be the
+            // same testimony in a second shape, and whichever shape reached a reader first would
+            // decide what they were told the author wrote.
+            stopped = stopped == null ? List.of() : List.copyOf(stopped);
             if (stopped.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a question stands because something was short of it");
@@ -158,8 +163,7 @@ public sealed interface ClosureGap {
          * met one nor which part was read first is any of that.
          */
         public static QuestionUnanswered of(StandingQuestion asked) {
-            return new QuestionUnanswered(asked.fact(), Set.of(asked.cited()),
-                    Set.copyOf(asked.stopped()));
+            return new QuestionUnanswered(asked.fact(), asked.cited(), asked.stopped());
         }
 
         /** Which rule raised it and what it asks. What a reading was short of is why it stands
@@ -182,11 +186,14 @@ public sealed interface ClosureGap {
         /** Both readings' accounts, as one: the question, with every handle and everything either
          *  of them was short of. */
         public QuestionUnanswered mergedWith(QuestionUnanswered other) {
+            if (!stopped.equals(other.stopped)) {
+                throw new IllegalArgumentException("two accounts of one question disagree about"
+                        + " what the author wrote it short of: " + stopped + " and "
+                        + other.stopped);
+            }
             Set<RuleCitation> handles = new HashSet<>(cited);
             handles.addAll(other.cited);
-            Set<BlockReason.AboutARule> met = new HashSet<>(stopped);
-            met.addAll(other.stopped);
-            return new QuestionUnanswered(question, handles, met);
+            return new QuestionUnanswered(question, handles, stopped);
         }
 
         /**

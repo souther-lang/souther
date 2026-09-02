@@ -2329,10 +2329,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * and nothing else. What they must not share is an identity: where a rule was read is the
      * partition's and one rule has as many of those as it has readings.
      */
-    private static String cited(RuleCitation cited,
+    private static String cited(Set<RuleCitation> offered,
                                 SourceNameResolver names,
                                 SourceId declaredIn) {
-        return cited.said(names, declaredIn);
+        return handle(offered).said(names, declaredIn);
     }
 
     /**
@@ -2862,7 +2862,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // needs to open a file wants the second rather than a string to take apart.
                 // The same handle the border prints for a line the comparison drew, through the
                 // table of sources this document carries.
-                one.put("rule", each.cited().said(sources::written, null));
+                one.put("rule", handle(each.cited()).said(sources::written, null));
                 // What tells one rule from another, beside the words for finding it. A handle is a
                 // projection of the rule and not the rule: two arms of one `ensures` clause may
                 // name the same case, so the author's words for them are the same words, and two
@@ -3021,7 +3021,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // what tells one rule from another, and the two are not in step wherever a rule has no
             // name of its own.
             if (each instanceof PartitionEvidence.NotRead.ARule rule) {
-                said.put("rule", rule.cited().said(sources::written, null));
+                said.put("rule", handle(rule.cited()).said(sources::written, null));
                 ruleId(said.putObject("ruleId"), rule.rule());
             }
         });
@@ -3389,7 +3389,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The handle, and what tells this rule from another beside it: two arms of one clause
             // may name the same case, so the words alone joined two questions into one row.
             case About.AQuestionNothingAnswered(var asked) ->
-                    asked.cited().said(sources::written, null) + " — " + asked(asked.question())
+                    handle(asked.cited()).said(sources::written, null)
+                            + " — " + asked(asked.question())
                             + " " + subjectOf(asked, sources::written, null);
             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                     missing.name() + " (in #" + (input.at() + 1) + ")";
@@ -3633,6 +3634,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case AdequacyOpening.NothingShowedARowCanBeWritten _ ->
                     new PublishedOpening.Kind.AnOpening(AdequacyOpeningWord.NOTHING_SHOWED_IT);
         };
+    }
+
+    /**
+     * The one handle this document sends a reader to a rule by, out of everywhere it was offered.
+     *
+     * <p>Chosen where the choosing is decided and not here. A rule found by two readers has a
+     * handle from each, the schema has room for one, and which one is a decision about what a
+     * reader is shown rather than about which reader a walk reached first.
+     */
+    private static RuleCitation handle(Set<RuleCitation> offered) {
+        return PublicationOrders.handleFor(offered).orElseThrow(() -> new IllegalStateException(
+                "a rule a reader is sent to is one some reader said how to find"));
     }
 
     /** What a document calls one of them, whichever of the two vocabularies it comes from. */

@@ -167,7 +167,7 @@ public final class LinesWhereTheyFall {
             // Not passed on. A line at a name no row is written at reaches the generator, which
             // says it could not build a value there — a reason nobody established, about a place
             // nobody meant. What an author is owed is the pairing, and it is said here.
-            notPlaced.add(new RuleWithoutALine(line.by().rule(), line.by().cited(),
+            notPlaced.add(RuleWithoutALine.of(line.by().rule(), line.by().cited(),
                     new souther.compiler.inputs.FilingCoordinate.OfTerm(filed.getFirst().name()),
                     new souther.compiler.inputs.BlockReason.CasePairingNotDetermined()));
             return;
