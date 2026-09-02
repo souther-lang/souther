@@ -7,6 +7,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.Located;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meta.ModulePath;
@@ -127,6 +128,28 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
     }
 
     /**
+     * And where nothing stands, which of the other two it is turns on whether a rule is filed here.
+     *
+     * <p>The half the contract above does not reach. A position everything was answered about is
+     * one of two things, and they are as far apart as the verdicts get: the model states something
+     * here that came to no line, or it states nothing at all. Read from the findings the rules
+     * produced rather than from what the verdict was built out of, so that the two are not one
+     * answer written twice.
+     */
+    @Test
+    void whereNothingStandsTheVerdictFollowsTheRulesFiledAtThePosition() {
+        List<String> disagreeing = new ArrayList<>();
+        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+            disagreeing.addAll(misclassifiedIn(corpus.analyse().compilation()));
+        }
+        for (String model : MODELS) {
+            disagreeing.addAll(misclassifiedIn(analysed(model)));
+        }
+        assertEquals(List.of(), disagreeing,
+                "a verdict and the rules filed at the position say different things");
+    }
+
+    /**
      * And the population is one the contract can be broken in, which a count of nothing is not.
      *
      * <p>Both halves have to be reachable here or the two above pass by having nothing to say: a
@@ -166,6 +189,34 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
                     out.add(behavior + " at " + each.at() + ": " + each.why()
                             + (somethingStands ? " with something standing at it"
                                     : " with every question at it answered and the position read"));
+                }
+            }
+        });
+        return out;
+    }
+
+    /**
+     * Where a position everything was answered about is one of the other two and the rules filed at
+     * it say the other.
+     */
+    private static List<String> misclassifiedIn(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        forEachBehavior(compilation, (behavior, divided) -> {
+            Set<TermPath> stated = new LinkedHashSet<>();
+            for (RuleWithoutALine rule : divided.rulesWithoutALine()) {
+                stated.add(rule.at().path());
+            }
+            for (UndividedPosition each : divided.undivided()) {
+                if (each.why() instanceof UndividedPosition.Why.CannotDerive) {
+                    continue;
+                }
+                boolean statesSomething = stated.contains(each.at());
+                boolean saidToState =
+                        each.why() instanceof UndividedPosition.Why.StatedWithoutALine;
+                if (statesSomething != saidToState) {
+                    out.add(behavior + " at " + each.at() + ": " + each.why()
+                            + (statesSomething ? " with a rule filed at it"
+                                    : " with no rule filed at it"));
                 }
             }
         });
