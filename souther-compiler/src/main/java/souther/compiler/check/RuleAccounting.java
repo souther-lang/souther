@@ -128,7 +128,7 @@ public final class RuleAccounting {
      * there is no question to ask — so they are not among the answers, and a reader that counted
      * the answers would be counting what this compiler managed to classify.
      */
-    public Set<Requirement.Undetermined> undetermined() {
+    public Set<Requirement.BoundaryUndetermined> undetermined() {
         return required.undetermined();
     }
 

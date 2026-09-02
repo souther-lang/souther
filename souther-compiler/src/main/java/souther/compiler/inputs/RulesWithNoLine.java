@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 
@@ -85,19 +84,18 @@ public record RulesWithNoLine(List<RuleWithoutALine> stated,
         }
 
         /**
-         * A rule that was classified, one of whose questions this could not decide, and the finding
-         * beside it.
+         * A rule that was classified and whose end this could not decide, and the finding beside
+         * it.
          *
          * <p>Both, because they are two things about one rule and neither says the other. The
          * finding is what a report tells a reader about what became of the rule here; the question
-         * is what holds the measure answering it open, and it names the question rather than
-         * leaving a reader to work out which of them is undecided.
+         * is what holds the border measure open, and the classes are settled beside it rather than
+         * held open with it.
          */
-        public void undetermined(RuleRef rule, RuleCitation cited, FilingCoordinate at,
-                                 CoverageObligation which,
-                                 BlockReason.RuleReadingStopped why) {
+        public void boundaryUndetermined(RuleRef rule, RuleCitation cited, FilingCoordinate at,
+                                         BlockReason.RuleReadingStopped why) {
             add(RuleWithoutALine.of(rule, cited, at, why));
-            asked(StandingQuestion.ObligationUndetermined.of(rule, cited, at, which, why));
+            asked(StandingQuestion.BoundaryUndetermined.of(rule, cited, at, why));
         }
 
         /** One a reader already made, which is how the findings of two readings meet. */

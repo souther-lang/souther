@@ -13,11 +13,18 @@ import souther.compiler.inputs.BlockReason;
  * answer for the rule, the second takes the first with it, and an obligation this compiler had
  * worked out is dropped because something beside it was not read.
  *
- * <p><b>{@link Undetermined#at} is where the classification stopped and not what the rule is
- * about.</b> What such a rule states there is what nothing worked out, so a reader may not turn the
- * place into a subject: it is where to look, which is what {@link souther.compiler.inputs
+ * <p><b>{@link BoundaryUndetermined#at} is where the classification stopped and not what the rule
+ * is about.</b> What such a rule states there is what nothing worked out, so a reader may not turn
+ * the place into a subject: it is where to look, which is what {@link souther.compiler.inputs
  * .FilingCoordinate} is for on the other side of the crossing, and it never becomes an
  * {@link Owed}.
+ *
+ * <p><b>One question is undecidable here and it is named.</b> Whether a rule restricts the values
+ * at a name it writes is settled by its writing one — a rule about them is a rule about them
+ * whether or not this compiler can say which ones — so the only classification that comes out
+ * undecided is where the values stop. Held as an obligation and a reason, the arm would admit an
+ * undecided admitted-values question, which nothing states and nothing could answer; the day one is
+ * real it arrives as an arm of its own and every reader of these has to say what it does about it.
  */
 public sealed interface Requirement {
 
@@ -37,34 +44,30 @@ public sealed interface Requirement {
     }
 
     /**
-     * A place this reading met and did not work out what the rule raises at.
+     * A place this reading met and did not work out whether the rule puts an end at.
      *
-     * <p>Not "raises nothing", which is a conclusion about the rule and is {@link Required
-     * .Irrelevant}'s to draw. Read as either of the two, a rule nobody could interpret is one the
-     * model says nothing with, or one raising a question that could never be answered — and both
-     * are claims about a model this compiler did not read.
+     * <p>Not "puts none", which is a conclusion about the rule and is what a clause read to the end
+     * comes to. Read as either that or as an end nothing found, a rule nobody could interpret is
+     * one the model draws no line with, or one owing a row at a line nobody can name — and both are
+     * claims about a model this compiler did not read.
      *
-     * <p><b>Which question it is undecided about, and not merely that something is.</b> A rule can
-     * be read far enough to say which values may stand somewhere and not far enough to say whether
-     * it also puts a line there: {@code Decimal.compare(total, subtotal) <= 0} restricts what may
-     * stand at {@code total} — the model says so whatever this compiler folds — and whether it
-     * places an end there is what inverting the operation would answer. Held as one undecided
-     * thing, the measure that answers the first is held open by the second.
+     * <p>Which values may stand there is not in doubt beside it. {@code Decimal.compare(total,
+     * subtotal) <= 0} restricts what may stand at {@code total} — the model says so whatever this
+     * compiler folds — and whether it also places an end there is what inverting the operation
+     * would answer. So the one is raised and the other is this, and only the border measure rests
+     * on it.
      *
-     * @param at    where the classification stopped, in the vocabulary of the value being read
-     * @param which the question it was not worked out whether the rule raises. The measure this
-     *              leaves open follows from it, exactly as it does for a question that was worked
-     *              out
-     * @param why   what this compiler could not do there, which is what would have to change
-     *              before the rule could be classified
+     * @param at  where the classification stopped, in the vocabulary of the value being read
+     * @param why what this compiler could not do there, which is what would have to change before
+     *            the rule could be classified
      */
-    record Undetermined(RuleKey at, CoverageObligation which,
-                        BlockReason.RuleReadingStopped why) implements Requirement {
+    record BoundaryUndetermined(RuleKey at, BlockReason.RuleReadingStopped why)
+            implements Requirement {
 
-        public Undetermined {
-            if (at == null || which == null || why == null) {
-                throw new IllegalArgumentException("a classification that did not come out is"
-                        + " about one question, somewhere, for a reason");
+        public BoundaryUndetermined {
+            if (at == null || why == null) {
+                throw new IllegalArgumentException("a classification that did not come out"
+                        + " stopped somewhere, for a reason");
             }
         }
     }

@@ -339,7 +339,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
 
     /** One rule, how a reader finds it, and one place its classification did not come out. */
     record RuleUnclassifiedAt(RuleRef rule, RuleCitation cited,
-                              Requirement.Undetermined at) {}
+                              Requirement.BoundaryUndetermined at) {}
 
     /**
      * How much of what the rules say the bounds at {@code path} are able to state.

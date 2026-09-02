@@ -18,10 +18,10 @@ import souther.compiler.inputs.BlockReason;
  * type adds is that the answer they have to write is one of three and not the absence of one — a
  * place that raises nothing says so, rather than being a place nothing was recorded about.
  */
-sealed interface Presence {
+sealed interface ObligationClassification {
 
     /** The rule raises it, and this is the question. */
-    record Raised(Owed owed) implements Presence {
+    record Raised(Owed owed) implements ObligationClassification {
 
         public Raised {
             if (owed == null) {
@@ -37,7 +37,7 @@ sealed interface Presence {
      * anything to be owed at, and no reading would find one. Reached only by classifying what a
      * reader found the clause to state, like every other answer here.
      */
-    record NotRaised() implements Presence {}
+    record NotRaised() implements ObligationClassification {}
 
     /**
      * Nothing worked out whether it raises it.
@@ -46,7 +46,7 @@ sealed interface Presence {
      * further — which is why the measure that answers this question stays open, and why the answer
      * is not that the model says nothing.
      */
-    record Undetermined(BlockReason.RuleReadingStopped why) implements Presence {
+    record Undetermined(BlockReason.RuleReadingStopped why) implements ObligationClassification {
 
         public Undetermined {
             if (why == null) {

@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
@@ -169,11 +168,10 @@ public final class LinesWhereTheyFall {
             // Not passed on. A line at a name no row is written at reaches the generator, which
             // says it could not build a value there — a reason nobody established, about a place
             // nobody meant. What an author is owed is the pairing, and it is said here.
-            notPlaced.undetermined(line.by().rule(), line.by().cited(),
+            // The line is what has nowhere to go: the rule was read, an end came out of it, and
+            // which of the positions it runs between is what nothing worked out.
+            notPlaced.boundaryUndetermined(line.by().rule(), line.by().cited(),
                     new FilingCoordinate.OfTerm(filed.getFirst().name()),
-                    // The line is what has nowhere to go: the rule was read, an end came out of it,
-                    // and which of the positions it runs between is what nothing worked out.
-                    CoverageObligation.BOUNDARY,
                     new BlockReason.CasePairingNotDetermined());
             return;
         }

@@ -78,8 +78,8 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
             switch (each) {
                 case Requirement.Determined it -> said.merge(placeOf(it.owed()),
                         askedOf(it.owed()), (had, more) -> had + " " + more);
-                case Requirement.Undetermined it -> said.merge(it.at().toString(),
-                        it.which() + "?", (had, more) -> had + " " + more);
+                case Requirement.BoundaryUndetermined it -> said.merge(it.at().toString(),
+                        CoverageObligation.BOUNDARY + "?", (had, more) -> had + " " + more);
             }
         }
 
@@ -98,7 +98,8 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
         Set<String> asked = new TreeSet<>();
         raised().obligations().forEach(each -> asked.add(askedOf(each) + " at " + placeOf(each)));
         Set<String> open = new TreeSet<>();
-        raised().undetermined().forEach(each -> open.add(each.which() + " at " + each.at()));
+        raised().undetermined()
+                .forEach(each -> open.add(CoverageObligation.BOUNDARY + " at " + each.at()));
 
         assertEquals(new TreeSet<>(Set.of("ADMITTED_VALUES at lo", "ADMITTED_VALUES at hi",
                         "ADMITTED_VALUES at a", "ADMITTED_VALUES at b",

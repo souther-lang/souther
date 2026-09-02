@@ -4,7 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DeclaredSubjects;
 import souther.compiler.check.RuleKey;
@@ -1534,7 +1533,7 @@ public final class InputDomain {
                                              RuleReadingSource source,
                                              RulesWithNoLine.Gathered out) {
         for (FieldDomains.Placed each : stated) {
-            out.undetermined(each.from(),
+            out.boundaryUndetermined(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
                     // Each rule at the coordinate that rule is about, which is what makes the two
                     // two. What is undecided is which of them the position is measured at, and that
@@ -1544,7 +1543,6 @@ public final class InputDomain {
                     // And what that leaves undecided is the end each of them places. Which values
                     // may stand there is what the rules say and nothing about the choice of number
                     // touches it.
-                    CoverageObligation.BOUNDARY,
                     new BlockReason.CompetingCoordinates());
         }
     }
@@ -1645,8 +1643,8 @@ public final class InputDomain {
                                                      RulesWithNoLine here) {
         List<StandingQuestion> out = new ArrayList<>(here.unclassified());
         for (PlacedRules.RuleUnclassifiedAt each : placed.unclassified(path)) {
-            out.add(StandingQuestion.ObligationUndetermined.of(each.rule(), each.cited(),
-                    FilingCoordinate.at(path), each.at().which(), each.at().why()));
+            out.add(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
+                    FilingCoordinate.at(path), each.at().why()));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
             out.add(StandingQuestion.Exact.of(each.rule(), each.cited(),

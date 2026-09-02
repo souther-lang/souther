@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -122,11 +123,13 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
                         && at.path().equals(TermPath.of("length")),
                 () -> "about the position the newtype stands at, which is what the value its"
                         + " clauses are written on is called out here: " + asked.asks());
-        StandingQuestion.ObligationUndetermined undecided = open.stream()
-                .filter(StandingQuestion.ObligationUndetermined.class::isInstance)
-                .map(StandingQuestion.ObligationUndetermined.class::cast).findFirst().orElseThrow(
+        StandingQuestion.BoundaryUndetermined undecided = open.stream()
+                .filter(StandingQuestion.BoundaryUndetermined.class::isInstance)
+                .map(StandingQuestion.BoundaryUndetermined.class::cast).findFirst().orElseThrow(
                         () -> new AssertionError("and whether it bounds is not: " + open));
-        assertEquals(CoverageObligation.BOUNDARY, undecided.which(),
-                "the question nothing worked out is named rather than left to be guessed");
+        assertEquals(TermPath.of("length"), undecided.at().path(),
+                "the question nothing worked out is filed where the reading stopped");
+        assertFalse(undecided.holdsOpen(CoverageObligation.Measure.PARTITION),
+                "and it is about the end alone, so the classes rest on nothing here");
     }
 }

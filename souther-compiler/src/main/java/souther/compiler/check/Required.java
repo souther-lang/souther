@@ -63,10 +63,10 @@ public sealed interface Required {
     }
 
     /** And the places it does not, which are where the reading of the rule stopped. */
-    default Set<Requirement.Undetermined> undetermined() {
-        Set<Requirement.Undetermined> out = new LinkedHashSet<>();
+    default Set<Requirement.BoundaryUndetermined> undetermined() {
+        Set<Requirement.BoundaryUndetermined> out = new LinkedHashSet<>();
         for (Requirement each : requirements()) {
-            if (each instanceof Requirement.Undetermined it) {
+            if (each instanceof Requirement.BoundaryUndetermined it) {
                 out.add(it);
             }
         }
@@ -259,13 +259,22 @@ public sealed interface Required {
         Set<Requirement> out = new LinkedHashSet<>();
         for (RuleKey at : named) {
             for (CoverageObligation kind : CoverageObligation.values()) {
-                switch (presenceOf(kind, at, bound, states)) {
-                    case Presence.Raised it -> out.add(new Requirement.Determined(it.owed()));
-                    case Presence.Undetermined it ->
-                            out.add(new Requirement.Undetermined(at, kind, it.why()));
+                switch (classificationOf(kind, at, bound, states)) {
+                    case ObligationClassification.Raised it ->
+                            out.add(new Requirement.Determined(it.owed()));
+                    // The one question a classification comes out undecided about, so the arm that
+                    // keeps it says which it is by being the arm it is. A kind added that can also
+                    // come out undecided stops here until it is given an arm of its own.
+                    case ObligationClassification.Undetermined it -> {
+                        if (kind != CoverageObligation.BOUNDARY) {
+                            throw new IllegalStateException("nothing works out whether a rule"
+                                    + " raises " + kind + ", and no arm carries that: " + at);
+                        }
+                        out.add(new Requirement.BoundaryUndetermined(at, it.why()));
+                    }
                     // Nothing to carry: the rule does not raise it, which is what the classification
                     // came to and not what is left when nobody said anything.
-                    case Presence.NotRaised _ -> { }
+                    case ObligationClassification.NotRaised _ -> { }
                 }
             }
         }
@@ -281,27 +290,31 @@ public sealed interface Required {
      * still states where the values stop, and a form nobody took apart still states which values
      * may stand at the names it writes.
      */
-    private static Presence presenceOf(CoverageObligation kind, RuleKey at,
-                                       ClauseStates.ABound bound, ClauseStates states) {
+    private static ObligationClassification classificationOf(CoverageObligation kind, RuleKey at,
+                                                             ClauseStates.ABound bound,
+                                                             ClauseStates states) {
         return switch (kind) {
             // A rule about the values at a name is a rule about them whether or not this compiler
-            // can say which ones. The question is the model's and the answer is a reading's.
-            case ADMITTED_VALUES -> new Presence.Raised(new Owed.AdmittedValues(at));
+            // can say which ones. The question is the model's and the answer is a reading's, so
+            // this one is never undecided.
+            case ADMITTED_VALUES ->
+                    new ObligationClassification.Raised(new Owed.AdmittedValues(at));
             // And where the values stop, which only a clause read far enough to be a bound states.
             // A clause read to the end that is no bound places no end anywhere; one whose form
             // nothing took apart may place one at any name it writes, and which of those it is,
             // is what reading further would answer.
             case BOUNDARY -> {
                 if (bound != null) {
-                    yield new Presence.Raised(new Owed.Boundary(bound.line()));
+                    yield new ObligationClassification.Raised(new Owed.Boundary(bound.line()));
                 }
                 if (!(states instanceof ClauseStates.SomethingElse it)) {
-                    yield new Presence.NotRaised();
+                    yield new ObligationClassification.NotRaised();
                 }
                 // Asked at this name, because the reading is answered at each of them. A name it
                 // settled is settled whatever it left beside it.
                 BlockReason.RuleReadingStopped why = it.unread().get(at);
-                yield why == null ? new Presence.NotRaised() : new Presence.Undetermined(why);
+                yield why == null ? new ObligationClassification.NotRaised()
+                        : new ObligationClassification.Undetermined(why);
             }
         };
     }

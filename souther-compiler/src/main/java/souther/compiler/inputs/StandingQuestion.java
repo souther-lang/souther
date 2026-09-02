@@ -72,11 +72,16 @@ public sealed interface StandingQuestion {
     default boolean holdsOpen(CoverageObligation.Measure measure) {
         return switch (this) {
             case Exact it -> it.obligation().answeredBy() == measure;
-            // The measure that answers the question nobody worked out, and only that one. Which
-            // question it is about is what such a question carries, and the measure follows from it
-            // exactly as it does for one that was worked out — held open in both, a rule undecided
-            // about where its line falls would keep the classes open as well.
-            case ObligationUndetermined it -> it.which().answeredBy() == measure;
+            // The measure that answers where a line falls, and only that one. What is undecided is
+            // whether the rule places an end, so which values may stand there is settled and the
+            // classes rest on nothing here — held open in both, a rule undecided about its line
+            // would keep them open as well.
+            //
+            // Per measure and no `default`, so a third has to be answered for.
+            case BoundaryUndetermined _ -> switch (measure) {
+                case PARTITION -> false;
+                case BOUNDARY -> true;
+            };
             // And a comparison the reading did not finish, which is undecided about what it does at
             // all. A line it comes to divides the position and owes the rows either side, so both
             // measures rest on a reading that stopped — asked per measure rather than answered with
@@ -262,7 +267,7 @@ public sealed interface StandingQuestion {
      * question. Where the reading of one stopped, what is undecided is what the rule does at all,
      * and both measures rest on it.
      *
-     * <p>Beside {@link ObligationUndetermined} and not among it. There a reading did classify the
+     * <p>Beside {@link BoundaryUndetermined} and not among it. There a reading did classify the
      * rule and one of its questions came out undecided, which names that question and holds open
      * only the measure answering it.
      */
@@ -355,20 +360,25 @@ public sealed interface StandingQuestion {
     }
 
     /**
-     * A rule of a declaration, and one question nothing worked out whether it raises.
+     * A rule of a declaration nothing worked out whether it puts an end at.
      *
      * <p>Beside {@link NothingClassifiesIt} and not among it, because what is undecided is a
      * different size. A clause is classified question by question — {@code Decimal.compare(total,
      * subtotal) <= 0} restricts what may stand at {@code total}, and whether it also puts a line
-     * there is what inverting the operation would answer — so what stands here names the question
-     * it is undecided about, and holds open the measure that answers that one.
+     * there is what inverting the operation would answer — so only the border measure rests on this
+     * and the classes are settled beside it.
      *
-     * @param filed which rule, which question, where it was filed and what stopped the reading
+     * <p>Named for the one question a classification comes out undecided about. Whether a rule
+     * restricts the values at a name is settled by its writing one, so there is no such thing here
+     * as an undecided admitted-values question; the day there is, it arrives as an arm of its own
+     * and everything that reads one of these has to say what it does about it.
+     *
+     * @param filed which rule, where it was filed and what stopped the reading
      * @param cited how a reader finds the rule
      */
-    record ObligationUndetermined(Filed filed, Set<RuleCitation> cited) implements Unclassified {
+    record BoundaryUndetermined(Filed filed, Set<RuleCitation> cited) implements Unclassified {
 
-        public ObligationUndetermined {
+        public BoundaryUndetermined {
             if (filed == null) {
                 throw new IllegalArgumentException("a question nothing worked out is one question,"
                         + " of one rule, filed somewhere");
@@ -381,11 +391,10 @@ public sealed interface StandingQuestion {
         }
 
         /** One reader's account of it, as that reader produced it. */
-        public static ObligationUndetermined of(RuleRef rule, RuleCitation cited,
-                                                FilingCoordinate at,
-                                                CoverageObligation which,
-                                                BlockReason.RuleReadingStopped why) {
-            return new ObligationUndetermined(new Filed(rule, at, which, why), Set.of(cited));
+        public static BoundaryUndetermined of(RuleRef rule, RuleCitation cited,
+                                              FilingCoordinate at,
+                                              BlockReason.RuleReadingStopped why) {
+            return new BoundaryUndetermined(new Filed(rule, at, why), Set.of(cited));
         }
 
         @Override
@@ -403,11 +412,6 @@ public sealed interface StandingQuestion {
             return filed.why();
         }
 
-        /** Which question it is undecided about, from which the measure it holds open follows. */
-        public CoverageObligation which() {
-            return filed.which();
-        }
-
         @Override
         public List<BlockReason.AboutARule> stopped() {
             return List.of(filed.why());
@@ -420,7 +424,7 @@ public sealed interface StandingQuestion {
 
         @Override
         public StandingQuestion mergedWith(StandingQuestion other) {
-            if (!(other instanceof ObligationUndetermined it)) {
+            if (!(other instanceof BoundaryUndetermined it)) {
                 throw new IllegalArgumentException("a question nothing worked out and " + other
                         + " are not two accounts of one thing");
             }
@@ -430,24 +434,23 @@ public sealed interface StandingQuestion {
             }
             Set<RuleCitation> both = new HashSet<>(cited);
             both.addAll(it.cited);
-            return new ObligationUndetermined(filed, both);
+            return new BoundaryUndetermined(filed, both);
         }
 
         @Override
         public String toString() {
-            return "undetermined " + filed.which() + " of " + filed.rule() + " at " + filed.at();
+            return "undetermined BOUNDARY of " + filed.rule() + " at " + filed.at();
         }
 
-        /** Which rule, which question, where and what stopped it — the whole of what makes two of
-         *  these one, for the reason {@link Exact.Fact} gives about the citation. */
+        /** Which rule, where and what stopped it — the whole of what makes two of these one, for
+         *  the reason {@link Exact.Fact} gives about the citation. */
         public record Filed(RuleRef rule, FilingCoordinate at,
-                            CoverageObligation which,
                             BlockReason.RuleReadingStopped why) {
 
             public Filed {
-                if (rule == null || at == null || which == null || why == null) {
-                    throw new IllegalArgumentException("a question nothing worked out is one"
-                            + " question, of one rule, filed somewhere, for a reason");
+                if (rule == null || at == null || why == null) {
+                    throw new IllegalArgumentException("a question nothing worked out is one of"
+                            + " one rule, filed somewhere, for a reason");
                 }
             }
         }
