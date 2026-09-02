@@ -21,6 +21,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1398,20 +1399,32 @@ public final class InvariantChecker {
             }
         }
         if (!(clause instanceof Core.Binary bin)) {
+            // Nothing but a binary is written as a comparison, so there is no reading of one for
+            // the classification to be handed.
             settle(clause, from, states(clause, at, byName, null),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
         }
+        // Where this clause is recognised as a comparison, and the one place it is. What each
+        // reader below wants is what the recognition established — the two sides to walk, and what
+        // the rule states of them — so each is handed that rather than the node it was read off.
+        // Asked again below, the question is answered a second time and every reader has a case to
+        // invent an answer for: the one where the operator compares nothing, which the recognition
+        // here already took out.
+        Comparison comparison = Comparison.of(bin).orElse(null);
+        // And the one reading of the arithmetic over it, handed to each of the questions asked of
+        // it: what the clause states, and what a reader is left with where no end came of it.
+        Arithmetic read = comparison == null ? null : arithmeticOf(comparison, at, byName);
         // A rule that orders the values, or one that says which value they take. A rule that only
         // rules a value out is read no further here, and neither is an operator that compares
         // nothing: what is below reads a clause for the end it places on a position and for which
         // declarations narrowed that position, and neither of those is a thing a denial of one
         // value states.
-        ComparisonClaim asWritten = Comparison.of(bin).map(Comparison::claim).orElse(null);
+        ComparisonClaim asWritten = comparison == null ? null : comparison.claim();
         if (asWritten == null
                 || asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
-            settle(bin, from, states(bin, at, byName, arithmeticOf(bin, at, byName)),
+            settle(bin, from, states(bin, at, byName, read),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
@@ -1441,9 +1454,6 @@ public final class InvariantChecker {
         // What the clause is about, asked of the comparison and not of what `end` came to. A
         // coordinate compared for order against something naming no other coordinate states where
         // the values stop, whether or not the number on the other side is one this could fold.
-        // Read once for this comparison and handed to both of the questions asked of it: what the
-        // clause states, and what a reader is left with where no end came of it.
-        Arithmetic read = arithmeticOf(bin, at, byName);
         ClauseStates shape = states(bin, at, byName, read);
         // And nothing of this value on the other side. `ARelation` is only what
         // `Relates.twoPositions` recognises, which wants each whole side to be a position — so
@@ -1492,7 +1502,7 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            noLineDrawn(bin, asWritten, from, part, at, byName, noLines, read);
+            noLineDrawn(read, from, part, at, byName, noLines);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1526,6 +1536,11 @@ public final class InvariantChecker {
      * read to the end — both sides were recognised — and raises no question about one position; a
      * rule this made nothing of raises the same question every other rule about a position's values
      * raises, and is answered or not by whichever reading could take it in.
+     *
+     * @param read what this reader's arithmetic made of the clause, or null where the clause is no
+     *             comparison. Handed in rather than read here: which clauses are comparisons is
+     *             settled where one is recognised, and a second reading of it here is a second
+     *             answer to that question
      */
     private ClauseStates states(Core clause, Denotations at,
                                 Map<FactSubject, Coordinate> byName, Arithmetic read) {
@@ -1548,11 +1563,8 @@ public final class InvariantChecker {
         // And only where the clause names a position at all. `1 >= 0` cuts nothing either, and it
         // is not a rule that restricts no value of this position — it is a rule about nowhere, said
         // by the one authority for that question, which is whether the value is mentioned.
-        ComparisonClaim states = clause instanceof Core.Binary bin
-                ? Comparison.of(bin).map(Comparison::claim).orElse(null)
-                : null;
-        if (!found.isEmpty() && read != null && states != null
-                && read.holdsOfEveryRow(states)) {
+        if (!found.isEmpty() && read instanceof Arithmetic.CutsNothing nothing
+                && nothing.holdsOfEveryRow()) {
             return new ClauseStates.NoRestriction();
         }
         if (Relates.twoPositions(clause, e -> {
@@ -1690,15 +1702,18 @@ public final class InvariantChecker {
      * quantity says which of them the rule is about. Taken from the walk, {@code x + y - y <= 20}
      * left a finding at {@code y} of a rule its own canonical form had cancelled — and the word
      * left there was the word for {@code x}.
+     *
+     * <p>The reading and nothing beside it. The node to walk, what the rule states of its sides and
+     * what the arithmetic made of them are three readings of one comparison, and handed over as
+     * three arguments they are as much one comparison as the caller left them.
      */
-    private void noLineDrawn(Core.Binary comparison, ComparisonClaim placed,
-                            RuleRef.Invariant from, int conjunct,
+    private void noLineDrawn(Arithmetic read, RuleRef.Invariant from, int conjunct,
                             Denotations at,
-                            Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out,
-                            Arithmetic read) {
-        if (!(placed instanceof ComparisonClaim.Cut)) {
+                            Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out) {
+        if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
             return;
         }
+        Core.Binary comparison = read.comparison().at();
         Places left = placesIn(comparison.left(), at, byName);
         Places right = placesIn(comparison.right(), at, byName);
         Predicate<RuleKey> ordered = place -> carrierAt(place, left, right) != null;
@@ -1799,56 +1814,102 @@ public final class InvariantChecker {
     }
 
     /**
-     * What this reader's arithmetic made of one comparison, read once and projected twice.
+     * What this reader's arithmetic made of one recognised comparison.
      *
      * <p>Two questions come off one reading. Which coordinates the quantity is over is what says
      * whether a rule relates two positions or bounds one, and what is left when they cancel is what
-     * says whether the rule holds of every row. Read separately, each reader called the same
-     * arithmetic on the same two sides and the answers agreed only because the calls were the same
-     * — which is the shape this branch removed from {@link ComparisonAssessment} at the other
-     * producer, and put back here.
+     * says whether the rule holds of every row. Read separately, each reader calls the same
+     * arithmetic on the same two sides and the answers agree only for as long as the calls are kept
+     * the same, which is why the assessment a {@code guard}'s comparison goes through is one
+     * reading as well.
      *
-     * @param quantity what the canonical form cuts, in the words {@link UnreadComparison} reads
-     * @param residue  what is left of {@code left - right} once the positions have cancelled, or
-     *                 null where the arithmetic stopped or a position is still in it
+     * <p><b>The comparison it was read of, in every case.</b> A reader below has the node to walk
+     * and what the rule states of its sides without going back to either: this is what one
+     * comparison came to, and not a result standing beside a comparison somebody handed over with
+     * it.
+     *
+     * <p><b>And the number left over only where there is one.</b> A residue is what the two sides
+     * come to once the positions have gone, so there is one exactly where the canonical form has no
+     * position left in it. Held beside a quantity that says the same thing, the two are one fact
+     * with two accounts, and a reader asking the residue whether the positions cancelled is
+     * answered by whichever account its writer kept in step. Here the residue is a field of the one
+     * case that has one: a residue standing beside a position is not refused, it is unwritable.
      */
-    private record Arithmetic(UnreadComparison.Quantity<RuleKey> quantity,
-                              java.math.BigDecimal residue) {
+    private sealed interface Arithmetic {
+
+        /** The comparison this is the reading of. */
+        Comparison comparison();
+
+        /** What the canonical form cuts, in the words {@link UnreadComparison} reads. */
+        UnreadComparison.Quantity<RuleKey> quantity();
 
         /**
-         * Whether the comparison holds of every row there is.
+         * The canonical form has no position left in it, and this is what {@code left - right} came
+         * to.
          *
-         * <p>Two halves and both are needed. The positions have to cancel — the quantity is empty,
-         * so no value of anything is either side of anything — and what is left has to be true.
-         * {@code lo - lo >= 0} is {@code 0 >= 0}, which every row satisfies; {@code lo - lo >= 1}
-         * is {@code 0 >= 1}, which no row satisfies, and a rule that admits nothing is the opposite
-         * of one that restricts nothing. Read off the empty quantity alone, the two came out alike.
-         *
-         * <p>Every comparison and not the orderings alone. Which operator is written is no part of
-         * whether a rule states anything: {@code lo - lo == 0} holds of every row exactly as the
-         * first one does, and an author who wrote it would have been told that which values may
-         * stand at {@code lo} is a question nothing answered. What the comparison decides is what
-         * the residue has to be, and which way the residue has to stand is what the relation it
-         * states is answered at.
+         * <p>Which is not the same as the comparison naming no position: {@code lo - lo > 0} and
+         * {@code 1 > 0} both arrive here, and what tells them apart is whether the clause names a
+         * position at all — asked by the one authority for that question, which is the walk over
+         * the clause, and not by this.
          */
-        boolean holdsOfEveryRow(ComparisonClaim claim) {
-            return residue != null && claim.statedRelation().holds(residue.signum());
+        record CutsNothing(Comparison comparison, BigDecimal residue) implements Arithmetic {
+
+            @Override
+            public UnreadComparison.Quantity.CutsNothing<RuleKey> quantity() {
+                return new UnreadComparison.Quantity.CutsNothing<>();
+            }
+
+            /**
+             * Whether the comparison holds of every row there is.
+             *
+             * <p>Asked only here, because only here is there a number for it to be true of.
+             * {@code lo - lo >= 0} is {@code 0 >= 0}, which every row satisfies; {@code lo - lo >=
+             * 1} is {@code 0 >= 1}, which no row satisfies, and a rule that admits nothing is the
+             * opposite of one that restricts nothing. Read off the empty quantity alone, the two
+             * came out alike.
+             *
+             * <p>Every comparison and not the orderings alone. Which operator is written is no part
+             * of whether a rule states anything: {@code lo - lo == 0} holds of every row exactly as
+             * the first one does, and an author who wrote it would have been told that which values
+             * may stand at {@code lo} is a question nothing answered. What the comparison decides
+             * is what the residue has to be, and which way the residue has to stand is what the
+             * relation it states is answered at.
+             */
+            boolean holdsOfEveryRow() {
+                return comparison.claim().statedRelation().holds(residue.signum());
+            }
         }
+
+        /** The arithmetic read no form here, and what it was looking at when it stopped. */
+        record NotRead(Comparison comparison,
+                       UnreadComparison.Quantity.NotRead<RuleKey> quantity) implements Arithmetic {}
+
+        /** The quantity the canonical form cuts is over one position. */
+        record OverOne(Comparison comparison,
+                       UnreadComparison.Quantity.OverOne<RuleKey> quantity) implements Arithmetic {}
+
+        /** The quantity the canonical form cuts is over several. */
+        record OverSeveral(Comparison comparison,
+                           UnreadComparison.Quantity.OverSeveral<RuleKey> quantity)
+                implements Arithmetic {}
     }
 
     /**
-     * That reading, made once for a comparison, or null where the operator is not one.
+     * That reading, made once for a comparison.
+     *
+     * <p>Of a comparison and not of a node, because whether the operator compares is settled where
+     * one is recognised and a caller has to hold that to get here. Taking the node, this would
+     * settle it a second time and owe an answer for the case where it does not compare — a case
+     * nothing reaches, so nothing would notice what the answer came to be.
      *
      * <p>This reader's own, because the atoms are: a clause names a coordinate of the value it is
      * written about. What is done with the answer is {@link UnreadComparison}'s, so a {@code guard}
      * of the same shape in a body two declarations away is described in the same words — which is
      * what {@code invariant Int.add(length.value, width.value) <= 150} and the guard beside it are.
      */
-    private Arithmetic arithmeticOf(Core.Binary comparison, Denotations at,
+    private Arithmetic arithmeticOf(Comparison recognised, Denotations at,
                                     Map<FactSubject, Coordinate> byName) {
-        if (!comparison.op().compares()) {
-            return null;
-        }
+        Core.Binary comparison = recognised.at();
         // Named against this reader's own coordinates rather than against every number the
         // discharge procedure can identify. A value that is a number and is no coordinate of the
         // subject is one the walk stops at, so the expression and its environment come back
@@ -1859,8 +1920,8 @@ public final class InvariantChecker {
                 terms.outcomeOf(comparison.right(), at, byName::containsKey);
         for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
-                return new Arithmetic(new UnreadComparison.Quantity.NotRead<>(
-                        placesIn(stopped.node(), stopped.at(), byName).origin()), null);
+                return new Arithmetic.NotRead(recognised, new UnreadComparison.Quantity.NotRead<>(
+                        placesIn(stopped.node(), stopped.at(), byName).origin()));
             }
         }
         NumericDomain.LinearForm<FactSubject> whole =
@@ -1872,13 +1933,14 @@ public final class InvariantChecker {
             over.add(byName.get(atom).path());
         }
         if (over.isEmpty()) {
-            return new Arithmetic(new UnreadComparison.Quantity.CutsNothing<>(), whole.constant());
+            return new Arithmetic.CutsNothing(recognised, whole.constant());
         }
         if (over.size() == 1) {
-            return new Arithmetic(new UnreadComparison.Quantity.OverOne<>(over.iterator().next()),
-                    null);
+            return new Arithmetic.OverOne(recognised,
+                    new UnreadComparison.Quantity.OverOne<>(over.iterator().next()));
         }
-        return new Arithmetic(new UnreadComparison.Quantity.OverSeveral<>(over), null);
+        return new Arithmetic.OverSeveral(recognised,
+                new UnreadComparison.Quantity.OverSeveral<>(over));
     }
 
     /**
