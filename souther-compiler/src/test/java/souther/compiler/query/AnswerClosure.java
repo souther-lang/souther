@@ -662,7 +662,17 @@ final class AnswerClosure {
                 operandMethodsOf("IdentityHashMap#entrySet", Scenario.VALID_CORPUS),
                 operandMethodsOf("IdentityHashMap#entrySet", Scenario.A_MODULE_SPOKEN_ABOUT),
                 operandMethodsOf("IdentityHashMap#table", Scenario.VALID_CORPUS),
-                operandMethodsOf("IdentityHashMap#table", Scenario.A_MODULE_SPOKEN_ABOUT));
+                operandMethodsOf("IdentityHashMap#table", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("AbstractMap#keySet", Scenario.VALID_CORPUS),
+                operandMethodsUnderPrepared("AbstractMap#keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("AbstractMap#values", Scenario.VALID_CORPUS),
+                operandMethodsUnderPrepared("AbstractMap#values", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("IdentityHashMap#entrySet", Scenario.VALID_CORPUS),
+                operandMethodsUnderPrepared("IdentityHashMap#entrySet",
+                        Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("IdentityHashMap#table", Scenario.VALID_CORPUS),
+                operandMethodsUnderPrepared("IdentityHashMap#table",
+                        Scenario.A_MODULE_SPOKEN_ABOUT));
     }
 
     /**
@@ -679,8 +689,14 @@ final class AnswerClosure {
 
     /** And the same, under the correspondence a prepared module keeps. */
     private static String operandMethodsOf(String named, Scenario scenario) {
+        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + "Shapes$CheckSurface.Answer#value"
+                + ".CheckSurface#operandMethods." + named + " in " + scenario;
+    }
+
+    /** The same table, reached through the state the assembly is half of. */
+    private static String operandMethodsUnderPrepared(String named, Scenario scenario) {
         return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + "Shapes$Prepared.Answer#value"
-                + ".Prepared#operandMethods." + named + " in " + scenario;
+                + ".Prepared#surface.CheckSurface#operandMethods." + named + " in " + scenario;
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */

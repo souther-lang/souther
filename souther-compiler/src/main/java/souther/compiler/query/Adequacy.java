@@ -659,12 +659,13 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present() || !settled.present()) {
                 return Answer.absent();
             }
-            // A module holding a type nothing could be worked out for is one this says nothing
-            // about. The hole was reported where the name is, and what a case can arrive at cannot
-            // be read through one — asked anyway, the reading meets a shape no position can have
-            // and says so about this compiler, which is true and is not what the author of a
-            // mistyped model needs.
-            if (souther.compiler.check.TypeOps.holdsAnErroneousType(settled.value())) {
+            // A module a declaration of which has no boundary representation is one this says
+            // nothing about. Why it has none was reported where the declaration is — a name that
+            // denotes nothing, a field carrying a shape that cannot cross — and what a case can
+            // arrive at cannot be read through such a declaration: asked anyway, the reading meets
+            // a shape no position can have and says so about this compiler, which is true and is
+            // not what the author of a mistyped model needs.
+            if (!db.ask(new Shapes.Derived(name)).present()) {
                 return Answer.absent();
             }
             // What the behaviors state about their own answers, which name locations of an input as

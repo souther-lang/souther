@@ -55,7 +55,7 @@ class AnAnswersIdentityCoversEverythingItAnswersWithTest {
     private static final Map<String, String> ALLOWED = Map.of(
             "souther.compiler.check.Term.hash",
             "the hash is of the shape and the parts, and is compared first as a way of saying no",
-            "souther.compiler.check.Prepared.operandMethods",
+            "souther.compiler.check.CheckSurface.operandMethods",
             "keyed on operand identity, over the very nodes the tree hands out — it says nothing"
                     + " the tree and the definitions built from it do not already say");
 

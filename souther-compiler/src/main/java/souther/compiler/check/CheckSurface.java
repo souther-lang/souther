@@ -206,15 +206,10 @@ public final class CheckSurface {
         return built;
     }
 
-    /** Everything it holds. The correspondence between a row's operand and its method is keyed on
-     * operand identity, so it is compared by the methods it gave out — the operands are the very
-     * nodes the tree hands over, and the tree is compared above. */
     @Override
     public boolean equals(Object o) {
         return o instanceof CheckSurface other && module().equals(other.module())
-                && rowDefs.equals(other.rowDefs)
-                && List.copyOf(operandMethods.values())
-                        .equals(List.copyOf(other.operandMethods.values()));
+                && rowDefs.equals(other.rowDefs);
     }
 
     @Override
