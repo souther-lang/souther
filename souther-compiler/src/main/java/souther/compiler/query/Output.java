@@ -388,7 +388,6 @@ public final class Output {
                 return Answer.absent();   // the plan is not about these bodies
             }
         }
-
     }
 
     /**

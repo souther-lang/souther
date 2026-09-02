@@ -44,8 +44,10 @@ class ProbeMappingTest {
         return compilation;
     }
 
-    /** One compile's numbering of {@code module}, which is the check's own and not a second walk. */
-    private static CoverageSites.Plan planOf(Compilation compilation, String module) {
+    /** The numbering {@code compilation} settled on for {@code module}, asked of the check that
+     *  holds its bodies. Every call walks them again and comes to the same numbers, the walk being
+     *  a function of the bodies; what matters here is which compile's bodies were walked. */
+    private static CoverageSites.Plan checkedPlanOf(Compilation compilation, String module) {
         Bodies.Elaborated checked =
                 compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -65,7 +67,7 @@ class ProbeMappingTest {
         Compilation elsewhere = compiled();
         String module = emitting.modules().get(0);
         Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
-        CoverageSites.Plan somewhereElse = planOf(elsewhere, module);
+        CoverageSites.Plan somewhereElse = checkedPlanOf(elsewhere, module);
         assertNotNull(in);
         assertTrue(somewhereElse.sites().size() > 0, "the other compile has arms of its own");
 
@@ -94,7 +96,7 @@ class ProbeMappingTest {
         String module = emitting.modules().get(0);
         Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
         assertNotNull(in);
-        CoverageSites.Plan real = planOf(emitting, module);
+        CoverageSites.Plan real = checkedPlanOf(emitting, module);
         assertTrue(real.sites().size() > 0);
 
         // The same plan with one more arm in it than any body will emit.

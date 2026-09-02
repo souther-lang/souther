@@ -148,9 +148,10 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
             assertNotNull(checked, "the model under test compiles");
             Core body = checked.behaviorBodies().get(name);
             assertNotNull(body, "the behavior under test has a body");
-            // The emitter's plan, which is the numbering the classes below were lit against. Taken
-            // from the check that made it, so there is nothing here for a second walk to disagree
-            // with.
+            // The emitter's plan, which is the numbering the classes below were lit against. Asked
+            // of the check the emitter reads too: this walks the bodies again and would be a second
+            // thing to be right, and it comes to the same numbers because the walk is a function of
+            // the bodies both took.
             CoverageSites.Plan plan = checked.plan();
             Symbols symbols = Scopes.derived(compilation.db(), module).value();
             InputDomain inputs =

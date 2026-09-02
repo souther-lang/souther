@@ -65,7 +65,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     @Test
     void oneRunPassesTheComparisonInsideAFunctionValueOncePerElement() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan = planOf(compilation);
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
         ComparisonEmissionSite perElement = comparisonAt(plan, "fee", 9);
         Map<String, ClassFileImage> classes = probed(compilation);
 
@@ -88,7 +88,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     @Test
     void aComparisonGivenANameIsRecordedWhereItIsWritten() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan = planOf(compilation);
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
         ComparisonEmissionSite named = comparisonAt(plan, "fee", 7);
         Map<String, ClassFileImage> classes = probed(compilation);
 
@@ -102,7 +102,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     @Test
     void aComparisonABehaviorAnswersWithIsRecordedToo() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan = planOf(compilation);
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
         ComparisonEmissionSite answered = comparisonAt(plan, "positive", 12);
         Map<String, ClassFileImage> classes = probed(compilation);
 
@@ -143,8 +143,10 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         return compilation;
     }
 
-    /** The numbering the classes below were lit against, taken from the check that made it. */
-    private static CoverageSites.Plan planOf(Compilation compilation) {
+    /** The numbering the classes below were lit against, asked of the check the emitter reads too.
+     *  Named apart from the plans this package's other tests build straight from bodies: those are
+     *  a walk of their own, and this is the one the compile settled on. */
+    private static CoverageSites.Plan checkedPlanOf(Compilation compilation) {
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");

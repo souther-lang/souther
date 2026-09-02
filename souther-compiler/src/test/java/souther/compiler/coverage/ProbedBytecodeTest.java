@@ -61,8 +61,10 @@ class ProbedBytecodeTest {
         return compilation;
     }
 
-    /** The numbering the classes below were lit against, taken from the check that made it. */
-    private static CoverageSites.Plan planOf(Compilation compilation) {
+    /** The numbering the classes below were lit against, asked of the check the emitter reads too.
+     *  Named apart from the plans this package's other tests build straight from bodies: those are
+     *  a walk of their own, and this is the one the compile settled on. */
+    private static CoverageSites.Plan checkedPlanOf(Compilation compilation) {
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
@@ -103,7 +105,7 @@ class ProbedBytecodeTest {
     @Test
     void aRunRecordsTheArmsItTook() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan = planOf(compilation);
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
         Behavior submit = new Behavior(probed(compilation));
 
         Set<Integer> negative = submit.armsFor(-1L);
