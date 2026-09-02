@@ -155,7 +155,7 @@ final class Coverages {
         // in, and the count it comes back with is over a set no answer here is about.
         Readings readings = Readings.of(rows, subject,
                 observed.gaps().stream()
-                        .filter(gap -> gap.code().leftNoRowRead()).toList());
+                        .filter(gap -> gap.fact().code().leftNoRowRead()).toList());
         // Walked as the reading holds it: a location at a time, and each measure beside the
         // location it sits at. What one of its measures is owed to say includes what the reading of
         // the position left unread, which is the position's answer — asked of the entry the walk is
@@ -195,7 +195,7 @@ final class Coverages {
      *               reason it was not observed, so that a measure weakened by one of them says which
      */
     record Readings(List<AtPosition> positions, List<WhereARowSat> byRow,
-                    List<Incompleteness> unseen) {
+                    List<Incompleteness.Met> unseen) {
 
         /**
          * What the rows came to at every measure of one location.
@@ -224,7 +224,7 @@ final class Coverages {
 
         static Readings of(List<RowOutcome> rows,
                            souther.compiler.partition.MeasuredInput subject,
-                           List<Incompleteness> unseen) {
+                           List<Incompleteness.Met> unseen) {
             // The measures a row is placed at, in the measurement's own order, and what each row
             // came to at each of them — asked for in that order and answered in it, so nothing
             // here looks a measure up in what it was just handed.
@@ -299,14 +299,15 @@ final class Coverages {
          */
         WeakeningSet weakening(List<AxisReading> read) {
             Set<Weakening> out = new LinkedHashSet<>();
-            for (Incompleteness gap : unseen) {
+            for (Incompleteness.Met gap : unseen) {
                 out.add(new Weakening.ObservationIncomplete(gap));
             }
-            Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
+            // Every reading's, whatever else met the same thing. What makes two of these one fact
+            // and what happens to the places they were met at is the account's, asked once there
+            // rather than settled again by whichever reading this walk reached first.
             for (AxisReading each : read) {
-                each.stopped().forEach(gap -> byKind.putIfAbsent(gap.identity(), gap));
+                each.stopped().forEach(gap -> out.add(Weakening.ObservationIncomplete.of(gap)));
             }
-            byKind.values().forEach(gap -> out.add(new Weakening.ObservationIncomplete(gap)));
             return WeakeningSet.ofAll(out);
         }
 
@@ -1184,7 +1185,7 @@ final class Coverages {
                 by.add(new Weakening.BorderValueUnreadable(border, why));
             }
         }
-        for (Incompleteness gap : observed.gaps()) {
+        for (Incompleteness.Met gap : observed.gaps()) {
             // Rows nothing read at all bear on every line. Rows that were read and did not finish
             // bear on a line a fork drew and on no other: meeting one takes the comparison having
             // run, which a row that stopped never reached.
@@ -1192,8 +1193,8 @@ final class Coverages {
             // Read off the reasons rather than off the dispositions beside them. What a row that
             // stopped costs a measure is said once, where the row stopped (`ExampleVerifier`), and
             // a second reading here was a second statement of it that could differ (issue #996).
-            if (gap.code().leftNoRowRead()
-                    || (guard && gap.scope() == Incompleteness.Scope.ROW)) {
+            if (gap.fact().code().leftNoRowRead()
+                    || (guard && gap.fact().scope() == Incompleteness.Scope.ROW)) {
                 by.add(new Weakening.ObservationIncomplete(gap));
             }
         }
@@ -1223,7 +1224,7 @@ final class Coverages {
         if (observed.armsUnseen()) {
             // Started and not finished, so it says what it went without.
             Set<Weakening> by = new LinkedHashSet<>();
-            for (Incompleteness gap : observed.gaps()) {
+            for (Incompleteness.Met gap : observed.gaps()) {
                 by.add(new Weakening.ObservationIncomplete(gap));
             }
             return new Measurement.FailedToMeasure<>(

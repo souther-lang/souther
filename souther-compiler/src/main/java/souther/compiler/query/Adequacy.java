@@ -2405,7 +2405,7 @@ public final class Adequacy {
             // Both kinds are already here. A row that stopped is a reason of its own, written where
             // it stopped; this used to walk the dispositions beside them and say it a second time,
             // in a vocabulary that named the row without saying which source it is in (issue #996).
-            for (Incompleteness gap : observed.gaps()) {
+            for (Incompleteness.Met gap : observed.gaps()) {
                 out.add(new Weakening.ObservationIncomplete(gap));
             }
             return WeakeningSet.ofAll(out);
@@ -2499,7 +2499,7 @@ public final class Adequacy {
             }
             Set<Weakening> by = new LinkedHashSet<>();
             for (Incompleteness gap : gaps) {
-                by.add(new Weakening.ObservationIncomplete(gap));
+                by.add(Weakening.ObservationIncomplete.of(gap));
             }
             WeakeningSet went = WeakeningSet.ofAll(by);
             return new RowReading(rows.isEmpty()
@@ -2525,9 +2525,10 @@ public final class Adequacy {
             return measured.made().map(Observed::rows).orElseGet(List::of);
         }
 
-        /** What this reading went without, as the reasons themselves. One projection, shared with
-         *  the document that prints them ({@link WeakeningSet#observationCauses}). */
-        public List<Incompleteness> gaps() {
+        /** What this reading went without, as the reasons themselves, each once and with everywhere
+         *  it was met. One projection, shared with the document that prints them
+         *  ({@link WeakeningSet#observationCauses}). */
+        public Set<Incompleteness.Met> gaps() {
             return measured.weakening().observationCauses();
         }
 
@@ -2545,7 +2546,8 @@ public final class Adequacy {
          */
         public boolean armsUnseen() {
             return gaps().stream()
-                    .anyMatch(gap -> gap.code() == Incompleteness.Code.INSTRUMENTATION_ABSENT);
+                    .anyMatch(gap -> gap.fact().code()
+                            == Incompleteness.Code.INSTRUMENTATION_ABSENT);
         }
 
         /**
@@ -2560,7 +2562,7 @@ public final class Adequacy {
          * <p>Which codes say it is each code's own answer ({@link Incompleteness.Code#leftNoRowRead}).
          */
         public boolean someRowsUnseen() {
-            return gaps().stream().anyMatch(gap -> gap.code().leftNoRowRead());
+            return gaps().stream().anyMatch(gap -> gap.fact().code().leftNoRowRead());
         }
     }
 
@@ -4933,8 +4935,8 @@ public final class Adequacy {
         // holds on their behalf. A row that was seen and did not finish is not here: it arrives
         // through the case it could not be classified into, which is what the counts already say.
         Set<Weakening> unseen = new LinkedHashSet<>();
-        for (Incompleteness gap : seen.gaps()) {
-            if (gap.code().leftNoRowRead()) {
+        for (Incompleteness.Met gap : seen.gaps()) {
+            if (gap.fact().code().leftNoRowRead()) {
                 unseen.add(new Weakening.ObservationIncomplete(gap));
             }
         }

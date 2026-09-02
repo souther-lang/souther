@@ -6,7 +6,9 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourcePos;
 
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * One reason a measure could not read everything it needed, as data rather than as a sentence.
@@ -241,22 +243,10 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return target.onlyBehavior();
     }
 
-    /**
-     * Whether this counts against {@code behavior}, and so whether its measures stop being answers.
-     *
-     * <p>A reason that names one behavior answers for itself. The rest are answered here and not by
-     * the target, because what a target names and what holds a behavior are two things: a module
-     * holds every behavior in it by what a module is, and whether a source holds one is a fact
-     * about the compilation that a source id does not carry.
-     *
-     * <p>A source answers yes, and that is a reading of the two places that write one. Both are a
-     * source that was not evaluated at all, where which behaviors it wrote rows for is exactly what
-     * could not be read — so every one of them is missing rows it may have held. A {@code SOURCE}
-     * whose contents were known would need the compilation to answer and would not belong here.
-     * Nothing writes one, and this is the claim to re-read if something does.
-     */
+    /** Whether this counts against {@code behavior}, which is the fact's answer and not this
+     *  occurrence's ({@link Fact#countsAgainst}). */
     public boolean countsAgainst(String behavior) {
-        return behavior().map(behavior::equals).orElse(true);
+        return identity().countsAgainst(behavior);
     }
 
     /**
@@ -269,7 +259,109 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return new Fact(code, target);
     }
 
-    /** A reason with the place it was said left out, which is the whole of what makes two of them
-     *  one. */
-    public record Fact(Code code, Target target) {}
+    /**
+     * A reason with the place it was said left out, which is the whole of what makes two of them
+     * one.
+     *
+     * <p>Everything a reader is told about the reason other than where it was met is here, because
+     * all of it follows from what happened and what it happened to. Where it was met is
+     * accumulated beside this rather than held in it, so that one fact cited at three places stays
+     * one fact.
+     */
+    public record Fact(Code code, Target target) {
+
+        public Fact {
+            if (code == null || target == null) {
+                throw new IllegalArgumentException("a reason is something that happened to"
+                        + " something");
+            }
+        }
+
+        /** Which kind of thing {@link #subject} identifies. */
+        public Scope scope() {
+            return target.scope();
+        }
+
+        /** What it happened to, as an identity. */
+        public String subject() {
+            return target.subject();
+        }
+
+        /** The same, as a person is shown it. */
+        public String shown(SourceNameResolver names) {
+            return target.shown(names);
+        }
+
+        /** The source this is about, where what it names is one. */
+        public Optional<SourceId> sourceIdentity() {
+            return target.sourceIdentity();
+        }
+
+        /** The behavior this is about, where it is about exactly one. */
+        public Optional<String> behavior() {
+            return target.onlyBehavior();
+        }
+
+        /**
+         * Whether this counts against {@code behavior}, and so whether its measures stop being
+         * answers.
+         *
+         * <p>Here and not beside the occurrence, because whose measures a reason costs follows
+         * from what it is about and never from where it was met. A reason that names one behavior
+         * answers for itself; the rest are answered here, because what a target names and what
+         * holds a behavior are two things — a module holds every behavior in it by what a module
+         * is, and whether a source holds one is a fact about the compilation that a source id does
+         * not carry.
+         *
+         * <p>A source answers yes, and that is a reading of the two places that write one. Both are
+         * a source that was not evaluated at all, where which behaviors it wrote rows for is
+         * exactly what could not be read — so every one of them is missing rows it may have held.
+         * A {@code SOURCE} whose contents were known would need the compilation to answer and would
+         * not belong here. Nothing writes one, and this is the claim to re-read if something does.
+         */
+        public boolean countsAgainst(String behavior) {
+            return behavior().map(behavior::equals).orElse(true);
+        }
+    }
+
+    /**
+     * One incompleteness fact, together with every usable citation at which it was met.
+     *
+     * <p>Empty citations is a fact met where there was nothing to send a reader to, and not a fact
+     * nobody met.
+     */
+    public record Met(Fact fact, Set<Citation> citations) {
+
+        public Met {
+            if (fact == null) {
+                throw new IllegalArgumentException("something was met, and this is what");
+            }
+            citations = citations == null ? Set.of() : Set.copyOf(citations);
+        }
+
+        /** One occurrence of it, as the reader that met it produced one. */
+        public static Met of(Incompleteness occurrence) {
+            return new Met(occurrence.identity(),
+                    occurrence.at().map(Set::of).orElseGet(Set::of));
+        }
+
+        /**
+         * Both occurrences of one fact, as one: the fact, cited everywhere either was met.
+         *
+         * <p>Of one fact, and it says so rather than taking the caller's word. What comes out
+         * carries this one's fact, so two that are not one fact would come out as this one met
+         * somewhere it was not — a reader sent to a place that is about something else. That the
+         * caller only ever asks under one key is true of the callers there are and is not what
+         * makes the answer right.
+         */
+        public Met mergedWith(Met other) {
+            if (!fact.equals(other.fact)) {
+                throw new IllegalArgumentException("two occurrences of one fact are of one fact: "
+                        + fact + " and " + other.fact);
+            }
+            Set<Citation> both = new HashSet<>(citations);
+            both.addAll(other.citations);
+            return new Met(fact, both);
+        }
+    }
 }

@@ -103,7 +103,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
 
     /** A question of a rule of this position that nothing answered. */
     private static StandingQuestion standing() {
-        return new StandingQuestion(
+        return StandingQuestion.of(
                 new RuleRef.Invariant(new Clause.Ref(
                         new Clause.Id(TypeSymbols.declared(new TypeKey("probe", "N")), 0),
                         java.util.Optional.empty())),

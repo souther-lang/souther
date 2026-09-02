@@ -6,6 +6,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -100,12 +101,14 @@ class ASourceThatProducedNoObservationSaysSoTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
-        List<Incompleteness> gaps = AdequacyReport.of(compilation).modules().get(0).incompleteness();
+        List<PublishedIncompleteness> gaps =
+                AdequacyReport.of(compilation).modules().get(0).incompleteness().written();
 
         assertEquals(1, gaps.size(), gaps.toString());
-        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, gaps.get(0).code(),
+        Incompleteness.Fact only = gaps.get(0).fact();
+        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, only.code(),
                 "the runtime is on this classpath; what happened is that a source was not read");
-        assertEquals(Incompleteness.Scope.SOURCE, gaps.get(0).scope());
+        assertEquals(Incompleteness.Scope.SOURCE, only.scope());
     }
 
     /** And the word the schema allows is the word that is written. */

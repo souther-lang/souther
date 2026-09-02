@@ -1,6 +1,9 @@
 package souther.compiler.publish;
 
+import souther.compiler.check.RuleCitation;
+import souther.compiler.diag.Citation;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.EstablishmentGap;
@@ -8,7 +11,11 @@ import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * The order a kind of reason is published in, for the kinds that arrive without one.
@@ -37,6 +44,23 @@ public final class PublicationOrders {
     private PublicationOrders() {}
 
     /**
+     * The repeated fields of a document whose order this compiler decides.
+     *
+     * <p>Written down and not worked out from the shape of the schema. That a field holds an array
+     * says nothing about where its order comes from: the behaviors of a module and the declarations
+     * under one are in the order somebody wrote them, and a document that sorted those would be
+     * answering by a precedence nothing in the model decides. What puts a field here is the other
+     * thing — that what it holds arrives with no order of its own, so a document either decides one
+     * or takes whichever a walk had.
+     *
+     * <p>So this is a decision about the published contract and belongs beside the orders. The
+     * check that a writer of one of these goes through a crossing reads it, and a field added to a
+     * document is outside that check until somebody says which of the two kinds it is.
+     */
+    public static final Set<String> CANONICALLY_ARRANGED_FIELDS =
+            Set.of("keptOpenBy", "incompleteness");
+
+    /**
      * What an observation met instead of a value, from what was nearest an answer to what never
      * started.
      *
@@ -58,6 +82,118 @@ public final class PublicationOrders {
     /** What an observation met, wherever a document says one. */
     public static final CanonicalSelection.Order<Incompleteness.Code> OBSERVATION_CODES =
             CanonicalSelection.Order.overValues(OBSERVATION_CODES_IN_ORDER);
+
+    /**
+     * What a reason is about, from the smallest thing it can be about to the largest.
+     *
+     * <p>A reader working through a module reads what is true of one row before what is true of
+     * everything in the file it is in, because the narrower of the two is the one they can act on
+     * without reading the rest of the report.
+     */
+    private static final CanonicalSelection.Order<Incompleteness.Scope> SCOPES =
+            CanonicalSelection.Order.overValues(List.of(
+                    Incompleteness.Scope.ROW,
+                    Incompleteness.Scope.POSITION,
+                    Incompleteness.Scope.BEHAVIOR,
+                    Incompleteness.Scope.SOURCE,
+                    Incompleteness.Scope.MODULE));
+
+    /**
+     * Where one place a document writes comes in front of another: by the source it is in, then by
+     * how far down and how far across, and last by whether the code is at it.
+     *
+     * <p>Nothing here is a rank. Two places in one file are read in the order the file is read in,
+     * and the identities of two files are compared as the text they are written as — which says
+     * nothing about either file except that a run comparing them again compares them the same way.
+     *
+     * <p>Last is the one thing a place says that is not where it is: whether the code is written
+     * here, or reached from here and written where this compile holds no file. Two places alike
+     * but for that are one position a reader is sent to for two reasons, and the nearer of the two
+     * is said first.
+     */
+    static final Comparator<PublishedAt> PLACES = Comparator
+            .comparing((PublishedAt each) -> each.source().value())
+            .thenComparingInt(PublishedAt::line)
+            .thenComparingInt(PublishedAt::column)
+            .thenComparing(PublicationOrders::whereRank)
+            .thenComparing(PublicationOrders::declarationOf);
+
+    private static int whereRank(PublishedAt place) {
+        return switch (place.writtenAt()) {
+            case PublishedAt.Where.Here _ -> 0;
+            case PublishedAt.Where.OutOfSight _ -> 1;
+        };
+    }
+
+    private static String declarationOf(PublishedAt place) {
+        return switch (place.writtenAt()) {
+            case PublishedAt.Where.Here _ -> "";
+            case PublishedAt.Where.OutOfSight it -> it.declaration();
+        };
+    }
+
+    /**
+     * The one place a document sends a reader to for a fact met at several, or nothing where none
+     * of them is a place.
+     *
+     * <p>The schema has room for one, and a fact is one fact however many readers met it — so a
+     * choice is made, and it is made here rather than by whichever of them a walk reached first.
+     * The first in the order above, which is the one nearest the top of the first file.
+     *
+     * <p>Citations that send a reader nowhere take no part. They are not places, so there is
+     * nothing about them for an order to say, and a fact with none of them is a fact the document
+     * writes no place for.
+     */
+    public static Optional<PublishedAt> placeFor(Collection<Citation> met) {
+        return met.stream().map(PublishedAt::of).flatMap(Optional::stream).min(PLACES);
+    }
+
+    /**
+     * How a document sends a reader to a rule that two readers each offered a handle for.
+     *
+     * <p>A name where the author gave one, before a place where they did not. A reader given a name
+     * has the word the model uses; a place is what there is instead, and a rule that has both is a
+     * rule a reader can be asked about in the author's own words.
+     *
+     * <p>Two names, or two places, are told apart by what a document writes of them — which is the
+     * text it prints, and comparing that is the same serialization order the identities of two
+     * sources are compared in.
+     */
+    private static final Comparator<RuleCitation> HANDLES =
+            Comparator.comparing(PublishedRuleHandle::of);
+
+    /**
+     * The one handle a document writes for a rule met with several, or nothing where none was
+     * offered.
+     *
+     * <p>The schema has room for one and a rule is one rule however many readers found it, so a
+     * choice is made and it is made here rather than by whichever reader a walk reached first.
+     */
+    public static Optional<RuleCitation> handleFor(Collection<RuleCitation> offered) {
+        return offered.stream().min(HANDLES);
+    }
+
+    /**
+     * What a document says a module could not read, from the narrowest thing that went unread to
+     * the widest, and within one word from the first place in the model to the last.
+     *
+     * <p>The array's unit is the fact, so two entries a reader can tell apart are two entries and
+     * an order over them has to tell them apart as well. What tells two of these apart is what a
+     * reader is shown: what happened, what it happened to, and where to look — so that is the key,
+     * whole, and nothing that went into deciding it is part of the comparison.
+     *
+     * <p>A fact the document writes no place for comes before one it does, at the same word about
+     * the same thing. There is only ever one of each such pair, since the two would be one fact.
+     */
+    public static final CanonicalArrangement.Order<PublishedIncompleteness> WHAT_WENT_UNREAD =
+            CanonicalArrangement.Order.by(Comparator
+                    .comparingInt((PublishedIncompleteness each) ->
+                            SCOPES.rankOf(each.fact().scope()))
+                    .thenComparingInt(each -> OBSERVATION_CODES.rankOf(each.fact().code()))
+                    .thenComparing(each -> each.fact().subject())
+                    .thenComparing(PublishedIncompleteness::at,
+                            Comparator.comparing(at -> at.orElse(null),
+                                    Comparator.nullsFirst(PLACES))));
 
     /**
      * What a reading of a number met instead of one.
@@ -175,6 +311,70 @@ public final class PublicationOrders {
             out.add(new WeakeningVocabulary.AWordOfThisDocuments(word));
         }
         return out;
+    }
+
+    /**
+     * The ways a verdict stays open that no weakening covers, from the measure nobody made to the
+     * point nothing was even attempted at.
+     *
+     * <p>A measure that was never made comes first because it is the one an author acts on by
+     * asking for it. Then the point a row is owed at, and of the three words for that, the two that
+     * say something was tried before the one that says nothing was: a reader sent after what
+     * stopped a showing has something to find, and a reader told nothing showed it has not.
+     */
+    private static final CanonicalSelection.Order<AdequacyOpeningWord> OPENING_WORDS =
+            CanonicalSelection.Order.overValues(List.of(
+                    AdequacyOpeningWord.NOT_MEASURED,
+                    AdequacyOpeningWord.SHOWING_STOPPED,
+                    AdequacyOpeningWord.NOTHING_WAS_COMPOSED,
+                    AdequacyOpeningWord.NOTHING_SHOWED_IT));
+
+    /**
+     * Why a measure the verdict rests on was never made, from what an author can do about it to
+     * what this build decided.
+     *
+     * <p>The words the schema allows and not the arms that produce them: several measures say
+     * {@code no_rows}, and a place per measure would be an order over which of them a walk reached.
+     * Rows the model does not have are a change an author makes, and a measure this build did not
+     * ask for is a change to how it was run, so the first is said first.
+     */
+    private static final CanonicalSelection.Order<NotMeasuredWord> NOT_MEASURED_REASONS =
+            CanonicalSelection.Order.overValues(List.of(
+                    NotMeasuredWord.NO_ROWS,
+                    NotMeasuredWord.NOT_ASKED,
+                    NotMeasuredWord.ARMS_NOT_ASKED));
+
+    /** Whether a wider run could answer it: the one it could, first. */
+    private static final CanonicalSelection.Order<RunSensitivity> RUN_SENSITIVITIES =
+            CanonicalSelection.Order.overValues(List.of(
+                    RunSensitivity.MAY_CHANGE, RunSensitivity.UNAFFECTED));
+
+    /**
+     * What a document says holds a verdict open, by what kind of thing each is.
+     *
+     * <p>The words a measurement went without first, in the order that array is already written in,
+     * and then the words of this array's own. A reader works through what was measured and fell
+     * short before what was never measured at all, because the first is the compiler saying how far
+     * it got and the second is it saying it did not start.
+     *
+     * <p>Then the reason, where the kind has one, and last whether a wider run could answer it. Two
+     * entries alike in all three are two entries a document writes identically, and which of them
+     * comes first is nothing a reader can see.
+     */
+    public static final CanonicalArrangement.Order<PublishedOpening> WHAT_HOLDS_A_VERDICT_OPEN =
+            CanonicalArrangement.Order.by(Comparator
+                    .comparingInt((PublishedOpening each) -> kindRank(each.kind()))
+                    .thenComparingInt(each -> each.reason()
+                            .map(NOT_MEASURED_REASONS::rankOf).orElse(-1))
+                    .thenComparingInt(each -> RUN_SENSITIVITIES.rankOf(each.runSensitivity())));
+
+    /** Where one kind sits, over the two vocabularies as one sequence. */
+    private static int kindRank(PublishedOpening.Kind kind) {
+        return switch (kind) {
+            case PublishedOpening.Kind.AWeakening it -> WEAKENING_WORDS.rankOf(it.said());
+            case PublishedOpening.Kind.AnOpening it ->
+                    WEAKENING_WORDS.slots().size() + OPENING_WORDS.rankOf(it.said());
+        };
     }
 
     /**

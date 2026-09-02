@@ -131,7 +131,7 @@ public final class EnsuresThresholds {
         }
         InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()));
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new ArrayList<>());
+                new RuleWithoutALine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
             String clause = labelOf(rule);
             // Which line of the clause each one is, counted over every comparison the clause states
@@ -148,13 +148,14 @@ public final class EnsuresThresholds {
                                 drawn);
             }
         }
-        return new Clauses(drawn.evidence(), drawn.between(), drawn.rulesWithoutALine());
+        return new Clauses(drawn.evidence(), drawn.between(), drawn.rulesWithoutALine().all());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<LineEvidence> evidence,
-                         List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {}
+                         List<LineDrawn> between,
+                         RuleWithoutALine.Gathered rulesWithoutALine) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -325,18 +326,14 @@ public final class EnsuresThresholds {
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      java.util.SequencedMap<FilingCoordinate,
                                              BlockReason.RuleWithoutLineReason> left,
-                                     List<RuleWithoutALine> withoutALine) {
+                                     RuleWithoutALine.Gathered withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);
-        left.forEach((named, why) -> {
-            RuleWithoutALine here = new RuleWithoutALine(rule, cited, named, why);
-            if (withoutALine.stream().noneMatch(had -> had.sameAs(here))) {
-                withoutALine.add(here);
-            }
-        });
+        left.forEach((named, why) ->
+                withoutALine.add(RuleWithoutALine.of(rule, cited, named, why)));
     }
 
 

@@ -121,7 +121,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
             Incompleteness.Code code = each == RunSensitivity.MAY_CHANGE
                     ? Incompleteness.Code.VALUE_TRUNCATED : Incompleteness.Code.VALUE_UNREADABLE;
 
-            assertEquals(each, new Weakening.ObservationIncomplete(Incompleteness.of(
+            assertEquals(each, Weakening.ObservationIncomplete.of(Incompleteness.of(
                     code, Incompleteness.Scope.BEHAVIOR, "b")).runSensitivity());
             assertEquals(each, new Weakening.BorderValueUnreadable(
                     border(), ReadingGap.of(code)).runSensitivity());
@@ -204,7 +204,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
      */
     private static List<Weakening> everyWeakening() {
         List<Weakening> out = new ArrayList<>();
-        out.add(new Weakening.ObservationIncomplete(Incompleteness.of(
+        out.add(Weakening.ObservationIncomplete.of(Incompleteness.of(
                 Incompleteness.Code.VALUE_TRUNCATED, Incompleteness.Scope.BEHAVIOR, "b")));
         out.add(new Weakening.BorderValueUnreadable(border(),
                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)));

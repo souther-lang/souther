@@ -5,8 +5,10 @@ import souther.compiler.inputs.BlockedDescent;
 import souther.compiler.inputs.RulesLeftUnread;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -174,14 +176,14 @@ public final class MeasureClosure {
                    List<souther.compiler.inputs.StandingQuestion> asked,
                    List<souther.compiler.inputs.RuleWithoutALine> refused, LinesRead lines) {
         lines.everyLineFoundWasDrawn();
-        Set<ClosureGap> partition = new LinkedHashSet<>();
-        Set<ClosureGap> border = new LinkedHashSet<>();
+        Gathering partition = new Gathering();
+        Gathering border = new Gathering();
         for (souther.compiler.inputs.RuleWithoutALine rule : refused) {
             if (rule.why().leavesShort(CoverageObligation.Measure.PARTITION)) {
-                partition.add(new ClosureGap.RuleUnread(rule));
+                partition.add(ClosureGap.RuleUnread.of(rule));
             }
             if (rule.why().leavesShort(CoverageObligation.Measure.BOUNDARY)) {
-                border.add(new ClosureGap.RuleUnread(rule));
+                border.add(ClosureGap.RuleUnread.of(rule));
             }
         }
         // Over the positions and not over the measures made of them. What a reading of a position
@@ -216,15 +218,45 @@ public final class MeasureClosure {
         // size that nothing answered went unsaid because the walk could not read what the map holds,
         // which are two facts about two different rules (issue #1084).
         for (souther.compiler.inputs.StandingQuestion each : asked) {
-            ClosureGap gap = new ClosureGap.QuestionUnanswered(each);
+            ClosureGap gap = ClosureGap.QuestionUnanswered.of(each);
             switch (each.obligation().answeredBy()) {
                 case PARTITION -> partition.add(gap);
                 case BOUNDARY -> border.add(gap);
             }
         }
         return new Both(
-                partition.isEmpty() ? new OfThePartition.Closed() : new OfThePartition.Open(partition),
-                border.isEmpty() ? new OfTheBorder.Closed() : new OfTheBorder.Open(border));
+                partition.isEmpty()
+                        ? new OfThePartition.Closed() : new OfThePartition.Open(partition.gaps()),
+                border.isEmpty()
+                        ? new OfTheBorder.Closed() : new OfTheBorder.Open(border.gaps()));
+    }
+
+    /**
+     * What one measure's reading was left open by, each fact once.
+     *
+     * <p>One stop met twice is one stop. Which handle a reader is sent to and what each reading of
+     * a question was short of are accumulated rather than kept apart, so that a gap found from two
+     * readers is one gap carrying both — and what makes two of these one is
+     * {@link ClosureGap#fact()}, asked of the gap rather than decided here.
+     *
+     * <p>Keyed and not ordered. Nothing here says which gap comes before which, and a reader that
+     * puts them in a sequence says which order it means.
+     */
+    private static final class Gathering {
+
+        private final Map<Object, ClosureGap> byFact = new HashMap<>();
+
+        void add(ClosureGap gap) {
+            byFact.merge(gap.fact(), gap, ClosureGap::merged);
+        }
+
+        boolean isEmpty() {
+            return byFact.isEmpty();
+        }
+
+        Set<ClosureGap> gaps() {
+            return Set.copyOf(byFact.values());
+        }
     }
 
     /**

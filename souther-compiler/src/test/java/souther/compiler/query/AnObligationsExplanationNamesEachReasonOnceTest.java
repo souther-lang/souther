@@ -175,7 +175,7 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
      */
     @Test
     void aReasonSaidWhereItHappenedIsNotSaidAgainHere() {
-        ReadingReasons met = explanationOf(List.of(new Weakening.ObservationIncomplete(
+        ReadingReasons met = explanationOf(List.of(Weakening.ObservationIncomplete.of(
                 new Incompleteness(Incompleteness.Code.OBSERVATION_ABSENT,
                         new Target.OfModule("example"), Optional.empty()))));
 

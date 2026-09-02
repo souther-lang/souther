@@ -513,8 +513,9 @@ class AMeasureWithNoNumberSaysWhyTest {
         // numbered none of them, which is the other half of the pair this test is about: written
         // as a number, "nothing was read" and "nothing was written" were the same byte.
         assertEquals(java.util.OptionalInt.empty(), reported.rowCount(), "nothing was read");
-        assertTrue(AdequacyReport.of(compilation).modules().get(0).incompleteness().stream()
-                        .anyMatch(gap -> gap.code() == Incompleteness.Code.OBSERVATION_ABSENT),
+        assertTrue(AdequacyReport.of(compilation).modules().get(0).incompleteness().written().stream()
+                        .anyMatch(gap -> gap.fact().code()
+                                == Incompleteness.Code.OBSERVATION_ABSENT),
                 "and there may well have been something to read");
 
         Adequacy.BranchEvidence branch = compilation.db()
