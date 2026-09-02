@@ -206,22 +206,32 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             return switch (asked.asks()) {
                 case souther.compiler.inputs.InputQuestion.AboutAPosition _ -> null;
                 case souther.compiler.inputs.InputQuestion.AboutANumber it ->
-                        switch (it.claim().of()) {
+                        switch (it.about().of()) {
                             // The position's own values, which the `path` beside this already says.
-                            case souther.compiler.check.BoundaryClaim.OfWhatNumber
+                            case souther.compiler.check.NumberAt.OfWhatNumber
                                     .OfItsOwnValue _ -> null;
-                            case souther.compiler.check.BoundaryClaim.OfWhatNumber
+                            case souther.compiler.check.NumberAt.OfWhatNumber
                                     .OfWhatAnOperationAnswers taken ->
                                     named(taken.operation()) + "(" + at() + ")";
                         };
             };
         }
 
-        /** What a document calls the operation a number is taken by. The qualified spelling where
-         *  the library declares it, which is what every other surface writes. */
+        /**
+         * What a document calls the operation a number is taken by.
+         *
+         * <p>The qualified spelling, which is the only one a document has. Every claim made today
+         * takes its operation from what the library declares of the shape
+         * ({@code NumericMeasures.takenOf}), so an operation of another kind arriving here is a
+         * producer added without the document being told what to call what it names — and a word
+         * invented here for it would be that decision taken by whoever wrote the renderer.
+         */
         private static String named(souther.compiler.types.ValueName operation) {
-            return operation instanceof souther.compiler.types.ValueName.Stdlib it
-                    ? it.qualified() : operation.toString();
+            if (!(operation instanceof souther.compiler.types.ValueName.Stdlib it)) {
+                throw new IllegalStateException("a question stands about the number `" + operation
+                        + "` answers, which no document has a word for");
+            }
+            return it.qualified();
         }
     }
 

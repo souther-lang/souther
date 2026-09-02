@@ -539,7 +539,7 @@ public final class InvariantChecker {
      * still take, which is where a row completing that assignment has to look.
      */
     static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy, Map<BoundaryClaim<RuleKey>, Count> settled) {
+                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled) {
         return seedFields(named, data, symbols, policy, settled, Reach.EVERYTHING);
     }
 
@@ -554,7 +554,7 @@ public final class InvariantChecker {
      * says, and it is not that one — see {@link Reach}.
      */
     static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy, Map<BoundaryClaim<RuleKey>, Count> settled,
+                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
                              Reach reach) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
         Map<String, Type> fields = c.clauses.fieldsOf(data);
@@ -792,19 +792,19 @@ public final class InvariantChecker {
             });
             held.forEach((path, counted) ->
                     spacing.put(counted.atom(), souther.compiler.numeric.Granularity.DISCRETE));
-            for (Map.Entry<BoundaryClaim<RuleKey>, Count> each : settled.entrySet()) {
-                BoundaryClaim<RuleKey> where = each.getKey();
+            for (Map.Entry<NumberAt<RuleKey>, Count> each : settled.entrySet()) {
+                NumberAt<RuleKey> where = each.getKey();
                 // The number the caller settled, which is the position's own value or the count
                 // taken of it. Two coordinates at one path and two atoms: a reading that resolved
                 // only the first left a rule over two counts unconditioned while the same rule was
                 // read whole when it was asked about.
                 FactSubject atom = switch (where.of()) {
-                    case BoundaryClaim.OfWhatNumber.OfItsOwnValue _ -> atoms.get(where.position());
+                    case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atoms.get(where.position());
                     // A count and nothing else. What a clause of a value has words for is the
                     // position and how much it holds; a number some other operation answers of the
                     // same location is a quantity the declarations never mention, so what they say
                     // about it is nothing rather than whatever stands in the count's slot (#1027).
-                    case BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers taken ->
+                    case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                             NumericMeasures.isMeasure(taken.operation())
                                     ? atomOf(held.get(where.position())) : null;
                 };
@@ -975,7 +975,7 @@ public final class InvariantChecker {
      *                 one value are two rules a row could be owed to, and held as declarations
      *                 they came back as one
      */
-    record Direct(BoundaryClaim<RuleKey> at, RuleRef.Invariant from,
+    record Direct(NumberAt<RuleKey> at, RuleRef.Invariant from,
                   InvariantBound bound, Core part, int conjunct) {
 
         /** What the value's rules call where the end was placed. Never which end it is: one name
@@ -1210,7 +1210,7 @@ public final class InvariantChecker {
      *                position no line is drawn on named nothing, and the reading that could say so
      *                had never heard of the position
      */
-    private record Coordinate(BoundaryClaim<RuleKey> at, Carrier carrier) {
+    private record Coordinate(NumberAt<RuleKey> at, Carrier carrier) {
 
         /** What the value's rules call it. Never what it is: two numbers can be taken at one name,
          *  and {@link #at} is what tells them apart. */
@@ -1256,10 +1256,10 @@ public final class InvariantChecker {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
-            byName.put(key, new Coordinate(BoundaryClaim.valueOf(path), carrier));
+            byName.put(key, new Coordinate(NumberAt.valueOf(path), carrier));
             FactSubject atom = atoms.get(path);
             if (atom != null) {
-                byName.put(atom, new Coordinate(BoundaryClaim.valueOf(path), carrier));
+                byName.put(atom, new Coordinate(NumberAt.valueOf(path), carrier));
             }
         });
         // A count is a whole number whatever it counts, so nothing about the container decides how
@@ -1267,7 +1267,7 @@ public final class InvariantChecker {
         // it: dropped here and rebuilt as "a number was taken", two operations over one path were
         // one coordinate and a report could not tell them apart.
         held.forEach((path, counted) -> byName.put(counted.atom(),
-                new Coordinate(BoundaryClaim.takenOf(path, counted.by()),
+                new Coordinate(NumberAt.takenOf(path, counted.by()),
                         Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();

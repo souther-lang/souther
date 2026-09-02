@@ -25,7 +25,7 @@ import java.util.Set;
  * would be two answers about one clause.
  *
  * <p><b>What a clause is about, and not the questions it raises.</b> A place it names is a
- * {@link RuleKey} and a line it draws is a {@link BoundaryClaim}, which are what a reading
+ * {@link RuleKey} and a line it draws is a {@link NumberAt}, which are what a reading
  * of a clause has; which coverage question each of them becomes is {@link Required#ofInvariant}'s
  * and is decided there. Written in the vocabulary of the questions instead, the names were a set of
  * subjects every member of which was the same arm with the same flag — a set of names wearing the
@@ -47,7 +47,7 @@ sealed interface ClauseStates {
      * @param named the ones the clause is about, which is what a rule can cost. Never empty: a
      *              clause bounding a coordinate writes the name it sits at
      */
-    record ABound(BoundaryClaim<RuleKey> line, Set<RuleKey> named) implements ClauseStates {
+    record ABound(NumberAt<RuleKey> line, Set<RuleKey> named) implements ClauseStates {
 
         public ABound {
             if (line == null) {

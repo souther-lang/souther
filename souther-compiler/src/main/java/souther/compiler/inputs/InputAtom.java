@@ -1,6 +1,6 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.BoundaryClaim;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleKey;
 
 /**
@@ -63,7 +63,7 @@ sealed interface InputAtom {
      *                 numbers at one place, and a rule about one says nothing about the other
      */
     record Named(String root, RuleKey path,
-                 BoundaryClaim.OfWhatNumber kind) implements InputAtom {
+                 NumberAt.OfWhatNumber kind) implements InputAtom {
 
         public Named {
             if (root == null || path == null) {
@@ -87,8 +87,8 @@ sealed interface InputAtom {
         public String toString() {
             String at = place();
             return switch (kind) {
-                case BoundaryClaim.OfWhatNumber.OfItsOwnValue _ -> at;
-                case BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers taken ->
+                case NumberAt.OfWhatNumber.OfItsOwnValue _ -> at;
+                case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         taken.operation() instanceof souther.compiler.types.ValueName.Stdlib named
                                 ? named.qualified() + "(" + at + ")" : "|" + at + "|";
             };

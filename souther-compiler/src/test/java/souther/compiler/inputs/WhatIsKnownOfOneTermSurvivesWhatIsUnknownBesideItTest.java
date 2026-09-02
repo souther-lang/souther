@@ -6,7 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.BoundaryClaim;
+import souther.compiler.check.NumberAt;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -200,16 +200,16 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
     void twoOperationsTakenOfOneLocationAreTwoCoordinates() {
         souther.compiler.check.RuleKey path =
                 new souther.compiler.check.RuleKey(List.of("p", "xs"));
-        BoundaryClaim<souther.compiler.check.RuleKey> byLength = BoundaryClaim.takenOf(path,
+        NumberAt<souther.compiler.check.RuleKey> byLength = NumberAt.takenOf(path,
                 souther.compiler.types.ValueName.Stdlib.operation("List", "length"));
-        BoundaryClaim<souther.compiler.check.RuleKey> bySize = BoundaryClaim.takenOf(path,
+        NumberAt<souther.compiler.check.RuleKey> bySize = NumberAt.takenOf(path,
                 souther.compiler.types.ValueName.Stdlib.operation("Set", "size"));
 
         assertNotEquals(byLength, bySize,
                 "one path, two operations, two numbers — and the claim says which");
-        assertNotEquals(byLength, BoundaryClaim.valueOf(path),
+        assertNotEquals(byLength, NumberAt.valueOf(path),
                 "and neither of them is the value the position holds");
-        assertEquals(byLength, BoundaryClaim.takenOf(path,
+        assertEquals(byLength, NumberAt.takenOf(path,
                         souther.compiler.types.ValueName.Stdlib.operation("List", "length")),
                 "while two namings of one number are one coordinate");
     }

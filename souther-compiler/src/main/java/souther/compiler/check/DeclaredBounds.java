@@ -216,7 +216,7 @@ public final class DeclaredBounds {
      *             path is the caller's already, which is what {@code placed} is a list of
      */
     public static Bounds placed(List<FieldDomains.Placed> placed,
-                                BoundaryClaim.OfWhatNumber kind, Carrier carrier) {
+                                NumberAt.OfWhatNumber kind, Carrier carrier) {
         End min = null;
         End max = null;
         for (FieldDomains.Placed each : placed) {

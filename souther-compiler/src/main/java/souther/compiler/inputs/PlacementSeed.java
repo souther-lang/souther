@@ -1,6 +1,6 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.BoundaryClaim;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.Owed;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
@@ -53,7 +53,7 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
          * and on its length, so two rules at one address can be about two numbers, and a reader that
          * took the number from the location would file both under whichever it guessed.
          */
-        record ANumberOfIt(BoundaryClaim.OfWhatNumber which) implements Placed {
+        record ANumberOfIt(NumberAt.OfWhatNumber which) implements Placed {
 
             public ANumberOfIt {
                 if (which == null) {
@@ -79,15 +79,15 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
     public static PlacementSeed of(RuleAddress address, NumericTerm term, RuleRef by,
                                    RuleCitation cited) {
         return new PlacementSeed(address, new Placed.ANumberOfIt(switch (term) {
-            case NumericTerm.ValueOf _ -> new BoundaryClaim.OfWhatNumber.OfItsOwnValue();
+            case NumericTerm.ValueOf _ -> new NumberAt.OfWhatNumber.OfItsOwnValue();
             case NumericTerm.TakenOf taken ->
-                    new BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers(taken.operation());
+                    new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken.operation());
             // The operation likewise, since what a rule about this number is about is what the
             // operation answered. That it answered it over a run rather than of one value is not a
             // difference a rule of the value the run is under can name: no clause of a record is
             // written about what its elements come to.
             case NumericTerm.TakenOver over ->
-                    new BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers(over.operation());
+                    new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(over.operation());
         }), by, cited);
     }
 

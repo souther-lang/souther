@@ -762,7 +762,7 @@ class EverySchemaWordIsAccountedForTest {
         written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
                 .AboutAPosition(souther.compiler.inputs.TermPath.of("x"))));
         written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
-                .AboutANumber(souther.compiler.check.BoundaryClaim.valueOf(
+                .AboutANumber(souther.compiler.check.NumberAt.valueOf(
                         souther.compiler.inputs.TermPath.of("x")))));
         written.add("comparison");
 

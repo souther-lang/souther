@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import souther.compiler.check.BoundaryClaim;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.Owed;
 import souther.compiler.check.RuleKey;
 import souther.compiler.diag.SourceNameResolver;
@@ -168,13 +168,13 @@ class AQuestionAboutANumberNamesTheNumberTest {
         ValueName length = ValueName.Stdlib.operation("List", "length");
         ValueName size = ValueName.Stdlib.operation("Set", "size");
 
-        assertNotEquals(new Owed.Boundary(BoundaryClaim.takenOf(RuleKey.of("names"), length)),
-                new Owed.Boundary(BoundaryClaim.takenOf(RuleKey.of("names"), size)),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
+                new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), size)),
                 "a line on one operation's number is not a line on another's");
-        assertNotEquals(new Owed.Boundary(BoundaryClaim.takenOf(RuleKey.of("names"), length)),
-                new Owed.Boundary(BoundaryClaim.valueOf(RuleKey.of("names"))),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
+                new Owed.Boundary(NumberAt.valueOf(RuleKey.of("names"))),
                 "nor a line on what the position itself holds");
-        assertNotEquals(new Owed.Boundary(BoundaryClaim.takenOf(RuleKey.of("names"), length)),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
                 new Owed.AdmittedValues(RuleKey.of("names")),
                 "and a question about a number is not the question about the position");
     }
@@ -190,7 +190,7 @@ class AQuestionAboutANumberNamesTheNumberTest {
     @Test
     void thePositionsTwoQuestionsAreTwoAtOnePath() {
         TermPath at = TermPath.of("t").then("names");
-        InputQuestion aLine = new InputQuestion.AboutANumber(BoundaryClaim.valueOf(at));
+        InputQuestion aLine = new InputQuestion.AboutANumber(NumberAt.valueOf(at));
         InputQuestion itsValues = new InputQuestion.AboutAPosition(at);
 
         assertNotEquals(aLine, itsValues,

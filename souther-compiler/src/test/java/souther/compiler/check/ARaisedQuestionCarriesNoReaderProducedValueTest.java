@@ -43,11 +43,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * vocabulary, which is what makes the rest of it sayable at all.
  *
  * <p><b>The whole reachable graph and not the roots.</b> A component whose type is model-side and
- * whose own components are not moves the reading one hop away and leaves the claim standing. So the
- * closure is walked — sealed subtypes and record components, through the generic signature so that
- * a type argument is followed rather than erased — and what it comes to is written down here. A
- * type added to it fails this until it is listed, which is where the reason for admitting it gets
- * written.
+ * whose own components are not moves the reading one hop away and leaves the question looking
+ * clean. So the closure is walked — sealed subtypes and record components, through the generic
+ * signature so that a type argument is followed rather than erased — and what it comes to is
+ * written down here. A type added to it fails this until it is listed, which is where the reason
+ * for admitting it gets written.
+ *
+ * <p><b>Which is a whole graph only because of what else is checked.</b> Record components are
+ * every field a record has; a class of another kind can hold one nothing here would follow, and the
+ * walk would say a type is clean while a reading sits one field inside it. So the shape is held to
+ * rather than the walk widened: everything the closure reaches, bar the names it stops at, is a
+ * record or a sealed interface with no state of its own
+ * ({@link #aQuestionIsBuiltOutOfRecordsAndSealedInterfaces}). Under that, following the components
+ * is following everything, and the two checks are one theorem — the walk is exhaustive because the
+ * vocabulary is an algebraic data type, and that it is one is said out loud rather than assumed.
  *
  * <p><b>And it stops at the three types that are names.</b> A place and an operation are named
  * rather than described: what {@link RuleKey}, {@code TermPath} and {@code ValueName} are made of
@@ -76,17 +85,17 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * <p>Each of them is something an author wrote or a name this compiler resolved one of their
      * words to, and none of them is an answer about a model. {@link RuleKey} and
      * {@code TermPath} are the two spellings of a place, which is what the crossing translates;
-     * {@link BoundaryClaim} is a place and which number of it; {@code ValueName} is the operation
+     * {@link NumberAt} is a place and which number of it; {@code ValueName} is the operation
      * that number is taken by, as the call resolved and not as it was written.
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",
             "souther/compiler/check/Owed$AdmittedValues",
             "souther/compiler/check/Owed$Boundary",
-            "souther/compiler/check/BoundaryClaim",
-            "souther/compiler/check/BoundaryClaim$OfWhatNumber",
-            "souther/compiler/check/BoundaryClaim$OfWhatNumber$OfItsOwnValue",
-            "souther/compiler/check/BoundaryClaim$OfWhatNumber$OfWhatAnOperationAnswers",
+            "souther/compiler/check/NumberAt",
+            "souther/compiler/check/NumberAt$OfWhatNumber",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOwnValue",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatAnOperationAnswers",
             "souther/compiler/check/RuleKey",
             "souther/compiler/inputs/InputQuestion",
             "souther/compiler/inputs/InputQuestion$AboutAPosition",
@@ -98,6 +107,46 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
     void aQuestionIsMadeOfTheModelsOwnVocabulary() {
         assertEquals(THE_QUESTIONS_OWN_VOCABULARY, reachable(),
                 "what a coverage question carries, walked from both ends of the crossing");
+    }
+
+    /**
+     * And what it is made of is records under sealed interfaces, which is what makes the walk above
+     * a walk of everything.
+     *
+     * <p>Record components are all the state a record has, so following them follows the whole of
+     * it. A class of another kind is under no such rule: one field of it would be a reading carried
+     * inside a type the walk had already called clean, and both checks here would pass while saying
+     * nothing. Rather than widen the walk to every field — which would then be reading private state
+     * to decide a public property — the vocabulary is held to the shape that makes the walk enough,
+     * and this is where that is said.
+     *
+     * <p>An interface may stand between them and carry nothing, which is how the arms are told
+     * apart at all. What it may not do is hold a field: a sealed interface with state is a class in
+     * everything but the word.
+     */
+    @Test
+    void aQuestionIsBuiltOutOfRecordsAndSealedInterfaces() {
+        Map<String, ClassModel> byName = compilerClasses();
+        List<String> otherwise = new ArrayList<>();
+        for (String each : reachable()) {
+            if (NAMES.contains(each)) {
+                continue;
+            }
+            ClassModel of = byName.get(each);
+            if (of == null) {
+                otherwise.add(each + " is not a class of this module, so its shape is unchecked");
+                continue;
+            }
+            boolean record = of.findAttribute(Attributes.record()).isPresent();
+            boolean stateless = of.fields().stream()
+                    .noneMatch(field -> !field.flags().has(java.lang.reflect.AccessFlag.STATIC));
+            if (!record && !stateless) {
+                otherwise.add(each + " is neither a record nor stateless, so following components"
+                        + " is not following its state");
+            }
+        }
+        assertEquals(List.of(), otherwise,
+                "the question vocabulary is an algebraic data type, which is what the walk assumes");
     }
 
     /**
@@ -126,10 +175,7 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
     /** Every {@code souther} type reachable from the roots, through sealed subtypes and record
      *  components. */
     private static Set<String> reachable() {
-        Map<String, ClassModel> byName = new LinkedHashMap<>();
-        for (ClassModel each : WhatAModuleDeclares.of(Owed.class).classes()) {
-            byName.put(each.thisClass().asInternalName(), each);
-        }
+        Map<String, ClassModel> byName = compilerClasses();
         Set<String> seen = new LinkedHashSet<>();
         Deque<String> todo = new ArrayDeque<>(ROOTS);
         while (!todo.isEmpty()) {
@@ -155,6 +201,15 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             }
         }
         return seen;
+    }
+
+    /** This compiler's own classes, by the name a class file spells. */
+    private static Map<String, ClassModel> compilerClasses() {
+        Map<String, ClassModel> byName = new LinkedHashMap<>();
+        for (ClassModel each : WhatAModuleDeclares.of(Owed.class).classes()) {
+            byName.put(each.thisClass().asInternalName(), each);
+        }
+        return byName;
     }
 
     /** The component as it was declared, so that a type argument is followed and not erased. */

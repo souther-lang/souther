@@ -1,6 +1,6 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.BoundaryClaim;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.ConstraintState;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
@@ -225,11 +225,11 @@ final class ReadQuantities implements Quantities {
         if (root == null) {
             return null;
         }
-        BoundaryClaim<RuleKey> counted =
+        NumberAt<RuleKey> counted =
                 byRoot.get(root.root()).rules().bounds().countedAt(root.named());
         if (counted == null
                 || !(counted.of()
-                        instanceof BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers taken)
+                        instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken)
                 || !(taken.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
@@ -589,7 +589,7 @@ final class ReadQuantities implements Quantities {
      * turned into one of those positions would be one of however many the name reaches, chosen by
      * nothing.
      */
-    private InputAtom called(TermPath root, BoundaryClaim<RuleKey> at, StructuralContext under) {
+    private InputAtom called(TermPath root, NumberAt<RuleKey> at, StructuralContext under) {
         return atomAt(standingUnder(pathOf(root, at.position()), under), at.of());
     }
 
@@ -597,7 +597,7 @@ final class ReadQuantities implements Quantities {
      *  from — the reading of a declaration, or a form a caller wrote. */
     private InputAtom.Named called(NumericTerm term, StructuralContext under) {
         UnderARoot at = rootOf(term.subjectPath());
-        BoundaryClaim<RuleKey> where = coordinateOf(at, term);
+        NumberAt<RuleKey> where = coordinateOf(at, term);
         return atomAt(standingUnder(pathOf(at.root(), where.position()), under), where.of());
     }
 
@@ -619,7 +619,7 @@ final class ReadQuantities implements Quantities {
      * number standing under however many cases there are — chosen by nothing.
      */
     private InputAtom.Named atomAt(TermPath place,
-                                   BoundaryClaim.OfWhatNumber kind) {
+                                   NumberAt.OfWhatNumber kind) {
         UnderARoot at = rootOf(place);
         return new InputAtom.Named(at.root().toString(), at.named(), kind);
     }
@@ -1057,8 +1057,8 @@ final class ReadQuantities implements Quantities {
     }
 
     /** What is fixed under one value, named the way that value's own rules name it. */
-    private Map<BoundaryClaim<RuleKey>, Count> under(TermPath root) {
-        Map<BoundaryClaim<RuleKey>, Count> out = new LinkedHashMap<>();
+    private Map<NumberAt<RuleKey>, Count> under(TermPath root) {
+        Map<NumberAt<RuleKey>, Count> out = new LinkedHashMap<>();
         fixed.forEach((term, fixedAt) -> {
             UnderARoot at = rootOf(term.subjectPath());
             // Which number of the place was settled, and not only which place. A count taken of one
@@ -1088,13 +1088,13 @@ final class ReadQuantities implements Quantities {
      * name — so a guard bounding one would have been read against the clauses written about the
      * other (#1027).
      */
-    private static BoundaryClaim<RuleKey> coordinateOf(UnderARoot at, NumericTerm term) {
+    private static NumberAt<RuleKey> coordinateOf(UnderARoot at, NumericTerm term) {
         return switch (term) {
-            case NumericTerm.ValueOf _ -> BoundaryClaim.valueOf(at.named());
+            case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
             case NumericTerm.TakenOf taken ->
-                    BoundaryClaim.takenOf(at.named(), taken.operation());
+                    NumberAt.takenOf(at.named(), taken.operation());
             case NumericTerm.TakenOver over ->
-                    BoundaryClaim.takenOf(at.named(), over.operation());
+                    NumberAt.takenOf(at.named(), over.operation());
         };
     }
 

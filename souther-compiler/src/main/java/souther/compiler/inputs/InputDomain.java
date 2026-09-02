@@ -1,7 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.BoundaryClaim;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleKey;
@@ -1282,12 +1282,12 @@ public final class InputDomain {
     }
 
     /** The position's own value, as the reading of one coordinate names it. */
-    private static final BoundaryClaim.OfWhatNumber ITS_OWN_VALUE =
-            new BoundaryClaim.OfWhatNumber.OfItsOwnValue();
+    private static final NumberAt.OfWhatNumber ITS_OWN_VALUE =
+            new NumberAt.OfWhatNumber.OfItsOwnValue();
 
     /** The number {@code operation} answers of what stands at a position. */
-    private static BoundaryClaim.OfWhatNumber answeredBy(ValueName operation) {
-        return new BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers(operation);
+    private static NumberAt.OfWhatNumber answeredBy(ValueName operation) {
+        return new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(operation);
     }
 
     /**
@@ -1531,7 +1531,7 @@ public final class InputDomain {
      * and the reading of the position disagreeing about what stands here — which is this compiler
      * contradicting itself rather than something the model left out.
      */
-    private static FilingCoordinate filedAt(TermPath path, BoundaryClaim<RuleKey> at,
+    private static FilingCoordinate filedAt(TermPath path, NumberAt<RuleKey> at,
                                             Type type, Symbols symbols) {
         return FilingCoordinate.of(termAt(path, at, type, symbols));
     }
@@ -1555,11 +1555,11 @@ public final class InputDomain {
      * term about something the model never wrote, and the reading of it would be applied to
      * whatever stood at the path.
      */
-    private static NumericTerm termAt(TermPath path, BoundaryClaim<RuleKey> at,
+    private static NumericTerm termAt(TermPath path, NumberAt<RuleKey> at,
                                       Type type, Symbols symbols) {
         return switch (at.of()) {
-            case BoundaryClaim.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
-            case BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers answered ->
+            case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers answered ->
                     takenBy(answered.operation(), path, type, symbols);
         };
     }

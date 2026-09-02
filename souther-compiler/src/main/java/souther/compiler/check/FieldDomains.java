@@ -131,7 +131,7 @@ public final class FieldDomains {
     private final TypeSymbol.AtModule named;
     private final Hir.Data data;
     private final Symbols symbols;
-    private final Map<BoundaryClaim<RuleKey>, Count> settled;
+    private final Map<NumberAt<RuleKey>, Count> settled;
     /** What this value was read under, so that reading it again for what one rule did reads it the
      *  same way. A second reading of one declaration under another policy would answer a name
      *  differently while both stayed sound, and what moved would be read as what the rule did. */
@@ -161,7 +161,7 @@ public final class FieldDomains {
                          SequencedMap<FactSubject, RuleKey> namedBy,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
-                         Map<BoundaryClaim<RuleKey>, Count> settled,
+                         Map<NumberAt<RuleKey>, Count> settled,
                          Set<RuleKey> unreadOfEveryValue,
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy,
@@ -278,9 +278,9 @@ public final class FieldDomains {
 
     /** Settlings written as names, read as what stands at each. What a caller naming a place means
      *  is the value there; a count taken of one is a coordinate it has to name. */
-    private static Map<BoundaryClaim<RuleKey>, Count> atValues(Map<RuleKey, Count> settled) {
-        Map<BoundaryClaim<RuleKey>, Count> out = new LinkedHashMap<>();
-        settled.forEach((path, at) -> out.put(BoundaryClaim.valueOf(path), at));
+    private static Map<NumberAt<RuleKey>, Count> atValues(Map<RuleKey, Count> settled) {
+        Map<NumberAt<RuleKey>, Count> out = new LinkedHashMap<>();
+        settled.forEach((path, at) -> out.put(NumberAt.valueOf(path), at));
         return out;
     }
 
@@ -302,7 +302,7 @@ public final class FieldDomains {
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                                   ReadingPolicy policy, Map<BoundaryClaim<RuleKey>, Count> settled,
+                                   ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the value it is, so there are no siblings to relate. Everything else is the same
@@ -443,7 +443,7 @@ public final class FieldDomains {
      *              other kind of rule reaches this reading
      * @param lower whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(BoundaryClaim<RuleKey> at, RuleRef.Invariant from, boolean lower, Endpoint end,
+    public record Placed(NumberAt<RuleKey> at, RuleRef.Invariant from, boolean lower, Endpoint end,
                         int conjunct) {
 
         /** What the value's rules call where the end sits. Never which number it is on: that is
@@ -485,7 +485,7 @@ public final class FieldDomains {
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record NoLine(BoundaryClaim<RuleKey> at, RuleRef.Invariant from,
+    public record NoLine(NumberAt<RuleKey> at, RuleRef.Invariant from,
                          Core part, int conjunct,
                          souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
 
@@ -503,7 +503,7 @@ public final class FieldDomains {
      * this — held under them, an answer had to be put back together from whatever rows a finer key
      * happened to hold.
      */
-    public record BoundaryQuestion(RuleRef.Invariant from, BoundaryClaim<RuleKey> at) {}
+    public record BoundaryQuestion(RuleRef.Invariant from, NumberAt<RuleKey> at) {}
 
     /**
      * A boundary question the reading of ends did not answer, and everything behind it.
@@ -618,10 +618,10 @@ public final class FieldDomains {
      * recomputed and is not offered, so nothing can read a settled state for an answer that was
      * worked out before the settling.
      */
-    public Settled given(Map<BoundaryClaim<RuleKey>, Count> fixed) {
+    public Settled given(Map<NumberAt<RuleKey>, Count> fixed) {
         ConstraintState<FactSubject> taken = constraints;
-        for (Map.Entry<BoundaryClaim<RuleKey>, Count> each : fixed.entrySet()) {
-            BoundaryClaim<RuleKey> where = each.getKey();
+        for (Map.Entry<NumberAt<RuleKey>, Count> each : fixed.entrySet()) {
+            NumberAt<RuleKey> where = each.getKey();
             FactSubject atom = subjectAt(where.position(), where.of());
             souther.compiler.numeric.Granularity spaced =
                     atom == null ? null : spacing.get(atom);
@@ -691,12 +691,12 @@ public final class FieldDomains {
          * from.
          */
         public <B> Carried<B> constraintsOver(
-                java.util.function.Function<BoundaryClaim<RuleKey>, B> named,
+                java.util.function.Function<NumberAt<RuleKey>, B> named,
                                               java.util.function.Function<Object, B> otherwise) {
-            Map<FactSubject, BoundaryClaim<RuleKey>> where = new LinkedHashMap<>();
-            atomAt.forEach((path, atom) -> at(where, atom, BoundaryClaim.valueOf(path)));
+            Map<FactSubject, NumberAt<RuleKey>> where = new LinkedHashMap<>();
+            atomAt.forEach((path, atom) -> at(where, atom, NumberAt.valueOf(path)));
             countAt.forEach((path, counted) -> at(where, counted.atom(),
-                    BoundaryClaim.takenOf(path, counted.by())));
+                    NumberAt.takenOf(path, counted.by())));
             // And every other subject this reading knows a name for, which is what a caller can
             // name and what these two maps are narrower than: they hold the numbers, and a name
             // holds whatever stands there. Left to `otherwise`, a subject of a name would be
@@ -706,11 +706,11 @@ public final class FieldDomains {
             // narrowing.
             namedBy.forEach((atom, path) -> {
                 if (!where.containsKey(atom)) {
-                    at(where, atom, BoundaryClaim.valueOf(path));
+                    at(where, atom, NumberAt.valueOf(path));
                 }
             });
             InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
-                BoundaryClaim<RuleKey> claim = where.get(atom);
+                NumberAt<RuleKey> claim = where.get(atom);
                 return claim == null ? otherwise.apply(atom) : named.apply(claim);
             });
             // Spelled, because what a caller does with these is name a place to a reader. The
@@ -729,9 +729,9 @@ public final class FieldDomains {
          * whichever of them went unnamed would be a coordinate the constraints say nothing about —
          * so what the caller was told the rules leave there would be everything.
          */
-        private static void at(Map<FactSubject, BoundaryClaim<RuleKey>> where, FactSubject atom,
-                               BoundaryClaim<RuleKey> claim) {
-            BoundaryClaim<RuleKey> had = where.put(atom, claim);
+        private static void at(Map<FactSubject, NumberAt<RuleKey>> where, FactSubject atom,
+                               NumberAt<RuleKey> claim) {
+            NumberAt<RuleKey> had = where.put(atom, claim);
             if (had != null && !had.equals(claim)) {
                 throw new IllegalStateException("one number is at `" + had.position() + "` and at `"
                         + claim.position() + "`, so neither name is the whole of it");
@@ -849,7 +849,7 @@ public final class FieldDomains {
      * question's word depend on a table nobody had asked it of, and left every reader downstream
      * looking at a list where the model has one answer.
      */
-    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, BoundaryClaim<RuleKey> where) {
+    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, NumberAt<RuleKey> where) {
         BoundaryStanding said = rule instanceof RuleRef.Invariant invariant
                 ? standing.get(new BoundaryQuestion(invariant, where)) : null;
         return said == null
@@ -1040,9 +1040,9 @@ public final class FieldDomains {
      * value — and a caller asking the first for the second is told there is no count wherever the
      * clause that mentions it is written about something else as well.
      */
-    public BoundaryClaim<RuleKey> countedAt(RuleKey path) {
+    public NumberAt<RuleKey> countedAt(RuleKey path) {
         Counted counted = countAt.get(path);
-        return counted == null ? null : BoundaryClaim.takenOf(path, counted.by());
+        return counted == null ? null : NumberAt.takenOf(path, counted.by());
     }
 
     /**
@@ -1297,7 +1297,7 @@ public final class FieldDomains {
      * clause placing an end at 0 beside one that takes the 0 away leaves a number whose first
      * value is 1, and the end as written is not where it starts.
      */
-    public NumericDomain.Bounds leftAt(RuleKey path, BoundaryClaim.OfWhatNumber kind) {
+    public NumericDomain.Bounds leftAt(RuleKey path, NumberAt.OfWhatNumber kind) {
         // The axis the caller is on, and not whichever of the two this name happens to have. A
         // `String` is measured two ways — its own order, and the length of it — and answering with
         // the wrong one clamps a line drawn on one axis by the range of the other.
@@ -1336,10 +1336,10 @@ public final class FieldDomains {
      * {@code Time.hour(t)} names a number the declarations never mention, so what they say about it
      * is nothing — and nothing is what a lookup finding no subject already means everywhere here.
      */
-    private FactSubject subjectAt(RuleKey path, BoundaryClaim.OfWhatNumber kind) {
+    private FactSubject subjectAt(RuleKey path, NumberAt.OfWhatNumber kind) {
         return switch (kind) {
-            case BoundaryClaim.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(path);
-            case BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers taken ->
+            case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(path);
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                     souther.compiler.check.NumericMeasures.isMeasure(taken.operation())
                             ? atomOf(countAt.get(path)) : null;
         };
@@ -1362,23 +1362,23 @@ public final class FieldDomains {
      * about this reading rather than about the form: the atom that would carry it does not exist, so
      * there is no relation to project and the caller is left with whatever it knows beside this.
      */
-    public NumericDomain.Bounds boundsOf(Map<BoundaryClaim<RuleKey>, java.math.BigDecimal> form) {
+    public NumericDomain.Bounds boundsOf(Map<NumberAt<RuleKey>, java.math.BigDecimal> form) {
         return boundsOfForm(constraints, atomAt, countAt, form);
     }
 
     private static NumericDomain.Bounds boundsOfForm(ConstraintState<FactSubject> constraints,
                                                      Map<RuleKey, FactSubject> atomAt,
                                                      Map<RuleKey, Counted> countAt,
-                                                     Map<BoundaryClaim<RuleKey>, java.math.BigDecimal> form) {
+                                                     Map<NumberAt<RuleKey>, java.math.BigDecimal> form) {
         if (form.isEmpty()) {
             return null;
         }
         Map<FactSubject, java.math.BigDecimal> coefs = new LinkedHashMap<>();
-        for (Map.Entry<BoundaryClaim<RuleKey>, java.math.BigDecimal> each : form.entrySet()) {
-            BoundaryClaim<RuleKey> at = each.getKey();
+        for (Map.Entry<NumberAt<RuleKey>, java.math.BigDecimal> each : form.entrySet()) {
+            NumberAt<RuleKey> at = each.getKey();
             FactSubject atom = switch (at.of()) {
-                case BoundaryClaim.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(at.position());
-                case BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers taken ->
+                case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(at.position());
+                case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         NumericMeasures.isMeasure(taken.operation())
                                 ? atomOf(countAt.get(at.position())) : null;
             };
