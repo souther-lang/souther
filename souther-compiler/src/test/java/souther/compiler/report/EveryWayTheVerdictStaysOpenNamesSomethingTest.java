@@ -77,7 +77,7 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
         Map<String, List<String>> said = new LinkedHashMap<>();
         everyWay().forEach((name, why) -> {
             List<AdequacyOpening> out = new ArrayList<>();
-            AdequacyReport.openedBy(out, new ObligationDisposition.Undecided(List.of(why)));
+            AdequacyReport.openedBy(out, ObligationDisposition.Undecided.about(List.of(why)));
             said.put(name, out.stream()
                     .map(each -> each.getClass().getSimpleName() + "/" + each.runSensitivity())
                     .toList());
@@ -119,7 +119,7 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
     void anUndecidedObligationIsAlwaysOpenOnSomething() {
         for (ObligationDisposition.Uncertainty each : everyWay().values()) {
             List<AdequacyOpening> out = new ArrayList<>();
-            AdequacyReport.openedBy(out, new ObligationDisposition.Undecided(List.of(each)));
+            AdequacyReport.openedBy(out, ObligationDisposition.Undecided.about(List.of(each)));
             boolean readings =
                     each instanceof ObligationDisposition.Uncertainty.WhetherARowIsThere
                             .ReadingsStopped;
@@ -131,7 +131,7 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
                 () -> new ObligationCoverage.Undecided(WeakeningSet.none()),
                 "a reading that stopped met something, so the facts it is counted by are there");
         assertThrows(IllegalArgumentException.class,
-                () -> new ObligationDisposition.Undecided(List.of()),
+                () -> ObligationDisposition.Undecided.about(List.of()),
                 "and an obligation is undecided about something");
     }
 
@@ -140,24 +140,24 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
         Map<String, ObligationDisposition.Uncertainty> out = new LinkedHashMap<>();
         out.put("ReadingsStopped",
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                        new ReadingReasons(List.of())));
+                        ReadingReasons.of(List.of())));
         out.put("NothingWasRead",
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                         NothingWasAsked.NOT_ASKED));
         out.put("Stopped[observation of a value a limit shortened]",
-                stopped(new EstablishmentGap.Observation(
+                stopped(EstablishmentGap.Observation.of(
                         Set.of(Incompleteness.Code.VALUE_TRUNCATED))));
         out.put("Stopped[observation of a value nothing could read]",
-                stopped(new EstablishmentGap.Observation(
+                stopped(EstablishmentGap.Observation.of(
                         Set.of(Incompleteness.Code.VALUE_UNREADABLE))));
         // Both, which is the case a fold over the codes gets wrong: a showing stopped by a limit
         // and by something nothing could read is stopped again after the limit is raised.
         out.put("Stopped[observation of both]",
-                stopped(new EstablishmentGap.Observation(Set.of(
+                stopped(EstablishmentGap.Observation.of(Set.of(
                         Incompleteness.Code.VALUE_TRUNCATED,
                         Incompleteness.Code.VALUE_UNREADABLE))));
         out.put("Stopped[nothing composed]",
-                stopped(new EstablishmentGap.Composition(Set.of(CompositionBudget.values()[0]))));
+                stopped(EstablishmentGap.Composition.of(Set.of(CompositionBudget.values()[0]))));
         out.put("NothingShowedIt",
                 new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt());
         return out;

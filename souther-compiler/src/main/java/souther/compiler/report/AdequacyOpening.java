@@ -113,7 +113,7 @@ public sealed interface AdequacyOpening {
             return switch (by) {
                 // What this compiler declined to build, and the figures that decided it.
                 case EstablishmentGap.Composition _ -> RunSensitivity.MAY_CHANGE;
-                case EstablishmentGap.Observation it -> it.causes().stream()
+                case EstablishmentGap.Observation it -> it.causes().written().stream()
                         .allMatch(code -> code.runSensitivity() == RunSensitivity.MAY_CHANGE)
                         ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
             };

@@ -1,5 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
+
+import java.util.Collection;
+
 /**
  * A condition on the way to a border that a row for it was not composed against, and which stage
  * let it go.
@@ -78,15 +83,20 @@ public sealed interface ReachabilityGap {
          * the budget cost is one condition on the way being composed against, and reporting it as a
          * point nothing could be established at would say more than happened.
          */
-        record TheWalkForItsPositionsWasStopped(java.util.Set<CompositionBudget> by)
+        record TheWalkForItsPositionsWasStopped(CanonicalSelection<CompositionBudget> by)
                 implements Why {
 
             public TheWalkForItsPositionsWasStopped {
-                by = java.util.Set.copyOf(by);
-                if (by.isEmpty()) {
+                if (by == null || by.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a walk this compiler stopped says which budget stopped it");
                 }
+            }
+
+            /** The budgets a walk met, in the order a report says them. */
+            public static TheWalkForItsPositionsWasStopped by(Collection<CompositionBudget> met) {
+                return new TheWalkForItsPositionsWasStopped(
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met));
             }
         }
 

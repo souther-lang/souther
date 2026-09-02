@@ -1,8 +1,11 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 
@@ -68,51 +71,22 @@ public sealed interface ObligationDisposition {
      * verdict, which is the one thing that does not say.
      *
      * <p>Both, because one obligation can be both, and either one alone would be a choice of which
-     * to tell. At most one of each, and in the order below: what a reader is shown cannot come out
-     * of the order a fold happened to put them in.
+     * to tell. At most one of each, and in the order they are published in
+     * ({@link PublicationOrders#OPEN_QUESTIONS}): what a reader is shown cannot come out of the
+     * order a fold happened to put them in.
      */
-    record Undecided(List<Uncertainty> because) implements ObligationDisposition {
-
-        /**
-         * Every question that can be open about an obligation, in the order they are said in.
-         *
-         * <p>A sequence and not a rank apiece, for the reason {@link ReadingReasons} gives: a
-         * number per question is a carrier wider than an order, and two questions given one number
-         * come out in whichever order a fold put them.
-         *
-         * <p>What a reader does about the two differs — the first is answered by reading more of
-         * what is written and the second is not work an author can do — and the first is said
-         * first because it is the one they can act on.
-         */
-        private static final List<Class<? extends Uncertainty>> EVERY_QUESTION = List.of(
-                Uncertainty.WhetherARowIsThere.class,
-                Uncertainty.WhetherARowCanBeWritten.class);
+    record Undecided(CanonicalSelection<Uncertainty> because) implements ObligationDisposition {
 
         public Undecided {
             if (because == null || because.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an obligation nobody can decide says which question is open");
             }
-            because = List.copyOf(because);
-            int last = -1;
-            for (Uncertainty each : because) {
-                int here = EVERY_QUESTION.indexOf(each.question());
-                if (here < 0) {
-                    throw new IllegalArgumentException(
-                            "a question with no place in the order they are said in: " + each);
-                }
-                if (here <= last) {
-                    throw new IllegalArgumentException(
-                            "the open questions are said once each, in the order they are said"
-                                    + " in: " + because);
-                }
-                last = here;
-            }
         }
 
-        /** The order itself, for the check that it holds every question there is. */
-        public static List<Class<? extends Uncertainty>> everyQuestion() {
-            return EVERY_QUESTION;
+        /** The questions that are open about one obligation, in the order they are said in. */
+        public static Undecided about(Collection<Uncertainty> open) {
+            return new Undecided(PublicationOrders.OPEN_QUESTIONS.keep(open));
         }
     }
 
@@ -234,6 +208,11 @@ public sealed interface ObligationDisposition {
      * new arm has to be put on one side or the other before it can be built.
      */
     private static ReadingReasons whatTheReadingsMet(WeakeningSet by) {
+        return ReadingReasons.of(readingGapsIn(by));
+    }
+
+    /** The gaps the readings met, as they were met. */
+    private static List<ReadingGap> readingGapsIn(WeakeningSet by) {
         List<ReadingGap> met = new ArrayList<>();
         for (Weakening each : by.causes()) {
             switch (each) {
@@ -256,7 +235,7 @@ public sealed interface ObligationDisposition {
                      Weakening.ArmsUnsettled _ -> { }
             }
         }
-        return ReadingReasons.of(met);
+        return met;
     }
 
 
@@ -285,7 +264,7 @@ public sealed interface ObligationDisposition {
             // What the rows left open, and beside it whatever else is open about the same point. A
             // reading that came to nothing and a showing that came to nothing are two questions,
             // and a point where both happened is undecided about both.
-            case ObligationCoverage.Undecided it -> new Undecided(alsoWritability(
+            case ObligationCoverage.Undecided it -> Undecided.about(alsoWritability(
                     new Uncertainty.WhetherARowIsThere.ReadingsStopped(whatTheReadingsMet(it.by())),
                     knowledge));
             case ObligationCoverage.Missed _ -> switch (knowledge) {
@@ -294,16 +273,16 @@ public sealed interface ObligationDisposition {
                 // can be written did not arrive. No finding is made of it, because nothing here can
                 // say the row an author would write is one that exists — and the obligation stays,
                 // because what did not arrive is a showing and not the model's answer.
-                case WritabilityKnowledge.Prevented stopped -> new Undecided(
+                case WritabilityKnowledge.Prevented stopped -> Undecided.about(
                         List.of(new Uncertainty.WhetherARowCanBeWritten.Stopped(stopped)));
-                case WritabilityKnowledge.NoEvidence _ -> new Undecided(
+                case WritabilityKnowledge.NoEvidence _ -> Undecided.about(
                         List.of(new Uncertainty.WhetherARowCanBeWritten.NothingShowedIt()));
             };
             // Nothing was read against it, so there is nothing to have found. Counted all the same:
             // whether a row is owed here is the model's answer, and no row naming the behavior is a
             // setting of this build (issue #1249). What is known about a row being writable there
             // is said beside that rather than instead of it.
-            case ObligationCoverage.NotMeasured it -> new Undecided(alsoWritability(
+            case ObligationCoverage.NotMeasured it -> Undecided.about(alsoWritability(
                     new Uncertainty.WhetherARowIsThere.NothingWasRead(it.why()), knowledge));
         };
     }

@@ -26,13 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * at it and a value can have been built there, all at once, and a verdict that named one of them
  * named whichever an order put first — so a point the rules prove came back saying a row was found
  * there, and the claim that stands whatever a search afterwards makes of the point was the one left
- * out. Held as a set there is nothing to leave out, and no order to invent.
+ * out. Holding all of them there is nothing to leave out, and the order they are said in is one
+ * written down rather than one this has to invent.
  *
  * <p>Nothing here is stored. Each ground is read off the answer that establishes it — the coverage
  * measurement, the projection, the attempt — so a point cannot carry a ground the facts beside it do
  * not support, and the correspondence is not something a test has to watch.
  */
-class WhatShowsARowCanBeWrittenIsASetAndNotAChoiceTest {
+class WhatShowsARowCanBeWrittenIsAllOfThemAndNotAChoiceTest {
 
     /** Both ends read in full, so both are proven on their own, and the body draws a line between
      *  them that nothing has read. */
@@ -117,8 +118,8 @@ class WhatShowsARowCanBeWrittenIsASetAndNotAChoiceTest {
      */
     @Test
     void aPointTwoThingsShowCarriesBoth() {
-        List<Set<Ground>> found = owedPoints().stream()
-                .map(owed -> owed.writabilityEvidence().grounds())
+        List<List<Ground>> found = owedPoints().stream()
+                .map(owed -> owed.writabilityEvidence().grounds().written())
                 .filter(grounds -> grounds.size() > 1).toList();
         assertFalse(found.isEmpty(),
                 "the corpus reaches a point more than one thing shows, or this asserts nothing");

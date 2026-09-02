@@ -1,4 +1,4 @@
-package souther.compiler.report;
+package souther.compiler.publish;
 
 /**
  * What a document calls one weakening.
@@ -6,6 +6,10 @@ package souther.compiler.report;
  * <p>An enum for the same reason every other enumerated field of the report has one: the shipped
  * schema names these words in its own file and is held against this, so a word added here has to be
  * taught to the schema before it can be written.
+ *
+ * <p>Beside the orders and not beside the writer. What a document calls something is part of what
+ * this compiler publishes, which is what this package holds; a vocabulary kept where the writer is
+ * would have the order over it reaching up into the writer to say what it is over.
  *
  * <p>Not one constant per {@link souther.compiler.query.Weakening} arm. A weakening that is an
  * observation gone missing writes the {@code Incompleteness} code's own word, because that

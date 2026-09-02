@@ -89,7 +89,7 @@ class ARowBuiltAtAPointIsNotUnbuiltByWhatTheObservationKeptTest {
                         + " never composed");
         assertNotNull(unverified.row(),
                 "and the row is offered, since composing it is what happened");
-        assertEquals(new EstablishmentGap.Observation(
+        assertEquals(EstablishmentGap.Observation.of(
                         Set.of(Incompleteness.Code.VALUE_TRUNCATED)),
                 unverified.why(),
                 "what stopped the placing is the observation, and it says which way");
@@ -117,9 +117,9 @@ class ARowBuiltAtAPointIsNotUnbuiltByWhatTheObservationKeptTest {
      */
     @Test
     void aRowNothingPlacedIsNotGroundsForAnything() {
-        assertEquals(Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
                 line(Limits.DEFAULT.maxText() + 1).owedAt(PointRole.ON)
-                        .writabilityEvidence().grounds(),
+                        .writabilityEvidence().grounds().written(),
                 "the rules still prove it; the row that was not placed adds nothing");
     }
 

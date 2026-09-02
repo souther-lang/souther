@@ -227,7 +227,7 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "adequacyOpening", "properties", "kind"),
                     Set.of("probe_mapping_lost", "row_did_not_finish"),
                     Incompleteness.Code.class,
-                    souther.compiler.report.WeakeningWord.class,
+                    souther.compiler.publish.WeakeningWord.class,
                     souther.compiler.report.AdequacyOpeningWord.class),
             // And what a measure nobody made was waiting for. The sources are read off the seal
             // rather than listed: which reasons mean "never started" is `NotMeasuredReason`'s own
@@ -380,7 +380,7 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
                     Set.of("probe_mapping_lost", "row_did_not_finish"),
                     Incompleteness.Code.class,
-                    souther.compiler.report.WeakeningWord.class),
+                    souther.compiler.publish.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",
                     List.of("$defs", "incompleteness", "properties", "scope"),
                     Incompleteness.Scope.class),
@@ -479,17 +479,17 @@ class EverySchemaWordIsAccountedForTest {
         return List.of(
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
-                new ObligationDisposition.Undecided(List.of(
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                                new ReadingReasons(List.of(ReadingGap.NO_VALUE))))),
-                new ObligationDisposition.Undecided(List.of(
+                                ReadingReasons.of(List.of(ReadingGap.NO_VALUE))))),
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                                 ItemAssessment.Coverage.NotAsked.NO_ROWS))),
-                new ObligationDisposition.Undecided(List.of(
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
-                                WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
+                                WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
                                         Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
-                new ObligationDisposition.Undecided(List.of(
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty
                                 .WhetherARowCanBeWritten.NothingShowedIt())));
     }
@@ -558,12 +558,22 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** The questions an obligation may be undecided about, likewise spelled by the writer. */
+    /**
+     * The questions an obligation may be undecided about, likewise spelled by the writer.
+     *
+     * <p>Read off the answers sampled above rather than off the order they are said in. The word a
+     * document carries is the question's and not what left it open, so any member of a family
+     * spells it — which {@code AnObligationsExplanationNamesEachReasonOnceTest} holds the writer
+     * to — and a sample missing a question is what {@code everyDispositionHasASample} is about.
+     */
     private static Set<String> undecidedWords() {
-        return ObligationDisposition.Undecided.everyQuestion().stream()
-                .map(EverySchemaWordIsAccountedForTest::oneOf)
-                .map(AdequacyReport::wire)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Set<String> out = new LinkedHashSet<>();
+        for (ObligationDisposition each : dispositions()) {
+            if (each instanceof ObligationDisposition.Undecided open) {
+                open.because().written().forEach(question -> out.add(AdequacyReport.wire(question)));
+            }
+        }
+        return out;
     }
 
     /**
@@ -577,8 +587,8 @@ class EverySchemaWordIsAccountedForTest {
             Class<? extends ObligationDisposition.Uncertainty> question) {
         for (ObligationDisposition each : dispositions()) {
             if (each instanceof ObligationDisposition.Undecided open
-                    && open.because().getFirst().question() == question) {
-                return open.because().getFirst();
+                    && open.because().written().getFirst().question() == question) {
+                return open.because().written().getFirst();
             }
         }
         throw new AssertionError("no sample above is open on " + question);

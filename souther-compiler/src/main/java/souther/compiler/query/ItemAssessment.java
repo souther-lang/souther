@@ -3,12 +3,13 @@ package souther.compiler.query;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 
-import java.util.Collections;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Everything known about one of the four coverage items of a border.
@@ -188,17 +189,22 @@ public sealed interface ItemAssessment {
     /**
      * What has shown that a row can be written at a point: the grounds, and never a verdict.
      *
-     * <p>A set and not a choice, because the three are not alternatives — a point the rules prove can
+     * <p>All of them and not a choice, because the three are not alternatives — a point the rules prove can
      * have a row at it as well, and a value built at it besides. Held as a sum with one case each,
      * the answer was whichever case an order put first, so the strongest claim there was could be the
      * one left out.
      *
      * <p>Empty is the whole of what {@code Unknown} was. Nothing here can say a point is unwritable:
      * a decoder refusing every candidate that was tried says nothing about the ones that were not, so
-     * an empty set is the absence of evidence and never evidence of absence. What says a point cannot
+     * holding none is the absence of evidence and never evidence of absence. What says a point cannot
      * be written at is the border refusing to owe it at all.
+     *
+     * <p>Held in the order they are published in ({@link PublicationOrders#WRITABILITY_GROUNDS}),
+     * which is a decision about what a reader is shown and no ranking of the three. A document
+     * writes a row per ground, and reading that order off the declaration would put it in the hands
+     * of whoever next tidies the constants.
      */
-    record WritabilityEvidence(Set<Ground> grounds) {
+    record WritabilityEvidence(CanonicalSelection<Ground> grounds) {
 
         /**
          * One thing that shows a row can be written at a point.
@@ -224,9 +230,13 @@ public sealed interface ItemAssessment {
         }
 
         public WritabilityEvidence {
-            EnumSet<Ground> held = EnumSet.noneOf(Ground.class);
-            held.addAll(grounds);
-            grounds = Collections.unmodifiableSet(held);
+            Objects.requireNonNull(grounds, "a point says what has shown a row can be written at it");
+        }
+
+        /** Grounds already known to hold, in the order a document says them. Which of them hold is
+         *  the question below, and this one does not ask it. */
+        public static WritabilityEvidence of(Collection<Ground> grounds) {
+            return new WritabilityEvidence(PublicationOrders.WRITABILITY_GROUNDS.keep(grounds));
         }
 
         /** The grounds that hold, over the three facts that establish them. Where every one of these
@@ -244,7 +254,7 @@ public sealed interface ItemAssessment {
             if (valueWasBuilt) {
                 grounds.add(Ground.A_VALUE_WAS_BUILT);
             }
-            return new WritabilityEvidence(grounds);
+            return of(grounds);
         }
 
         /** Whether anything at all has shown a row can be written here. False leaves it open, never
@@ -255,7 +265,7 @@ public sealed interface ItemAssessment {
 
         /** Whether this ground is among them. */
         public boolean has(Ground ground) {
-            return grounds.contains(ground);
+            return grounds.written().contains(ground);
         }
     }
 
@@ -533,7 +543,7 @@ public sealed interface ItemAssessment {
                 // is a copy that can be made to travel wrong. What the word is remains the budgets'
                 // to say at both ends, so neither end holds a pair that disagrees.
                 if (why.reason() != Generator.UnresolvedCombination.Reason
-                        .wordFor(stoppedBy.budgets())) {
+                        .wordFor(stoppedBy.budgets().written())) {
                     throw new IllegalArgumentException("a search stopped by "
                             + stoppedBy.budgets() + " does not come back with " + why.reason());
                 }
