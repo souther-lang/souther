@@ -103,6 +103,16 @@
              this. A fork brings its own compiler and collector threads, and one per core leaves
              nothing for them but the cores the tests are on. -->
         <forkCount>0.5C</forkCount>
+        <!-- What a row of an example is held to while the suite runs. The shipped default is a
+             hundred million, which is what a model somebody wrote deserves; the models here write a
+             literal or a small record, and dozens of them hold a helper that loops on purpose,
+             because what they are about is a row that does not come back. A looping row is walked
+             to the limit before anything is reported about it, so the limit is what those tests
+             cost: the compiler's suite is 140s under the shipped default and 73s under this one.
+             Twenty times what `DoesNotComeBack` allows a row it expects to finish, so a model doing
+             real work has room, and reached in milliseconds by one that loops. Named here so
+             -Dtest.example.step.limit=N reaches it. -->
+        <test.example.step.limit>1000000</test.example.step.limit>
     </properties>
 
     <dependencyManagement>
@@ -220,6 +230,9 @@
                              bound was set for. A test that wants a smaller one makes its own
                              thread. -->
                         <argLine>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xss4m</argLine>
+                        <systemPropertyVariables>
+                            <souther.example.step.limit>${test.example.step.limit}</souther.example.step.limit>
+                        </systemPropertyVariables>
                     </configuration>
                 </plugin>
                 <!-- The pre-commit hook's checker, configured here and bound to no lifecycle phase.
