@@ -2129,7 +2129,7 @@ public final class Bodies {
             // out here. What the check reads is that fact; the clauses it was read from are not
             // something a body's answer turns on, and depending on them would re-check every body
             // beside a declaration that cannot change it.
-            Answer<List<souther.compiler.check.UninhabitableTypes.UninhabitableGroup>> withNoValue =
+            Answer<souther.compiler.check.UninhabitableTypes.WithNoValue> withNoValue =
                     db.ask(new Shapes.TypesWithNoValue(name));
             if (!lowering.present() || !scope.present()
                     || !injected.present() || !unwritten.present()

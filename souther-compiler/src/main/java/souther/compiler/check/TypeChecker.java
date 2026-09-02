@@ -76,7 +76,7 @@ public final class TypeChecker {
      * because the body check reads the same two and they must be the same two.
      */
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
-                                       List<UninhabitableTypes.UninhabitableGroup> withNoValue,
+                                       UninhabitableTypes.WithNoValue withNoValue,
                                        ReadingPolicy policy,
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
@@ -203,7 +203,7 @@ public final class TypeChecker {
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
     static void checkRecovering(Hir.Module module, DerivedSymbols symbols,
-                                        List<UninhabitableTypes.UninhabitableGroup> withNoValue,
+                                        UninhabitableTypes.WithNoValue withNoValue,
                                        ReadingPolicy policy,
                                         Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,

@@ -450,9 +450,23 @@ public final class DataChecker {
      * which sentence to write. That is the whole of why it arrives: a reader that picked between two
      * sentences by looking at the declaration a second time would be a second reader of a question
      * the count already answered, free to pick the sentence the count did not mean.
+     *
+     * <p>What arrives says whether there was a count at all ({@link UninhabitableTypes.WithNoValue}),
+     * and what stopped one that was tried is reported where it was tried. Nothing is concluded here
+     * from there being no count: a module whose declarations could not be counted is one this says
+     * nothing about, and it still has everything else about it to report.
      */
     static List<CompileException> typesWithNoValue(
-            List<UninhabitableTypes.UninhabitableGroup> groups, Symbols symbols) {
+            UninhabitableTypes.WithNoValue counted, Symbols symbols) {
+        // A count that found nothing and no count at all are one empty list of sentences and two
+        // different facts. Nothing here needs to tell them apart — what would be written is nothing
+        // either way — and the difference is kept because the reader that does need it is the one
+        // deciding whether a declaration may be refused for having no value.
+        List<UninhabitableTypes.UninhabitableGroup> groups = switch (counted) {
+            case UninhabitableTypes.WithNoValue.Counted(List<UninhabitableTypes
+                    .UninhabitableGroup> found) -> found;
+            case UninhabitableTypes.WithNoValue.NotCounted _ -> List.of();
+        };
         // How many of the lacks reported here each declaration is part of. A declaration in one of
         // them is a declaration whose lack the group accounts for entirely, and a suggestion about
         // that group is a way out. A declaration in two is in neither's: what a group is established

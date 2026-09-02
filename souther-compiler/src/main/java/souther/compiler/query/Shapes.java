@@ -516,28 +516,37 @@ public final class Shapes {
      * way; a diagnostic carries a position and a sentence, and comparing those would make this
      * answer differ whenever the file moved.
      */
-    public record TypesWithNoValue(String name)
-            implements Key<List<UninhabitableTypes.UninhabitableGroup>> {
+    public record TypesWithNoValue(String name) implements Key<UninhabitableTypes.WithNoValue> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<List<UninhabitableTypes.UninhabitableGroup>> compute(Db db) {
+        public Answer<UninhabitableTypes.WithNoValue> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
             Answer<RuleReadingSource> reading = ruleReading(db, name);
             Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
-            if (!lowering.present() || !reading.present() || !policy.present()) {
+            if (!lowering.present() || !policy.present()) {
                 return Answer.absent();
+            }
+            // Answered either way, because what a reader of this does about a count it has not been
+            // given is that reader's: a module whose declarations could not be checked still has
+            // everything else about it to report, and going absent here would take that with it.
+            if (!reading.present()) {
+                return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
             }
             List<Hir.Def> declarations = lowering.value().settled().defs();
             try {
-                return Answer.of(UninhabitableTypes.withNoValueOfTheirOwn(declarations,
-                        souther.compiler.check.TypeCardinality.solve(
-                                declarations, reading.value(), policy.value())));
+                return Answer.of(new UninhabitableTypes.WithNoValue.Counted(
+                        UninhabitableTypes.withNoValueOfTheirOwn(declarations,
+                                souther.compiler.check.TypeCardinality.solve(
+                                        declarations, reading.value(), policy.value()))));
             } catch (CompileException e) {
-                return Answer.absent(e);
+                // Said here, as what this attempt found, and not handed on in the answer: a reader
+                // of the answer is told there was no count and concludes nothing from it, which is
+                // the whole of what it may do with a count that did not happen.
+                return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted(), Report.of(e));
             }
         }
     }
