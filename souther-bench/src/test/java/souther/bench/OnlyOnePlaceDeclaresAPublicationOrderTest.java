@@ -31,29 +31,31 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
     private static final String SOURCE_ORDERED = "souther.compiler.publish.SourceOrdered";
     private static final String REPORT = "souther.compiler.report.";
 
+    /**
+     * Nothing but the one place makes an order.
+     *
+     * <p><b>Which methods make one is asked of what they answer with, not listed here.</b> Named,
+     * this rule covered the factories somebody remembered when they wrote it — and the second shape
+     * an order comes in was added to the list a round later than the shape itself, which is a rule
+     * that grows by being reminded. What makes an order is answering with one, so that is the
+     * question, and a factory added to either shape is inside this without anybody adding a line.
+     *
+     * <p>Called or named for later, because either makes one: a reference runs the same factory
+     * somewhere else and puts no invoke in the caller's code, so a rule counting calls alone is
+     * passed by {@code Order::by}. What is not making one is reading a field that happens to have
+     * a factory's name, which is why the reach is asked as well.
+     */
     @Test
     void nothingButThePublicationOrdersMakesAnOrder() throws Exception {
         List<String> made = new ArrayList<>();
         boolean reached = false;
         for (Compiled.Site site : Compiled.sites()) {
-            if ((site.owner().equals(ORDER)
-                        && (site.member().equals("overValues")
-                                || site.member().equals("overFamilies")))
-                    // And the other shape an order comes in. A sequence whose length is not bounded
-                    // by a vocabulary is put in order by a comparison rather than by a list of
-                    // places, and a second one of those is a second decision about what a reader is
-                    // shown just as readily.
-                    // Called or named for later, because either makes one: a reference runs the
-                    // same factory somewhere else and puts no invoke in the caller's code, so a
-                    // rule counting calls alone is passed by `Order::by`. What is not making one
-                    // is reading the field the comparison is held in, which has the same name.
-                    || (site.owner().equals(ARRANGEMENT) && site.member().equals("by")
-                            && (site.how() == Compiled.How.CALLS
-                                    || site.how() == Compiled.How.REFERS))) {
-                reached = true;
-                if (!site.from().equals(AUTHORITY)) {
-                    made.add(site.at());
-                }
+            if (!makesAnOrder(site)) {
+                continue;
+            }
+            reached = true;
+            if (!site.from().equals(AUTHORITY)) {
+                made.add(site.at());
             }
         }
 
@@ -62,6 +64,34 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
         assertEquals(List.of(), made,
                 "an order over a kind of reason made outside the one place that declares them,"
                         + " which is how a kind comes to have two orders that agree until one moves");
+    }
+
+    /** Whether reaching this is making an order, which is whether what it answers with is one. */
+    private static boolean makesAnOrder(Compiled.Site site) {
+        if (site.how() != Compiled.How.CALLS && site.how() != Compiled.How.REFERS) {
+            return false;
+        }
+        if (!site.owner().equals(ORDER) && !site.owner().equals(ARRANGEMENT)) {
+            return false;
+        }
+        for (java.lang.reflect.Method each : orderShape(site.owner()).getDeclaredMethods()) {
+            if (each.getName().equals(site.member())
+                    && java.lang.reflect.Modifier.isStatic(each.getModifiers())
+                    && (each.getReturnType().equals(orderShape(ORDER))
+                            || each.getReturnType().equals(orderShape(ARRANGEMENT)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Class<?> orderShape(String named) {
+        try {
+            return Class.forName(named);
+        } catch (ClassNotFoundException absent) {
+            throw new AssertionError("a shape an order comes in that this cannot read: " + named,
+                    absent);
+        }
     }
 
     /**
