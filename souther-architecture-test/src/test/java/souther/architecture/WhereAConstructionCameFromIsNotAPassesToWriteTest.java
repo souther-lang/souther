@@ -6,6 +6,7 @@ import souther.test.RepositoryLayout;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
@@ -18,9 +19,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -45,9 +48,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>This lives in a module that depends on every other, so every module's classes are built when it
  * runs and the population is the whole repository rather than whatever happened to be built. That
- * the population is whole is asserted against {@link RepositoryLayout}, which is what says what the
- * repository is made of: a module added without a dependency from here would otherwise be passed
- * over in silence.
+ * every module is depended on is asserted below against {@link RepositoryLayout}, which is what says
+ * what the repository is made of — a module added without a dependency from here would otherwise be
+ * passed over in silence, and the build order does not reliably show it.
+ *
+ * <p>Which forms hold an origin, and that they are the two, is the compiler's own to say and is
+ * said in its tests. What is here is the question no module can answer alone: who, across every
+ * module of the reactor, calls what.
  */
 class WhereAConstructionCameFromIsNotAPassesToWriteTest {
 
@@ -76,33 +83,46 @@ class WhereAConstructionCameFromIsNotAPassesToWriteTest {
                         + " ones to call, and a rebuild carries the origin it was handed");
     }
 
-    /** Every module of the repository is read, which is what makes the answer above about all of
-     *  them. The modules are {@link RepositoryLayout}'s, so one added without a dependency from
-     *  here is a failure rather than a gap. */
+    /**
+     * Every module of the repository is depended on from here, which is what has them built when
+     * this runs and so what makes the answer above about all of them.
+     *
+     * <p>Asked of the classpath these tests run on, which Maven builds from the dependencies this
+     * module declares: a module missing from it is a module this build had no reason to compile
+     * before running these, and what the walk would find of it is whatever an earlier build left.
+     *
+     * <p>Not asked of the build order. A module is built before this one because something depends
+     * on it, and a dependency left out is only sometimes visible there: what sends this module to
+     * the end is every edge it has, so an omitted edge is covered whenever another module it does
+     * depend on is written after the one it forgot. Measured — dropping the dependency on
+     * {@code souther-cli} left the build order unchanged.
+     */
     @Test
-    void andEveryModuleTheRepositoryHoldsIsInWhatWasRead() {
-        Set<String> read = new LinkedHashSet<>();
-        for (Path each : everyCompiledClass()) {
-            read.add(REPOSITORY.root().relativize(each).getName(0).toString());
+    void andEveryModuleTheRepositoryHoldsIsDependedOnFromHere() {
+        Set<String> built = new TreeSet<>();
+        for (String entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
+            Path where = Path.of(entry);
+            if (where.endsWith(Path.of("target", "classes")) && where.startsWith(REPOSITORY.root())) {
+                built.add(where.getParent().getParent().getFileName().toString());
+            }
         }
 
-        assertEquals(everyModule(), read,
-                "a module whose classes were not built when this ran is one this says nothing"
-                        + " about. Every module is depended on from here so that Maven builds it"
-                        + " first");
+        assertEquals(new TreeSet<>(everyModule()), built,
+                "a module this does not depend on is one nothing has built when this runs, and one"
+                        + " this then says nothing about");
     }
 
-    /** The control: the walk sees the reference where the forms themselves make it. */
+    /** The control: the walk found forms to watch and sees the reference where they make it
+     *  themselves. Which forms those are is the compiler's own to say, and its tests do. */
     @Test
     void andTheCheckSeesTheReferenceWhereItIsAllowed() {
         Set<String> forms = formsThatHoldAnOrigin();
 
-        assertEquals(Set.of(THEIRS + "Hir$NewData", THEIRS + "Hir$Apply"), forms,
-                "the forms are read off the tree, and these are the two");
+        assertFalse(forms.isEmpty(), "a form that holds an origin is what this watches");
         assertTrue(everyCompiledClass().stream()
-                        .filter(each -> internalName(each).equals(THEIRS + "Hir$Apply"))
+                        .filter(each -> forms.contains(internalName(each)))
                         .anyMatch(each -> handsAnOriginTo(forms, each)),
-                "the form itself hands an origin to its own constructor, which is what this reads");
+                "a form hands an origin to its own constructor, which is what this reads");
     }
 
     /** The forms that say where a construction came from, read off the trees that have them. */

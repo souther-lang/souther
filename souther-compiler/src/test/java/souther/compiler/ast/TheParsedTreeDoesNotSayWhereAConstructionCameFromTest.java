@@ -2,12 +2,15 @@ package souther.compiler.ast;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -46,6 +49,35 @@ class TheParsedTreeDoesNotSayWhereAConstructionCameFromTest {
                 "these are the forms a pass can be handed a construction through, and the ones the"
                         + " permission check asks. A form added here is a place the same question"
                         + " is answered that nothing reads");
+    }
+
+    /**
+     * An origin answers nothing on its own, so a reader has to ask the form that holds it.
+     *
+     * <p>Read as "there is no public protocol here" rather than as a list of members that may not
+     * be declared: a member on this type is public whatever it is called, because that is what an
+     * interface member is. One would be a second place to ask what a construction's origin means —
+     * reached through whatever a pass happens to hold rather than through the form that knows what
+     * it is — and a second place to change one.
+     *
+     * <p>The arms are held to the same thing from the other side. Sealed, so no one else is one;
+     * declared here, so no one else can name one; and not public, because a record's canonical
+     * constructor is as accessible as the record, and a public arm is a public way to mint an
+     * origin.
+     */
+    @Test
+    void andAnOriginIsAskedThroughTheFormRatherThanAnsweringForItself() {
+        assertEquals(List.of(), Arrays.stream(ConstructionOrigin.class.getDeclaredMethods())
+                        .map(Method::getName).sorted().toList(),
+                "a member here is a public one, and the questions belong to the package that holds"
+                        + " the forms");
+        assertTrue(ConstructionOrigin.class.isSealed(), "an origin is one of the arms below");
+        for (Class<?> arm : ConstructionOrigin.class.getPermittedSubclasses()) {
+            assertEquals(ConstructionOrigin.class.getPackageName(), arm.getPackageName(),
+                    arm + " is named where an origin may be made");
+            assertFalse(Modifier.isPublic(arm.getModifiers()),
+                    arm + " would be a public way to mint one");
+        }
     }
 
     /** The control: the walk reaches the forms and reads their parts. */
