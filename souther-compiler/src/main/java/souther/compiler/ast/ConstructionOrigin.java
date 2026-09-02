@@ -17,11 +17,12 @@ import souther.compiler.types.TypeSymbol;
  * behavior reading the name originates nothing whatever module declared the type.
  *
  * <p>This is not a value a pass names. Its arms are declared in this package and nothing outside can
- * name one, so the only origins there are, are the ones the two forms that hold one make: a
- * construction is its own where it is built, and becomes one of the other two where a body crosses
- * into a reader. What a pass elsewhere can do with an origin is hand the one it was given back —
- * {@link Hir.NewData} and {@link Hir.Apply} take none when they are built, and carry the one they
- * have when they are rebuilt.
+ * name one, and the two crossings that answer differently are {@link Origins}' to write, so the only
+ * origins there are, are the ones the two forms that hold one make: a construction is its own where
+ * it is built, and becomes one of the other two where a body crosses into a reader. All a pass
+ * elsewhere can do with an origin is hand back the one it was given — {@link Hir.NewData} and
+ * {@link Hir.Apply} take none when they are built, and carry the one they have when they are
+ * rebuilt. What is public here is what a reader asks, and a reader asks the node.
  *
  * <p>The transitions, of which carried by a value is the last word:
  *
@@ -54,15 +55,5 @@ public sealed interface ConstructionOrigin
     /** Whether a value this body named is what carried the construction in. */
     default boolean viaValueReference() {
         return this instanceof Origins.ByValue;
-    }
-
-    /** The same construction, carried into a reader by {@code module}'s published body. */
-    default ConstructionOrigin publishedIn(String module) {
-        return this instanceof Origins.ByValue ? this : new Origins.Published(module);
-    }
-
-    /** The same construction, carried into a body by a value that body named. */
-    default ConstructionOrigin carriedByValue() {
-        return Origins.ByValue.IT_IS;
     }
 }

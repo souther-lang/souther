@@ -13,6 +13,16 @@ final class Origins {
 
     private Origins() {}
 
+    /** {@code origin}, carried into a reader by {@code module}'s published body. */
+    static ConstructionOrigin publishedIn(ConstructionOrigin origin, String module) {
+        return origin instanceof ByValue ? origin : new Published(module);
+    }
+
+    /** {@code origin}, carried into a body by a value that body named. */
+    static ConstructionOrigin byValue(ConstructionOrigin origin) {
+        return origin instanceof ByValue kept ? kept : ByValue.IT_IS;
+    }
+
     /** A construction written where it stands. */
     record Own() implements ConstructionOrigin {
 

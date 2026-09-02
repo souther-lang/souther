@@ -244,6 +244,12 @@ public final class HelperNames {
      * <p>A unit data is not marked. It is constructed by being named and the permission check
      * collects no unit (spec §constructs-excludes-unit-data), so a mark on the name would be one
      * nothing reads.
+     *
+     * <p>Neither is a call left standing, which is where this and the mark a value leaves differ.
+     * What a recursive helper builds is counted from its own body, and that body was marked when it
+     * was published, so the check absorbs those constructions as the kinds they already are. A value
+     * turns all of them into the value's whatever they were, and there is nothing on the way to say
+     * it but the call.
      */
     static Hir.Expr publishedBy(Hir.Expr e, String module) {
         // a spread names a value, and a value is not a construction: what it built was built where it

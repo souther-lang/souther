@@ -20,9 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * draws, and offers a pass below a value to take an answer from — one that says the reader's own
  * wherever it is asked, since that is all a parse can put there.
  *
- * <p>What is measured is the component's own type. A form holding another form that holds one would
- * pass here and is what the check beside this one is about: the parsed tree holds no form of the
- * tree below.
+ * <p>What is measured is the component's own type, and only that. A parsed-tree form whose component
+ * were a form of the tree below would hold one at a remove and pass here; nothing says it may not,
+ * and the check beside this one does not — it asks whether the frontend names each form, which a
+ * form that is named and holds the wrong thing answers.
  */
 class TheParsedTreeDoesNotSayWhereAConstructionCameFromTest {
 

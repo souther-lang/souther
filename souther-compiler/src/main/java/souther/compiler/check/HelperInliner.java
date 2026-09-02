@@ -1130,10 +1130,10 @@ public final class HelperInliner {
                 // separate slots: the binding is in the callee position, the spelling beside it.
                 ValueName.Local applied = new ValueName.Local(f.name(), f.id());
                 yield inline(new Hir.LetIn(f, raw.function(), null, false, null,
-                        raw.rewritten(Hir.Var.respelled(f.name(),
+                        raw.withFunction(Hir.Var.respelled(f.name(),
                                 new ReachName.InScope(applied), raw.function().pos(),
-                                raw.function().region()),
-                                raw.args(), spelling(raw.function()), raw.pos(), raw.region()),
+                                raw.function().region()))
+                                .standingIn(spelling(raw.function())),
                         raw.pos(), raw.region()));
             }
             case Hir.Apply rawCall -> expandCall(rawCall);
@@ -2030,10 +2030,10 @@ public final class HelperInliner {
             // the callee is renamed as the expression it is, like every other subexpression. A name
             // applied is an `Hir.Var` held here, so it goes through the arm above and is substituted
             // exactly as a read of it would be — the position cannot ask a different question.
-            case Hir.Apply call -> call.rewritten(
+            case Hir.Apply call -> call.with(
                     rename(call.function(), renaming),
                     renameList(call.args(), renaming),
-                    call.appliedAs(), renaming.at(call.pos()), renaming.over(call.region()));
+                    renaming.at(call.pos()), renaming.over(call.region()));
             case Hir.Binary bin -> new Hir.Binary(bin.op(), rename(bin.left(), renaming),
                     rename(bin.right(), renaming), bin.origin(), renaming.at(bin.pos()),
                     renaming.over(bin.region()));

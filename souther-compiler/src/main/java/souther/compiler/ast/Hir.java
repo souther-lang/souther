@@ -1598,13 +1598,13 @@ public interface Hir {
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
         public NewData publishedBy(String module) {
-            return new NewData(typeName, inits, spreads, origin.publishedIn(module), fields, pos,
-                    region);
+            return new NewData(typeName, inits, spreads, Origins.publishedIn(origin, module),
+                    fields, pos, region);
         }
 
         /** The same construction, carried into a body by a value that body named. */
         public NewData carriedByValue() {
-            return new NewData(typeName, inits, spreads, origin.carriedByValue(), fields, pos,
+            return new NewData(typeName, inits, spreads, Origins.byValue(origin), fields, pos,
                     region);
         }
 
@@ -2088,7 +2088,7 @@ public interface Hir {
          * where its constructions would otherwise stand, and it is what has to say where it came
          * from. */
         public Apply carriedByValue() {
-            return new Apply(function, args, origin.carriedByValue(), appliedAs, pos, region);
+            return new Apply(function, args, Origins.byValue(origin), appliedAs, pos, region);
         }
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
@@ -2105,17 +2105,22 @@ public interface Hir {
             return new Apply(function, args, origin, appliedAs, pos, region);
         }
 
+        /** The same application rewritten and stamped where the copy of it stands — what a pass
+         *  that copies a body into another one writes. What it does not name it carries, which is
+         *  where the construction came from and what stands in for the written name. */
+        public Apply with(Expr function, List<Expr> args, SourcePos pos, Region region) {
+            return new Apply(function, args, origin, appliedAs, pos, region);
+        }
+
         /**
-         * This application as a pass rewriting it says it: every part but where the construction it
-         * stands for came from, which is carried.
+         * The same application, saying that {@code appliedAs} is what a lowering replaced the
+         * written name with.
          *
-         * <p>A pass copying a body into another one restamps what it copies, and a lowering that
-         * binds what was applied puts its own name in the callee — both write most of an
-         * application and neither is entitled to say where the construction came from. Written
-         * without that part, so that carrying it is not something a caller can forget.
+         * <p>Said here rather than by writing the application again, because the pass that
+         * introduces one is replacing what was applied with a binding it made: what it has an
+         * opinion about is the callee and this, and the rest of the application is the author's.
          */
-        public Apply rewritten(Expr function, List<Expr> args, String appliedAs, SourcePos pos,
-                               Region region) {
+        public Apply standingIn(String appliedAs) {
             return new Apply(function, args, origin, appliedAs, pos, region);
         }
 
