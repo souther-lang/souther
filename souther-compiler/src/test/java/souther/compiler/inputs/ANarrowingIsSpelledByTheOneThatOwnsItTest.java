@@ -56,6 +56,37 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ANarrowingIsSpelledByTheOneThatOwnsItTest {
 
+    /** A leaf, a case that is itself a sum, an or-pattern, and both of an optional's carriers. */
+    private static final String A_MODEL_OF_EVERY_SHAPE = """
+            module m
+
+            data Station  = { at: String }
+            data Hospital = { at: String }
+            data Renkei   = { at: String }
+            data OnceKind  = Station | Hospital
+            data VisitKind = OnceKind | Renkei
+
+            data Tagged = { tag: Int? }
+            data Ack = { at: String }
+
+            behavior visit : (k: VisitKind, t: Tagged) -> Ack
+            let visit (k, t) = {
+                let named = match k with
+                    | OnceKind as once ->
+                        match once with
+                            | Station as s -> s.at
+                            | Hospital as h -> h.at
+                    | Renkei as r -> r.at
+                let both = match k with
+                    | Station | Hospital -> "once"
+                    | Renkei as r -> r.at
+                let held = match t.tag with
+                    | Some v -> v
+                    | None -> 0
+                Ack { at = named }
+            }
+            """;
+
     @Test
     void aNarrowingHasNoConstructorAReaderCanReach() {
         for (Class<?> variant : new Class<?>[] {Refinement.SumCase.class, Refinement.Presence.class}) {
@@ -78,6 +109,13 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
      * takes: a way in whose parameter is a name, a string, a list of case types or a selector that
      * has not been resolved against the declarations is one that cannot answer for a case standing
      * over several leaves, whatever it is called.
+     *
+     * <p>{@code allOf} is the third name and not a third answer. It takes the same
+     * {@link ResolvedCase} and says every distinction that selection covers; {@code of} is that
+     * asked for the one case where there is exactly one, and is written in terms of it. Two readers
+     * want the two — a path takes a single narrowing or none, and what the rules leave an arm is
+     * asked of every distinction it can arrive at — and the check below is that the second is the
+     * first read again rather than a second decision about what a selection covers.
      */
     @Test
     void everyWayInTakesAValueThatSettlesTheNarrowing() {
@@ -86,15 +124,31 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                         .filter(each -> Modifier.isStatic(each.getModifiers())
                                 && !Modifier.isPrivate(each.getModifiers()))
                         .toList();
-        assertEquals(java.util.Set.of("of"),
+        assertEquals(java.util.Set.of("of", "allOf"),
                 ways.stream().map(java.lang.reflect.Method::getName)
                         .collect(java.util.stream.Collectors.toSet()),
-                "a way to spell a narrowing that is not `of` is a decision, not an accident");
+                "a way to spell a narrowing that is not one of these is a decision, not an accident");
         assertEquals(java.util.Set.of(Case.class, ResolvedCase.class),
                 ways.stream().map(each -> each.getParameterTypes()[0])
                         .collect(java.util.stream.Collectors.toSet()),
                 "a narrowing is made from what a position divides into or from what an arm was"
                         + " resolved to select, and from nothing that settles less than either");
+    }
+
+    /** And the singular reading is the plural one, asked for the case where there is exactly one. */
+    @Test
+    void theOneNarrowingIsTheOnlyOneCovered() {
+        Read read = read(A_MODEL_OF_EVERY_SHAPE);
+
+        for (Core.Case arm : armsOf(read.body)) {
+            if (arm.selectedCase().isEmpty()) {
+                continue;
+            }
+            ResolvedCase selected = arm.selectedCase().orElseThrow();
+            List<Refinement> covered = Refinement.allOf(selected);
+            assertEquals(covered.size() == 1 ? covered.get(0) : null, Refinement.of(selected),
+                    () -> "the one narrowing of `" + selected + "` is whatever it alone covers");
+        }
     }
 
     /**
@@ -118,35 +172,7 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
      */
     @Test
     void everySelectionTheCheckerMakesAnswersOneNarrowingOrNone() {
-        Read read = read("""
-                module m
-
-                data Station  = { at: String }
-                data Hospital = { at: String }
-                data Renkei   = { at: String }
-                data OnceKind  = Station | Hospital
-                data VisitKind = OnceKind | Renkei
-
-                data Tagged = { tag: Int? }
-                data Ack = { at: String }
-
-                behavior visit : (k: VisitKind, t: Tagged) -> Ack
-                let visit (k, t) = {
-                    let named = match k with
-                        | OnceKind as once ->
-                            match once with
-                                | Station as s -> s.at
-                                | Hospital as h -> h.at
-                        | Renkei as r -> r.at
-                    let both = match k with
-                        | Station | Hospital -> "once"
-                        | Renkei as r -> r.at
-                    let held = match t.tag with
-                        | Some v -> v
-                        | None -> 0
-                    Ack { at = named }
-                }
-                """);
+        Read read = read(A_MODEL_OF_EVERY_SHAPE);
 
         Map<String, Refinement> answered = new LinkedHashMap<>();
         int orPatterns = 0;

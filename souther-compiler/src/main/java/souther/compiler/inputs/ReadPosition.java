@@ -66,16 +66,40 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm.FromOnePosition te
      */
     @Override
     public Admits admissionOf(TypeSymbol leaf) {
+        return admissionOf(distinction(
+                each -> each instanceof Case.SumCase sum && sum.leaf().equals(leaf)));
+    }
+
+    @Override
+    public Admits admissionOf(Refinement narrowing) {
+        return admissionOf(distinction(each -> narrowing.equals(Refinement.of(each))));
+    }
+
+    /**
+     * Which distinction of this position a key names, or null where it names none.
+     *
+     * <p>One lookup and two keys. A leaf and a narrowing pick out the same distinction where they
+     * pick out one at all, and worked out twice the two would answer differently on the day the
+     * distinctions changed — a caller asking by leaf being told a case stands while one asking by
+     * narrowing was told nothing was read about it.
+     */
+    private Case distinction(java.util.function.Predicate<Case> named) {
         for (Case each : declared) {
-            if (each instanceof Case.SumCase sum && sum.leaf().equals(leaf)) {
-                return admissionOf(each);
+            if (named.test(each)) {
+                return each;
             }
         }
-        return new Admits.Unsettled(new Unsettlement.NoSuchDistinction());
+        return null;
     }
 
     @Override
     public Admits admissionOf(Case one) {
+        if (one == null) {
+            // A key that names no distinction of this position. Said as the reading stating no such
+            // distinction, which is what it is: a fact about the two vocabularies not being about
+            // the same values, and not about how far the rules were read.
+            return new Admits.Unsettled(new Unsettlement.NoSuchDistinction());
+        }
         if (obligations instanceof ObligationDomain.Conservative) {
             return new Admits.Unsettled(new Unsettlement.RulesLeaveNothing());
         }

@@ -548,13 +548,10 @@ public sealed interface Core {
          *  written. */
         List<ResolvedCase> cases();
 
-        /** The same, as what tests and reads a value — which is what a backend emits. */
+        /** The same, as what tests and reads a value — which is what a backend emits. A projection
+         *  of {@link #cases()} and answered as one: what an arm selects is that value's to say. */
         default List<CaseSelector> selectors() {
-            List<CaseSelector> out = new java.util.ArrayList<>();
-            for (ResolvedCase each : cases()) {
-                out.add(each.selector());
-            }
-            return out;
+            return cases().stream().map(ResolvedCase::selector).toList();
         }
 
         /**

@@ -687,20 +687,34 @@ public final class PathReachability {
         }
     }
 
-    /** What the rules leave one arm, or null where the arm names no case — a binding of the whole
-     *  value, which the rules of the position say nothing about. */
+    /**
+     * What the rules leave one arm, or null where the arm names no case — a binding of the whole
+     * value, which the rules of the position say nothing about.
+     *
+     * <p><b>Asked of the distinctions the arm reaches and not of the names it is written by.</b> A
+     * name is not a distinction of a position: an optional's carriers name none of them, and a case
+     * that is itself a sum names the leaves under it rather than any one of them. Asked by name,
+     * every such arm came back as a position that had settled nothing — this compiler reporting a
+     * limit as an answer about the model, and `unreachable` written on an arm the rules admit
+     * going unreported (#1252). What the arm reaches is the checker's resolution of it, read as
+     * distinctions where the two vocabularies agree.
+     */
     private Reachability saidOf(Position at, TermPath path, Core.Case arm, boolean nothingAbove) {
         List<TypeSymbol> named = arm.caseTypes();
         if (named.isEmpty()) {
             return null;
         }
-        if (named.stream().allMatch(each -> at.admissionOf(each) instanceof Admits.Refused)) {
+        List<souther.compiler.inputs.Refinement> reaches = new java.util.ArrayList<>();
+        for (souther.compiler.types.ResolvedCase each : arm.pattern().cases()) {
+            reaches.addAll(souther.compiler.inputs.Refinement.allOf(each));
+        }
+        if (reaches.stream().allMatch(each -> at.admissionOf(each) instanceof Admits.Refused)) {
             // Every case it is written for is one the rules refuse, so an arm a row could still
             // take is not among these: an arm goes only where all of them go.
             return new Reachability.Unreachable(
                     Proof.everyCaseRefused(path.toString(), named));
         }
-        for (TypeSymbol each : named) {
+        for (souther.compiler.inputs.Refinement each : reaches) {
             if (at.admissionOf(each) instanceof Admits.Unsettled unsettled) {
                 return new Reachability.Unsettled(
                         WhyUnsettled.thePositionDidNotSettleIt(unsettled.why()));

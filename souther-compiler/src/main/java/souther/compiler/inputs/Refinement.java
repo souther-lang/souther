@@ -3,6 +3,8 @@ package souther.compiler.inputs;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.List;
+
 /**
  * A narrowing of which values may stand at a position, which does not move to another position.
  *
@@ -49,9 +51,11 @@ public sealed interface Refinement {
      * divides into and what a position under it stands beneath are the same statement read twice —
      * a row whose value is an {@code Approved} is a row at every position {@code Approved} declares
      * — and a second relating of them would be the classes and the branches disagreeing about which
-     * is which. {@link #of(CaseSelector)} is beside this and is not that second relating: it takes
-     * what a checked pattern selected, which is the other value that settles a narrowing, and the
-     * two are held to one answer where a type states a division a pattern can select.
+     * is which. {@link #of(ResolvedCase)} is beside this and is not that second relating: it takes
+     * what a checked pattern was resolved to select, which is the other value that settles a
+     * narrowing, and the two are held to one answer where a type states a division a pattern can
+     * select. Resolved and not merely selected: a selector says what a value is tested and read as,
+     * which one name over several leaves says as fully as one over a single leaf.
      *
      * <p>Exhaustive over {@link Case}, with no {@code default}: a distinction the reading learns to
      * make later stops this compiling rather than arriving as a branch that is quietly never walked.
@@ -100,13 +104,36 @@ public sealed interface Refinement {
      * nearest.
      */
     static Refinement of(ResolvedCase selected) {
+        List<Refinement> covered = allOf(selected);
+        return covered.size() == 1 ? covered.get(0) : null;
+    }
+
+    /**
+     * Every distinction of a position that selecting {@code selected} covers, in the order the
+     * selection reaches them.
+     *
+     * <p>The general reading, and {@link #of(ResolvedCase)} is the same answer asked for the one
+     * case where there is exactly one. Two readers want the two: one puts a narrowing on a path,
+     * which takes a single distinction or none, and one asks what the rules leave an arm, which is
+     * asked of every distinction the arm can arrive at. Worked out twice, an arm over two leaves
+     * would be a place to nobody and two places to somebody else.
+     *
+     * <p>Exhaustive over {@link souther.compiler.types.Refinement}, with no {@code default}: a way
+     * of selecting a case added later stops this compiling rather than arriving as whichever arm is
+     * nearest.
+     */
+    static List<Refinement> allOf(ResolvedCase selected) {
         return switch (selected.refinement()) {
-            case souther.compiler.types.Refinement.Direct _ -> selected.atoms().size() == 1
-                    ? new SumCase(selected.atoms().get(0)) : null;
+            // A case that is itself a sum stands for the leaves under it (spec §sum-data), and a
+            // position divides into those leaves, so what it covers is one distinction per atom.
+            case souther.compiler.types.Refinement.Direct _ ->
+                    selected.atoms().stream().map(each -> (Refinement) new SumCase(each)).toList();
             // An optional's carriers cover themselves and are not leaves of anything, so what they
-            // narrow to follows from the carrier alone ({@code CaseSpace}).
-            case souther.compiler.types.Refinement.OptionPresent _ -> new Presence(true);
-            case souther.compiler.types.Refinement.OptionAbsent _ -> new Presence(false);
+            // narrow to follows from the carrier alone ({@code check.CaseSpace}).
+            case souther.compiler.types.Refinement.OptionPresent _ ->
+                    List.of(new Presence(true));
+            case souther.compiler.types.Refinement.OptionAbsent _ ->
+                    List.of(new Presence(false));
         };
     }
 
