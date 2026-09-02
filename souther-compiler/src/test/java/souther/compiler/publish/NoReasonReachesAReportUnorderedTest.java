@@ -13,6 +13,7 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -79,7 +80,7 @@ class NoReasonReachesAReportUnorderedTest {
             }
             for (Member each : membersOf(here)) {
                 if (each.type() instanceof ParameterizedType held
-                        && Set.class.isAssignableFrom(rawOf(held.getRawType()))
+                        && Collection.class.isAssignableFrom(rawOf(held.getRawType()))
                         && isAKind(held.getActualTypeArguments()[0])) {
                     found.add(here.getSimpleName() + "." + each.name() + " holds "
                             + held.getActualTypeArguments()[0].getTypeName()
@@ -104,23 +105,24 @@ class NoReasonReachesAReportUnorderedTest {
     }
 
     /**
-     * Nothing a report writes takes or answers with an unordered plurality of a kind.
+     * Nothing a report writes takes or answers with a plurality of a kind in a bare collection.
      *
      * <p>The shape the defect had, and the one the walk above cannot see: what a report hands its
      * own writers. A method taking the budgets as a set joined them in whatever the set iterated
      * in, and no type anywhere held that.
      *
-     * <p>A set or a bare collection, and not a list. A list was put in an order by whoever built it
-     * and some of those orders are the author's — the reasons a question stands are said in the
-     * order the clauses were written, and sorting them would answer by a precedence nothing in the
-     * model decides. What a set or a {@code Collection} says is that whoever built it decided
-     * nothing, which is the plurality this is about.
+     * <p><b>Any collection, a list included.</b> A list says somebody put it in an order and does
+     * not say who — the walk that met the reasons, or the person who wrote what raised them — and
+     * those are the two things a reader may not be left to tell apart. So a plurality of a kind
+     * crosses as a {@link CanonicalSelection}, where the order is this compiler's decision about
+     * what a reader is shown, or as a {@link SourceOrdered}, where it is the model's own; a bare
+     * collection is neither claim made.
      *
      * <p>Read off every method a report declares, private ones included. What a document says is
      * built by the ones nobody outside calls.
      */
     @Test
-    void nothingAReportWritesTakesOrAnswersWithAnUnorderedPluralityOfAKind() throws Exception {
+    void nothingAReportWritesTakesOrAnswersWithAPluralityOfAKindInABareCollection() throws Exception {
         List<String> found = new ArrayList<>();
         for (Class<?> each : everyReport()) {
             for (Method method : each.getDeclaredMethods()) {
@@ -128,10 +130,11 @@ class NoReasonReachesAReportUnorderedTest {
                 said.add(method.getGenericReturnType());
                 for (Type type : said) {
                     if (type instanceof ParameterizedType held
-                            && unordered(rawOf(held.getRawType()))
+                            && (Collection.class.isAssignableFrom(rawOf(held.getRawType()))
+                                    || rawOf(held.getRawType()).equals(Iterable.class))
                             && isAKind(held.getActualTypeArguments()[0])) {
                         found.add(each.getSimpleName() + "." + method.getName() + " takes or"
-                                + " answers with an unordered plurality of "
+                                + " answers with a bare collection of "
                                 + held.getActualTypeArguments()[0].getTypeName());
                     }
                 }
@@ -143,11 +146,6 @@ class NoReasonReachesAReportUnorderedTest {
                         + " order, and what it says them in is then what that happens to iterate in");
     }
 
-    /** Whether a plurality of this shape arrives with nobody having decided its order. */
-    private static boolean unordered(Class<?> held) {
-        return Set.class.isAssignableFrom(held)
-                || held.equals(Collection.class) || held.equals(Iterable.class);
-    }
 
     /**
      * Everything that writes a report, read off what was compiled.
@@ -177,13 +175,13 @@ class NoReasonReachesAReportUnorderedTest {
      * Whether values of this type are members of a kind a report would have to put in an order.
      *
      * <p>Asked of the type as it is written and not of the class it erases to. {@code ? extends
-     * CompositionBudget} erases to {@link Object} and is the budgets all the same; an arm of a sum
-     * that has an order is a member of that kind whatever it is called. Asked of the erasure, a
-     * plurality could be written in either of those shapes and answer no.
+     * CompositionBudget} and a {@code <T extends CompositionBudget>} both erase to {@link Object}
+     * and are the budgets all the same; an arm of a sum that has an order is a member of that kind
+     * whatever it is called. Asked of the erasure, a plurality could be written in any of those
+     * shapes and answer no.
      */
     private static boolean isAKind(Type type) {
-        Class<?> written = rawOf(type instanceof WildcardType it && it.getUpperBounds().length > 0
-                ? it.getUpperBounds()[0] : type);
+        Class<?> written = rawOf(bound(type));
         if (written.isEnum() && written.getPackageName().startsWith("souther.compiler")) {
             return true;
         }
@@ -193,6 +191,15 @@ class NoReasonReachesAReportUnorderedTest {
             }
         }
         return false;
+    }
+
+    /** What a type is bounded by, which is what a wildcard or a parameter says about its values. */
+    private static Type bound(Type type) {
+        return switch (type) {
+            case WildcardType it when it.getUpperBounds().length > 0 -> bound(it.getUpperBounds()[0]);
+            case TypeVariable<?> it when it.getBounds().length > 0 -> bound(it.getBounds()[0]);
+            default -> type;
+        };
     }
 
     /** Every kind something is published in an order of, which is the sums among them. */

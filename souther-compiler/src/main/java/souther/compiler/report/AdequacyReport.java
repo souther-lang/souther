@@ -68,6 +68,7 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.publish.SourceOrdered;
 import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.partition.CompositionBudget;
@@ -2128,7 +2129,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
                         asked(asked.question()), subjectOf(asked, names, declaredIn),
-                        whyStanding(asked).stream().map(AdequacyReport::whyUnread)
+                        whyStanding(asked).written().stream().map(AdequacyReport::whyUnread)
                                 .collect(Collectors.joining("; "))));
             }
         }
@@ -2146,17 +2147,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * round. What a document promises is deliberately coarser than what this compiler records, so
      * two reasons a reader is not offered to tell apart come out as one word — and that is the
      * projection saying they are one thing to lift, rather than a report dropping one of them.
+     *
+     * <p><b>In the order the author wrote the parts that raised the question</b>, which is what the
+     * schema promises a consumer of {@code stopped} and what says which of these to lift first. So
+     * it is a {@link SourceOrdered} and not an order of this compiler's: a written order over this
+     * kind would answer by a precedence nothing in the model decides.
      */
-    private static List<UndividedPosition.Reason> whyStanding(
+    private static SourceOrdered<UndividedPosition.Reason> whyStanding(
             PartitionEvidence.Unanswered asked) {
         List<UndividedPosition.Reason> said = new ArrayList<>();
         for (BlockReason.AboutARule each : asked.stopped()) {
-            UndividedPosition.Reason word = ReportedReason.of(each);
-            if (!said.contains(word)) {
-                said.add(word);
-            }
+            said.add(ReportedReason.of(each));
         }
-        return said;
+        return SourceOrdered.asWritten(said);
     }
 
     /**
@@ -2731,7 +2734,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // report beside it is the two disagreeing about one question, and nothing would
                 // have said which of them to believe.
                 ArrayNode stopped = one.putArray("stopped");
-                whyStanding(each).forEach(reason -> stopped.add(word(reason)));
+                whyStanding(each).written().forEach(reason -> stopped.add(word(reason)));
             }
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");
