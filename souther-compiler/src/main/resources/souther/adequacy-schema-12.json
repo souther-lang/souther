@@ -12,6 +12,35 @@
     "keptOpenBy",
     "modules"
   ],
+  "allOf": [
+    {
+      "description": "An open verdict names what it is open on, and a settled one is open on nothing. Written as a shape and not only as a sentence: the conformance corpus produced `undetermined` beside an empty array the day the field existed, and a description saying that cannot happen is a description a renderer can go on contradicting.",
+      "if": {
+        "properties": {
+          "adequacy": {
+            "const": "undetermined"
+          }
+        },
+        "required": [
+          "adequacy"
+        ]
+      },
+      "then": {
+        "properties": {
+          "keptOpenBy": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "keptOpenBy": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
@@ -109,6 +138,18 @@
             {
               "const": "not_measured",
               "description": "A measure the verdict rests on was never made, so a gap it could have found is one nobody looked for. Nothing fell short here, which is why it is not one of the words above: those say what a measurement went without, and this says there was no measurement."
+            },
+            {
+              "const": "showing_stopped",
+              "description": "The rows are read out, no row is at a point the model owes one at, and what was read to show a row can be written there did not come back. The obligation stays: what did not arrive is a showing, not the model taking the point back."
+            },
+            {
+              "const": "nothing_was_composed",
+              "description": "The same point, where this compiler declined to compose a candidate for it at all — a figure of its own decided that, which is why this is its own word beside `showing_stopped` and why a wider run may get past it."
+            },
+            {
+              "const": "nothing_showed_it",
+              "description": "The same point again, where nothing was stopped and nothing arrived: no showing was made, so there is no limit to raise and nothing to name. Told apart from the two above because a reader sent after what stopped it would be looking for something nobody met."
             }
           ],
           "description": "What kind of thing this is. Everything but `not_measured` is the vocabulary `weakening` writes, where one word covers more than one thing this compiler can meet — a pattern too large to build and a rule about a value made from another are both `rule_unread` — so this says which kind it was and not which of them, and two entries alike are two things rather than one said twice."

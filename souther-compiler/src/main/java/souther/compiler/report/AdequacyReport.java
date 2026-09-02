@@ -738,31 +738,80 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // The facts first, folded once. Two measures that went without the same thing went without
         // one thing, and putting them together is what says so.
         WeakeningSet facts = WeakeningSet.none();
+        List<AdequacyOpening> rest = new ArrayList<>();
         for (Measurement<?> each : requiredSupport()) {
             facts = facts.union(each.weakening());
+            openedBy(rest, each);
         }
         for (Measure<?> each : requiredEvidence()) {
             facts = facts.union(each.weakening());
+            if (each instanceof Measurement<?> measured) {
+                openedBy(rest, measured);
+            }
         }
         for (ObligationAssessment each : requiredObligations()) {
             facts = facts.union(each.weakening());
+            openedBy(rest, each.disposition());
         }
         List<AdequacyOpening> out = new ArrayList<>();
         facts.causes().forEach(each -> out.add(new AdequacyOpening.ByWeakening(each)));
-        // And the measures nobody made, one entry each and not folded on the reason. Two measures
-        // both waiting on rows are two measures nobody made, and a fold on `no_rows` would say a
-        // model with one behavior unmeasured and a model with forty were the same news.
-        //
-        // The domain measures alone. A reading of the rows nobody made is left out of what the
-        // verdict rests on before it gets here — this build says it makes no measurement over rows,
-        // and a bar asking for one was never going to be answered — so asking the support for one
-        // of these is asking a list that cannot hold one.
-        for (Measure<?> each : requiredEvidence()) {
-            if (each instanceof Measurement.NotMeasured<?> never) {
-                out.add(new AdequacyOpening.NotMeasured(never.why()));
+        out.addAll(rest);
+        return out;
+    }
+
+    /**
+     * What one measurement opens the verdict on beside the facts it went without.
+     *
+     * <p>A {@code switch} over the states with no {@code default}, because this is the same question
+     * {@link #adequacy()} asks of the same value and the two must not be able to answer differently.
+     * Asked as "what did it go without", a measurement nobody made answered nothing while the
+     * verdict over it stayed open — and the arm that says so is the one a fold would never reach.
+     *
+     * <p>The other three states need nothing here. A complete measurement opens nothing, and the
+     * two that are short of something refuse an empty {@code WeakeningSet} at construction, so the
+     * union above already holds at least one fact for each of them.
+     */
+    static void openedBy(List<AdequacyOpening> out, Measurement<?> measured) {
+        switch (measured) {
+            case Measurement.NotMeasured<?> never ->
+                    out.add(new AdequacyOpening.NotMeasured(never.why()));
+            case Measurement.Complete<?> _, Measurement.Partial<?> _,
+                 Measurement.FailedToMeasure<?> _ -> { }
+        }
+    }
+
+    /**
+     * And what one obligation opens it on, which is what it is undecided about.
+     *
+     * <p>Read from the disposition and never from the coverage beneath it. Those are two questions
+     * and {@link #adequacy()} asks the first: whether a row can be written at a point is settled
+     * from the coverage <em>and</em> what showed a row is writable, so three of the four ways an
+     * obligation is undecided leave the coverage with nothing to have gone without. Asked of the
+     * coverage, a point nothing could show a row for held the verdict open and named nothing.
+     *
+     * <p>A reading that stopped adds nothing here, and that is not an omission: what it met is the
+     * coverage's own {@code WeakeningSet}, which the union above already holds. Counted again it
+     * would be one fact said twice, which is what a set is for.
+     *
+     * <p>{@code Undecided} refuses an empty list at construction and every arm below yields an
+     * entry, so an obligation that holds the verdict open cannot come back with nothing.
+     */
+    static void openedBy(List<AdequacyOpening> out, ObligationDisposition disposition) {
+        if (!(disposition instanceof ObligationDisposition.Undecided undecided)) {
+            return;
+        }
+        for (ObligationDisposition.Uncertainty each : undecided.because()) {
+            switch (each) {
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped _ -> { }
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead it ->
+                        out.add(new AdequacyOpening.NotMeasured(it.why()));
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped it ->
+                        it.by().by().forEach(gap ->
+                                out.add(new AdequacyOpening.ShowingStopped(gap)));
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
+                        out.add(new AdequacyOpening.NothingShowedARowCanBeWritten());
             }
         }
-        return out;
     }
 
     /**
@@ -781,7 +830,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * words would be a count of something else.
      *
      * @param mayChange how many of them an allowance of this compiler's stopped
-     * @param unaffected how many it had no reading for, which is what no allowance changes
+     * @param unaffected how many no allowance stopped, which is what allowing more does not reach.
+     *                   Not "how many it had no reading for": a measure nobody made and a point
+     *                   nothing showed a row writable at are both here and neither is a reading.
+     *                   Which kind of thing each was, is what the kind beside it says
      */
     public record UnderAWiderRun(int mayChange, int unaffected) {
 
@@ -3529,6 +3581,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     fact.put("kind", "not_measured");
                     fact.put("reason", word(it.why()));
                 }
+                // Two words for the two gaps, rather than one word and a reason beside it. Which of
+                // them it was is what a reader acts on and what the sensitivity is read from, so it
+                // is the kind: a value read for the point that did not come back, and a composing
+                // this compiler declined to do, are not one kind of news.
+                case AdequacyOpening.ShowingStopped it -> fact.put("kind", switch (it.by()) {
+                    case EstablishmentGap.Observation _ -> "showing_stopped";
+                    case EstablishmentGap.Composition _ -> "nothing_was_composed";
+                });
+                case AdequacyOpening.NothingShowedARowCanBeWritten _ ->
+                        fact.put("kind", "nothing_showed_it");
             }
             fact.put("runSensitivity", word(each.runSensitivity()));
         }

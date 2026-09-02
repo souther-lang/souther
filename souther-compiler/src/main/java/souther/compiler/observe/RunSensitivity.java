@@ -15,11 +15,15 @@ package souther.compiler.observe;
  * again by a wider run on the same machine, and a run on another machine is a different host rather
  * than a wider run of this one.
  *
- * <p><b>The question a producer answers.</b> Did an allowance of this compiler's stop it, or did it
- * have no reading for what it met? Nothing here is a judgment about what a person should do, and
- * that is deliberate: what an author or an operator may go on to do differs from reason to reason
- * and is what the reasons themselves already say, one word at a time. This says only whether
- * measuring the same model again, allowing more, could answer what was not answered.
+ * <p><b>The question a producer answers.</b> Did an allowance of this compiler's stop it. That is
+ * the whole of it. The other half of the sentence this used to carry — "or did it have no reading
+ * for what it met" — is a classification and not this axis, and it was already false of things that
+ * answer {@link #UNAFFECTED}: a measure nobody made met nothing and read nothing, and a point where
+ * nothing showed a row can be written is not a reading either.
+ *
+ * <p>So nothing here says what kind of thing it was, and nothing here is a judgment about what a
+ * person should do. Both of those belong to the kind beside it, one word at a time. This says only
+ * whether measuring the same model again, allowing more, could answer what was not answered.
  *
  * <p><b>And what it does not promise.</b> {@link #MAY_CHANGE} is not that a wider run finishes the
  * measure. It is that the stop that produced this shortfall need not happen again — a reading past

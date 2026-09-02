@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.Weakening;
 
@@ -71,6 +72,61 @@ public sealed interface AdequacyOpening {
                 throw new IllegalArgumentException("a measure nobody made says why");
             }
         }
+
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * Nothing could show a row can be written at a point, and this is what stopped the showing.
+     *
+     * <p>Its own arm because it is about neither a measure nor a measurement. The rows were read
+     * out and no row is at the point; whether one could be written there is a second question, and
+     * a point where nothing answered it is owed a row still. Nothing weakened a measure over it,
+     * so a list of what fell short says nothing about a verdict this holds open.
+     *
+     * <p>One per gap and not one per point. A showing may be stopped in more than one way — a value
+     * read for it that did not come back, and a composing for another that never started — and what
+     * a reader wants is everything that would have to give.
+     */
+    record ShowingStopped(EstablishmentGap by) implements AdequacyOpening {
+
+        public ShowingStopped {
+            if (by == null) {
+                throw new IllegalArgumentException("a showing that was stopped says what stopped it");
+            }
+        }
+
+        /**
+         * The gap's own answer, and it is read rather than assumed.
+         *
+         * <p>An observation that stopped holds the codes it met, and those do not agree: a value a
+         * limit shortened is one a run allowed more keeps and a value nothing could read back is
+         * not. So the codes are asked, and it takes all of them — a showing stopped by both is
+         * stopped again after the limit is raised.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return switch (by) {
+                // What this compiler declined to build, and the figures that decided it.
+                case EstablishmentGap.Composition _ -> RunSensitivity.MAY_CHANGE;
+                case EstablishmentGap.Observation it -> it.causes().stream()
+                        .allMatch(code -> code.runSensitivity() == RunSensitivity.MAY_CHANGE)
+                        ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
+            };
+        }
+    }
+
+    /**
+     * Nothing showed a row can be written at a point, and nothing stopped anything either.
+     *
+     * <p>Beside {@link ShowingStopped} and not folded into it. There a showing was made and met
+     * something; here nothing arrived at all, and a reader told a limit stopped it would go looking
+     * for a limit nobody hit. Nothing was compared against a figure, so no allowance changes it.
+     */
+    record NothingShowedARowCanBeWritten() implements AdequacyOpening {
 
         @Override
         public RunSensitivity runSensitivity() {

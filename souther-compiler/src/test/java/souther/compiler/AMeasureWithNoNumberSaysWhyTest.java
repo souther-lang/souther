@@ -260,7 +260,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                 adequacy: undetermined
                   what keeps it open
                     may change in a wider run     0
-                    unaffected by a wider run     1
+                    unaffected by a wider run     5
                 """, human());
     }
 
