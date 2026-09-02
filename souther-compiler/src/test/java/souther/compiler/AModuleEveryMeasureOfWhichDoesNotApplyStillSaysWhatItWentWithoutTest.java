@@ -86,7 +86,8 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
         assertInstanceOf(Measurement.Partial.class, behavior.reading().measured(),
                 "the row was read and ran past the deadline it was evaluated under");
         assertEquals(List.of(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
-                behavior.reading().gaps().stream().map(Incompleteness::code).toList());
+                behavior.reading().gaps().stream()
+                        .map(gap -> gap.fact().code()).toList());
         assertFalse(behavior.weakenedBy().isEmpty(),
                 () -> "so the behavior went without something: " + behavior.weakenedBy());
     }
@@ -103,7 +104,7 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
                 "which the verdict already said, from a list the status could not see");
         assertEquals(List.of(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
-                module.incompleteness().stream().map(Incompleteness::code).toList());
+                module.incompleteness().stream().map(gap -> gap.fact().code()).toList());
     }
 
     /** And the document a build reads says it too. */

@@ -60,13 +60,34 @@ public record RuleWithoutALine(RuleRef rule, RuleCitation cited, FilingCoordinat
     }
 
     /**
-     * Whether this is the same finding as {@code other}.
+     * What makes two of these one finding: the rule, the position and the limit.
      *
-     * <p>The rule, the position and the limit. The citation is left out on purpose: a rule and the
-     * handle for it are two questions, and a key holding the handle would file one rule under
-     * several wherever the two come apart.
+     * <p>The citation is no part of it. A rule and the handle for it are two questions, and a key
+     * holding the handle files one rule under several wherever the two come apart — which they do
+     * wherever a rule has no name of its own.
+     *
+     * <p>A value and not a comparison, so that a collection can be keyed on it. Written as a
+     * predicate alone, every caller wanting one fact once walked what it had and asked the
+     * predicate of each, and what survived was whichever the walk met first.
      */
+    public Fact fact() {
+        return new Fact(rule, at, why);
+    }
+
+    /** A rule with no line here, with the handle for it left out, which is the whole of what makes
+     *  two of them one. */
+    public record Fact(RuleRef rule, FilingCoordinate at, BlockReason.RuleWithoutLineReason why) {
+
+        public Fact {
+            if (rule == null || at == null || why == null) {
+                throw new IllegalArgumentException("a rule is without a line somewhere, and for a"
+                        + " reason");
+            }
+        }
+    }
+
+    /** Whether this is the same finding as {@code other}, which is whether they are one fact. */
     public boolean sameAs(RuleWithoutALine other) {
-        return rule.equals(other.rule) && at.equals(other.at) && why.equals(other.why);
+        return fact().equals(other.fact());
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowRef;
@@ -11,6 +12,7 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -29,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
 
-    private static List<Incompleteness> reasonsOf(Compilation compilation, String module) {
+    private static Set<Incompleteness.Met> reasonsOf(Compilation compilation, String module) {
         for (AdequacyReport.ModuleReport each : AdequacyReport.of(compilation).modules()) {
             if (each.module().equals(module)) {
                 return each.incompleteness();
@@ -67,10 +69,13 @@ class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
                     | (Draft { n = 2 }) -> Ok { n = 2 }
                 """), "take");
 
-        assertEquals(List.of("take/0/#1", "take/0/#2"),
+        // As a set, because which of two reasons comes first is not this account's to say. What is
+        // asked here is that there are two of them and that each names its own row.
+        assertEquals(Set.of("take/0/#1", "take/0/#2"),
                 reasonsOf(compilation, "example.pair").stream()
-                        .filter(gap -> gap.scope() == Incompleteness.Scope.ROW)
-                        .map(Incompleteness::subject).toList(),
+                        .filter(gap -> gap.fact().scope() == Incompleteness.Scope.ROW)
+                        .map(gap -> gap.fact().subject())
+                        .collect(Collectors.toUnmodifiableSet()),
                 "each row is its own reason, and says which row it is");
     }
 
@@ -102,10 +107,11 @@ class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
                     | (Draft { n = 2 }) -> Ok { n = 2 }
                 """), "take");
 
-        assertEquals(List.of("take/0/#1", "take/1/#1"),
+        assertEquals(Set.of("take/0/#1", "take/1/#1"),
                 reasonsOf(compilation, "example.across").stream()
-                        .filter(gap -> gap.scope() == Incompleteness.Scope.ROW)
-                        .map(Incompleteness::subject).toList(),
+                        .filter(gap -> gap.fact().scope() == Incompleteness.Scope.ROW)
+                        .map(gap -> gap.fact().subject())
+                        .collect(Collectors.toUnmodifiableSet()),
                 "the first row of each source is a row of its own");
     }
 
@@ -140,8 +146,8 @@ class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
                 """), "take");
 
         List<String> shown = reasonsOf(compilation, "example.shown").stream()
-                .filter(gap -> gap.scope() == Incompleteness.Scope.ROW)
-                .map(gap -> gap.shown(souther.compiler.diag.SourceNameResolver.identity()))
+                .filter(gap -> gap.fact().scope() == Incompleteness.Scope.ROW)
+                .map(gap -> gap.fact().shown(SourceNameResolver.identity()))
                 .toList();
 
         assertEquals(2, shown.size(), () -> "two rows did not come back: " + shown);

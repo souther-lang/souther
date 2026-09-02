@@ -8,8 +8,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,13 +80,14 @@ class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
 
     @Test
     void theReasonNamesTheBehaviorThePositionIsIn() {
-        List<Incompleteness> why = report().modules().get(0).incompleteness();
+        Set<Incompleteness.Met> why = report().modules().get(0).incompleteness();
 
         assertFalse(why.isEmpty(), "the position that could not be read is said");
-        assertTrue(why.stream().allMatch(gap -> gap.behavior().equals(Optional.of("take"))),
+        assertTrue(why.stream().allMatch(gap -> gap.fact().behavior()
+                        .equals(Optional.of("take"))),
                 why.toString());
-        assertTrue(why.stream().anyMatch(gap -> gap.countsAgainst("take")));
-        assertFalse(why.stream().anyMatch(gap -> gap.countsAgainst("cancel")),
+        assertTrue(why.stream().anyMatch(gap -> gap.fact().countsAgainst("take")));
+        assertFalse(why.stream().anyMatch(gap -> gap.fact().countsAgainst("cancel")),
                 "a position of `take` is not a reason about `cancel`");
     }
 
@@ -104,7 +105,7 @@ class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
     void filteringToItDropsAReasonAboutAnotherBehaviorsPosition() {
         AdequacyReport only = AdequacyReport.of(compilationOf()).only(null, "cancel");
 
-        assertEquals(List.of(), only.modules().get(0).incompleteness());
+        assertEquals(Set.of(), only.modules().get(0).incompleteness());
         assertEquals(MeasurementStatus.COMPLETE, only.status());
     }
 

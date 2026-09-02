@@ -1,8 +1,13 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.RuleCitation;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.observe.RunSensitivity;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * One thing that stopped a measure's reading of the model from running out.
@@ -34,6 +39,35 @@ public sealed interface ClosureGap {
     RunSensitivity runSensitivity();
 
     /**
+     * What tells one of these from another.
+     *
+     * <p>The value itself, wherever everything the arm holds is what a reader is told. Where the
+     * arm holds what evidenced the fact as well — the handle a reader is sent to, what a reading
+     * was short of — the fact alone, so that one thing that went wrong, found twice, is one thing.
+     *
+     * <p>Asked of the arm and not written down by whoever gathers these. Two places put these
+     * together — what one measure's reading came to, and what a measurement went without — and a
+     * quotient written at each would be two answers to the question of what one gap is.
+     */
+    Object fact();
+
+    /**
+     * Two of these under one fact, as one, with what evidenced them accumulated.
+     *
+     * <p>Commutative, so which of the two a walk met first decides nothing about the result. A
+     * {@code switch} with no {@code default}, so an arm added later has to say whether it carries
+     * anything to accumulate before anything can put two of them together.
+     */
+    static ClosureGap merged(ClosureGap had, ClosureGap also) {
+        return switch (had) {
+            case RuleUnread it -> it.mergedWith((RuleUnread) also);
+            case QuestionUnanswered it -> it.mergedWith((QuestionUnanswered) also);
+            // Equal under the fact and holding nothing else, so both are the same value.
+            case RulesNotReached _, PositionNotReachedInto _ -> had;
+        };
+    }
+
+    /**
      * A rule of the model a reader stopped on. The rule says which measures that costs
      * ({@link BlockReason.RuleWithoutLineReason#leavesShort}).
      *
@@ -43,13 +77,34 @@ public sealed interface ClosureGap {
      * nothing here for it to be counted as. `MeasureClosure` asks the reason before building one of
      * these, and this refuses what that question would have had to let through.
      */
-    record RuleUnread(RuleWithoutALine rule) implements ClosureGap {
+    record RuleUnread(RuleWithoutALine.Fact rule, Set<RuleCitation> cited) implements ClosureGap {
 
         public RuleUnread {
             if (!(rule.why() instanceof BlockReason.RuleReadingStopped)) {
                 throw new IllegalArgumentException(
                         "a rule read to the end leaves no measure short: " + rule.why());
             }
+            cited = cited == null ? Set.of() : Set.copyOf(cited);
+        }
+
+        /** One reader's finding, as that reader produced it: the rule it stopped on, and the handle
+         *  it would send somebody to. */
+        public static RuleUnread of(RuleWithoutALine found) {
+            return new RuleUnread(found.fact(), Set.of(found.cited()));
+        }
+
+        /** The rule, the position and the limit. The handle is how a reader finds it and not what
+         *  tells it from another. */
+        @Override
+        public Object fact() {
+            return rule;
+        }
+
+        /** Both readers' findings, as one: the rule, with every handle either of them offered. */
+        public RuleUnread mergedWith(RuleUnread other) {
+            Set<RuleCitation> both = new HashSet<>(cited);
+            both.addAll(other.cited);
+            return new RuleUnread(rule, both);
         }
 
         /** The rule's own answer, which the constructor above has already made sure there is one
@@ -68,8 +123,43 @@ public sealed interface ClosureGap {
      * both or yields neither and records what stopped its reading. Which is why a comparison's
      * incompleteness reaches this only as {@link RuleUnread}.
      */
-    record QuestionUnanswered(souther.compiler.inputs.StandingQuestion question)
-            implements ClosureGap {
+    record QuestionUnanswered(StandingQuestion.Fact question, Set<RuleCitation> cited,
+                              Set<BlockReason.AboutARule> stopped) implements ClosureGap {
+
+        public QuestionUnanswered {
+            cited = cited == null ? Set.of() : Set.copyOf(cited);
+            stopped = stopped == null ? Set.of() : Set.copyOf(stopped);
+        }
+
+        /**
+         * One reading's account of it: the question, the handle for the rule that raised it, and
+         * what that reading was short of.
+         *
+         * <p>What it was short of arrives as a set. A question stands until every reason it stands
+         * for is gone, so the reasons are what a reader has to see away and neither how many parts
+         * met one nor which part was read first is any of that.
+         */
+        public static QuestionUnanswered of(StandingQuestion asked) {
+            return new QuestionUnanswered(asked.fact(), Set.of(asked.cited()),
+                    Set.copyOf(asked.stopped()));
+        }
+
+        /** Which rule raised it and what it asks. What a reading was short of is why it stands
+         *  rather than which question it is. */
+        @Override
+        public Object fact() {
+            return question;
+        }
+
+        /** Both readings' accounts, as one: the question, with every handle and everything either
+         *  of them was short of. */
+        public QuestionUnanswered mergedWith(QuestionUnanswered other) {
+            Set<RuleCitation> handles = new HashSet<>(cited);
+            handles.addAll(other.cited);
+            Set<BlockReason.AboutARule> met = new HashSet<>(stopped);
+            met.addAll(other.stopped);
+            return new QuestionUnanswered(question, handles, met);
+        }
 
         /**
          * What the reasons the question is short for come to, and it takes all of them.
@@ -84,10 +174,10 @@ public sealed interface ClosureGap {
          */
         @Override
         public RunSensitivity runSensitivity() {
-            if (question.stopped().isEmpty()) {
+            if (stopped.isEmpty()) {
                 return RunSensitivity.UNAFFECTED;
             }
-            return question.stopped().stream()
+            return stopped.stream()
                     .allMatch(each -> each.runSensitivity()
                             == RunSensitivity.MAY_CHANGE)
                     ? RunSensitivity.MAY_CHANGE
@@ -140,6 +230,12 @@ public sealed interface ClosureGap {
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
         }
+
+        /** Everything it holds is what a reader is told: whose position, and which. */
+        @Override
+        public Object fact() {
+            return this;
+        }
     }
 
     /**
@@ -173,6 +269,13 @@ public sealed interface ClosureGap {
         @Override
         public RunSensitivity runSensitivity() {
             return why.runSensitivity();
+        }
+
+        /** Everything it holds is what a reader is told: whose position, which, and what the walk
+         *  met there. */
+        @Override
+        public Object fact() {
+            return this;
         }
     }
 }

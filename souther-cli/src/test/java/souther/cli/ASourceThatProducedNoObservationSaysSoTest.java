@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -100,12 +101,14 @@ class ASourceThatProducedNoObservationSaysSoTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
-        List<Incompleteness> gaps = AdequacyReport.of(compilation).modules().get(0).incompleteness();
+        Set<Incompleteness.Met> gaps =
+                AdequacyReport.of(compilation).modules().get(0).incompleteness();
 
         assertEquals(1, gaps.size(), gaps.toString());
-        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, gaps.get(0).code(),
+        Incompleteness.Fact only = gaps.iterator().next().fact();
+        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, only.code(),
                 "the runtime is on this classpath; what happened is that a source was not read");
-        assertEquals(Incompleteness.Scope.SOURCE, gaps.get(0).scope());
+        assertEquals(Incompleteness.Scope.SOURCE, only.scope());
     }
 
     /** And the word the schema allows is the word that is written. */

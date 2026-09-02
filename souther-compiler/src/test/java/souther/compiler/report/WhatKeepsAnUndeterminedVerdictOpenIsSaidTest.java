@@ -23,6 +23,8 @@ import souther.compiler.types.CoverageOrigin;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -313,19 +315,28 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      * <p>Both halves are here on purpose. Two entries alike must stay two, and two entries the same
      * kind with different answers must stay two as well: the first is what a {@code distinct()}
      * takes out, and the second is what folding on the kind alone takes out.
+     *
+     * <p>Counted and not listed. What is asked here is how many of each word the array holds, which
+     * is what a reader counting it counts; which of two entries comes first is the order the
+     * document publishes them in, and is asked where that order is decided.
      */
     @Test
     void twoFactsOfOneKindAreTwoEntries() {
-        assertEquals(List.of("rule_unread/unaffected", "rule_unread/unaffected"),
-                keptOpenBy(WeakeningSet.of(
+        assertEquals(Map.of("rule_unread/unaffected", 2L),
+                howManyOfEach(keptOpenBy(WeakeningSet.of(
                         ruleUnread(new BlockReason.RuleAboutADerivedValue(), "a"),
-                        ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b"))),
+                        ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b")))),
                 "two rules nothing could read are two things to tell a person");
-        assertEquals(List.of("rule_unread/may_change", "rule_unread/unaffected"),
-                keptOpenBy(WeakeningSet.of(
+        assertEquals(Map.of("rule_unread/may_change", 1L, "rule_unread/unaffected", 1L),
+                howManyOfEach(keptOpenBy(WeakeningSet.of(
                         ruleUnread(new BlockReason.PatternTooCostly(), "a"),
-                        ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b"))),
+                        ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b")))),
                 "and one word over two answers is two entries, not one of either");
+    }
+
+    /** How many entries each word has, which is what the multiplicity of this array says. */
+    private static Map<String, Long> howManyOfEach(List<String> said) {
+        return said.stream().collect(Collectors.groupingBy(word -> word, Collectors.counting()));
     }
 
     /**
@@ -355,7 +366,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
 
     /** One rule this compiler stopped on, at {@code term}. */
     private static Weakening ruleUnread(BlockReason.RuleReadingStopped why, String term) {
-        return new Weakening.ModelReadingIncomplete(new ClosureGap.RuleUnread(
+        return new Weakening.ModelReadingIncomplete(ClosureGap.RuleUnread.of(
                 new RuleWithoutALine(
                         new RuleRef.Comparison("go",
                                 new CoverageOrigin("m", 0, 0, CoverageConstruct.IF)),

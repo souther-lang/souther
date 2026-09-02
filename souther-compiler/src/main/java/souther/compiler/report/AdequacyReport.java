@@ -213,16 +213,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
          * reason no measure carried, which is a report saying something the measures beside it do
          * not (issue #996).
          *
-         * <p>One entry per reason. A reason that counts against every behavior is carried by every
-         * one of them and is one thing to tell an author, and a module-wide failure found from each
-         * of three attached files is one failure.
+         * <p>One entry per reason, which is what the account itself holds. A reason that counts
+         * against every behavior is carried by every one of them and is one thing to tell an
+         * author, and a module-wide failure found from each of three attached files is one failure
+         * citing three places.
          */
-        public List<Incompleteness> incompleteness() {
-            Map<Object, Incompleteness> byIdentity = new LinkedHashMap<>();
-            for (Incompleteness gap : weakenedBy().observationCauses()) {
-                byIdentity.putIfAbsent(gap.identity(), gap);
-            }
-            return List.copyOf(byIdentity.values());
+        public Set<Incompleteness.Met> incompleteness() {
+            return weakenedBy().observationCauses();
         }
 
         /**
@@ -1092,12 +1089,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
                 said(out, module.incompleteness().stream()
-                        .filter(gap -> gap.behavior().map(behavior.name()::equals).orElse(false))
+                        .filter(gap -> gap.fact().behavior()
+                                .map(behavior.name()::equals).orElse(false))
                         .toList(), names);
             }
             declared(out, module, names);
             said(out, module.incompleteness().stream()
-                    .filter(gap -> gap.behavior().isEmpty()).toList(), names);
+                    .filter(gap -> gap.fact().behavior().isEmpty()).toList(), names);
         }
         int total = counted.values().stream().mapToInt(Integer::intValue).sum();
         out.append(String.format("%n%d %s: %d implemented, %d unimplemented, %d injected;"
@@ -1142,10 +1140,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** The reasons, in the one shape a reason is printed in wherever it sits. */
-    private void said(StringBuilder out, List<Incompleteness> gaps,
+    private void said(StringBuilder out, List<Incompleteness.Met> gaps,
                              SourceNameResolver names) {
-        for (Incompleteness gap : gaps) {
-            out.append(String.format("    · %s%n", Reasons.said(gap, names)));
+        for (Incompleteness.Met gap : gaps) {
+            out.append(String.format("    · %s%n", Reasons.said(gap.fact(), names)));
         }
     }
 
@@ -2639,16 +2637,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             m.put("status", wire(module.status()));
             weakening(m, module.weakenedBy());
             ArrayNode gaps = m.putArray("incompleteness");
-            for (Incompleteness gap : module.incompleteness()) {
+            for (Incompleteness.Met gap : module.incompleteness()) {
                 ObjectNode g = gaps.addObject();
-                g.put("code", word(gap.code()));
-                g.put("scope", word(gap.scope()));
+                g.put("code", word(gap.fact().code()));
+                g.put("scope", word(gap.fact().scope()));
                 // What the subject is, is the reason's answer; that this document has now written an
                 // identity down and owes an account of it is this renderer's. The two are asked and
                 // answered in that order, and neither side holds the other's half.
-                g.put("subject",
-                        gap.sourceIdentity().map(sources::written).orElseGet(gap::subject));
-                gap.at().ifPresent(where -> at(g, where, sources));
+                g.put("subject", gap.fact().sourceIdentity()
+                        .map(sources::written).orElseGet(gap.fact()::subject));
+                // TEMPORARY. A fact met at more than one place is cited at all of them, and this
+                // field holds one — so which one is written is whichever this happens to reach.
+                // Nothing decides it. Deciding it is the publication crossing's, and this loop goes
+                // when that arrives.
+                gap.citations().stream().findAny().ifPresent(where -> at(g, where, sources));
             }
             // What the module's declarations are short of, beside what its bodies are. A line an
             // `invariant` drew is not any behavior's, so publishing it under one would publish it
@@ -3547,7 +3549,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static WeakeningVocabulary vocabularyOf(Weakening weakening) {
         return weakening instanceof Weakening.ObservationIncomplete gap
-                ? new WeakeningVocabulary.AnObservationCode(gap.cause().code())
+                ? new WeakeningVocabulary.AnObservationCode(gap.met().fact().code())
                 : new WeakeningVocabulary.AWordOfThisDocuments(wordFor(weakening));
     }
 

@@ -51,6 +51,30 @@ public record StandingQuestion(RuleRef rule, RuleCitation cited, InputQuestion a
         stopped = java.util.List.copyOf(stopped);
     }
 
+    /**
+     * What makes two of these one question: which rule raised it, and what it asks.
+     *
+     * <p>Both of the others are left out, and each says so where it is declared. The citation is
+     * how a reader finds the rule and not what tells it from another. What the question is short of
+     * is why it stands rather than which question it is — one raised by one rule about one position
+     * is that question however many parts of it a reading was short of, and a key holding those
+     * would file it under as many as the parts were met in orders.
+     */
+    public Fact fact() {
+        return new Fact(rule, asks);
+    }
+
+    /** A question that stands, with what it is short of and the handle for it left out. */
+    public record Fact(RuleRef rule, InputQuestion asks) {
+
+        public Fact {
+            if (rule == null || asks == null) {
+                throw new IllegalArgumentException("a standing question names a rule and what it"
+                        + " asks");
+            }
+        }
+    }
+
     /** What it asks, which follows from what it is about. */
     public souther.compiler.check.CoverageObligation obligation() {
         return asks.obligation();

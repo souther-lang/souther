@@ -605,9 +605,9 @@ public final class GeneratedRows {
                 // generator's would be the same fact under two spellings, read side by side.
                 case GenerationReason.RowsNotRead unread -> {
                     StringBuilder lines = new StringBuilder();
-                    for (Incompleteness because : unread.because()) {
+                    for (Incompleteness.Met because : unread.because()) {
                         lines.append(String.format("// generation stopped for `%s`: %s%n",
-                                unread.behavior(), Reasons.said(because, names)));
+                                unread.behavior(), Reasons.said(because.fact(), names)));
                     }
                     yield lines.toString();
                 }
