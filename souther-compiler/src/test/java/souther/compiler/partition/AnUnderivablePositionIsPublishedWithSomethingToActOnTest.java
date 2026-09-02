@@ -145,13 +145,31 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
      * position's rules that nothing answered, or a reading that never got to the position. A rule
      * filed at the position that came to no line is not one of those — the reading of it finished,
      * and the model states what it states.
+     *
+     * <p>Every kind of finding there is, with no {@code default}. What this test claims is that a
+     * verdict and the findings at the position agree, and a kind added and not answered for here
+     * would be one the claim quietly stopped covering — the check would go on passing while saying
+     * less than it says.
      */
     private static TermPath shortAt(Adequacy.Finding finding) {
         return switch (finding.about()) {
             case About.AQuestionNothingAnswered asked -> asked.asked().asked().asks().path();
             case About.APositionThisCouldNotRead read -> read.finding().finding().at();
             case About.APositionWhoseRulesWereNotReached gap -> gap.gap().at().at();
-            default -> null;
+            // A rule filed at the position, which says the reading of it finished.
+            case About.ARuleWithoutALine _,
+            // The values the position was read as, wider than its rules leave them: a fact about
+            // the set and about no rule, and about a position that may well be measured.
+                 About.APositionReadWiderThanItsRules _,
+            // And the verdict itself, which is what this is held against rather than part of it.
+                 About.APositionNoLineDivides _,
+            // Everything else a document says, none of which is about the reach of a reading at a
+            // position: what the rows cover, what an obligation came to, what a case or an arm is
+            // short of.
+                 About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
+                 About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
+                 About.APointOfABorder _, About.APointOfADeclaredBorder _,
+                 About.AnArmNoRowGoesThrough _ -> null;
         };
     }
 

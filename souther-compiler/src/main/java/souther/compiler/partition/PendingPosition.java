@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 
 /**
@@ -76,35 +75,26 @@ sealed interface PendingPosition {
         if (measured) {
             return null;
         }
+        // A position with no evidence and no fallback was never read. Nothing about a model follows
+        // from it — an answer here would be this compiler's state written down as what the model
+        // divides, which is the sentence the whole protocol is against.
+        if (at.pending() == null) {
+            throw new IllegalStateException(
+                    "nothing was read at " + at.path() + " and it has no evidence");
+        }
         // The reading not having got to the rules of the position outranks what those rules raise:
         // a question about a rule nothing arrived at is a second description of that same hole, and
-        // the first is the cause.
-        if (at.notReachedInto() != null) {
-            return new Blocked(at.path(), at.notReachedInto());
+        // the first is the cause. Which of the ways that happened is the position's own answer
+        // ({@link PositionAccount#notReachedInto}) and is not worked out again here.
+        souther.compiler.inputs.BlockReason.AboutThePosition unreached = at.notReachedInto();
+        if (unreached != null) {
+            return new Blocked(at.path(), unreached);
         }
-        return switch (at.pending()) {
-            // Answered above, where both ways of not getting to the rules are one answer.
-            case StructuralInspection.Continuation.Blocked _ ->
-                    throw new IllegalStateException("answered by the reach of " + at.path());
-            // Nothing follows the position, so what it is still waiting on is whatever its own
-            // rules raise that nothing answered.
-            case StructuralInspection.Continuation.None _,
-            // A sequence, whose elements were reached and are a position of their own. Nothing
-            // stopped here: what the list itself divides into is what its own rules say about how
-            // many it holds, and an absence may follow where they say nothing. What is written
-            // about what it holds is answered at the element and is not this position's to be
-            // short of.
-                 StructuralInspection.Continuation.Elements _,
-            // And a sum, whose cases were reached and stand under it. Nothing stopped here either:
-            // a sum with no evidence is one whose own cases the rules left it none of, which is a
-            // reading that ran to the end.
-                 StructuralInspection.Continuation.Branches _ -> pending(at);
-            // A position with no evidence that was never read. Nothing about a model follows from
-            // it — an answer here would be this compiler's state written down as what the model
-            // divides, which is the sentence the whole protocol is against.
-            case null -> throw new IllegalStateException(
-                    "nothing was read at " + at.path() + " and it has no evidence");
-        };
+        // And where it did get to them, what the position is waiting on is whatever those rules
+        // raise that nothing answered. What the walk found under the position is no part of it: an
+        // element or a case is a position of its own, and what is written about it is answered
+        // there rather than being this position's to be short of.
+        return pending(at);
     }
 
     /**

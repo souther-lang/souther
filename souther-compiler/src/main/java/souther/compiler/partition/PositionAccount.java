@@ -73,17 +73,30 @@ public record PositionAccount(String behavior, TermPath path, Type type, Reading
      * <p>Asked here, where both facts are, and read by everything that has to know. A verdict about
      * the position and a finding written at it are the same question asked twice, and answered
      * apart they answer differently the day one of them learns about an arm.
+     *
+     * <p>Over what the walk found, with no {@code default}, because that is what makes this the one
+     * place: a continuation added later says here whether the rules were got to, or does not
+     * compile. Asked with an {@code instanceof} and left to a caller to switch on the rest, the
+     * question would be answered in as many places as there are callers.
      */
     public souther.compiler.inputs.BlockReason.AboutThePosition notReachedInto() {
-        if (pending instanceof StructuralInspection.Continuation.Blocked blocked) {
-            return blocked.why();
-        }
-        // A handing over nobody took over is the descent above said from the other end, and the
-        // descent is the cause — so only this reading's own loss is one of these.
-        return residue.rulesLeftUnread().stream()
-                        .anyMatch(souther.compiler.inputs.RulesLeftUnread
-                                .ClauseOfThisReadingWasUnread.class::isInstance)
-                ? new souther.compiler.inputs.BlockReason.ValueRulesNotReached() : null;
+        return switch (pending) {
+            case StructuralInspection.Continuation.Blocked blocked -> blocked.why();
+            // The walk went in, so what is left is whether this reading lost a clause of its own.
+            // A handing over nobody took over is the descent above said from the other end and is
+            // not one of these, for the reason it is not reported twice: the descent is the cause.
+            case StructuralInspection.Continuation.None _,
+                 StructuralInspection.Continuation.Elements _,
+                 StructuralInspection.Continuation.Branches _ -> residue.rulesLeftUnread().stream()
+                            .anyMatch(souther.compiler.inputs.RulesLeftUnread
+                                    .ClauseOfThisReadingWasUnread.class::isInstance)
+                    ? new souther.compiler.inputs.BlockReason.ValueRulesNotReached() : null;
+            // The reading of the declarations answered for the position, so there is no fallback
+            // and nothing here was not got to. Whether a position with no fallback and no evidence
+            // is one anything was read at is a different question, asked where that pair is
+            // ({@link PendingPosition#of}).
+            case null -> null;
+        };
     }
 
     /** What one position's reading came to, as the reading itself answered it. */

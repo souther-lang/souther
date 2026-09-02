@@ -64,14 +64,14 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                 List.of(PartitionClass.of("true", "true", new Recognition.Nothing(),
                                 RepresentativeSource.of(FixtureTemplate.bool(true)))
                         .ofTheNumber(new NumericTerm.ValueOf(AT))),
-                List.of()), null);
+                List.of()));
     }
 
-    /** One position with nothing left to answer for, measured at the one number. */
-    private static PositionMeasurements at(Axis axis, StructuralInspection.Continuation found) {
+    /** One position with nothing left to answer for, measured at the one number. Its declarations
+     *  answered for it, so there is no fallback for it to be waiting on. */
+    private static PositionMeasurements at(Axis axis) {
         return new PositionMeasurements(
-                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found,
-                        List.of()),
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, null, List.of()),
                 List.of(axis), READ_TO_THE_END);
     }
 

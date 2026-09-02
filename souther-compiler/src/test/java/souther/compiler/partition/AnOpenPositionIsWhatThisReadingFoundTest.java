@@ -27,17 +27,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What one reading of a position comes to, and which of its answers an absence may be built on.
+ * What one reading of a position comes to, which is what that reading found and nothing more.
  *
- * <p>{@code Open} is a sentence about the model: its local rules were read to the end and it states
- * no division here. Written instead as "the producers came back empty", the sentence was a tally,
- * and a producer added later stayed outside what "everything was asked" meant — which is how a
- * position whose invariant names the two values it may hold was reported as one the model divides
- * no way (issue #772).
+ * <p>{@code Open} says this reading found no division. It is not a sentence about the model, and
+ * a reader that took it for one would be reading a tally: a producer added later stays outside
+ * what "everything was asked" meant, which is how a position whose invariant names the two values
+ * it may hold was reported as one the model divides no way.
  *
- * <p>So the three answers are held from the outside: what each of them claims, and the two ways of
- * writing one that claims more than the reading found. {@code Open} carries no account of the
- * reading, which is what makes a reading short of the rules unable to be written as one.
+ * <p>So the two answers are held from the outside, and so is the line between what this reading
+ * says and what follows about the model. Whether an absence follows is answered where the
+ * position's standing questions and a body's rules are, and the one thing {@code Open} may not do
+ * is decide it.
  *
  * <p>Over the positions the language can currently be in, which is the whole claim. A position
  * carrying both a division and children would say something further about the precedence, and no
@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * classes nor cuts. Building one out of a hand-made {@code Shape} would fix the implementation's
  * product space rather than the language's, so the rows here are the reachable ones.
  */
-class AnOpenPositionIsAReadingThatRanToTheEndTest {
+class AnOpenPositionIsWhatThisReadingFoundTest {
 
     private static final String MODULE = """
             module demo
