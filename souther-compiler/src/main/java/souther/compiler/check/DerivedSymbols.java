@@ -51,11 +51,12 @@ public final class DerivedSymbols implements Symbols {
     /**
      * The same names over the declarations as resolution left them.
      *
-     * <p>Which names are declared, and by which module. Asked of resolution because that is what
-     * settled it: a declaration whose clauses cannot be read has no normalized form and is still a
-     * name this module declares, and a reader told otherwise would say the name is the language's
-     * or that the value has no field to read. What one achievement could not do does not decide what
-     * another established — which is the same reason the two tables above are two.
+     * <p>Which names are declared, by which module, and what a spelling written here means. Asked of
+     * resolution because that is what settled them: a declaration no representation could be derived
+     * for is a name this module declares all the same, and a reader told otherwise would say the
+     * name is the language's, or that the value has no field to read, or that this compilation has
+     * no such type. What one achievement could not do does not decide what another established —
+     * which is the same reason the two tables above are two.
      */
     private final SymbolTable<Hir.Def> resolved;
 

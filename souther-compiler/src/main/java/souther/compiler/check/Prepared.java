@@ -77,7 +77,9 @@ public final class Prepared {
      * declarations has no representation is one there is nothing to emit for.
      *
      * <p>Refused where the two were not made from one antecedent, and the antecedent is compared
-     * rather than anything read off it. Two of them, because one is not enough. The settling both
+     * rather than anything read off it. Three of them, one for each part this answers with: what
+     * a reader gets from here is the assembly's definitions and the witness's declarations, so both
+     * have to have been made from the same things. The settling both
      * were built over is compared as the state and not as its tree — a settling answers a module
      * beside the recursive calls its clauses left standing, and two that left different calls
      * standing share the tree. The normalized declarations are compared as themselves, because
@@ -105,6 +107,11 @@ public final class Prepared {
         if (!derived.equals(surface.declarations())) {
             throw new IllegalArgumentException("the declarations `" + desugared.name()
                     + "` had a representation derived for are not the ones `" + surface.name()
+                    + "` was assembled from");
+        }
+        if (!desugared.fns().equals(surface.desugaredFrom())) {
+            throw new IllegalArgumentException("the definitions `" + desugared.name()
+                    + "` came out with are not the ones `" + surface.name()
                     + "` was assembled from");
         }
         return new Prepared(desugared, surface);

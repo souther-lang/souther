@@ -10,6 +10,7 @@ import java.lang.classfile.MethodModel;
 import java.lang.classfile.constantpool.FieldRefEntry;
 import java.lang.classfile.instruction.FieldInstruction;
 import java.io.File;
+import java.lang.reflect.AccessFlag;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -118,6 +119,40 @@ class WhichTableAnswersAQuestionIsWrittenDownForEachOfThemTest {
             }
         }
         throw new AssertionError("the class this rule is about was not on the path");
+    }
+
+    /**
+     * And every question is answered by reading a table, not by asking another question here.
+     *
+     * <p>What the readings above count is the field a method reads. A method that answered by
+     * calling one of its neighbours would read no table at all and would be in none of the three
+     * sets — so the rule would be silent about it, while the neighbour it called decides its answer.
+     * Held instead of following the call: which table answers a question is a thing to say at the
+     * question, and a method that says it by delegating has not said it.
+     */
+    @Test
+    void everyQuestionReadsATableItself() {
+        Set<String> answered = new LinkedHashSet<>();
+        answered.addAll(reading("table"));
+        answered.addAll(reading("normalized"));
+        answered.addAll(reading("resolved"));
+
+        List<String> silent = new ArrayList<>();
+        for (MethodModel method : model().methods()) {
+            String name = method.methodName().stringValue();
+            // A synthetic method is not a question this class answers: what the compiler wrote for
+            // a lambda belongs to the method that wrote it, and building the tables is not
+            // answering from one.
+            if (method.flags().has(AccessFlag.SYNTHETIC)
+                    || name.equals("<init>") || name.equals("over") || answered.contains(name)) {
+                continue;
+            }
+            silent.add(name);
+        }
+
+        assertEquals(List.of(), silent,
+                "a question here reads one of the three tables, or it is answered by whichever"
+                        + " question it delegated to and this rule says nothing about it");
     }
 
     /** Held so the reading above is over the members this file writes and not over a class it could

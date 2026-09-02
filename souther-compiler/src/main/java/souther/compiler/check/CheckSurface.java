@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * The module a best-effort reading of a compilation runs over, assembled once.
@@ -41,17 +42,27 @@ public final class CheckSurface implements Assembly {
     private final List<Hir.Example> examples;
     private final List<Hir.Fake> fakes;
     private final List<Hir.FnDef> rowDefs;
+    /**
+     * The definitions this was joined from, as they were handed in.
+     *
+     * <p>Kept beside the ones above because the two are not the same values: what is on the surface
+     * has had its imported names written out and its state proved again of what came out, and what
+     * came in is the answer the desugaring gave. A caller pairing this assembly with the witness
+     * that every definition came out compares what each was made from, and the assembly's is this.
+     */
+    private final List<Desugared.Fn> desugaredFrom;
     private final Map<Hir.Expr, String> operandMethods;
     /** Worked out once, as the rungs beside this work theirs out. */
     private volatile Hir.Module projected;
 
     private CheckSurface(InvariantSettled settling, List<Normalized.Def> declarations,
-                         List<Desugared.Fn> fns,
+                         List<Desugared.Fn> fns, List<Desugared.Fn> desugaredFrom,
                          List<Hir.Example> examples, List<Hir.Fake> fakes,
                          List<Hir.FnDef> rowDefs, Map<Hir.Expr, String> operandMethods) {
         this.settling = settling;
         this.declarations = List.copyOf(declarations);
         this.fns = List.copyOf(fns);
+        this.desugaredFrom = List.copyOf(desugaredFrom);
         this.examples = List.copyOf(examples);
         this.fakes = List.copyOf(fakes);
         this.rowDefs = List.copyOf(rowDefs);
@@ -92,6 +103,14 @@ public final class CheckSurface implements Assembly {
             if (came == null) {
                 return null;
             }
+            // Which declaration each answer is for is checked and not taken from the key it arrived
+            // under, for the reason Derived.Module#assemble states: a bare name is a name in some
+            // module, so an answer for another module's declaration of the same name would
+            // otherwise be built into this one.
+            if (!came.declaredKey().equals(def.declaredKey())) {
+                throw new IllegalArgumentException("the declaration normalized under `" + def.name()
+                        + "` is " + came.declaredKey() + ", not " + def.declaredKey());
+            }
             declarations.add(came);
         }
         // An imported definition is written here bare and denotes the module that declares it.
@@ -102,11 +121,22 @@ public final class CheckSurface implements Assembly {
         // In the order the module wrote them, and not the order they were worked out in: what a
         // report about two definitions wrong the same way names is the earlier of them.
         List<Desugared.Fn> fns = new ArrayList<>();
+        List<Desugared.Fn> desugaredFrom = new ArrayList<>();
         for (Hir.FnDef wrote : settled.fns()) {
             Desugared.Fn came = desugared.get(wrote.name());
             if (came == null) {
                 return null;
             }
+            // And which definition each answer is for, for the reason Desugared.Module#assemble
+            // states: a module carries definitions of several modules under names of one shape, so
+            // the key tells them apart even less here than it does a declaration.
+            if (!came.read().name().equals(wrote.name())
+                    || !Objects.equals(came.read().declaredIn(), wrote.declaredIn())) {
+                throw new IllegalArgumentException("the definition desugared under `" + wrote.name()
+                        + "` is `" + came.read().name() + "` of " + came.read().declaredIn()
+                        + ", not `" + wrote.name() + "` of " + wrote.declaredIn());
+            }
+            desugaredFrom.add(came);
             fns.add(Desugared.Fn.reestablish(
                     HelperNames.qualifyImportsIn(came.read(), self), scope));
         }
@@ -118,14 +148,14 @@ public final class CheckSurface implements Assembly {
         for (Hir.Fake table : settled.fakes()) {
             fakes.add(HelperNames.qualifyImportsIn(table, self));
         }
-        CheckSurface written = new CheckSurface(settling, declarations, fns, examples, fakes,
+        CheckSurface written = new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
                 List.of(), Map.of());
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the assembly: it is decided here and read wherever a row is run, never counted out again.
         RowFixtures.Emitted rows = RowFixtures.emitted(written.module(), scope, signatures);
         return rows.defs().isEmpty() ? written
-                : new CheckSurface(settling, declarations, fns, examples, fakes,
+                : new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
                         List.copyOf(rows.defs().values()), rows.methods());
     }
 
@@ -143,6 +173,12 @@ public final class CheckSurface implements Assembly {
     /** The declarations joined here, as the one producer of that form answered for them. */
     List<Normalized.Def> declarations() {
         return declarations;
+    }
+
+    /** And the definitions, as the desugaring answered for them — what this was joined from, which
+     *  is what a caller pairing it with a witness compares. */
+    List<Desugared.Fn> desugaredFrom() {
+        return desugaredFrom;
     }
 
     /** The behaviors it declares, which no rung at or below this rewrites. */
@@ -230,10 +266,13 @@ public final class CheckSurface implements Assembly {
         return built;
     }
 
+    /** What it answers with. The tree covers the parts that were written back into it; what it was
+     *  joined from is answered beside the tree and is compared beside it, since two surfaces made
+     *  from different answers are two surfaces however alike the trees came out. */
     @Override
     public boolean equals(Object o) {
         return o instanceof CheckSurface other && module().equals(other.module())
-                && rowDefs.equals(other.rowDefs);
+                && rowDefs.equals(other.rowDefs) && desugaredFrom.equals(other.desugaredFrom);
     }
 
     @Override

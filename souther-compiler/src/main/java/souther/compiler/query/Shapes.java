@@ -336,12 +336,12 @@ public final class Shapes {
 
     /**
      * A module's definitions by name, each with the newtype constructions written in its body
-     * rewritten to the constructions they are, and only the ones that came out.
+     * rewritten to the constructions they are.
      *
-     * <p>A definition at a time, and every one of them worked out whether or not the one before it
-     * came out. What it reads about the declarations it names is asked for a declaration at a time
-     * too, so a declaration that did not come out leaves the definitions that do not name it with
-     * their answers.
+     * <p>Every one of them. The rewrite writes what is a construction as one and leaves what is not
+     * as it was, so there is no body it comes back with nothing for — and the module above is
+     * assembled from all of them, so one that came back with nothing would take the reading away
+     * from the definitions beside it.
      */
     public record DesugaredFns(String name)
             implements Key<Map<String, souther.compiler.check.Desugared.Fn>> {
@@ -358,16 +358,11 @@ public final class Shapes {
                 return Answer.absent();
             }
             Map<String, souther.compiler.check.Desugared.Fn> out = new LinkedHashMap<>();
-            List<Report> reports = new ArrayList<>();
             for (Hir.FnDef fn : settling.value().fns()) {
-                try {
-                    out.put(fn.name(),
-                            souther.compiler.check.Desugared.Fn.desugar(fn, scope.value()));
-                } catch (CompileException e) {
-                    reports.addAll(Report.of(e));
-                }
+                out.put(fn.name(),
+                        souther.compiler.check.Desugared.Fn.desugar(fn, scope.value()));
             }
-            return Answer.of(Map.copyOf(out), reports);
+            return Answer.of(Map.copyOf(out));
         }
     }
 

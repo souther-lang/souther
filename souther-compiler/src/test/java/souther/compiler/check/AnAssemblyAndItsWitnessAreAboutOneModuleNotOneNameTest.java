@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
@@ -16,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A module's assembly and the witness that every declaration in it came out have to be about the
@@ -91,7 +93,11 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         assertNotEquals(normalizedIn(declarations), List.copyOf(elsewhere.values()),
                 "the two readings are two declarations, or this says nothing");
 
-        CheckSurface read = CheckSurface.assemble(settling, elsewhere, Map.of(),
+        Map<String, Desugared.Fn> itsOwn = new LinkedHashMap<>();
+        for (Desugared.Fn each : declarations.fns()) {
+            itsOwn.put(each.name(), each);
+        }
+        CheckSurface read = CheckSurface.assemble(settling, elsewhere, itsOwn,
                 Scopes.derived(Compilation.ofSource(WITH_A_CONSTRUCTION, "Main").db(), "m").value(),
                 Map.of());
         assertNotNull(read, "the assembly is made, so the refusal below is about the pairing");
@@ -101,6 +107,53 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
                         + " another, and the settled tree they share says nothing about it");
     }
 
+    /**
+     * And an answer standing in for a definition it is not about is refused where it arrives.
+     *
+     * <p>The third antecedent, guarded where the assembly is made. What the parts are looked up by
+     * is the name the module wrote, and a name is a name in some module: an answer for another
+     * definition of the same spelling would otherwise be built in, and the assembly would hand a
+     * reader a body about something else under the name it asked for. Said the way
+     * {@link Desugared.Module#assemble} says it of the same table, so the two agree about what an
+     * answer standing in for a part has to be.
+     */
+    @Test
+    void ananswerForAnotherDefinitionIsRefusedWhereItArrives() {
+        CheckSurface itsOwn = assemblyOf(TWO_DEFINITIONS);
+        InvariantSettled settling = itsOwn.settling();
+
+        Map<String, Normalized.Def> normalized = new LinkedHashMap<>();
+        for (Normalized.Def each : itsOwn.declarations()) {
+            normalized.put(each.name(), each);
+        }
+        Map<String, Desugared.Fn> underTheWrongName = new LinkedHashMap<>();
+        Desugared.Fn second = itsOwn.desugaredFrom().get(1);
+        for (Hir.FnDef wrote : settling.module().fns()) {
+            underTheWrongName.put(wrote.name(), second);   // both names reach the second definition
+        }
+
+        assertEquals(2, settling.module().fns().size(), "two definitions, or this says nothing");
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> CheckSurface.assemble(settling, normalized, underTheWrongName,
+                        Scopes.derived(Compilation.ofSource(TWO_DEFINITIONS, "Main").db(), "m")
+                                .value(),
+                        Map.of()),
+                "an answer for one definition stood in for another, and the name they were looked"
+                        + " up by is the same shape");
+        assertTrue(refused.getMessage().contains("first"), refused.getMessage());
+    }
+
+    /** Two definitions, so that one answer standing in for the other is a thing to write. */
+    private static final String TWO_DEFINITIONS = """
+            module m exposing ( Wrapped )
+
+            data Wrapped = Int
+
+            let first (n: Int) : Int = n
+            let second (n: Int) : Int = n
+            """;
+
     /** A module whose clause writes a construction, so that what a name denotes decides what the
      *  normalized declaration is. */
     private static final String WITH_A_CONSTRUCTION = """
@@ -109,6 +162,8 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
             data Wrapped = Int
             data Amount = Int
                 invariant ok = Wrapped(value) == Wrapped(0)
+
+            let wrap (n: Int) : Wrapped = Wrapped(n)
             """;
 
     private static List<Normalized.Def> normalizedIn(Desugared.Module module) {

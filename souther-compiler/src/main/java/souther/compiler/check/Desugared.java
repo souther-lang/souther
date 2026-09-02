@@ -43,7 +43,11 @@ public final class Desugared {
          * — measured, by rewriting a definition of a settled module and of an unsettled one and
          * getting the same answer.
          *
-         * @throws CompileException where a construction written in the body cannot be read as one
+         * <p>Answered for every definition. A rewrite is not a check: what it writes as a
+         * construction is a newtype applied to one value, and an application of one to any other
+         * count is left as the application it is, to be said where the check reads it
+         * ({@code CallElaborator.noCallee}). A refusal here would make a body nobody could read into
+         * a definition nobody could see, and a module is assembled from all of them.
          */
         public static Fn desugar(Hir.FnDef fn, Symbols scope) {
             return new Fn(NewtypeDesugar.rewriteOf(fn, scope));
