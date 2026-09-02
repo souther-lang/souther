@@ -68,7 +68,6 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
     private static final List<String> ROOTS = List.of(
             "souther/compiler/check/InvariantChecker#states",
             "souther/compiler/check/InvariantChecker#canonicalFormOf",
-            "souther/compiler/check/InvariantChecker#namesIn",
             "souther/compiler/check/InvariantChecker#namedIn",
             "souther/compiler/check/Required#ofInvariant");
 
@@ -82,7 +81,8 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
     private static final List<String> WHAT_ANSWERING_PRODUCES = List.of(
             "souther/compiler/check/InvariantBound",
             "souther/compiler/check/UnreadComparison$Quantity",
-            "souther/compiler/check/PartsRead",
+            "souther/compiler/check/InvariantChecker$PartsRead",
+            "souther/compiler/check/InvariantChecker$PartRead",
             "souther/compiler/check/ConstraintState",
             "souther/compiler/check/ReadingEvidence",
             "souther/compiler/check/FieldDomains",
@@ -105,15 +105,49 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
     }
 
     /**
-     * And the walk reaches what it is supposed to be walking.
+     * Every name this check is configured with names something.
      *
-     * <p>A check over a closure says nothing if the closure is empty, and this one is built from
-     * method names: one renamed leaves a root matching nothing, and every forbidden type is absent
-     * from a walk of nowhere. So what the walk got to is asserted as well.
+     * <p>The two lists above are strings, and a string that matches nothing makes this check pass
+     * about a type nobody forbade and a root nobody walked. Both were true of it at once: a
+     * forbidden entry named a top-level type where the type is a record inside a class, so the
+     * prefix could never match and the answer it names could have been read all along.
+     *
+     * <p>Resolved against the classes the module actually declares, so a name that has moved is a
+     * failure here rather than a silence everywhere else.
+     */
+    @Test
+    void everyNameThisIsConfiguredWithNamesSomething() {
+        Map<String, ClassModel> byName = compilerClasses();
+        for (String each : WHAT_ANSWERING_PRODUCES) {
+            assertTrue(byName.keySet().stream()
+                            .anyMatch(one -> one.equals(each) || one.startsWith(each + "$")),
+                    each + " is not a class this module declares, so forbidding it forbids nothing");
+        }
+        for (String each : ROOTS) {
+            String owner = each.substring(0, each.indexOf('#'));
+            String name = each.substring(each.indexOf('#') + 1);
+            ClassModel of = byName.get(owner);
+            assertTrue(of != null && of.methods().stream()
+                            .anyMatch(one -> one.methodName().stringValue().equals(name)
+                                    && one.code().isPresent()),
+                    each + " names no method with a body, so the walk starts nowhere");
+        }
+    }
+
+    /**
+     * And the walk enters every root and gets past them.
+     *
+     * <p>A closure is a set of names, and the walk marks one seen whether or not it found anything
+     * to enter. So the roots are asserted one at a time and against what was entered rather than
+     * against what was queued: a count over the whole walk is satisfied by the roots that still
+     * resolve, and says nothing about the one that stopped resolving.
      */
     @Test
     void theWalkReachesWhatItIsWalking() {
         Reached reached = walk();
+        for (String each : ROOTS) {
+            assertTrue(reached.entered().contains(each), each + " was not entered by the walk");
+        }
         assertTrue(reached.methods().size() > ROOTS.size(),
                 "the roots call something: " + reached.methods().size() + " methods");
         for (String each : List.of(
@@ -127,11 +161,10 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
                 // And the vocabulary a model is read in, which is what is left when the answers go.
                 "souther/compiler/check/Carrier",
                 "souther/compiler/numeric/LinearForm",
-                // The walk over a clause, which the classification reaches only through the
-                // implementation it is handed as {@code Names}. Named here because everything
-                // behind that indirection was outside this walk until it followed what a
-                // constructed value declares, and a check that stops at an interface says nothing
-                // about the class answering for it.
+                // The walk over a clause, which is what says which places it names. Named here
+                // because it is reached through a reading built where it is used, and a check that
+                // stops at whatever declares an interface says nothing about the class answering
+                // for it.
                 "souther/compiler/check/ValueOrigin")) {
             assertTrue(reaches(reached, each), each + " is not in the walk");
         }
@@ -147,17 +180,22 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
     /** How a class constructed inside the walk is named, meaning every method it declares. */
     private static final String EVERYTHING_IT_DECLARES = "*";
 
-    /** What the walk got to: every method it entered, every type it saw, and where each was first
-     *  reached from, so a failure names a path rather than a set. */
-    private record Reached(Set<String> methods, Set<String> types, Map<String, String> cameFrom) {}
+    /**
+     * What the walk got to.
+     *
+     * @param methods  every name it took off the queue, whether or not it found code under it
+     * @param entered  every name it found a body for and read, which is what it actually walked
+     * @param types    every type it saw
+     * @param cameFrom where each was first reached from, so a failure names a path and not a set
+     */
+    private record Reached(Set<String> methods, Set<String> entered, Set<String> types,
+                           Map<String, String> cameFrom) {}
 
     private static Reached walk() {
-        Map<String, ClassModel> byName = new LinkedHashMap<>();
-        for (ClassModel each : WhatAModuleDeclares.of(Required.class).classes()) {
-            byName.put(each.thisClass().asInternalName(), each);
-        }
+        Map<String, ClassModel> byName = compilerClasses();
         Map<String, String> cameFrom = new LinkedHashMap<>();
         Set<String> methods = new LinkedHashSet<>();
+        Set<String> entered = new LinkedHashSet<>();
         Set<String> types = new LinkedHashSet<>();
         Deque<String> todo = new ArrayDeque<>(ROOTS);
         while (!todo.isEmpty()) {
@@ -182,6 +220,7 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
                 if (code == null) {
                     continue;
                 }
+                entered.add(at);
                 for (CodeElement element : code) {
                     for (String each : referenced(element)) {
                         if (!each.startsWith("souther/")) {
@@ -199,7 +238,18 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
                 }
             }
         }
-        return new Reached(methods, types, cameFrom);
+        return new Reached(methods, entered, types, cameFrom);
+    }
+
+    /**
+     * This compiler's own classes, by the name a class file spells.
+     */
+    private static Map<String, ClassModel> compilerClasses() {
+        Map<String, ClassModel> byName = new LinkedHashMap<>();
+        for (ClassModel each : WhatAModuleDeclares.of(Required.class).classes()) {
+            byName.put(each.thisClass().asInternalName(), each);
+        }
+        return byName;
     }
 
     /**
@@ -223,11 +273,9 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
             }
             // Everything the constructed class declares, and not the constructor alone. A value
             // made here is handed on, and what runs of it is whichever method a caller reaches
-            // through whatever interface it implements — an anonymous class made to answer three
-            // questions is called through the interface, whose methods have no code for a walk to
-            // follow. Left at the constructor, the walk stops at the interface and everything the
-            // implementation does is outside it, which is where the classification's own walk over
-            // a clause went the day it was put behind one.
+            // through whatever it implements — an interface method has no code for a walk to
+            // follow, so a walk that stopped at the constructor would call a classification clean
+            // while the class answering for it read whatever it liked.
             case NewObjectInstruction it -> {
                 out.add(internal(it.className().asSymbol()));
                 out.add(internal(it.className().asSymbol()) + "#" + EVERYTHING_IT_DECLARES);

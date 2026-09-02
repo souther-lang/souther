@@ -1426,7 +1426,7 @@ public final class InvariantChecker {
         if (!(clause instanceof Core.Binary bin)) {
             // Nothing but a binary is written as a comparison, so there is no reading of one for
             // the classification to be handed.
-            settle(clause, from, states(clause, at, namesIn(byName), null),
+            settle(clause, from, states(clause, at, byName, null),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
@@ -1441,7 +1441,7 @@ public final class InvariantChecker {
         // And the one reading of the arithmetic over it, handed to each of the questions asked of
         // it: what the clause states, and what a reader is left with where no end came of it.
         CanonicalForm read =
-                comparison == null ? null : canonicalFormOf(comparison, at, namesIn(byName));
+                comparison == null ? null : canonicalFormOf(comparison, at, byName);
         // A rule that orders the values, or one that says which value they take. A rule that only
         // rules a value out is read no further here, and neither is an operator that compares
         // nothing: what is below reads a clause for the end it places on a position and for which
@@ -1450,7 +1450,7 @@ public final class InvariantChecker {
         ComparisonClaim asWritten = comparison == null ? null : comparison.claim();
         if (asWritten == null
                 || asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
-            settle(bin, from, states(bin, at, namesIn(byName), read),
+            settle(bin, from, states(bin, at, byName, read),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
@@ -1480,7 +1480,7 @@ public final class InvariantChecker {
         // What the clause is about, asked of the comparison and not of what `end` came to. A
         // coordinate compared for order against something naming no other coordinate states where
         // the values stop, whether or not the number on the other side is one this could fold.
-        ClauseStates shape = states(bin, at, namesIn(byName), read);
+        ClauseStates shape = states(bin, at, byName, read);
         // And nothing of this value on the other side. `ARelation` is only what
         // `Relates.twoPositions` recognises, which wants each whole side to be a position — so
         // `width <= height + 1` is not one, and read as a bound it raised a question about where
@@ -1568,9 +1568,10 @@ public final class InvariantChecker {
      *             settled where one is recognised, and a second reading of it here is a second
      *             answer to that question
      */
-    private ClauseStates states(Core clause, Denotations at, Names names, CanonicalForm read) {
+    private ClauseStates states(Core clause, Denotations at,
+                                Map<FactSubject, Coordinate> byName, CanonicalForm read) {
         List<RuleKey> found = new ArrayList<>();
-        namedIn(clause, at, names, found);
+        namedIn(clause, at, byName, found);
         // What the rule cuts, ahead of what it looks like. Which values a rule restricts is settled
         // by the quantity its canonical form cuts, and that is the rule `UnreadComparison.why` is
         // written around one layer down — asked of what the rule cuts, and of the sides only where
@@ -1594,7 +1595,7 @@ public final class InvariantChecker {
         }
         if (Relates.twoPositions(clause, e -> {
             FactSubject named = nameOf(e, at);
-            return named != null && names.names(named) ? named : null;
+            return named != null && byName.containsKey(named) ? named : null;
         })) {
             return new ClauseStates.ARelation();
         }
@@ -1609,10 +1610,11 @@ public final class InvariantChecker {
      * {@link #relating} makes, and for the same reason: a coordinate names itself, and nothing under
      * it is a coordinate of its own.
      */
-    private void namedIn(Core e, Denotations at, Names names, List<RuleKey> out) {
-        for (RuleKey each : names.positionsIn(e, at)) {
-            if (!out.contains(each)) {
-                out.add(each);
+    private void namedIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
+                         List<RuleKey> out) {
+        for (Coordinate each : coordinatesIn(e, at, byName)) {
+            if (!out.contains(each.path())) {
+                out.add(each.path());
             }
         }
     }
@@ -1659,70 +1661,6 @@ public final class InvariantChecker {
      */
     private record Places(ValueOrigin<RuleKey> origin, Map<RuleKey, Coordinate> met) {}
 
-    /**
-     * What the clauses of this value call the places a rule can name.
-     *
-     * <p>The names, and nothing about what stands at them. A coordinate here is a place and a
-     * {@link Carrier} — what its values are ordered on — and the carrier is an answer: it is what
-     * an end is read against, and a reader holding one can say where a line falls. What a
-     * classification of a clause asks is which places the clause names and what this value calls
-     * them, so that is the whole of what it is handed.
-     *
-     * <p><b>Handed rather than left unused.</b> The classification does not read a carrier today,
-     * and a reader that comes to it next would find one within reach and no reason written down for
-     * leaving it alone. Typed this way it is not within reach, which is the same rule the questions
-     * themselves are under: what may not decide a classification is not passed to it.
-     *
-     * <p>One walk all the same. What a clause names is found by the walk that finds the carriers,
-     * and this is that walk's answer with the carriers dropped — two walks would be two readings of
-     * one clause with nothing holding them to the same answer.
-     */
-    private interface Names {
-
-        /** Whether the rules of this value have a name for {@code subject}. */
-        boolean names(FactSubject subject);
-
-        /**
-         * What they call it.
-         *
-         * <p>Asked only of a subject {@link #names} accepts, and it refuses anything else rather
-         * than answering nothing: a caller here is naming an atom the arithmetic was allowed to
-         * read, so a subject with no name is this reader and that one disagreeing about which
-         * atoms there are. Answered with null, the disagreement travelled — a form was built over
-         * a position called nothing, and what finally refused it was a quantity two steps later,
-         * blaming the walk it was compared against.
-         */
-        RuleKey pathOf(FactSubject subject);
-
-        /** The places {@code e} names, as the walk over it answers. */
-        java.util.Set<RuleKey> positionsIn(Core e, Denotations at);
-    }
-
-    /** The names in {@code byName}, for a reader that may not ask what they carry. */
-    private Names namesIn(Map<FactSubject, Coordinate> byName) {
-        return new Names() {
-
-            @Override
-            public boolean names(FactSubject subject) {
-                return byName.containsKey(subject);
-            }
-
-            @Override
-            public RuleKey pathOf(FactSubject subject) {
-                Coordinate found = byName.get(subject);
-                if (found == null) {
-                    throw new IllegalStateException("the arithmetic read `" + subject
-                            + "`, which the rules of this value have no name for");
-                }
-                return found.path();
-            }
-
-            @Override
-            public java.util.Set<RuleKey> positionsIn(Core e, Denotations at) {
-                return placesIn(e, at, byName).origin().positions();
-            }
-        };
-    }
 
     /** What the place {@code path} is counted on, off whichever side of the comparison met it. */
     private static Carrier carrierAt(RuleKey path, Places left, Places right) {
@@ -2063,15 +2001,16 @@ public final class InvariantChecker {
      * of the same shape in a body two declarations away is described in the same words — which is
      * what {@code invariant Int.add(length.value, width.value) <= 150} and the guard beside it are.
      */
-    private CanonicalForm canonicalFormOf(Comparison recognised, Denotations at, Names names) {
+    private CanonicalForm canonicalFormOf(Comparison recognised, Denotations at,
+                                          Map<FactSubject, Coordinate> byName) {
         // Named against this reader's own coordinates rather than against every number the
         // discharge procedure can identify. A value that is a number and is no coordinate of the
         // subject is one the walk stops at, so the expression and its environment come back
         // together — read as an atom and found unprojectable afterwards, both were already gone.
         AffineForms.Outcome<FactSubject, Denotations> left =
-                terms.outcomeOf(recognised.left(), at, names::names);
+                terms.outcomeOf(recognised.left(), at, byName::containsKey);
         AffineForms.Outcome<FactSubject, Denotations> right =
-                terms.outcomeOf(recognised.right(), at, names::names);
+                terms.outcomeOf(recognised.right(), at, byName::containsKey);
         for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
                 return new CanonicalForm.NotRead(recognised, stopped.node(), stopped.at());
@@ -2083,7 +2022,7 @@ public final class InvariantChecker {
                                 .form());
         java.util.SequencedSet<RuleKey> over = new LinkedHashSet<>();
         for (FactSubject atom : whole.coefs().keySet()) {
-            over.add(names.pathOf(atom));
+            over.add(byName.get(atom).path());
         }
         return over.isEmpty() ? new CanonicalForm.CutsNothing(recognised, whole.constant())
                 : new CanonicalForm.Over(recognised, over);
