@@ -9,7 +9,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.ast.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;

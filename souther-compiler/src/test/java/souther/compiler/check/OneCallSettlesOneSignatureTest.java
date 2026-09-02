@@ -6,7 +6,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -42,7 +41,7 @@ class OneCallSettlesOneSignatureTest {
                 new Hir.BoolLit(true, POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
         return new Hir.Apply("List.filter",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "filter")),
-                List.of(predicate, new Hir.ListLit(List.of(), POS, null)), ConstructionOrigin.own(), POS, null);
+                List.of(predicate, new Hir.ListLit(List.of(), POS, null)), POS, null);
     }
 
     @Test
@@ -137,8 +136,8 @@ class OneCallSettlesOneSignatureTest {
                                         new Hir.ListLit(List.of(new Hir.ListLit(
                                                 List.of(new Hir.IntLit(1, POS, null)), POS, null)),
                                                 POS, null)),
-                                ConstructionOrigin.own(), POS, null)),
-                ConstructionOrigin.own(), POS, null);
+                                POS, null)),
+                POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT));

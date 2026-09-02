@@ -5,7 +5,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -37,7 +36,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         Hir.Expr call = new Hir.Apply("List.length",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "length")),
                 List.of(new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null)),
-                ConstructionOrigin.own(), POS, null);
+                POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT));
@@ -60,7 +59,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         Hir.Expr call = new Hir.Apply("List.flatMap",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
                 List.of(step, new Hir.ListLit(List.of(new Hir.IntLit(2, POS, null)), POS, null)),
-                ConstructionOrigin.own(), POS, null);
+                POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT));
@@ -92,8 +91,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // still holds one is this compiler having failed to do that
         ValueName.Helper half = new ValueName.Helper("demo", "half");
         Hir.Expr call = new Hir.Apply("half",
-                new ReachName.Own(half), List.of(new Hir.IntLit(1, POS, null)),
-                ConstructionOrigin.own(), POS, null);
+                new ReachName.Own(half), List.of(new Hir.IntLit(1, POS, null)), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT)));

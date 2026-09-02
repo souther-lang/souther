@@ -4,7 +4,6 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -60,8 +59,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
     @Test
     void aKeptCallAppliedToTheWrongNumberOfArgumentsIsSaidAsThat() {
         Hir.Expr twoArgs = new Hir.Apply("List.map", new ReachName.OfLibrary(MAP),
-                List.of(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)),
-                ConstructionOrigin.own(), POS, null);
+                List.of(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)), POS, null);
 
         assertThrows(RuntimeException.class, () -> elaborate(twoArgs, keeping(MAP, SIGNATURE)));
     }
@@ -94,7 +92,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     private static Hir.Expr callTo(ValueName.Stdlib.Operation operation) {
         return new Hir.Apply(operation.qualified(), new ReachName.OfLibrary(operation),
-                List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
+                List.of(new Hir.IntLit(1, POS, null)), POS, null);
     }
 
     private static Preserved keeping(ValueName operation, Type.FnOf signature) {

@@ -10,7 +10,6 @@ import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -651,7 +650,7 @@ public final class HelperInliner {
                 Hir.Var.respelled(rewrite.target().qualified(),
                         new ReachName.OfLibrary(rewrite.target()), call.function().pos(),
                         call.function().region()),
-                args, ConstructionOrigin.own(), call.pos(), call.region());
+                args, call.pos(), call.region());
     }
 
     /** Inlines a recursive helper's own body, expanding the non-recursive helper calls it makes while
@@ -1131,11 +1130,10 @@ public final class HelperInliner {
                 // separate slots: the binding is in the callee position, the spelling beside it.
                 ValueName.Local applied = new ValueName.Local(f.name(), f.id());
                 yield inline(new Hir.LetIn(f, raw.function(), null, false, null,
-                        new Hir.Apply(Hir.Var.respelled(f.name(),
+                        raw.withFunction(Hir.Var.respelled(f.name(),
                                 new ReachName.InScope(applied), raw.function().pos(),
-                                raw.function().region()),
-                                raw.args(), raw.origin(), spelling(raw.function()), raw.pos(),
-                                raw.region()),
+                                raw.function().region()))
+                                .standingIn(spelling(raw.function())),
                         raw.pos(), raw.region()));
             }
             case Hir.Apply rawCall -> expandCall(rawCall);
@@ -1299,8 +1297,7 @@ public final class HelperInliner {
         // takes nothing. The value is substituted and the arguments are applied to it.
         if (helper.params().isEmpty() && !args.isEmpty()
                 && call.function() instanceof Hir.Var named) {
-            return inline(new Hir.Apply(valueOf(named), args, call.origin(), call.pos(),
-                    call.region()));
+            return inline(call.withFunction(valueOf(named)).withArgs(args));
         }
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
@@ -1590,7 +1587,7 @@ public final class HelperInliner {
         // The block and the application in it are this pass's: what the author wrote there is a
         // name, and these are the parameters and the call it stands for.
         return new Hir.Block(params,
-                new Hir.Apply(function, args, ConstructionOrigin.own(), function.pos(), null),
+                new Hir.Apply(function, args, function.pos(), null),
                 souther.compiler.types.RuleOrigin.unwritten(), function.pos(), null);
     }
 
@@ -1777,8 +1774,7 @@ public final class HelperInliner {
             values.add(substituted(spread.name(), value.writtenBody()));
             spreads.add(Hir.Var.local(name, spread.pos()));
         }
-        Hir.Expr built = new Hir.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
-                nd.origin(), nd.fields(), nd.pos(), nd.region());
+        Hir.Expr built = nd.with(inlineInits(nd.inits()), spreads);
         // The bindings a spread of a value becomes stand where the construction stands.
         for (int i = bound.size() - 1; i >= 0; i--) {
             built = new Hir.LetIn(bound.get(i), values.get(i), null, false, null, built, nd.pos(),
@@ -2034,11 +2030,10 @@ public final class HelperInliner {
             // the callee is renamed as the expression it is, like every other subexpression. A name
             // applied is an `Hir.Var` held here, so it goes through the arm above and is substituted
             // exactly as a read of it would be — the position cannot ask a different question.
-            case Hir.Apply call -> new Hir.Apply(
+            case Hir.Apply call -> call.with(
                     rename(call.function(), renaming),
                     renameList(call.args(), renaming),
-                    call.origin(), call.appliedAs(), renaming.at(call.pos()),
-                    renaming.over(call.region()));
+                    renaming.at(call.pos()), renaming.over(call.region()));
             case Hir.Binary bin -> new Hir.Binary(bin.op(), rename(bin.left(), renaming),
                     rename(bin.right(), renaming), bin.origin(), renaming.at(bin.pos()),
                     renaming.over(bin.region()));
@@ -2059,8 +2054,7 @@ public final class HelperInliner {
                 for (Hir.Var s : nd.spreads()) {
                     spreads.add(renameVar(s, renaming));
                 }
-                yield new Hir.NewData(nd.typeName(), inits, spreads, nd.origin(), nd.fields(),
-                        renaming.at(nd.pos()), renaming.over(nd.region()));
+                yield nd.with(inits, spreads, renaming.at(nd.pos()), renaming.over(nd.region()));
             }
             case Hir.Match m -> {
                 List<Hir.Case> cases = new ArrayList<>();

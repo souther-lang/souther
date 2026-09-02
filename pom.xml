@@ -40,6 +40,7 @@
         <module>souther-cli</module>
         <module>souther-bench</module>
         <module>souther-program-api-test</module>
+        <module>souther-architecture-test</module>
     </modules>
 
     <scm>

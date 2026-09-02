@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -28,7 +27,7 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
     void aStandardLibraryCallLeftStandingIsNotSomethingToType() {
         Hir.Expr call = new Hir.Apply("List.map",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "map")),
-                List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
+                List.of(new Hir.IntLit(1, POS, null)), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none(DefaultStdlib.get()))));
@@ -41,8 +40,7 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
         // namespace the name was in
         ValueName.Helper half = new ValueName.Helper("demo", "half");
         Hir.Expr call = new Hir.Apply("half",
-                new ReachName.Own(half), List.of(new Hir.IntLit(1, POS, null)),
-                ConstructionOrigin.own(), POS, null);
+                new ReachName.Own(half), List.of(new Hir.IntLit(1, POS, null)), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none(DefaultStdlib.get()))));

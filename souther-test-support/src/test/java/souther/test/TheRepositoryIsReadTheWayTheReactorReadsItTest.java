@@ -68,7 +68,8 @@ class TheRepositoryIsReadTheWayTheReactorReadsItTest {
                 .map(module -> module.getFileName().toString()).toList();
         assertEquals(List.of("souther-test-support", "souther-runtime", "souther-syntax",
                         "souther-compiler", "souther-build-driver", "souther-fmt", "souther-lsp",
-                        "souther-cli", "souther-bench", "souther-program-api-test"), named,
+                        "souther-cli", "souther-bench", "souther-program-api-test",
+                        "souther-architecture-test"), named,
                 "the reactor's modules, in the order the root pom names them");
     }
 

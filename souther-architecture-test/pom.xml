@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.souther-lang</groupId>
+        <artifactId>souther-parent</artifactId>
+        <version>0.1.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>souther-architecture-test</artifactId>
+    <name>Souther Architecture Tests</name>
+
+    <description>
+        Holds the checks whose population is the compiled output of the whole reactor, and nothing
+        else. A check that reads compiled classes sees what has been built when it runs, so where it
+        lives is what it measures: one living in the module it is about reads that module and passes
+        over every module built after it, saying nothing about them while looking as though it did.
+        A check that a module can answer on its own belongs in that module.
+
+        The reactor had no such place. This is one: it depends on every other module and nothing
+        depends on it, so Maven builds it last and every module's classes are there when its tests
+        run. That every module is depended on is what the tests here assert of this pom's own
+        dependencies, rather than something the build order would show — an omitted dependency takes
+        an edge away, and the remaining edges go on sending this module to the end whenever one of
+        them names a module written after the one that was forgotten.
+
+        Nothing ships from here and there is no main source. The dependencies are test-scoped
+        because that is what they are for: compiling and running these tests, and telling Maven what
+        must be built before them.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-test-support</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-runtime</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-syntax</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-compiler</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-build-driver</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-fmt</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-lsp</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-cli</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-bench</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-program-api-test</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

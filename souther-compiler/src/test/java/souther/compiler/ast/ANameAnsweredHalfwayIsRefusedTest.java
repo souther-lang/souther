@@ -1,7 +1,6 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -85,8 +84,7 @@ class ANameAnsweredHalfwayIsRefusedTest {
     @Test
     void anApplicationAPassWritesCannotLeaveItsNameUnanswered() {
         assertThrows(NullPointerException.class,
-                () -> new Hir.Apply("spin", null,
-                        List.of(), ConstructionOrigin.own(), POS, null));
+                () -> new Hir.Apply("spin", null, List.of(), POS, null));
     }
 
     /** Answered, it says both. */
