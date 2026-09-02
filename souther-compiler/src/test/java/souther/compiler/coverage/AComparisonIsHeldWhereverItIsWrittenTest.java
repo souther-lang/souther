@@ -28,13 +28,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AComparisonIsHeldWhereverItIsWrittenTest {
 
-    private static Map<String, Core> bodiesOf(String source) {
+    /** The bodies a source compiles to, under the name the source declares them in. The name comes
+     *  with them: a body's own parameters belong to the behavior the module declares, so a plan
+     *  built under some other module's name is a plan of bodies whose names it cannot place. */
+    private record Checked(String module, Map<String, Core> bodies) {}
+
+    private static Checked bodiesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db()
-                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+                .ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        return checked.behaviorBodies();
+        return new Checked(module, checked.behaviorBodies());
     }
 
     private static List<String> operatorsIn(String source) {
@@ -48,23 +54,22 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      * catalog exists for. A list the catalog handed over would be a second answer to keep in step
      * with {@link ComparisonCatalog#at}, and nothing in the compiler wants one.
      */
-    private static List<Core.Binary> comparisonsIn(Map<String, Core> bodies) {
-        ComparisonCatalog catalog = catalogOf(bodies);
+    private static List<Core.Binary> comparisonsIn(Checked checked) {
+        ComparisonCatalog catalog = catalogOf(checked);
         List<Core.Binary> out = new ArrayList<>();
-        bodies.values().forEach(body -> collect(body, catalog, out));
+        checked.bodies().values().forEach(body -> collect(body, catalog, out));
         return out;
     }
 
-    /** The catalog of {@code bodies}, under a module name this fixture supplies. Which name it is
-     *  does not matter here: every question below is of one catalog, and a name only has to tell
-     *  one module's comparisons from another's. */
-    private static ComparisonCatalog catalogOf(Map<String, Core> bodies) {
-        return ComparisonCatalog.of(new ModuleBodies("example", new LinkedHashMap<>(bodies)));
+    private static ComparisonCatalog catalogOf(Checked checked) {
+        return ComparisonCatalog.of(new ModuleBodies(checked.module(),
+                new LinkedHashMap<>(checked.bodies())));
     }
 
-    /** The plan of the same, under the same name. */
-    private static CoverageSites.Plan planOf(Map<String, Core> bodies) {
-        return CoverageSites.of(new ModuleBodies("example", new LinkedHashMap<>(bodies)),
+    /** The plan of the same bodies, under the same name. */
+    private static CoverageSites.Plan planOf(Checked checked) {
+        return CoverageSites.of(new ModuleBodies(checked.module(),
+                        new LinkedHashMap<>(checked.bodies())),
                 DecisionSources.NONE, SuppliedRules.NONE);
     }
 
@@ -170,9 +175,9 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      */
     @Test
     void aComparisonCanBeCataloguedWithNoSiteToRecordARunAt() {
-        Map<String, Core> bodies = bodiesOf(BEHIND_AN_ABORT);
-        ComparisonCatalog catalog = catalogOf(bodies);
-        CoverageSites.Plan plan = planOf(bodies);
+        Checked checked = bodiesOf(BEHIND_AN_ABORT);
+        ComparisonCatalog catalog = catalogOf(checked);
+        CoverageSites.Plan plan = planOf(checked);
 
         List<ComparisonOccurrence> held = catalog.all().stream()
                 .map(ComparisonCatalog.Catalogued::which).toList();
@@ -192,15 +197,15 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      */
     @Test
     void aComparisonInsideAFunctionValueMayBePassedMoreThanOnce() {
-        Map<String, Core> bodies = bodiesOf("""
+        Checked checked = bodiesOf("""
                 module example.inside
 
                 behavior positives : (xs: List<Int>) -> List<Int>
 
                 let positives (xs) = List.filter(x -> x > 0, xs)
                 """);
-        CoverageSites.Plan plan = planOf(bodies);
-        Core.Binary comparison = comparisonsIn(bodies).get(0);
+        CoverageSites.Plan plan = planOf(checked);
+        Core.Binary comparison = comparisonsIn(checked).get(0);
 
         assertTrue(plan.comparisons().occurrenceAt(comparison).filter(plan::instruments)
                         .isPresent(), "it is numbered");
@@ -219,9 +224,9 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     @Test
     void everyComparisonOfABodyIsOneTheCatalogNames() {
         for (String source : List.of(NAMED_BEFORE_THE_FORK, INSIDE_A_FUNCTION_VALUE, BEHIND_AN_ABORT)) {
-            Map<String, Core> bodies = bodiesOf(source);
-            ComparisonCatalog catalog = catalogOf(bodies);
-            bodies.values().forEach(body -> recognised(body, each ->
+            Checked checked = bodiesOf(source);
+            ComparisonCatalog catalog = catalogOf(checked);
+            checked.bodies().values().forEach(body -> recognised(body, each ->
                     assertTrue(catalog.occurrenceAt(each).isPresent(),
                             () -> "the catalog names " + each.op() + " at " + each.pos())));
         }
@@ -238,7 +243,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      */
     @Test
     void twoComparisonsSpelledAlikeAreTwoOccurrences() {
-        Map<String, Core> bodies = bodiesOf("""
+        Checked checked = bodiesOf("""
                 module example.twice
 
                 behavior band : (a: Int) -> Int
@@ -247,7 +252,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
                 let band (a) = if over(a) then (if over(a) then 1 else 2) else 3
                 """);
-        ComparisonCatalog catalog = catalogOf(bodies);
+        ComparisonCatalog catalog = catalogOf(checked);
 
         List<ComparisonCatalog.Catalogued> held = catalog.all();
         assertEquals(2, held.size(), "the helper is spliced into the body at both calls");
@@ -275,9 +280,9 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 let check (a) = if a > 10 then 1 else 2
                 """;
         ComparisonCatalog here = ComparisonCatalog.of(
-                new ModuleBodies("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")))));
+                new ModuleBodies("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")).bodies())));
         ComparisonCatalog there = ComparisonCatalog.of(
-                new ModuleBodies("two", new LinkedHashMap<>(bodiesOf(body.formatted("two")))));
+                new ModuleBodies("two", new LinkedHashMap<>(bodiesOf(body.formatted("two")).bodies())));
 
         assertEquals(1, here.all().size(), "each module writes one comparison");
         assertEquals(1, there.all().size(), "each module writes one comparison");
@@ -303,10 +308,10 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 let check (a) = if a > 10 then 1 else 2
                 """;
         CoverageSites.Plan here = CoverageSites.of(
-                new ModuleBodies("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")))),
+                new ModuleBodies("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")).bodies())),
                 DecisionSources.NONE, SuppliedRules.NONE);
         ComparisonOccurrence there = ComparisonCatalog.of(new ModuleBodies(
-                "two", new LinkedHashMap<>(bodiesOf(body.formatted("two"))))).all().get(0).which();
+                "two", new LinkedHashMap<>(bodiesOf(body.formatted("two")).bodies()))).all().get(0).which();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> here.instruments(there));
@@ -325,7 +330,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      */
     @Test
     void aPlanCannotNumberAComparisonItsCatalogNeverHeld() {
-        Map<String, Core> bodies = bodiesOf(NAMED_BEFORE_THE_FORK);
+        Checked checked = bodiesOf(NAMED_BEFORE_THE_FORK);
         ComparisonOccurrence elsewhere = new ComparisonOccurrence("nowhere", "fee", 0);
         Map<ComparisonOccurrence, Integer> numbered = new LinkedHashMap<>();
         numbered.put(elsewhere, 0);
@@ -333,7 +338,8 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
                         numbered, new IdentityHashMap<>(), new LinkedHashMap<>(),
-                        java.util.Set.of(), new IdentityHashMap<>(), catalogOf(bodies)));
+                        java.util.Set.of(), new IdentityHashMap<>(), catalogOf(checked),
+                        NumberingIdentity.of("example")));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
                 refused.getMessage());
     }
@@ -350,16 +356,17 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      */
     @Test
     void bodiesInAnotherOrderAreAnotherModuleBodies() {
-        Map<String, Core> bodies = bodiesOf(TWO_BEHAVIORS);
-        assertEquals(2, bodies.size(), "the model under test declares two behaviors");
+        Checked checked = bodiesOf(TWO_BEHAVIORS);
+        assertEquals(2, checked.bodies().size(), "the model under test declares two behaviors");
         LinkedHashMap<String, Core> reversed = new LinkedHashMap<>();
-        List<String> names = new ArrayList<>(bodies.keySet());
+        List<String> names = new ArrayList<>(checked.bodies().keySet());
         for (int at = names.size() - 1; at >= 0; at--) {
-            reversed.put(names.get(at), bodies.get(names.get(at)));
+            reversed.put(names.get(at), checked.bodies().get(names.get(at)));
         }
 
-        assertNotEquals(new ModuleBodies("example", new LinkedHashMap<>(bodies)),
-                new ModuleBodies("example", reversed),
+        assertNotEquals(
+                new ModuleBodies(checked.module(), new LinkedHashMap<>(checked.bodies())),
+                new ModuleBodies(checked.module(), reversed),
                 "one order is what the numbering is of, so the other is another value");
     }
 
@@ -373,8 +380,8 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      */
     @Test
     void oneComparisonStandingInTwoBodiesIsRefused() {
-        Map<String, Core> bodies = bodiesOf(TWO_BEHAVIORS);
-        Core shared = bodies.values().iterator().next();
+        Checked checked = bodiesOf(TWO_BEHAVIORS);
+        Core shared = checked.bodies().values().iterator().next();
         LinkedHashMap<String, Core> both = new LinkedHashMap<>();
         both.put("one", shared);
         both.put("two", shared);

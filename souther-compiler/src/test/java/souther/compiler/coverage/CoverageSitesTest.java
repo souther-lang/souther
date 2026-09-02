@@ -45,25 +45,29 @@ class CoverageSitesTest {
                         unreachable "a member over thirty is handled elsewhere"
             """;
 
-    private static Map<String, Core> bodiesOf(String source) {
+    /** The bodies a source compiles to, under the name the source declares them in. The name comes
+     *  with them: a body's own parameters belong to the behavior the module declares, so a plan
+     *  built under some other module's name is a plan of bodies whose names it cannot place. */
+    private record Checked(String module, Map<String, Core> bodies) {}
+
+    private static Checked bodiesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db()
-                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+                .ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        return checked.behaviorBodies();
+        return new Checked(module, checked.behaviorBodies());
     }
 
     private static CoverageSites.Plan planOf(String source) {
         return planOf(bodiesOf(source));
     }
 
-    /** A plan of {@code bodies}, under a module name this fixture supplies. What the name is does
-     *  not matter to anything here — every question asked below is of one plan, and a name only
-     *  has to tell one module's comparisons from another's. */
-    private static CoverageSites.Plan planOf(Map<String, Core> bodies) {
+    private static CoverageSites.Plan planOf(Checked checked) {
         return CoverageSites.of(
-                new ModuleBodies("example", new java.util.LinkedHashMap<>(bodies)),
+                new ModuleBodies(checked.module(),
+                        new java.util.LinkedHashMap<>(checked.bodies())),
                 souther.compiler.coverage.DecisionSources.NONE,
                 souther.compiler.coverage.SuppliedRules.NONE);
     }
@@ -174,7 +178,7 @@ class CoverageSitesTest {
      */
     @Test
     void aForkNothingReachesIsPlannedWithNoArms() {
-        Map<String, Core> bodies = bodiesOf("""
+        Checked checked = bodiesOf("""
                 module example.dead
 
                 data Yes
@@ -196,9 +200,9 @@ class CoverageSitesTest {
                                 | No  -> Score(3)
                         }
                 """);
-        CoverageSites.Plan plan = planOf(bodies);
+        CoverageSites.Plan plan = planOf(checked);
 
-        Core.Match outer = (Core.Match) unwrap(bodies.get("scoreFor"));
+        Core.Match outer = (Core.Match) unwrap(checked.bodies().get("scoreFor"));
         Core.Match inner = innerMatch(outer.cases().get(1).body());
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, CoverageSites.NO_SITE},
                 plan.probesOf(inner), "the emitter still finds it, and finds nothing to light");
@@ -308,7 +312,7 @@ class CoverageSitesTest {
      */
     @Test
     void anArmWithoutAProbeKeepsItsPlaceInTheArray() {
-        Map<String, Core> bodies = bodiesOf("""
+        Checked checked = bodiesOf("""
                 module example.order
 
                 data Yes
@@ -325,9 +329,9 @@ class CoverageSitesTest {
                         | Yes -> unreachable "the caller has already refused a yes"
                         | No  -> Score(0)
                 """);
-        CoverageSites.Plan plan = planOf(bodies);
+        CoverageSites.Plan plan = planOf(checked);
 
-        Core.Match match = (Core.Match) unwrap(bodies.get("scoreFor"));
+        Core.Match match = (Core.Match) unwrap(checked.bodies().get("scoreFor"));
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, 0}, plan.probesOf(match),
                 "the surviving arm is second, and it is the second entry that holds its probe");
     }
@@ -392,10 +396,10 @@ class CoverageSitesTest {
 
     @Test
     void aSiteIsFoundByTheNodeInstanceTheEmitterHolds() {
-        Map<String, Core> bodies = bodiesOf(MODEL);
-        CoverageSites.Plan plan = planOf(bodies);
+        Checked checked = bodiesOf(MODEL);
+        CoverageSites.Plan plan = planOf(checked);
 
-        Core body = bodies.get("daysFor");
+        Core body = checked.bodies().get("daysFor");
         Core.Match match = (Core.Match) unwrap(body);
         int[] arms = plan.probesOf(match);
         assertNotNull(arms, "the plan is keyed by the instances it was built from");
@@ -476,6 +480,6 @@ class CoverageSitesTest {
 
     @Test
     void aModuleWithNoBodiesPlansNothing() {
-        assertSame(true, planOf(Map.<String, Core>of()).hasNoProbes());
+        assertSame(true, planOf(new Checked("example.empty", Map.of())).hasNoProbes());
     }
 }
