@@ -271,6 +271,41 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
+     * A pattern this reads no deeper into, which is a limit of the reading and says so.
+     *
+     * <p>Every construct in it is one this reads. What stopped the reading is how deeply they are
+     * written, which is this compiler's measure and not the author's spelling — told that the form
+     * is one nothing reads, they would go looking for the construct that was the trouble.
+     */
+    @Test
+    void aPatternThisReadsNoDeeperIntoIsSaidAsThat() {
+        String deep = "(".repeat(201) + "a" + ")".repeat(201);
+        Measured measured = of("    invariant String.matches(\"" + deep + "\", name)");
+
+        assertTrue(measured.says("written more deeply nested than this compiler reads"),
+                measured.human());
+        assertFalse(measured.says("written in a form this compiler does not read"),
+                measured.human());
+    }
+
+    /**
+     * And a pattern stopped by a construct the subset has no word for, which is not that.
+     *
+     * <p>{@code \\p{Alpha}} names a property of a character, and the subset here names symbols by
+     * their numbers. So the rule is one written in a form nothing read, like any other — the pair
+     * with the one above is what says the two are told apart by what stopped the reading rather
+     * than by the reading having stopped.
+     */
+    @Test
+    void aPatternStoppedByAConstructThisHasNoWordForIsAFormNothingRead() {
+        Measured measured = of("    invariant String.matches(\"\\\\p{Alpha}+\", name)");
+
+        assertTrue(measured.says("written in a form this compiler does not read"), measured.human());
+        assertFalse(measured.says("written more deeply nested than this compiler reads"),
+                measured.human());
+    }
+
+    /**
      * And a clause nothing here takes apart, which is what a limit of this compiler looks like.
      *
      * <p>Here the question standing is the truth: what the clause says about the values was never

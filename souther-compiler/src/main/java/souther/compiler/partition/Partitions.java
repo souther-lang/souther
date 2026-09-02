@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ClauseHelpers;
+import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
@@ -1680,10 +1681,15 @@ public final class Partitions {
                     // to the runtime, which is a format and nothing else, and this is which strings
                     // the rule admits — asked through the constraint, every predicate the decoder
                     // has no word for proposed no value, and a position an author had written a
-                    // rule for was offered `"x"` and refused (issue #1249).
-                    souther.compiler.regex.PatternSyntax admits =
-                            souther.compiler.check.StringPredicates.statedByWritten(each, symbols);
-                    String written = admits == null ? null : writtenFor(admits);
+                    // rule for was offered `"x"` and refused.
+                    //
+                    // Told which strings only where the reading came to them. Why it did not is
+                    // the reading's to keep and nothing here has a use for it: a rule this could
+                    // not read proposes no value, the same as one whose strings nobody can paste.
+                    StringPredicates.Reading admits =
+                            StringPredicates.statedByWritten(each, symbols);
+                    String written = admits instanceof StringPredicates.Reading.Accepting it
+                            ? writtenFor(it.accepts()) : null;
                     if (written != null) {
                         candidates.add(FixtureTemplate.string(written));
                     }
@@ -1708,10 +1714,11 @@ public final class Partitions {
     /**
      * A value a source can carry that {@code regex} accepts, or null where there is none to offer.
      *
-     * <p>Null three ways, and they are one answer here: a pattern outside the subset this compiler
-     * reads, one whose machine costs more than writing a value is allowed, and one every string of
-     * which is something nobody can paste. What a caller does with each of them is offer no
-     * candidate, so they are not told apart — a row is offered or it is not.
+     * <p>Null two ways, and they are one answer here: a pattern whose machine costs more than
+     * writing a value is allowed, and one every string of which is something nobody can paste. What
+     * a caller does with each of them is offer no candidate, so they are not told apart — a row is
+     * offered or it is not. A pattern outside the subset this compiler reads never reaches here:
+     * the reading says so, and the caller offers no candidate for the same reason.
      *
      * <p>Read by the one thing here that reads patterns. What this used to have was a reader of its
      * own, which meant two answers to "what does this pattern accept" and one model where they
