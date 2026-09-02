@@ -7,6 +7,7 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.inputs.TermPath;
 
 
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
@@ -2288,12 +2289,14 @@ public final class Adequacy {
             // waits on a run, so taking `Plan.NONE` where the build did not ask for the instrumented
             // classes bought nothing and left a body that owes no arm looking like a body nobody
             // measured (issue #955).
-            souther.compiler.coverage.CoverageSites.Plan plan = Output.Evaluated.planOf(db, name);
+            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            CoverageSites.Plan plan =
+                    checked == null ? CoverageSites.Plan.NONE : checked.plan();
             // Whether the bodies came back at all. Which behaviors have one is the model's answer
             // and is asked of the declarations below; this is the other question — whether what a
             // body holds could be read — and answering both from this map is what made a module the
             // compile stopped in report every behavior as one with no body (issue #996).
-            boolean bodiesRead = db.ask(new Bodies.Checked(name)).value() != null;
+            boolean bodiesRead = checked != null;
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Set<Integer> lit = new LinkedHashSet<>();
             for (RowReading observed : byTarget.values()) {

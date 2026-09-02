@@ -5,6 +5,7 @@ import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
@@ -60,6 +61,14 @@ class ProbedBytecodeTest {
         return compilation;
     }
 
+    /** The numbering the classes below were lit against, taken from the check that made it. */
+    private static CoverageSites.Plan planOf(Compilation compilation) {
+        Bodies.Elaborated checked = compilation.db()
+                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+        assertNotNull(checked, "the model under test compiles");
+        return checked.plan();
+    }
+
     private static Map<String, ClassFileImage> probed(Compilation compilation) {
         souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                 .ask(new Output.Evaluated(compilation.modules().get(0),
@@ -94,8 +103,7 @@ class ProbedBytecodeTest {
     @Test
     void aRunRecordsTheArmsItTook() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan =
-                Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
+        CoverageSites.Plan plan = planOf(compilation);
         Behavior submit = new Behavior(probed(compilation));
 
         Set<Integer> negative = submit.armsFor(-1L);

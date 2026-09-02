@@ -44,6 +44,14 @@ class ProbeMappingTest {
         return compilation;
     }
 
+    /** One compile's numbering of {@code module}, which is the check's own and not a second walk. */
+    private static CoverageSites.Plan planOf(Compilation compilation, String module) {
+        Bodies.Elaborated checked =
+                compilation.db().ask(new Bodies.Checked(module)).value();
+        assertNotNull(checked, "the model under test compiles");
+        return checked.plan();
+    }
+
     /**
      * A plan made from one compile, used to emit another's bodies.
      *
@@ -57,7 +65,7 @@ class ProbeMappingTest {
         Compilation elsewhere = compiled();
         String module = emitting.modules().get(0);
         Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
-        CoverageSites.Plan somewhereElse = Output.Evaluated.planOf(elsewhere.db(), module);
+        CoverageSites.Plan somewhereElse = planOf(elsewhere, module);
         assertNotNull(in);
         assertTrue(somewhereElse.sites().size() > 0, "the other compile has arms of its own");
 
@@ -86,7 +94,7 @@ class ProbeMappingTest {
         String module = emitting.modules().get(0);
         Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
         assertNotNull(in);
-        CoverageSites.Plan real = Output.Evaluated.planOf(emitting.db(), module);
+        CoverageSites.Plan real = planOf(emitting, module);
         assertTrue(real.sites().size() > 0);
 
         // The same plan with one more arm in it than any body will emit.

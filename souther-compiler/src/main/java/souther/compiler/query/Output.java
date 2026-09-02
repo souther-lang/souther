@@ -26,7 +26,6 @@ import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.Instrumentation;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DataMessage;
@@ -390,12 +389,6 @@ public final class Output {
             }
         }
 
-        /** The plan of the same module, for a caller that needs to read what a hit set means. Made
-         * from the same answer the classes were generated from, so the numbers agree. */
-        public static CoverageSites.Plan planOf(Db db, String module) {
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
-            return checked == null ? CoverageSites.Plan.NONE : checked.plan();
-        }
     }
 
     /**
