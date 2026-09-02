@@ -64,7 +64,8 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
-                    Map.of(), Map.of(), new ReadingEvidence(), Map.of(), Set.of(RuleKey.THE_VALUE), Set.of(),
+                    Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
+                    Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
                     ConstraintState.<FactSubject>top(), null, null, null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
@@ -109,8 +110,8 @@ public final class FieldDomains {
      *  over them, and a name a lost correlation never reached keeps its own answer. */
     private final Set<RuleKey> notSeparatedByName;
     /** Where a clause of this value did not reach the readings at all, as the names the stops
-     * happened at — see {@link #admits}. */
-    private final Set<RuleKey> notGathered;
+     * happened at and what stopped there — see {@link #admits}. */
+    private final Map<RuleKey, Set<RulesMissed>> notGathered;
     /** Where this reading ended with a declaration still to be read under the name, which is an
      * obligation on whoever walks them rather than anything wrong here — see
      * {@link #handedOn()}. */
@@ -156,7 +157,7 @@ public final class FieldDomains {
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
                          Map<BoundaryQuestion, BoundaryStanding> standing, ReadingEvidence took,
                          Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
-                         Set<RuleKey> notGathered, Set<RuleKey> handedOn,
+                         Map<RuleKey, Set<RulesMissed>> notGathered, Set<RuleKey> handedOn,
                          SequencedMap<FactSubject, RuleKey> namedBy,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
@@ -1125,7 +1126,7 @@ public final class FieldDomains {
      * whether anything is out of sight wants this.
      */
     public boolean everyRuleReachedAt(RuleKey path) {
-        return reaches(notGathered, path);
+        return reaches(notGathered.keySet(), path);
     }
 
     /**
