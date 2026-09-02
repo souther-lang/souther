@@ -1682,7 +1682,16 @@ public final class InvariantChecker {
         /** Whether the rules of this value have a name for {@code subject}. */
         boolean names(FactSubject subject);
 
-        /** What they call it, or null where none of them can name it. */
+        /**
+         * What they call it.
+         *
+         * <p>Asked only of a subject {@link #names} accepts, and it refuses anything else rather
+         * than answering nothing: a caller here is naming an atom the arithmetic was allowed to
+         * read, so a subject with no name is this reader and that one disagreeing about which
+         * atoms there are. Answered with null, the disagreement travelled — a form was built over
+         * a position called nothing, and what finally refused it was a quantity two steps later,
+         * blaming the walk it was compared against.
+         */
         RuleKey pathOf(FactSubject subject);
 
         /** The places {@code e} names, as the walk over it answers. */
@@ -1701,7 +1710,11 @@ public final class InvariantChecker {
             @Override
             public RuleKey pathOf(FactSubject subject) {
                 Coordinate found = byName.get(subject);
-                return found == null ? null : found.path();
+                if (found == null) {
+                    throw new IllegalStateException("the arithmetic read `" + subject
+                            + "`, which the rules of this value have no name for");
+                }
+                return found.path();
             }
 
             @Override
@@ -1985,14 +1998,20 @@ public final class InvariantChecker {
                 implements CanonicalForm {}
 
         /**
-         * The canonical form is over these positions, in the order the walk met them.
+         * The canonical form is over these positions.
          *
          * <p>One arm for one and for several. How many there are is what an answer turns on — a
          * rule over one bounds it, a rule over two relates them — and that is read off the set
          * where the answer is given. Split here, this would be carrying the answer's distinction
          * in the classification's vocabulary.
+         *
+         * <p><b>A set and no order.</b> These are the atoms the canonical form has a coefficient
+         * for, and what a form is does not say which of its positions comes first. A reader that
+         * needs them in an order gets one from the walk over the clause, which met them somewhere
+         * ({@code UnreadComparison.over}). Typed as a sequence, this would promise an order that
+         * is whatever a hash of the atoms happened to give.
          */
-        record Over(Comparison comparison, java.util.SequencedSet<RuleKey> positions)
+        record Over(Comparison comparison, java.util.Set<RuleKey> positions)
                 implements CanonicalForm {
 
             public Over {
@@ -2001,8 +2020,7 @@ public final class InvariantChecker {
                             "a form over no position is one whose positions cancelled, which is"
                                     + " the arm with the residue");
                 }
-                positions = java.util.Collections.unmodifiableSequencedSet(
-                        new LinkedHashSet<>(positions));
+                positions = java.util.Set.copyOf(positions);
             }
         }
     }

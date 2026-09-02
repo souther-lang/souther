@@ -126,7 +126,13 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
                 "souther/compiler/check/Terms",
                 // And the vocabulary a model is read in, which is what is left when the answers go.
                 "souther/compiler/check/Carrier",
-                "souther/compiler/numeric/LinearForm")) {
+                "souther/compiler/numeric/LinearForm",
+                // The walk over a clause, which the classification reaches only through the
+                // implementation it is handed as {@code Names}. Named here because everything
+                // behind that indirection was outside this walk until it followed what a
+                // constructed value declares, and a check that stops at an interface says nothing
+                // about the class answering for it.
+                "souther/compiler/check/ValueOrigin")) {
             assertTrue(reaches(reached, each), each + " is not in the walk");
         }
     }
@@ -137,6 +143,9 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
         return reached.types().stream()
                 .anyMatch(each -> each.equals(named) || each.startsWith(named + "$"));
     }
+
+    /** How a class constructed inside the walk is named, meaning every method it declares. */
+    private static final String EVERYTHING_IT_DECLARES = "*";
 
     /** What the walk got to: every method it entered, every type it saw, and where each was first
      *  reached from, so a failure names a path rather than a set. */
@@ -165,7 +174,8 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
             }
             String name = at.substring(at.indexOf('#') + 1);
             for (MethodModel method : of.methods()) {
-                if (!method.methodName().stringValue().equals(name)) {
+                if (!name.equals(EVERYTHING_IT_DECLARES)
+                        && !method.methodName().stringValue().equals(name)) {
                     continue;
                 }
                 CodeModel code = method.code().orElse(null);
@@ -211,7 +221,17 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
                 out.add(internal(it.owner().asSymbol()));
                 out.add(internal(it.typeSymbol()));
             }
-            case NewObjectInstruction it -> out.add(internal(it.className().asSymbol()));
+            // Everything the constructed class declares, and not the constructor alone. A value
+            // made here is handed on, and what runs of it is whichever method a caller reaches
+            // through whatever interface it implements — an anonymous class made to answer three
+            // questions is called through the interface, whose methods have no code for a walk to
+            // follow. Left at the constructor, the walk stops at the interface and everything the
+            // implementation does is outside it, which is where the classification's own walk over
+            // a clause went the day it was put behind one.
+            case NewObjectInstruction it -> {
+                out.add(internal(it.className().asSymbol()));
+                out.add(internal(it.className().asSymbol()) + "#" + EVERYTHING_IT_DECLARES);
+            }
             case TypeCheckInstruction it -> out.add(internal(it.type().asSymbol()));
             // A lambda's body is a method of the class that wrote it, named by the handle the call
             // site is given. Left out, everything a classification does inside one would be
