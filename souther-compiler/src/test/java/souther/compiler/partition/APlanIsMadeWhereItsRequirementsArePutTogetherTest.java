@@ -14,6 +14,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeKey;
 
@@ -216,8 +217,12 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 "nothing here asks one position to be two things").plan();
     }
 
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement caseOf(String leaf) {
-        return Refinement.sumCase(TypeSymbols.declared(new TypeKey("g", leaf)));
+        souther.compiler.types.TypeSymbol named = TypeSymbols.declared(new TypeKey("g", leaf));
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(named), java.util.List.of(named)));
     }
 
     /** The behavior's one parameter type, and the names it is read against. */

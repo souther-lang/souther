@@ -126,6 +126,22 @@ public sealed interface Position permits ReadPosition {
     Admits admissionOf(TypeSymbol leaf);
 
     /**
+     * The same, of the distinction a narrowing names.
+     *
+     * <p>What a reader holding a {@code match} arm has. An arm is written by a name, and a name is
+     * not a distinction of a position: an optional's carriers name none of them, and a case that is
+     * itself a sum names the leaves under it rather than any one of them. Asked by name, such an
+     * arm is answered {@link Unsettlement.NoSuchDistinction} — which is true, and is a fact about
+     * the key rather than about the model, so a caller reading it as the position falling short
+     * reports a limit of this compiler as an answer about what the rules leave (#1252).
+     *
+     * <p>So the key is the narrowing, which is what both vocabularies agree on
+     * ({@link Refinement}), and what an arm covers is asked of every distinction it reaches
+     * ({@link Refinement#allOf}).
+     */
+    Admits admissionOf(Refinement narrowing);
+
+    /**
      * How much of what the rules say about this position's values one reading took in.
      *
      * <p>That reading's account of itself, and nothing else. Nothing downstream decides anything

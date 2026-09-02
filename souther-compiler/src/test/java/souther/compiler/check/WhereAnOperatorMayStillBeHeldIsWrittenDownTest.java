@@ -296,10 +296,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " types turn out not to have: the emission itself is off what the"
                             + " comparison stated"),
 
-            // And whether it compares at all, asked of the one place that says so.
-            new Held("souther.compiler.check.InvariantChecker.arithmeticOf",
-                    "asks the enum whether the operator compares, which its caller has now"
-                            + " recognised the comparison for as well"),
+            // And whether it compares at all, asked of the one place that says so — by a reader
+            // recognising a comparison, and by no reader below one.
             new Held("souther.compiler.check.Relates.twoPositions",
                     "asks the enum whether the operator compares, for a rule that stands one"
                             + " position against another"),

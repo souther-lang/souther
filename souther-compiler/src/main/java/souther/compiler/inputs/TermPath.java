@@ -50,6 +50,18 @@ public record TermPath(String head, List<Step> steps) {
     /** One step of a path: two that go somewhere, and one that stays and narrows. */
     public sealed interface Step {
 
+        /**
+         * How this is written where a narrowing says which kind it is as well.
+         *
+         * <p>The same text for every step that carries no narrowing, which is why this is here
+         * rather than at the one that does: a caller spelling a path asks each step how it is
+         * written, and a caller that reached inside a step to add the kind would be deciding a
+         * step's separator somewhere other than the step.
+         */
+        default String discriminated() {
+            return toString();
+        }
+
         /** The field of a record. */
         record Field(String name) implements Step {
 
@@ -89,6 +101,11 @@ public record TermPath(String head, List<Step> steps) {
             @Override
             public String toString() {
                 return "@" + refinement.spelled();
+            }
+
+            @Override
+            public String discriminated() {
+                return "@" + refinement.discriminated();
             }
         }
     }
@@ -299,7 +316,24 @@ public record TermPath(String head, List<Step> steps) {
     private static String spelled(List<Step> steps) {
         StringBuilder out = new StringBuilder();
         for (Step step : steps) {
-            spell(out, step);
+            spell(out, step, false);
+        }
+        return out.toString();
+    }
+
+    /**
+     * The same path, with each narrowing saying which kind it is.
+     *
+     * <p>For a message about this compiler and never for one about a model. Two paths spelled alike
+     * can hold narrowings that are not equal — an optional's present carrier and a sum's case
+     * declared as {@code Some} are both written {@code @Some} — and a message that spelled only the
+     * path would say two positions this compiler holds apart are one place, which leaves an author
+     * reading a sentence that is true of the words and false of the model.
+     */
+    public String discriminated() {
+        StringBuilder out = new StringBuilder(head);
+        for (Step step : steps) {
+            spell(out, step, true);
         }
         return out.toString();
     }
@@ -311,7 +345,7 @@ public record TermPath(String head, List<Step> steps) {
      * separator is decided. A step added later stops this compiling rather than arriving in a
      * report under a dot that says it is a field.
      */
-    private static void spell(StringBuilder out, Step step) {
+    private static void spell(StringBuilder out, Step step, boolean discriminating) {
         switch (step) {
             case Step.Field field -> {
                 if (!out.isEmpty()) {
@@ -321,7 +355,8 @@ public record TermPath(String head, List<Step> steps) {
             }
             // Neither wears a separator: what a list holds follows the list, and a narrowing of a
             // position follows the position, and a dot before either would read as a field of it.
-            case Step.Element _, Step.Refine _ -> out.append(step);
+            case Step.Element _, Step.Refine _ ->
+                    out.append(discriminating ? step.discriminated() : step.toString());
         }
     }
 
@@ -329,7 +364,7 @@ public record TermPath(String head, List<Step> steps) {
     public String toString() {
         StringBuilder out = new StringBuilder(head);
         for (Step step : steps) {
-            spell(out, step);
+            spell(out, step, false);
         }
         return out.toString();
     }

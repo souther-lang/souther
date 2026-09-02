@@ -63,8 +63,14 @@ class ALeafIsNotAnAbsenceTest {
     }
 
     private StructuralInspection.Branch unitCase(String name) {
-        return new StructuralInspection.Branch(
-                Refinement.sumCase(((Type.Ref) named(name)).name()), null);
+        return new StructuralInspection.Branch(toLeaf(((Type.Ref) named(name)).name()), null);
+    }
+
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)));
     }
 
     private Type named(String name) {

@@ -6,6 +6,7 @@ import souther.compiler.types.CaseSelector;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -522,20 +523,52 @@ public sealed interface Core {
     /**
      * What an arm selects and what it binds, both decided by the checker.
      *
-     * <p>{@code selectors} are the cases the arm answers for, in the order they are written; more
-     * than one is an or-pattern. {@code binding} is what the value is read as once the arm is taken,
-     * and it is the arm's own rather than any one selector's: an or-pattern binds the subject,
-     * because no single case type fits all of its alternatives.
+     * <p>{@code cases} are the cases the arm answers for, in the order they are written; more than
+     * one is an or-pattern. {@code binding} is what the value is read as once the arm is taken, and
+     * it is the arm's own rather than any one case's: an or-pattern binds the subject, because no
+     * single case type fits all of its alternatives.
      *
-     * <p>Nothing here is worked out again downstream. A reader emitting this tests each selector's
+     * <p><b>As the checker resolved them, and not as they were written.</b> A case is carried here
+     * as a {@link ResolvedCase} — what the value is tested and read as, together with the atoms
+     * selecting it covers. The second half is a fact about the declarations this compile read: a
+     * case that is itself a sum stands for the leaves under it (spec §sum-data), so {@code OnceKind}
+     * selects two of them where {@code Station} selects one. Kept as a selector alone it was
+     * unrecoverable below this point — nothing downstream holds declarations to ask — and every
+     * reader that needed which case of a subject an arm picked answered from the name, which says
+     * neither how many leaves it reaches nor whether it is an optional's carrier.
+     *
+     * <p>Nothing here is worked out again downstream. A reader emitting this tests each case's
      * {@link Refinement} and reads the binding through {@code binding}, and never asks whether the
      * subject was an optional, whether the arm named one case or several, or whether a case is a
      * primitive. Those are the questions {@code Core} exists to have answered already.
      */
     sealed interface ResolvedPattern {
 
-        /** The cases the arm answers for, in the order they are written. */
-        List<CaseSelector> selectors();
+        /** The cases the arm answers for, as this compile resolved them, in the order they are
+         *  written. */
+        List<ResolvedCase> cases();
+
+        /** The same, as what tests and reads a value — which is what a backend emits. A projection
+         *  of {@link #cases()} and answered as one: what an arm selects is that value's to say. */
+        default List<CaseSelector> selectors() {
+            return cases().stream().map(ResolvedCase::selector).toList();
+        }
+
+        /**
+         * The one case this arm selects, or empty where it selects no one case.
+         *
+         * <p>Asked here rather than worked out from the shape of the pattern. A reader that decided
+         * from the pattern's shape that one case must be there, and then took its name, would be
+         * rebuilding a decision this already holds out of less than it was made from. That is how
+         * an optional's {@code Some} came to be read as a sum's case named {@code Some}.
+         *
+         * <p>Empty is an answer and not an absence of one: an or-pattern selects several cases and
+         * therefore no one of them, which is a fact about what was written and not a count standing
+         * in for one. What that selection then comes to at a position — one of the distinctions the
+         * declarations state there, or none — is the other question, and it is answered from the
+         * atoms this carries rather than from anything about the pattern.
+         */
+        Optional<ResolvedCase> selectedCase();
 
         /**
          * What the value is read as once the arm is taken.
@@ -563,22 +596,27 @@ public sealed interface Core {
         }
 
         /** An arm answering for one case, which binds what that case's carrier holds. */
-        record Single(CaseSelector selector) implements ResolvedPattern {
+        record Single(ResolvedCase selected) implements ResolvedPattern {
 
             public Single {
-                if (selector == null) {
+                if (selected == null) {
                     throw new IllegalArgumentException("an arm selects a case");
                 }
             }
 
             @Override
-            public List<CaseSelector> selectors() {
-                return List.of(selector);
+            public List<ResolvedCase> cases() {
+                return List.of(selected);
+            }
+
+            @Override
+            public Optional<ResolvedCase> selectedCase() {
+                return Optional.of(selected);
             }
 
             @Override
             public Refinement binding() {
-                return selector.refinement();
+                return selected.refinement();
             }
         }
 
@@ -586,16 +624,21 @@ public sealed interface Core {
          * An arm answering for several, which binds the subject: no one case type fits all of its
          * alternatives, and every alternative is already the subject.
          */
-        record AnyOf(List<CaseSelector> selectors, Type subject) implements ResolvedPattern {
+        record AnyOf(List<ResolvedCase> cases, Type subject) implements ResolvedPattern {
 
             public AnyOf {
-                if (selectors == null || selectors.size() < 2) {
+                if (cases == null || cases.size() < 2) {
                     throw new IllegalArgumentException("an arm answering for several names several");
                 }
                 if (subject == null) {
                     throw new IllegalArgumentException("what such an arm binds is the subject");
                 }
-                selectors = List.copyOf(selectors);
+                cases = List.copyOf(cases);
+            }
+
+            @Override
+            public Optional<ResolvedCase> selectedCase() {
+                return Optional.empty();
             }
 
             @Override
@@ -616,6 +659,12 @@ public sealed interface Core {
         /** The cases this arm answers for. */
         public List<TypeSymbol> caseTypes() {
             return pattern.caseTypes();
+        }
+
+        /** The one case this arm selects, as this compile resolved it, or empty where it selects no
+         *  one case. */
+        public Optional<ResolvedCase> selectedCase() {
+            return pattern.selectedCase();
         }
 
         /** The type the binding takes inside this arm. */

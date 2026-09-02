@@ -153,9 +153,14 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
                         | Empty -> No
                 """;
         Read read = read(inArm);
-        TermPath underNamed = TermPath.of("slot").refine(souther.compiler.inputs.Refinement.sumCase(
-                souther.compiler.types.TypeSymbols.declared(
-                        new souther.compiler.types.TypeKey("example.arm", "Named")))).then("c");
+        souther.compiler.types.TypeSymbol named = souther.compiler.types.TypeSymbols.declared(
+                new souther.compiler.types.TypeKey("example.arm", "Named"));
+        // A leaf is a case that covers itself, which is what the checker's resolution of the arm
+        // says, so selecting it narrows the position to that one distinction.
+        TermPath underNamed = TermPath.of("slot").refine(
+                souther.compiler.inputs.Refinement.of(souther.compiler.types.ResolvedCase.of(
+                        souther.compiler.types.CaseSelector.direct(named), List.of(named))))
+                .then("c");
 
         assertEquals(List.of(read.lengthAt(underNamed)),
                 read.sides().stream().map(Condition.Side::at).distinct().toList(),

@@ -117,7 +117,7 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
     void oneKeyUnderTwoValuesIsTwoAddresses() {
         InputDomain read = reading(SHARED, "read");
         TermPath sum = TermPath.of("q");
-        TermPath aCase = sum.refine(Refinement.sumCase(caseNamed(read, sum, "A")));
+        TermPath aCase = sum.refine(narrowingTo(read, sum, "A"));
 
         assertNotEquals(new RuleAddress(sum, RuleKey.of("limit")),
                 new RuleAddress(aCase, RuleKey.of("limit")));
@@ -135,8 +135,8 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
     void aPathUnderAnotherValuePlacesNothing() {
         InputDomain read = reading(SHARED, "read");
         TermPath sum = TermPath.of("q");
-        TermPath a = sum.refine(Refinement.sumCase(caseNamed(read, sum, "A")));
-        TermPath b = sum.refine(Refinement.sumCase(caseNamed(read, sum, "B")));
+        TermPath a = sum.refine(narrowingTo(read, sum, "A"));
+        TermPath b = sum.refine(narrowingTo(read, sum, "B"));
 
         assertNull(RuleAddress.of(a, b.then("limit")),
                 "no rule of `A` names a position in `B`");
@@ -162,9 +162,19 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
 
     /** The case's own name, taken off the reading that holds it. */
     private static TypeSymbol caseNamed(InputDomain read, TermPath sum, String name) {
+        return distinctionAt(read, sum, name).leaf();
+    }
+
+    /** The narrowing to that case, spelled by the distinction the reading holds rather than by the
+     *  case's name — which is how every reader of this path spells it. */
+    private static Refinement narrowingTo(InputDomain read, TermPath sum, String name) {
+        return Refinement.of(distinctionAt(read, sum, name));
+    }
+
+    private static Case.SumCase distinctionAt(InputDomain read, TermPath sum, String name) {
         for (Case each : read.at(sum).obligationCases()) {
             if (each instanceof Case.SumCase one && one.leaf().name().equals(name)) {
-                return one.leaf();
+                return one;
             }
         }
         throw new IllegalStateException("no case named " + name);
