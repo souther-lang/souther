@@ -30,7 +30,6 @@ import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.TheCompilerDisagreesWithItself;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
@@ -1518,8 +1517,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " line — the conditions on the way there rule those values out";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
-            // settled by the authority a reason belongs to
-            // ({@link BlockReason}), so no reason is written both ways.
+            // settled by the authority a reason belongs to, so no reason is written both ways.
             case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
             case RULE_NOT_INTERPRETED_HERE ->
                     "it was reached, and nothing worked out what it says about the values here";
@@ -2143,23 +2141,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * send an author to lift it and find the question still there. Which is also why nothing here
      * chooses between them — the only thing there is to choose by is which the reading met first.
      *
-     * <p>Each projected on its own and the words made distinct afterwards, never the other way
-     * round. What a document promises is deliberately coarser than what this compiler records, so
-     * two reasons a reader is not offered to tell apart come out as one word — and that is the
-     * projection saying they are one thing to lift, rather than a report dropping one of them.
-     *
      * <p><b>In the order the author wrote the parts that raised the question</b>, which is what the
      * schema promises a consumer of {@code stopped} and what says which of these to lift first. So
      * it is a {@link SourceOrdered} and not an order of this compiler's: a written order over this
      * kind would answer by a precedence nothing in the model decides.
+     *
+     * <p>Asked of the projection rather than made here. What the order is is known where the
+     * reasons still are what a walk recorded; by the time they are words a document writes, nothing
+     * left can tell the author's order from the walk's, and a claim made here would be a claim
+     * about something this cannot see.
      */
     private static SourceOrdered<UndividedPosition.Reason> whyStanding(
             PartitionEvidence.Unanswered asked) {
-        List<UndividedPosition.Reason> said = new ArrayList<>();
-        for (BlockReason.AboutARule each : asked.stopped()) {
-            said.add(ReportedReason.of(each));
-        }
-        return SourceOrdered.asWritten(said);
+        return ReportedReason.asWritten(asked.stopped());
     }
 
     /**

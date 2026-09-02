@@ -9,22 +9,25 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * The order a kind of reason is published in is declared in one place, and nowhere else makes one.
+ * Who may say what order a plurality of reasons is in.
  *
- * <p>What the compiler holds is that an order is made inside its own package: the two factories are
- * package-private, so no other part of this compiler can reach them. What that leaves open is a
- * second class in that package making one — and then a kind would have two orders, which is the
- * thing the whole arrangement is against.
+ * <p>Two orders and two answers, and the asymmetry between them is the arrangement. What order this
+ * compiler publishes a kind in is one decision for the whole compiler, so making one is closed to
+ * the place that declares them. That a particular sequence is in the order the model has is not a
+ * decision at all — it is something a producer either knows or does not — so anybody who knows it
+ * may say it, and a reader who does not may not.
  *
- * <p>Read off the call sites rather than off the declarations. A check over the fields of the other
+ * <p>Read off the call sites rather than off the declarations. A check over the fields of the
  * classes there would see a field of the order's type and miss an order made inside a method and
- * used from there, which is the same second order with nowhere to see it. What makes an order is
- * calling one of two methods, and this says who calls them.
+ * used from there, which is the same second order with nowhere to see it. What makes one of these
+ * is calling a method, and this says who calls them.
  */
 class OnlyOnePlaceDeclaresAPublicationOrderTest {
 
     private static final String ORDER = "souther.compiler.publish.CanonicalSelection$Order";
     private static final String AUTHORITY = "souther.compiler.publish.PublicationOrders";
+    private static final String SOURCE_ORDERED = "souther.compiler.publish.SourceOrdered";
+    private static final String REPORT = "souther.compiler.report.";
 
     @Test
     void nothingButThePublicationOrdersMakesAnOrder() throws Exception {
@@ -45,5 +48,35 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
         assertEquals(List.of(), made,
                 "an order over a kind of reason made outside the one place that declares them,"
                         + " which is how a kind comes to have two orders that agree until one moves");
+    }
+
+    /**
+     * A report says of no sequence that its order is the model's.
+     *
+     * <p>The claim a {@link souther.compiler.publish.SourceOrdered} carries is that the order came
+     * from what somebody wrote, and by the time a plurality is at a report nothing left in it says
+     * where its order came from. Made there, the type would be a report calling whatever it was
+     * handed the author's order — which is the check that a plurality arrives having been answered
+     * for, passed by answering for it at the end.
+     */
+    @Test
+    void aReportSaysOfNoSequenceThatItsOrderIsTheModelsOwn() throws Exception {
+        List<String> claimed = new ArrayList<>();
+        boolean reached = false;
+        for (Compiled.Site site : Compiled.sites()) {
+            if (site.owner().equals(SOURCE_ORDERED) && site.member().equals("asWritten")) {
+                reached = true;
+                if (site.from().startsWith(REPORT)) {
+                    claimed.add(site.at());
+                }
+            }
+        }
+
+        assertFalse(claimed.isEmpty() && !reached,
+                "nothing anywhere says a sequence is in the order it was written, so this is"
+                        + " passing for the wrong reason");
+        assertEquals(List.of(), claimed,
+                "a report claims the model's order for a sequence it was handed, which is a claim"
+                        + " about something it cannot see");
     }
 }
