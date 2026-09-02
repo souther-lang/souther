@@ -132,8 +132,8 @@ class ASearchIsAskedForAndAMeasurementIsNotTest {
                 // added to. A superset and not a rank: the grounds are not alternatives, so there is
                 // no order to compare them under — and inventing one, which this did, is how a
                 // search that replaced a proof with a witness read as a search that strengthened it.
-                assertTrue(now.writabilityEvidence().grounds()
-                                .containsAll(owed.writabilityEvidence().grounds()),
+                assertTrue(now.writabilityEvidence().grounds().written()
+                                .containsAll(owed.writabilityEvidence().grounds().written()),
                         "the search took a ground away at " + before.label());
             }
         }

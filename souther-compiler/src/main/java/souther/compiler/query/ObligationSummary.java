@@ -1,8 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.publish.CanonicalSelection;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -28,19 +29,18 @@ public record ObligationSummary<T>(List<T> met, List<T> unmet, List<T> undecided
                                    List<Excluded<T>> excluded) {
 
     /** One obligation outside the count, with every reason it is out. */
-    public record Excluded<T>(T item, Set<ObligationDisposition.Reason> because) {
+    public record Excluded<T>(T item, CanonicalSelection<ObligationDisposition.Reason> because) {
 
         public Excluded {
             if (because == null || because.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an obligation left out of the count says why it is out");
             }
-            because = Set.copyOf(because);
         }
 
         /** Whether {@code reason} is one of them, for a reader wording that reason. */
         public boolean was(ObligationDisposition.Reason reason) {
-            return because.contains(reason);
+            return because.written().contains(reason);
         }
     }
 

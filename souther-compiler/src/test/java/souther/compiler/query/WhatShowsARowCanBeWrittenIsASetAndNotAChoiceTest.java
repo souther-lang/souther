@@ -117,8 +117,8 @@ class WhatShowsARowCanBeWrittenIsASetAndNotAChoiceTest {
      */
     @Test
     void aPointTwoThingsShowCarriesBoth() {
-        List<Set<Ground>> found = owedPoints().stream()
-                .map(owed -> owed.writabilityEvidence().grounds())
+        List<List<Ground>> found = owedPoints().stream()
+                .map(owed -> owed.writabilityEvidence().grounds().written())
                 .filter(grounds -> grounds.size() > 1).toList();
         assertFalse(found.isEmpty(),
                 "the corpus reaches a point more than one thing shows, or this asserts nothing");

@@ -454,14 +454,14 @@ class EverySchemaWordIsAccountedForTest {
         return List.of(
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
-                new ObligationDisposition.Undecided(List.of(
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere(
-                                new ReadingReasons(List.of(ReadingGap.NO_VALUE))))),
-                new ObligationDisposition.Undecided(List.of(
+                                ReadingReasons.of(List.of(ReadingGap.NO_VALUE))))),
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
-                                WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
+                                WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
                                         Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
-                new ObligationDisposition.NotCounted(
+                ObligationDisposition.NotCounted.because(
                         Set.of(ObligationDisposition.Reason.NOTHING_WAS_READ)));
     }
 

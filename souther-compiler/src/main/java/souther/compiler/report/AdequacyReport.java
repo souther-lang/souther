@@ -44,6 +44,8 @@ import souther.compiler.query.ObligationSummary;
 import souther.compiler.query.ReadingReasons;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -1723,7 +1725,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return List.of();
         }
         List<String> said = new ArrayList<>();
-        for (ObligationDisposition.Uncertainty each : it.because()) {
+        for (ObligationDisposition.Uncertainty each : it.because().written()) {
             said.add(switch (each) {
                 // And what the readings met, which is what makes it undecided rather than missed.
                 // The reading carried whether a value was stopped or never arrived all the way
@@ -1756,7 +1758,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String whatTheReadingsMet(ReadingReasons met) {
         List<String> said = new ArrayList<>();
-        for (ReadingGap each : met.eachKindOnce()) {
+        for (ReadingGap each : met.eachKindOnce().written()) {
             said.add(atTheBorder(each));
         }
         return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
@@ -1781,10 +1783,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String why(WritabilityKnowledge.Prevented stopped) {
         List<String> out = new ArrayList<>();
-        for (EstablishmentGap each : stopped.by()) {
+        for (EstablishmentGap each : stopped.by().written()) {
             out.add(switch (each) {
-                case EstablishmentGap.Observation(Set<Incompleteness.Code> causes) ->
-                        "a row was built for it, and " + causes.stream()
+                case EstablishmentGap.Observation(CanonicalSelection<Incompleteness.Code> causes) ->
+                        "a row was built for it, and " + causes.written().stream()
                                 .map(AdequacyReport::whatStopped)
                                 .collect(Collectors.joining(", and "));
                 // What this compiler declined to build, and which figure decided it. An author does
@@ -1815,7 +1817,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** The obligations this block says on {@code surface}, in the order the account holds them. */
     private static <T> List<T> excludedSaid(ObligationSummary<T> account, Surface surface) {
         return account.excluded().stream()
-                .filter(each -> each.because().stream()
+                .filter(each -> each.because().written().stream()
                         .anyMatch(reason -> surfaceOf(reason) == surface))
                 .map(ObligationSummary.Excluded::item)
                 .toList();
@@ -1984,9 +1986,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * they can act on — and a budget added arrives here as a compile error rather than as a name
      * nobody wrote a sentence for.
      */
-    private static String said(java.util.Set<souther.compiler.partition.CompositionBudget> budgets) {
+    private static String said(CanonicalSelection<CompositionBudget> budgets) {
         List<String> out = new ArrayList<>();
-        for (souther.compiler.partition.CompositionBudget each : budgets) {
+        for (CompositionBudget each : budgets.written()) {
             out.add(switch (each) {
                 case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
                 case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
@@ -2853,15 +2855,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         // different sentences (issue #1036).
                         ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
                         i.put("knownWritable", evidence.known());
-                        // In this document's own order, which is why it is written down here and
-                        // not asked of the evidence. The grounds are a set and have none, so some
-                        // order has to be chosen for the array — and chosen where the array is, the
-                        // choice is not one an editor moving two constants apart can make.
                         ArrayNode because = i.putArray("writableBecause");
-                        for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
-                            if (evidence.has(ground)) {
-                                because.add(wire(ground));
-                            }
+                        for (ItemAssessment.WritabilityEvidence.Ground ground
+                                : evidence.grounds().written()) {
+                            because.add(wire(ground));
                         }
                         // Inside it, because it is. `false` here is `NoHit` — what the rows this
                         // measurement read came to — and never a measurement that was not made.
@@ -3362,10 +3359,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
         of.put("knownWritable", evidence.known());
         ArrayNode because = of.putArray("writableBecause");
-        for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
-            if (evidence.has(ground)) {
-                because.add(wire(ground));
-            }
+        for (ItemAssessment.WritabilityEvidence.Ground ground : evidence.grounds().written()) {
+            because.add(wire(ground));
         }
         ObligationCoverage coverage = owed.coverage();
         of.put("status", wire(ReportMeasurement.statusOf(coverage)));
@@ -3379,10 +3374,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         of.put("disposition", wire(owed.disposition()));
         if (owed.disposition() instanceof ObligationDisposition.NotCounted out) {
             ArrayNode left = of.putArray("notCountedBecause");
-            for (ObligationDisposition.Reason reason : ObligationDisposition.Reason.values()) {
-                if (out.because().contains(reason)) {
-                    left.add(wire(reason));
-                }
+            for (ObligationDisposition.Reason reason : out.because().written()) {
+                left.add(wire(reason));
             }
         }
     }
@@ -3470,23 +3463,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NOT_APPLICABLE, NOT_MEASURED -> "unavailable";
         };
     }
-
-    /**
-     * The order this document writes the grounds of {@code writableBecause} in.
-     *
-     * <p>The document's and not the evidence's. The grounds are a set, so the array needs an order
-     * the set cannot supply — read off {@code values()} it was the order two constants happen to be
-     * declared in, and moving them apart would have moved the bytes of every document while a test
-     * comparing against {@code values()} went on seeing nothing.
-     *
-     * <p>Every ground is here, which {@code theDocumentWritesEveryGroundThereIs} holds. A ground
-     * added to the type and not to this list is one no document would carry, so the widening would
-     * be made and nothing would say it had not arrived.
-     */
-    static final List<ItemAssessment.WritabilityEvidence.Ground> GROUND_ORDER = List.of(
-            ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT,
-            ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT,
-            ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT);
 
     /** What a document calls a ground a row can be written at a point on. Written out for the same
      *  reason as the status above: widening what a consumer must handle is a decision about the

@@ -1,9 +1,11 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -56,51 +58,22 @@ public sealed interface ObligationDisposition {
      * verdict, which is the one thing that does not say.
      *
      * <p>Both, because one obligation can be both, and either one alone would be a choice of which
-     * to tell. At most one of each, and in the order below: what a reader is shown cannot come out
-     * of the order a fold happened to put them in.
+     * to tell. At most one of each, and in the order they are published in
+     * ({@link PublicationOrders#OPEN_QUESTIONS}): what a reader is shown cannot come out of the
+     * order a fold happened to put them in.
      */
-    record Undecided(List<Uncertainty> because) implements Counted {
-
-        /**
-         * Every question that can be open about an obligation, in the order they are said in.
-         *
-         * <p>A sequence and not a rank apiece, for the reason {@link ReadingReasons} gives: a
-         * number per question is a carrier wider than an order, and two questions given one number
-         * come out in whichever order a fold put them.
-         *
-         * <p>What a reader does about the two differs — the first is answered by reading more of
-         * what is written and the second is not work an author can do — and the first is said
-         * first because it is the one they can act on.
-         */
-        private static final List<Class<? extends Uncertainty>> EVERY_QUESTION = List.of(
-                Uncertainty.WhetherARowIsThere.class,
-                Uncertainty.WhetherARowCanBeWritten.class);
+    record Undecided(CanonicalSelection<Uncertainty> because) implements Counted {
 
         public Undecided {
             if (because == null || because.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an obligation nobody can decide says which question is open");
             }
-            because = List.copyOf(because);
-            int last = -1;
-            for (Uncertainty each : because) {
-                int here = EVERY_QUESTION.indexOf(each.getClass());
-                if (here < 0) {
-                    throw new IllegalArgumentException(
-                            "a question with no place in the order they are said in: " + each);
-                }
-                if (here <= last) {
-                    throw new IllegalArgumentException(
-                            "the open questions are said once each, in the order they are said"
-                                    + " in: " + because);
-                }
-                last = here;
-            }
         }
 
-        /** The order itself, for the check that it holds every question there is. */
-        static List<Class<? extends Uncertainty>> everyQuestion() {
-            return EVERY_QUESTION;
+        /** The questions that are open about one obligation, in the order they are said in. */
+        public static Undecided about(Collection<Uncertainty> open) {
+            return new Undecided(PublicationOrders.OPEN_QUESTIONS.keep(open));
         }
     }
 
@@ -157,6 +130,11 @@ public sealed interface ObligationDisposition {
      * new arm has to be put on one side or the other before it can be built.
      */
     private static ReadingReasons whatTheReadingsMet(WeakeningSet by) {
+        return ReadingReasons.of(readingGapsIn(by));
+    }
+
+    /** The gaps the readings met, as they were met. */
+    private static List<ReadingGap> readingGapsIn(WeakeningSet by) {
         List<ReadingGap> met = new ArrayList<>();
         for (Weakening each : by.causes()) {
             switch (each) {
@@ -179,19 +157,23 @@ public sealed interface ObligationDisposition {
                      Weakening.ArmsUnsettled _ -> { }
             }
         }
-        return ReadingReasons.of(met);
+        return met;
     }
 
 
     /** One this account does not count, with every reason it does not. */
-    record NotCounted(Set<Reason> because) implements ObligationDisposition {
+    record NotCounted(CanonicalSelection<Reason> because) implements ObligationDisposition {
 
         public NotCounted {
             if (because == null || because.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an obligation left out of the count says why it is out");
             }
-            because = Collections.unmodifiableSet(EnumSet.copyOf(because));
+        }
+
+        /** The reasons an obligation is out of the count, in the order they are said in. */
+        public static NotCounted because(Collection<Reason> reasons) {
+            return new NotCounted(PublicationOrders.NOT_COUNTED_REASONS.keep(reasons));
         }
     }
 
@@ -236,7 +218,7 @@ public sealed interface ObligationDisposition {
                 if (knowledge instanceof WritabilityKnowledge.Prevented stopped) {
                     open.add(new Uncertainty.WhetherARowCanBeWritten(stopped));
                 }
-                yield new Undecided(open);
+                yield Undecided.about(open);
             }
             case ObligationCoverage.Missed _ -> switch (knowledge) {
                 case WritabilityKnowledge.Established _ -> new Unmet();
@@ -245,10 +227,10 @@ public sealed interface ObligationDisposition {
                 // budget of this compiler's is not the model refusing anything — and no finding is
                 // made of it, because nothing here can say the row an author would write is one
                 // that exists.
-                case WritabilityKnowledge.Prevented stopped -> new Undecided(
+                case WritabilityKnowledge.Prevented stopped -> Undecided.about(
                         List.of(new Uncertainty.WhetherARowCanBeWritten(stopped)));
                 case WritabilityKnowledge.NoEvidence _ ->
-                        new NotCounted(EnumSet.of(Reason.NOT_KNOWN_TO_BE_WRITABLE));
+                        NotCounted.because(EnumSet.of(Reason.NOT_KNOWN_TO_BE_WRITABLE));
             };
             // Nothing was read against it, so there is nothing to have found. What is known about a
             // row being writable there is said beside that rather than instead of it: the two are
@@ -258,7 +240,7 @@ public sealed interface ObligationDisposition {
                 if (!(knowledge instanceof WritabilityKnowledge.Established)) {
                     because.add(Reason.NOT_KNOWN_TO_BE_WRITABLE);
                 }
-                yield new NotCounted(because);
+                yield NotCounted.because(because);
             }
         };
     }

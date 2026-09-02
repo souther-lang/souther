@@ -878,7 +878,7 @@ final class Coverages {
                                     new souther.compiler.partition.Generator.UnresolvedCombination(
                                             java.util.List.of(label), wordOf(unknown)),
                                     within, java.util.List.of(),
-                                    new EstablishmentGap.Composition(unknown.stoppedBy()));
+                                    EstablishmentGap.Composition.of(unknown.stoppedBy()));
                 };
             }
         };
@@ -1012,7 +1012,7 @@ final class Coverages {
                 codes.add(it.code());
             }
         }
-        return new EstablishmentGap.Observation(codes);
+        return EstablishmentGap.Observation.of(codes);
     }
 
     /**
@@ -1119,7 +1119,7 @@ final class Coverages {
             // declined to work on left the count as one the model admits no row at.
             case souther.compiler.partition.Generator.BoundaryAttempt.Stopped left ->
                     new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
-                            new EstablishmentGap.Composition(left.by()));
+                            EstablishmentGap.Composition.of(left.by()));
         };
     }
 

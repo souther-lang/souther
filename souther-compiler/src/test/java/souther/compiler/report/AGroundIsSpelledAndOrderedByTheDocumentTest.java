@@ -2,11 +2,11 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.query.ItemAssessment.WritabilityEvidence.Ground;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -22,6 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>So both are held here against fixed strings. Nothing in this file mentions a constant except to
  * say which word it is spelled as, and a change to the type that a consumer would notice cannot pass
  * without changing a literal somebody has to read.
+ *
+ * <p>That the order holds every ground there is, is not asked here. It is one of the things a
+ * publication order can be wrong about and it is asked of every one of them at once, in
+ * {@link souther.compiler.publish.EveryKindSaidInOneOrderTest}.
  */
 class AGroundIsSpelledAndOrderedByTheDocumentTest {
 
@@ -33,24 +37,11 @@ class AGroundIsSpelledAndOrderedByTheDocumentTest {
     @Test
     void theDocumentsOrderIsTheOneWrittenDownHere() {
         List<String> written = new ArrayList<>();
-        AdequacyReport.GROUND_ORDER.forEach(ground -> written.add(AdequacyReport.wire(ground)));
+        for (Object ground : PublicationOrders.WRITABILITY_GROUNDS.slots()) {
+            written.add(AdequacyReport.wire((Ground) ground));
+        }
         assertEquals(AS_THE_DOCUMENT_WRITES_THEM, written,
                 "the order or the spelling of `writableBecause` moved, and a consumer keyed on"
                         + " either would meet a document it did not expect");
-    }
-
-    /**
-     * Every ground there is reaches a document.
-     *
-     * <p>The order is a list and a list can be short. A ground added to the type and left out of it
-     * is one no document carries — the widening would be made, every other test would go on passing,
-     * and the field would quietly answer a narrower question than the type does.
-     */
-    @Test
-    void theDocumentWritesEveryGroundThereIs() {
-        assertEquals(Set.of(Ground.values()), Set.copyOf(AdequacyReport.GROUND_ORDER),
-                "a ground the type has that the document never writes");
-        assertEquals(AdequacyReport.GROUND_ORDER.size(),
-                Set.copyOf(AdequacyReport.GROUND_ORDER).size(), "and none of them twice");
     }
 }

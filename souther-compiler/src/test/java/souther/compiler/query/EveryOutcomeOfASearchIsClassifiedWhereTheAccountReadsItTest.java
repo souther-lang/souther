@@ -117,11 +117,11 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 assertEquals(List.of(
                                 ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.class),
                         assertInstanceOf(ObligationDisposition.Undecided.class, disposition)
-                                .because().stream().map(Object::getClass).toList(),
+                                .because().written().stream().map(Object::getClass).toList(),
                         () -> leaf.getSimpleName() + " is this compiler being stopped, which is not"
                                 + " the model refusing a row and may not take one out of the count");
             } else {
-                assertEquals(new ObligationDisposition.NotCounted(
+                assertEquals(ObligationDisposition.NotCounted.because(
                                 Set.of(ObligationDisposition.Reason.NOT_KNOWN_TO_BE_WRITABLE)),
                         disposition,
                         () -> leaf.getSimpleName() + " has shown nothing and was stopped by"
@@ -151,12 +151,12 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         assertEquals(forward, backward, "the searches of one point are a set of facts about it");
         WritabilityKnowledge.Prevented held = assertInstanceOf(
                 WritabilityKnowledge.Prevented.class, forward);
-        assertEquals(Set.of(new EstablishmentGap.Observation(
+        assertEquals(List.of(EstablishmentGap.Observation.of(
                         EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
-                        new EstablishmentGap.Composition(EnumSet.of(
+                        EstablishmentGap.Composition.of(EnumSet.of(
                                 CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS,
                                 CompositionBudget.STEPS_A_SEARCH_MAY_TAKE))),
-                held.by(),
+                held.by().written(),
                 "and every figure that would have to give is there, none of them ranked away");
     }
 
@@ -169,11 +169,11 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
      */
     @Test
     void howTheGapsWereSplitOnTheWayIsNotSomethingAnAccountHolds() {
-        WritabilityKnowledge apart = new WritabilityKnowledge.Prevented(Set.of(
-                new EstablishmentGap.Observation(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
-                new EstablishmentGap.Observation(EnumSet.of(Incompleteness.Code.VALUE_UNREADABLE))));
+        WritabilityKnowledge apart = WritabilityKnowledge.Prevented.of(Set.of(
+                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
+                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_UNREADABLE))));
         WritabilityKnowledge together = WritabilityKnowledge.Prevented.by(
-                new EstablishmentGap.Observation(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED,
+                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED,
                         Incompleteness.Code.VALUE_UNREADABLE)));
 
         assertEquals(together, apart,
@@ -199,7 +199,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     }
 
     private static ItemAssessment.WritabilityEvidence nothingShown() {
-        return new ItemAssessment.WritabilityEvidence(Set.of());
+        return ItemAssessment.WritabilityEvidence.of(Set.of());
     }
 
     private static ItemAssessment.Attempt certified() {
@@ -212,7 +212,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Unverified(
                 new Generator.GeneratedRow(new Generator.Purpose.ForAPoint("p.x = 11"), List.of()),
                 WAY, List.of(),
-                new EstablishmentGap.Observation(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
+                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
     }
 
     private static ItemAssessment.Attempt stopped() {
@@ -223,7 +223,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Stopped(
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
-                WAY, List.of(), new EstablishmentGap.Composition(EnumSet.of(budget)));
+                WAY, List.of(), EstablishmentGap.Composition.of(EnumSet.of(budget)));
     }
 
     private static ItemAssessment.Attempt unresolved() {

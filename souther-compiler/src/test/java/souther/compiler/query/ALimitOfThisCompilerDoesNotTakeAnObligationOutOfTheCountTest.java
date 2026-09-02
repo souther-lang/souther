@@ -46,7 +46,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
 
         assertInstanceOf(ObligationDisposition.Counted.class, disposition,
                 "a point whose showing a limit stopped is one the model still owes a row at");
-        assertEquals(new ObligationDisposition.Undecided(List.of(
+        assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
                                 prevented()))),
                 disposition,
@@ -65,7 +65,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
         ObligationDisposition disposition = ObligationDisposition.of(
                 new ObligationCoverage.Missed(), new WritabilityKnowledge.NoEvidence());
 
-        assertEquals(new ObligationDisposition.NotCounted(
+        assertEquals(ObligationDisposition.NotCounted.because(
                         Set.of(ObligationDisposition.Reason.NOT_KNOWN_TO_BE_WRITABLE)),
                 disposition,
                 "a point nothing promises a row at is not one an author is behind on");
@@ -93,9 +93,9 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                 prevented());
 
-        assertEquals(new ObligationDisposition.Undecided(List.of(
+        assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere(
-                                new ReadingReasons(List.of(
+                                ReadingReasons.of(List.of(
                                         ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
                                 prevented()))),
@@ -115,7 +115,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS),
                 new WritabilityKnowledge.NoEvidence());
 
-        assertEquals(new ObligationDisposition.NotCounted(Set.of(
+        assertEquals(ObligationDisposition.NotCounted.because(Set.of(
                         ObligationDisposition.Reason.NOTHING_WAS_READ,
                         ObligationDisposition.Reason.NOT_KNOWN_TO_BE_WRITABLE)),
                 disposition,
@@ -174,10 +174,10 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                     after.equals(before) || after instanceof ObligationDisposition.Undecided;
             case ObligationDisposition.Undecided it ->
                     after instanceof ObligationDisposition.Undecided then
-                            && then.because().containsAll(it.because());
+                            && then.because().written().containsAll(it.because().written());
             case ObligationDisposition.NotCounted it ->
                     after instanceof ObligationDisposition.NotCounted then
-                            && then.because().containsAll(it.because());
+                            && then.because().written().containsAll(it.because().written());
         };
     }
 
@@ -191,12 +191,12 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     }
 
     private static WritabilityKnowledge established() {
-        return new WritabilityKnowledge.Established(new ItemAssessment.WritabilityEvidence(
+        return new WritabilityKnowledge.Established(ItemAssessment.WritabilityEvidence.of(
                 Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT)));
     }
 
     private static WritabilityKnowledge.Prevented prevented() {
-        return WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
+        return WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
                 EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
     }
 }

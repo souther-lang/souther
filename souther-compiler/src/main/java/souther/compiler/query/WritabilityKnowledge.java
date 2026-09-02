@@ -2,10 +2,13 @@ package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
-import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -54,50 +57,57 @@ public sealed interface WritabilityKnowledge {
     /**
      * Budgets of this compiler's stopped the establishing, and these are which.
      *
-     * <p>A set, and one that holds at most one of each kind. Two readings of one point may have
-     * been stopped by two different figures, and neither of them outranks the other — what a reader
-     * wants is everything that would have to be raised, and a choice between them would tell them
-     * about whichever reading a walk happened to reach first.
+     * <p>All of them, at most one of each kind. Two readings of one point may have been stopped by
+     * two different figures, and neither of them outranks the other — what a reader wants is
+     * everything that would have to be raised, and a choice between them would tell them about
+     * whichever reading a walk happened to reach first.
      *
-     * <p>Normalised here rather than by whoever collects them. Two observations that each name a
-     * cause are one observation naming both, and two composings are one composing naming every
-     * budget: held unnormalised, the same two facts arriving in two orders would be two different
-     * values, and a law about the order readings are folded in could not be stated as an equality.
+     * <p>Put together here rather than by whoever collects them, and put in order after that
+     * ({@link #of}). So two runs that were stopped by the same things hold one value, whatever
+     * order the readings arrived in and whatever order the kinds are declared in.
      */
-    record Prevented(Set<EstablishmentGap> by) implements WritabilityKnowledge {
+    record Prevented(CanonicalSelection<EstablishmentGap> by) implements WritabilityKnowledge {
 
         public Prevented {
             Objects.requireNonNull(by, "a showing that was stopped says what stopped it");
-            by = normalised(by);
             if (by.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a showing that was stopped says what stopped it");
             }
         }
 
-        /** One gap of each kind, holding between them everything the kinds were given. */
-        private static Set<EstablishmentGap> normalised(Set<EstablishmentGap> gaps) {
+        /**
+         * Everything that stopped the showing, as one gap of each kind in the order they are
+         * published in.
+         *
+         * <p>The two happen in that order and not the other. What the kinds hold between them is
+         * settled first, because two observations that each name a cause are one observation naming
+         * both — held apart, the same two facts arriving in two orders would be two different
+         * values, and a law about the order readings are folded in could not be stated as an
+         * equality. Only what is left after that has an order, and it is the one order there is.
+         */
+        public static Prevented of(Collection<EstablishmentGap> gaps) {
             Set<Incompleteness.Code> observed = EnumSet.noneOf(Incompleteness.Code.class);
             Set<CompositionBudget> budgets = EnumSet.noneOf(CompositionBudget.class);
             for (EstablishmentGap each : gaps) {
                 switch (each) {
-                    case EstablishmentGap.Observation it -> observed.addAll(it.causes());
-                    case EstablishmentGap.Composition it -> budgets.addAll(it.budgets());
+                    case EstablishmentGap.Observation it -> observed.addAll(it.causes().written());
+                    case EstablishmentGap.Composition it -> budgets.addAll(it.budgets().written());
                 }
             }
-            Set<EstablishmentGap> out = new LinkedHashSet<>();
+            List<EstablishmentGap> kinds = new ArrayList<>();
             if (!observed.isEmpty()) {
-                out.add(new EstablishmentGap.Observation(observed));
+                kinds.add(EstablishmentGap.Observation.of(observed));
             }
             if (!budgets.isEmpty()) {
-                out.add(new EstablishmentGap.Composition(budgets));
+                kinds.add(EstablishmentGap.Composition.of(budgets));
             }
-            return Collections.unmodifiableSet(out);
+            return new Prevented(PublicationOrders.ESTABLISHMENT_GAPS.keep(kinds));
         }
 
         /** One gap that was made, for a caller that has exactly one. */
         public static Prevented by(EstablishmentGap gap) {
-            return new Prevented(Set.of(gap));
+            return of(List.of(gap));
         }
     }
 
@@ -134,6 +144,6 @@ public sealed interface WritabilityKnowledge {
         // reader is owed is everything that would have to give — so the gaps are collected and
         // never ranked.
         Set<EstablishmentGap> stopped = searches.prevented();
-        return stopped.isEmpty() ? new NoEvidence() : new Prevented(stopped);
+        return stopped.isEmpty() ? new NoEvidence() : Prevented.of(stopped);
     }
 }

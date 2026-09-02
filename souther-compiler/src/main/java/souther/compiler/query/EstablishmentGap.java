@@ -1,10 +1,11 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.Set;
+import java.util.Collection;
 
 /**
  * What stopped this compiler establishing that a row can be written at a point.
@@ -25,6 +26,11 @@ import java.util.Set;
  * observation is of a value that exists and did not come back whole; a composing is of a value that
  * was never built. They leave the same question open and they are different work to close: one
  * takes keeping more of what is built, the other takes building more of what the rules leave.
+ *
+ * <p>What each of them holds is a {@link CanonicalSelection}, made where the gap is. A producer
+ * hands over the reasons it met, in whatever order it met them, and what comes out is the order
+ * they are published in — so nothing downstream has an order to decide, and nothing upstream has
+ * one to keep.
  */
 public sealed interface EstablishmentGap {
 
@@ -35,14 +41,18 @@ public sealed interface EstablishmentGap {
      * reading back, and {@link Incompleteness.Code} is what says whether a limit shortened the
      * observation or nothing could be made of the value at all.
      */
-    record Observation(Set<Incompleteness.Code> causes) implements EstablishmentGap {
+    record Observation(CanonicalSelection<Incompleteness.Code> causes) implements EstablishmentGap {
 
         public Observation {
             if (causes == null || causes.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an observation that stopped something says what stopped it");
             }
-            causes = Collections.unmodifiableSet(EnumSet.copyOf(causes));
+        }
+
+        /** The gap the codes an observation met are, in the order a document says them. */
+        public static Observation of(Collection<Incompleteness.Code> causes) {
+            return new Observation(PublicationOrders.OBSERVATION_CODES.keep(causes));
         }
     }
 
@@ -59,19 +69,21 @@ public sealed interface EstablishmentGap {
      * of an offer. Such a budget travels on what was built and not here, because a gap here is read
      * as the showing having been stopped.
      *
-     * <p>A set, because a search meets as many figures as it meets and no two of them are the same
-     * piece of work. Ranked, the one a reader was told about would be whichever the walk hit first.
+     * <p>As many figures as the search met, because no two of them are the same piece of work.
+     * Ranked, the one a reader was told about would be whichever the walk hit first.
      */
-    record Composition(Set<souther.compiler.partition.CompositionBudget> budgets)
-            implements EstablishmentGap {
+    record Composition(CanonicalSelection<CompositionBudget> budgets) implements EstablishmentGap {
 
         public Composition {
             if (budgets == null || budgets.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a composing this compiler stopped says which budget stopped it");
             }
-            budgets = Collections.unmodifiableSet(
-                    EnumSet.copyOf(budgets));
+        }
+
+        /** The gap the budgets a search met are, in the order a document says them. */
+        public static Composition of(Collection<CompositionBudget> budgets) {
+            return new Composition(PublicationOrders.COMPOSITION_BUDGETS.keep(budgets));
         }
     }
 }

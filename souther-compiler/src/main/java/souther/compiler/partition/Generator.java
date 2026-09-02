@@ -439,7 +439,7 @@ public final class Generator {
              * a set — a stop is one place — and this says so rather than choosing between them,
              * which would be a precedence over causes at the one layer that has none.
              */
-            public static Reason wordFor(java.util.Set<CompositionBudget> budgets) {
+            public static Reason wordFor(java.util.Collection<CompositionBudget> budgets) {
                 Reason word = null;
                 for (CompositionBudget each : budgets) {
                     Reason here = switch (each) {
@@ -2607,7 +2607,7 @@ public final class Generator {
                 unrepresented.add(new ReachabilityGap.Uncomposed(cut, shared
                         ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
                         : found != null && !found.stoppedBy().isEmpty()
-                                ? new ReachabilityGap.Why.TheWalkForItsPositionsWasStopped(
+                                ? ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
                                         found.stoppedBy())
                                 : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
                 continue;

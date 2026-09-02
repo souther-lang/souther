@@ -332,7 +332,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     private static ItemAssessment.Attempt unverified(String carrier) {
         return new ItemAssessment.Attempt.Unverified(new Generator.GeneratedRow(
                 new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null,
-                List.of(), new EstablishmentGap.Observation(
+                List.of(), EstablishmentGap.Observation.of(
                         java.util.Set.of(souther.compiler.observe.Incompleteness.Code
                                 .VALUE_TRUNCATED)));
     }
