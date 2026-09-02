@@ -9,16 +9,22 @@ import souther.compiler.check.CoverageObligation;
  *
  * <p><b>The same questions {@code check.Owed} carries, and not the same identities.</b> A reading of
  * a declaration knows its positions by a key relative to the value the clauses are written on —
- * {@code x}, {@code a.b}, the empty string for the value itself — and knows a number of one by the
- * operation beside that key. What an input is walked by is a {@link TermPath} from a parameter, and
- * what a boundary is drawn on is a {@link NumericTerm}. Neither can be read off the other without
- * the root the walk started at and the type standing at the position, which only the boundary
- * between the two has.
+ * {@code x}, {@code a.b}, the empty string for the value itself — and what an input is walked by is
+ * a {@link TermPath} from a parameter. So a declaration names a number as
+ * {@code NumberAt<RuleKey>} and an input names the same number as {@code NumberAt<TermPath>}, and
+ * the crossing translates the place and nothing else: which number of it this is crosses unchanged.
  *
- * <p>So the crossing is made once, where those are, and everything downstream compares these. Left
- * in the declaration's vocabulary and compared against an axis, a field key and a term path are two
- * spellings of one place that agree at a top-level parameter and nowhere else — and comparing them
- * as strings is the reconstruction this whole side exists to stop.
+ * <p>The crossing is made once, at the boundary that has the root the walk started at, and
+ * everything downstream compares these. Left in the declaration's vocabulary and compared against
+ * an axis, a field key and a term path are two spellings of one place that agree at a top-level
+ * parameter and nowhere else — and comparing them as strings is the reconstruction this whole side
+ * exists to stop.
+ *
+ * <p><b>A {@link NumericTerm} is on neither side of it.</b> It belongs to a reader that may answer
+ * one of these, and stating a question never needs one — which is what lets a question be asked
+ * about a number no reading could make a term of. Asked for at the crossing, the crossing would
+ * have to be handed the type standing at the position and could fail, and a question would go
+ * unasked for want of an answer.
  *
  * <p>The same crossing {@link UnreadRule} makes with {@link FilingCoordinate}, and for the same
  * reason: a finding about a rule and a question about a rule are both filed at a number, and the
@@ -56,8 +62,8 @@ public sealed interface InputQuestion {
      * <p><b>Not the term.</b> A {@link NumericTerm} exists where a reading worked out what the
      * number is measured by and how it is read off a row, so a question holding one could be asked
      * only about a rule this compiler had already got through — and a rule whose number nothing
-     * could be made of asked nothing at all. What is here is a place and the operation the author's
-     * call resolved to, and nothing is built out of it.
+     * could be made of asked nothing at all. What is here is a place and the operation as it
+     * resolved, and nothing is built out of it.
      *
      * <p><b>The answer side is what makes the term, and it projects.</b> A reader that can answer
      * this has already built a term of its own and says which of these that term is a measure of

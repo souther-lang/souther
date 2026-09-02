@@ -197,8 +197,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * reach a document as one about no number at all.
          *
          * <p><b>Written from the question and never from an answer to it.</b> What the document
-         * says a line falls on is the place the rules name and the operation the author's call
-         * resolved to, both of which the question carries. Read off the term a reading made, this
+         * says a line falls on is the place the rules name and the operation as it resolved, both
+         * of which the question carries. Read off the term a reading made, this
          * had a word only for the numbers something had already read — and the document's own
          * vocabulary was then a projection of what this compiler can do.
          */

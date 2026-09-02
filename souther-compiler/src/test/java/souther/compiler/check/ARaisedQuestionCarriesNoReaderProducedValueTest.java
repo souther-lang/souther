@@ -10,6 +10,7 @@ import java.lang.classfile.ClassModel;
 import java.lang.classfile.Signature;
 import java.lang.classfile.attribute.RecordAttribute;
 import java.lang.classfile.attribute.RecordComponentInfo;
+import java.lang.reflect.AccessFlag;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -123,6 +124,12 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * <p>An interface may stand between them and carry nothing, which is how the arms are told
      * apart at all. What it may not do is hold a field: a sealed interface with state is a class in
      * everything but the word.
+     *
+     * <p><b>And it has to be sealed, not merely empty.</b> A class holding nothing passes any test
+     * for state and leaves whatever extends it out of reach, since the walk finds an arm through
+     * the permitted subclasses and there are none to find. So a reading one subclass down would sit
+     * behind a supertype every check here calls clean — the same hole one hop further out, which is
+     * what asking for empty rather than for sealed would have left.
      */
     @Test
     void aQuestionIsBuiltOutOfRecordsAndSealedInterfaces() {
@@ -138,11 +145,13 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
                 continue;
             }
             boolean record = of.findAttribute(Attributes.record()).isPresent();
+            boolean sealedInterface = of.flags().has(AccessFlag.INTERFACE)
+                    && of.findAttribute(Attributes.permittedSubclasses()).isPresent();
             boolean stateless = of.fields().stream()
-                    .noneMatch(field -> !field.flags().has(java.lang.reflect.AccessFlag.STATIC));
-            if (!record && !stateless) {
-                otherwise.add(each + " is neither a record nor stateless, so following components"
-                        + " is not following its state");
+                    .noneMatch(field -> !field.flags().has(AccessFlag.STATIC));
+            if (!(record || (sealedInterface && stateless))) {
+                otherwise.add(each + " is neither a record nor a sealed interface with no state,"
+                        + " so what the walk follows is not everything it holds");
             }
         }
         assertEquals(List.of(), otherwise,

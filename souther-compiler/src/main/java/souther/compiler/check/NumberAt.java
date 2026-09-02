@@ -14,11 +14,14 @@ import souther.compiler.types.ValueName;
  * {@link Owed.Boundary} and {@code inputs.InputQuestion.AboutANumber} say, in the arm, where it can
  * be true of everything that reaches it.
  *
- * <p><b>What it is made of takes no reading.</b> The place is what a vocabulary calls it and the
- * operation is what the call resolved to, so one of these exists for a rule this compiler has not
- * read and cannot read. That is what lets a question be asked about a number nothing could be made
- * of: held as a term instead ({@link souther.compiler.inputs.NumericTerm}), the question could only
- * be stated where the reading had already succeeded, and the shortfall was left to be carried in a
+ * <p><b>What it is made of takes no reading.</b> The place is what a vocabulary calls it, and the
+ * operation is a resolved name — the one the shape declares its values are measured by
+ * ({@code NumericMeasures.takenOf}), or the one a call in the source resolved to
+ * ({@code inputs.NumericTerm.TakenOf}), which are two ways to the same name and not two provenances
+ * a reader has to tell apart. So one of these exists for a rule this compiler has not read and
+ * cannot read. That is what lets a question be asked about a number nothing could be made of: held
+ * as a term instead ({@link souther.compiler.inputs.NumericTerm}), the question could only be
+ * stated where the reading had already succeeded, and the shortfall was left to be carried in a
  * list beside the accounting.
  *
  * <p><b>The place is a parameter because it crosses a boundary and the number does not.</b> A

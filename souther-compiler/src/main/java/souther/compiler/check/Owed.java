@@ -55,8 +55,8 @@ public sealed interface Owed {
      * about one operation's number was filed at another's, and every reader that wanted the name
      * reached past the question to whatever stood beside it.
      *
-     * <p><b>A claim and never a term.</b> What names the number is the place the rules call it and
-     * the operation the call resolved to, both of which a rule that nothing read still has. A term
+     * <p><b>A subject and never a term.</b> What names the number is the place the rules call it
+     * and the operation as it resolved, both of which a rule that nothing read still has. A term
      * is what a reading makes of one, so a question carrying a term could only be raised where the
      * reading had already succeeded.
      *

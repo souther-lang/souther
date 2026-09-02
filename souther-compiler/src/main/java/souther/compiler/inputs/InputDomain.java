@@ -1593,8 +1593,8 @@ public final class InputDomain {
      * <p>Here, where the root the walk started at and the type standing at the position both are.
      * The reading that raised them knows its positions by a key relative to the value its clauses
      * are written on; what everything past here compares is a term path. Which number of a position
-     * a question is about crosses unchanged — it is the operation the author's call resolved to,
-     * and no capability of either side is asked about it.
+     * a question is about crosses unchanged — it is a resolved name, and no capability of either
+     * side is asked about it.
      */
     private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path) {
         List<StandingQuestion> out = new ArrayList<>();
