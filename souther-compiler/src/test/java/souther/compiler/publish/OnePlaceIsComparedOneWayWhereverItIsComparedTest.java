@@ -64,6 +64,36 @@ class OnePlaceIsComparedOneWayWhereverItIsComparedTest {
                 "one order over places, asked twice");
     }
 
+    /**
+     * And two rules written in a text this compilation cannot name are told apart by where.
+     *
+     * <p>The document's own field for a place takes a source, so there is none for these — and the
+     * sentence about a rule prints the numbers all the same, so a reader sees two. Told apart by
+     * the field's shape alone, the two came out as one value and which was written fell to
+     * whichever the set of handles iterated first.
+     */
+    @Test
+    void twoRulesInATextThisCannotNameAreToldApartByWhereTheyAre() {
+        RuleCitation earlier = new RuleCitation.WrittenAt(Citation.of(new SourcePos(1, 1)));
+        RuleCitation later = new RuleCitation.WrittenAt(Citation.of(new SourcePos(2, 2)));
+
+        assertEquals(PublicationOrders.handleFor(List.of(earlier, later)),
+                PublicationOrders.handleFor(List.of(later, earlier)),
+                "which of the two a caller had first decides nothing");
+        assertEquals(Optional.of(earlier), PublicationOrders.handleFor(List.of(later, earlier)),
+                "and the one nearest the top of the text is the one a document writes");
+    }
+
+    /** And a place a reader can be sent to comes before one nobody can. */
+    @Test
+    void aPlaceAReaderCanBeSentToComesBeforeOneNobodyCan() {
+        RuleCitation held = new RuleCitation.WrittenAt(EARLIER);
+        RuleCitation unnamed = new RuleCitation.WrittenAt(Citation.of(new SourcePos(1, 1)));
+
+        assertEquals(Optional.of(held), PublicationOrders.handleFor(List.of(unnamed, held)),
+                "a reader sent to a file is better served than one sent to two numbers");
+    }
+
     /** A name the author gave comes before a place they did not. */
     @Test
     void aNameComesBeforeAPlace() {

@@ -36,4 +36,11 @@ public final class NoPlaceToWrite extends IllegalArgumentException
         super("an adequacy document writes places in files this compile holds, and was given "
                 + where);
     }
+
+    /** The same, said of the fact rather than of one of the places it was met at — because there
+     *  were several and naming whichever came to hand would say a different one each run. */
+    public NoPlaceToWrite(souther.compiler.observe.Incompleteness.Fact about) {
+        super("an adequacy document writes places in files this compile holds, and every place "
+                + about + " was met at is in a text it cannot name");
+    }
 }

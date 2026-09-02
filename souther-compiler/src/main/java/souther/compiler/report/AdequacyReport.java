@@ -2742,6 +2742,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // answered in that order, and neither side holds the other's half.
             g.put("subject", gap.fact().sourceIdentity()
                     .map(sources::written).orElseGet(gap.fact()::subject));
+            // The one surface with a field a place is missing from, so the one that has anything to
+            // refuse. A fact met nowhere a reader can be sent is written without a place, which the
+            // schema allows; a fact met only where this document may not point is the other thing,
+            // and the page and the generated block go on saying it because neither points anywhere.
+            if (gap.metWhereNothingCanBeWritten()) {
+                throw new NoPlaceToWrite(gap.fact());
+            }
             gap.at().ifPresent(where -> at(g, where, sources));
         }
     }

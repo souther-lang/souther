@@ -123,7 +123,7 @@ class WhatWentUnreadIsWrittenInOneOrderHoweverItWasMetTest {
     private static PublishedIncompleteness entry(Incompleteness.Code code, Target about,
                                                  int line, int column) {
         return new PublishedIncompleteness(new Incompleteness.Fact(code, about),
-                PublishedAt.of(Citation.of(pos(line, column))));
+                PublishedAt.of(Citation.of(pos(line, column))), false);
     }
 
     private static Target row(int ordinal) {

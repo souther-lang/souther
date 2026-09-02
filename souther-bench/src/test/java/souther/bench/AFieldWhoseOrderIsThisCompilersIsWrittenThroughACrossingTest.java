@@ -41,6 +41,30 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
             "souther.compiler.publish.CanonicalSelection",
             "souther.compiler.publish.SourceOrdered");
 
+    /**
+     * Every array a report starts is one whose name can be read here.
+     *
+     * <p>What the rule below is over is the writers of a named field, found by the name written at
+     * the call. A name this cannot read is not a writer that fails the rule — it is a writer the
+     * rule never sees, so the population would go on looking complete while a field left it. Held
+     * first, because a check whose population can shrink in silence says less than it appears to.
+     */
+    @Test
+    void everyArrayAReportStartsIsStartedUnderANameThisCanRead() throws Exception {
+        List<String> unread = new ArrayList<>();
+        for (Compiled.Invocation each : called()) {
+            if (each.site().member().equals(STARTS_AN_ARRAY)
+                    && each.site().from().startsWith("souther.compiler.report.")
+                    && each.said().isEmpty()) {
+                unread.add(each.site().at());
+            }
+        }
+
+        assertEquals(List.of(), unread,
+                "an array of the document is started under a name nothing here can read, so a"
+                        + " field written there is outside every rule about named fields");
+    }
+
     @Test
     void everyFieldWhoseOrderIsThisCompilersIsWrittenFromACrossing() throws Exception {
         List<String> straightFromACollection = new ArrayList<>();

@@ -23,7 +23,8 @@ import java.util.Optional;
  * as the document writes it, so resolving one here would make the choosing of an order decide which
  * sources a document goes on to explain.
  */
-public record PublishedIncompleteness(Incompleteness.Fact fact, Optional<PublishedAt> at) {
+public record PublishedIncompleteness(Incompleteness.Fact fact, Optional<PublishedAt> at,
+                                      boolean metWhereNothingCanBeWritten) {
 
     public PublishedIncompleteness {
         if (fact == null) {
@@ -45,19 +46,19 @@ public record PublishedIncompleteness(Incompleteness.Fact fact, Optional<Publish
      * comparison asked at that point would let the sorting decide which sources a document goes on
      * to explain.
      *
-     * <p>A fact met nowhere a reader can be sent has no place, and the schema says a place is
-     * optional — so it is written without one. A fact met only at places none of which names a file
-     * this compile holds is the other thing, and it is refused ({@link NoPlaceToWrite}).
+     * <p>A fact met nowhere a reader can be sent comes out with no place. Whether that is something
+     * to refuse is the surface's: the page a person reads and the block a generator writes say
+     * these facts without pointing anywhere, and only the document has a field that a place is
+     * missing from ({@link NoPlaceToWrite}). Refused here, a generation stopped because a report it
+     * was not writing would have had a field to fill.
      */
     public static CanonicalArrangement<PublishedIncompleteness> everyOne(
             Collection<Incompleteness.Met> gaps) {
         List<PublishedIncompleteness> out = new ArrayList<>(gaps.size());
         for (Incompleteness.Met gap : gaps) {
             Optional<PublishedAt> place = PublicationOrders.placeFor(gap.citations());
-            if (place.isEmpty() && !gap.citations().isEmpty()) {
-                throw new NoPlaceToWrite(gap.citations().iterator().next());
-            }
-            out.add(new PublishedIncompleteness(gap.fact(), place));
+            out.add(new PublishedIncompleteness(gap.fact(), place,
+                    place.isEmpty() && !gap.citations().isEmpty()));
         }
         return PublicationOrders.WHAT_WENT_UNREAD.arrange(out);
     }

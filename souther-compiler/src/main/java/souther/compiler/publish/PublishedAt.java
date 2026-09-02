@@ -22,7 +22,7 @@ import java.util.SequencedMap;
  * of these is a place, and what one is written as is what tells two of them apart.
  *
  * <p>So this and never {@link Citation} is what a canonical order is over, and what a witness is
- * chosen from. {@link PublicationOrders#PUBLISHED_PLACES} is the order.
+ * chosen from, and {@code PublicationOrders.PLACES} is the order.
  *
  * <p><b>It names the source and does not resolve it.</b> What a document calls a source is the
  * renderer's, recorded as the document writes it; asked here, the choosing of one place out of
