@@ -51,12 +51,17 @@ public sealed interface Owed {
      * Where a line falls on one number at one name.
      *
      * <p>The number itself, which is the value at the name or what an operation answers of it.
-     * Two operations over one name are two of these, and that is the whole reason the coordinate is
+     * Two operations over one name are two of these, and that is the whole reason the claim is
      * carried rather than a flag saying that a number was taken: told apart by the flag, a rule
      * about one operation's number was filed at another's, and every reader that wanted the name
      * reached past the question to whatever stood beside it.
+     *
+     * <p><b>A claim and never a term.</b> What names the number is the place the rules call it and
+     * the operation the call resolved to, both of which a rule that nothing read still has. A term
+     * is what a reading makes of one, so a question carrying a term could only be raised where the
+     * reading had already succeeded.
      */
-    record Boundary(FieldDomains.Coordinate on) implements Owed {
+    record Boundary(BoundaryClaim<RuleKey> on) implements Owed {
 
         public Boundary {
             if (on == null) {
@@ -66,7 +71,13 @@ public sealed interface Owed {
 
         @Override
         public String toString() {
-            return on.toString();
+            // The value itself is at no name, which reads as nothing at all where it is printed.
+            String where = on.position().isTheValueItself() ? "the value" : on.position().toString();
+            return switch (on.of()) {
+                case BoundaryClaim.OfWhatNumber.OfItsOwnValue _ -> where;
+                case BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers taken ->
+                        taken.operation() + "(" + where + ")";
+            };
         }
     }
 

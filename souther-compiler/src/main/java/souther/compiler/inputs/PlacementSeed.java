@@ -1,6 +1,6 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.FieldDomains;
+import souther.compiler.check.BoundaryClaim;
 import souther.compiler.check.Owed;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
@@ -53,7 +53,7 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
          * and on its length, so two rules at one address can be about two numbers, and a reader that
          * took the number from the location would file both under whichever it guessed.
          */
-        record ANumberOfIt(FieldDomains.CoordinateKind which) implements Placed {
+        record ANumberOfIt(BoundaryClaim.OfWhatNumber which) implements Placed {
 
             public ANumberOfIt {
                 if (which == null) {
@@ -79,15 +79,15 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
     public static PlacementSeed of(RuleAddress address, NumericTerm term, RuleRef by,
                                    RuleCitation cited) {
         return new PlacementSeed(address, new Placed.ANumberOfIt(switch (term) {
-            case NumericTerm.ValueOf _ -> new FieldDomains.CoordinateKind.OfItsOwnValue();
+            case NumericTerm.ValueOf _ -> new BoundaryClaim.OfWhatNumber.OfItsOwnValue();
             case NumericTerm.TakenOf taken ->
-                    new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(taken.operation());
+                    new BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers(taken.operation());
             // The operation likewise, since what a rule about this number is about is what the
             // operation answered. That it answered it over a run rather than of one value is not a
             // difference a rule of the value the run is under can name: no clause of a record is
             // written about what its elements come to.
             case NumericTerm.TakenOver over ->
-                    new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(over.operation());
+                    new BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers(over.operation());
         }), by, cited);
     }
 
@@ -108,8 +108,8 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleRef by, Rule
                     new PlacementSeed(new RuleAddress(root, values.path()),
                             new Placed.TheValuesThere(), by, cited);
             case Owed.Boundary boundary ->
-                    new PlacementSeed(new RuleAddress(root, boundary.on().path()),
-                            new Placed.ANumberOfIt(boundary.on().kind()), by, cited);
+                    new PlacementSeed(new RuleAddress(root, boundary.on().position()),
+                            new Placed.ANumberOfIt(boundary.on().of()), by, cited);
         };
     }
 }

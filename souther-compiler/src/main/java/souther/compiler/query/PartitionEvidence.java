@@ -195,24 +195,33 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * number is said by the arm that has none rather than by a test that any shape added later
          * would also fail — which is how a question about a number nobody had classified would
          * reach a document as one about no number at all.
+         *
+         * <p><b>Written from the question and never from an answer to it.</b> What the document
+         * says a line falls on is the place the rules name and the operation the author's call
+         * resolved to, both of which the question carries. Read off the term a reading made, this
+         * had a word only for the numbers something had already read — and the document's own
+         * vocabulary was then a projection of what this compiler can do.
          */
         public String measure() {
             return switch (asked.asks()) {
                 case souther.compiler.inputs.InputQuestion.AboutAPosition _ -> null;
                 case souther.compiler.inputs.InputQuestion.AboutANumber it ->
-                        switch (it.term()) {
+                        switch (it.claim().of()) {
                             // The position's own values, which the `path` beside this already says.
-                            case souther.compiler.inputs.NumericTerm.ValueOf _ -> null;
-                            case souther.compiler.inputs.NumericTerm.TakenOf taken ->
-                                    taken.toString();
-                            // The number itself, as it is written: what the `path` beside this says
-                            // is where its values are read from, which for a run is not what the
-                            // number is of. A consumer reading the path as the measure would take
-                            // a total for the values it was added up from.
-                            case souther.compiler.inputs.NumericTerm.TakenOver over ->
-                                    over.toString();
+                            case souther.compiler.check.BoundaryClaim.OfWhatNumber
+                                    .OfItsOwnValue _ -> null;
+                            case souther.compiler.check.BoundaryClaim.OfWhatNumber
+                                    .OfWhatAnOperationAnswers taken ->
+                                    named(taken.operation()) + "(" + at() + ")";
                         };
             };
+        }
+
+        /** What a document calls the operation a number is taken by. The qualified spelling where
+         *  the library declares it, which is what every other surface writes. */
+        private static String named(souther.compiler.types.ValueName operation) {
+            return operation instanceof souther.compiler.types.ValueName.Stdlib it
+                    ? it.qualified() : operation.toString();
         }
     }
 

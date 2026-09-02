@@ -104,7 +104,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             case PlacementSeed.Placed.TheValuesThere _ ->
                     new souther.compiler.check.Owed.AdmittedValues(seed.address().key());
             case PlacementSeed.Placed.ANumberOfIt it -> new souther.compiler.check.Owed.Boundary(
-                    new souther.compiler.check.FieldDomains.Coordinate(seed.address().key(),
+                    new souther.compiler.check.BoundaryClaim<>(seed.address().key(),
                             it.which()));
         };
     }

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.BoundaryClaim;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
@@ -147,6 +148,27 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
      * is the one that tells them apart. */
     public TermPath path() {
         return term.position();
+    }
+
+    /**
+     * Which claim about a number this axis answers.
+     *
+     * <p>The projection runs this way and only this way. A claim is what a rule of the model says a
+     * line falls on; a term is what this compiler managed to make of one, and it carries how the
+     * number is measured, where it runs and how it is read off a row besides. So an answer can say
+     * which question it is an answer to, and no question is built out of an answer — asked the other
+     * way round, a question about a number no term could be made of would have had no axis to
+     * compare against and no way to be recognised as this axis's.
+     *
+     * <p>Here rather than beside the claim, so that the question vocabulary names nothing a reading
+     * produces. A converter written over there would be that dependency with the arrow drawn the
+     * other way.
+     */
+    public BoundaryClaim<TermPath> claim() {
+        return switch (term) {
+            case NumericTerm.ValueOf it -> BoundaryClaim.valueOf(it.position());
+            case NumericTerm.TakenOf it -> BoundaryClaim.takenOf(it.position(), it.operation());
+        };
     }
 
     /**

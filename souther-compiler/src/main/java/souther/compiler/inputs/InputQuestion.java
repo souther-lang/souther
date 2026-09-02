@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.BoundaryClaim;
 import souther.compiler.check.CoverageObligation;
 
 /**
@@ -48,21 +49,28 @@ public sealed interface InputQuestion {
     /**
      * Where a line falls on one number of one position.
      *
-     * <p>The term, which names the operation for a number taken of a position and the position
+     * <p>The claim, which names the operation for a number taken of a position and the position
      * itself for its own values. Two operations over one path are two of these and are told apart
      * here rather than by whatever a reader finds standing beside them.
+     *
+     * <p><b>Not the term.</b> A {@link NumericTerm} exists where a reading worked out what the
+     * number is measured by and how it is read off a row, so a question holding one could be asked
+     * only about a rule this compiler had already got through — and a rule whose number nothing
+     * could be made of asked nothing at all. The claim is what the author wrote: a place and the
+     * operation their call resolved to. Whoever answers builds the term from it, and where none can
+     * be built the question stands unanswered rather than unasked.
      */
-    record AboutANumber(NumericTerm term) implements InputQuestion {
+    record AboutANumber(BoundaryClaim<TermPath> claim) implements InputQuestion {
 
         public AboutANumber {
-            if (term == null) {
+            if (claim == null) {
                 throw new IllegalArgumentException("a line falls on some number");
             }
         }
 
         @Override
         public String toString() {
-            return term.toString();
+            return claim.toString();
         }
     }
 
@@ -70,7 +78,7 @@ public sealed interface InputQuestion {
     default TermPath path() {
         return switch (this) {
             case AboutAPosition it -> it.path();
-            case AboutANumber it -> it.term().subjectPath();
+            case AboutANumber it -> it.claim().position();
         };
     }
 

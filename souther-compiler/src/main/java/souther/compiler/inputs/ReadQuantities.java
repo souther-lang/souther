@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.BoundaryClaim;
 import souther.compiler.check.ConstraintState;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
@@ -224,11 +225,11 @@ final class ReadQuantities implements Quantities {
         if (root == null) {
             return null;
         }
-        FieldDomains.Coordinate counted =
+        BoundaryClaim<RuleKey> counted =
                 byRoot.get(root.root()).rules().bounds().countedAt(root.named());
         if (counted == null
-                || !(counted.kind()
-                        instanceof FieldDomains.CoordinateKind.OfWhatAnOperationAnswers taken)
+                || !(counted.of()
+                        instanceof BoundaryClaim.OfWhatNumber.OfWhatAnOperationAnswers taken)
                 || !(taken.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
@@ -588,16 +589,16 @@ final class ReadQuantities implements Quantities {
      * turned into one of those positions would be one of however many the name reaches, chosen by
      * nothing.
      */
-    private InputAtom called(TermPath root, FieldDomains.Coordinate at, StructuralContext under) {
-        return atomAt(standingUnder(pathOf(root, at.path()), under), at.kind());
+    private InputAtom called(TermPath root, BoundaryClaim<RuleKey> at, StructuralContext under) {
+        return atomAt(standingUnder(pathOf(root, at.position()), under), at.of());
     }
 
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
     private InputAtom.Named called(NumericTerm term, StructuralContext under) {
         UnderARoot at = rootOf(term.subjectPath());
-        FieldDomains.Coordinate where = coordinateOf(at, term);
-        return atomAt(standingUnder(pathOf(at.root(), where.path()), under), where.kind());
+        BoundaryClaim<RuleKey> where = coordinateOf(at, term);
+        return atomAt(standingUnder(pathOf(at.root(), where.position()), under), where.of());
     }
 
     /** Where a value's own rules put a coordinate, as a place of this input. */
@@ -618,7 +619,7 @@ final class ReadQuantities implements Quantities {
      * number standing under however many cases there are — chosen by nothing.
      */
     private InputAtom.Named atomAt(TermPath place,
-                                   FieldDomains.CoordinateKind kind) {
+                                   BoundaryClaim.OfWhatNumber kind) {
         UnderARoot at = rootOf(place);
         return new InputAtom.Named(at.root().toString(), at.named(), kind);
     }
@@ -1056,8 +1057,8 @@ final class ReadQuantities implements Quantities {
     }
 
     /** What is fixed under one value, named the way that value's own rules name it. */
-    private Map<FieldDomains.Coordinate, Count> under(TermPath root) {
-        Map<FieldDomains.Coordinate, Count> out = new LinkedHashMap<>();
+    private Map<BoundaryClaim<RuleKey>, Count> under(TermPath root) {
+        Map<BoundaryClaim<RuleKey>, Count> out = new LinkedHashMap<>();
         fixed.forEach((term, fixedAt) -> {
             UnderARoot at = rootOf(term.subjectPath());
             // Which number of the place was settled, and not only which place. A count taken of one
@@ -1087,13 +1088,13 @@ final class ReadQuantities implements Quantities {
      * name — so a guard bounding one would have been read against the clauses written about the
      * other (#1027).
      */
-    private static FieldDomains.Coordinate coordinateOf(UnderARoot at, NumericTerm term) {
+    private static BoundaryClaim<RuleKey> coordinateOf(UnderARoot at, NumericTerm term) {
         return switch (term) {
-            case NumericTerm.ValueOf _ -> FieldDomains.Coordinate.value(at.named());
+            case NumericTerm.ValueOf _ -> BoundaryClaim.valueOf(at.named());
             case NumericTerm.TakenOf taken ->
-                    FieldDomains.Coordinate.takenBy(at.named(), taken.operation());
+                    BoundaryClaim.takenOf(at.named(), taken.operation());
             case NumericTerm.TakenOver over ->
-                    FieldDomains.Coordinate.takenBy(at.named(), over.operation());
+                    BoundaryClaim.takenOf(at.named(), over.operation());
         };
     }
 

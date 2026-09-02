@@ -3,7 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.FieldDomains;
+import souther.compiler.check.BoundaryClaim;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.Sig;
@@ -74,7 +74,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
         PlacementFiling filing = read.file(new PlacementSeed(
                 new RuleAddress(TermPath.of("q"), RuleKey.of("limit")),
                 new PlacementSeed.Placed.ANumberOfIt(
-                        new FieldDomains.CoordinateKind.OfItsOwnValue()),
+                        new BoundaryClaim.OfWhatNumber.OfItsOwnValue()),
                 aRule(read), someCitation(aRule(read))));
 
         assertEquals(List.of("q@A.limit", "q@B.limit"),
