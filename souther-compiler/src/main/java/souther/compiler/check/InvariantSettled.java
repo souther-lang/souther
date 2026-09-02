@@ -83,6 +83,17 @@ public final class InvariantSettled {
         return module.name();
     }
 
+    /**
+     * The behaviors it declares.
+     *
+     * <p>Handed over as they are, because nothing this state claims is about them: no rung at or
+     * below the settling rewrites a behavior. A reader wanting what they take and answer with is
+     * asking a question of its own, and does not need a module every declaration of which came out.
+     */
+    public List<Hir.BehaviorDef> behaviors() {
+        return module.behaviors();
+    }
+
     /** The tree, for the states of this package that are assembled from it. */
     Hir.Module module() {
         return module;

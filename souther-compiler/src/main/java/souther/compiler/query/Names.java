@@ -7,6 +7,9 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclarationRefusals;
+import souther.compiler.check.Derived;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.check.Denoting;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
@@ -129,26 +132,26 @@ public final class Names {
      * A registry over this compilation, reading each module's declarations as they were derived.
      *
      * <p>What it hands over is the derived declaration and not the node it was derived from. A table
-     * of nodes would say of every declaration below the stage what nothing established of it, and
-     * the reason it used to be one is that the second source a reader is answered from — the
-     * language's own vocabulary — was loaded resolved and had no derived declaration to give. It has
-     * one now ({@link souther.compiler.check.Declarations.Vocabulary#ofDerived}), so both sources
-     * are at this rung. What says a reader is at the derived world is which registry it asked for:
+     * of nodes would say of every declaration below the stage what nothing established of it. Both
+     * sources a reader is answered from are at this rung: the compilation's, here, and the
+     * language's own vocabulary, which is lifted to the same representation
+     * ({@link Declarations.Vocabulary#ofDerived}) rather than left resolved with no derived
+     * declaration to give. What says a reader is at the derived world is which registry it asked for:
      * {@link #derivedSymbols} is built over this one and {@link #resolvedSymbols} over the
      * resolved one.
      */
-    static Registry<souther.compiler.check.Derived.Def> derivedRegistry(Db db) {
-        return new Registry<souther.compiler.check.Derived.Def>() {
+    static Registry<Derived.Def> derivedRegistry(Db db) {
+        return new Registry<Derived.Def>() {
             @Override
-            public souther.compiler.check.Derived.Def declaration(TypeKey address) {
-                Answer<souther.compiler.check.Derived.Def> def =
+            public Derived.Def declaration(TypeKey address) {
+                Answer<Derived.Def> def =
                         db.ask(new Shapes.DerivedDef(address));
                 return def.present() ? def.value() : null;
             }
 
             @Override
-            public Map<String, souther.compiler.check.Derived.Def> declaredIn(String moduleName) {
-                Answer<Map<String, souther.compiler.check.Derived.Def>> defs =
+            public Map<String, Derived.Def> declaredIn(String moduleName) {
+                Answer<Map<String, Derived.Def>> defs =
                         db.ask(new Shapes.DerivedDeclarations(moduleName));
                 return defs.present() ? defs.value() : Map.of();
             }
@@ -524,8 +527,8 @@ public final class Names {
 
     /** What names mean in a module over the declarations as resolution left them — what
      * {@link Resolved} is resolved against. */
-    static Answer<souther.compiler.check.ResolvedSymbols> resolvedSymbols(Db db, String name) {
-        return symbols(db, name, (names, stdlib) -> souther.compiler.check.ResolvedSymbols
+    static Answer<ResolvedSymbols> resolvedSymbols(Db db, String name) {
+        return symbols(db, name, (names, stdlib) -> ResolvedSymbols
                 .over(name, resolvedRegistry(db), names, stdlib));
     }
 
@@ -541,7 +544,7 @@ public final class Names {
      * memoised by, and a caller that kept one would be holding the compilation it was made from. It
      * is built where it is used and dropped there.
      */
-    public static Answer<souther.compiler.check.DerivedSymbols> derivedSymbols(
+    public static Answer<DerivedSymbols> derivedSymbols(
             Db db, String name) {
         // What this module's own declarations came to may be partial — a declaration that did not
         // come out is left out and the ones beside it are still read. What another module's are may
@@ -552,8 +555,8 @@ public final class Names {
         if (!db.ask(new Shapes.DerivedDependencies(name)).present()) {
             return Answer.absent();
         }
-        return symbols(db, name, (names, stdlib) -> souther.compiler.check.DerivedSymbols
-                .over(name, derivedRegistry(db), names, stdlib));
+        return symbols(db, name, (names, stdlib) -> DerivedSymbols
+                .over(name, derivedRegistry(db), resolvedRegistry(db), names, stdlib));
     }
 
     /** The same, over the declarations as they were written — what {@code Resolve} resolves
@@ -584,7 +587,7 @@ public final class Names {
 
         @Override
         public Answer<Map<String, Hir.Def>> compute(Db db) {
-            Answer<souther.compiler.check.ResolvedSymbols> symbols = resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> symbols = resolvedSymbols(db, name);
             return symbols.present() ? Answer.of(symbols.value().reachable()) : Answer.absent();
         }
     }

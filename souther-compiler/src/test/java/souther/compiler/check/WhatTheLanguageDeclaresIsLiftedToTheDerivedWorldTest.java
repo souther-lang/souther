@@ -20,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The two sources a reader below the derivation is answered from are at the same rung.
  *
  * <p>A reader there asks {@link Declarations} for an identity and is answered from the compilation's
- * registry or from the language's own vocabulary. While the second was loaded resolved, the only
- * representation both could be in was the node — which is what made a table of derived declarations
- * impossible to hand out, and every reader below the derivation held declarations with nothing left
- * saying they had come out.
+ * registry or from the language's own vocabulary. Were the second at the rung below, the only
+ * representation both could be in would be the node, no table of derived declarations could be
+ * handed out, and every reader below the derivation would hold declarations with nothing saying they
+ * had come out.
  */
 class WhatTheLanguageDeclaresIsLiftedToTheDerivedWorldTest {
 

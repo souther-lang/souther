@@ -439,7 +439,7 @@ public final class Adequacy {
      * — and a key set alone cannot tell it from an answer that was overwritten.
      */
     static <T> Answer<Map<String, T>> answerEveryBehavior(
-            souther.compiler.check.Prepared prepared,
+            souther.compiler.check.CheckSurface prepared,
             java.util.function.Function<Hir.BehaviorDef, T> answer) {
         Map<String, T> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : prepared.behaviors()) {
@@ -1207,7 +1207,11 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, SignatureEvidence>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            // The assembly. A measure says what it could and could not establish, so a module one
+            // of whose declarations did not come out is one it has something to say about — while
+            // the readings it reads are derived only where the module did come out, and say so.
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -1268,7 +1272,8 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, PartitionEvidence>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -1335,9 +1340,8 @@ public final class Adequacy {
                                            Map<String, RowReading> byTarget,
                                            Measure<List<BorderAssessment>> lines) {
             // A behavior whose signature and input were both read is one the model divides
-            // somewhere or nowhere, and either is an answer. Nothing is a compile that stopped
-            // after this had already read both, which is the two disagreeing rather than a
-            // behavior to skip.
+            // somewhere or nowhere, and either is an answer. A declaration that did not come out
+            // leaves the input unread, which is said above rather than here.
             souther.compiler.partition.Partitions.Partitioning divided =
                     db.ask(new Divided(name, spec.name())).value();
             if (divided == null) {
@@ -1922,7 +1926,8 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, Measure<List<BorderAssessment>>>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !sigs.present()) {
                 return Answer.absent();
@@ -2271,7 +2276,8 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, BranchEvidence>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.CheckSurface> prepared =
+                    db.ask(new Shapes.CheckSurface(name));
             if (!prepared.present()) {
                 return Answer.absent();
             }

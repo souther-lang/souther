@@ -284,6 +284,14 @@ public final class Shapes {
                 if (reached.equals(name) || !seen.add(reached)) {
                     continue;
                 }
+                // A module this compilation does not have is a different mistake, and one already
+                // said where the import is written. What it was to bring in denotes nothing here,
+                // and the names that rest on it are read as the error type they are — which every
+                // reader below handles. Refused here as well, a module would go unread for an
+                // import it never had.
+                if (db.ask(new Front.Available(reached)).value() == null) {
+                    continue;
+                }
                 if (!db.ask(new Derived(reached)).present()) {
                     return Answer.absent();
                 }
@@ -356,17 +364,54 @@ public final class Shapes {
     }
 
     /**
-     * The module a check and a codegen actually run over: the desugared one with every imported name
-     * written as the definition it denotes, plus the recursive helpers it reaches, as its own fns
-     * under those names.
+     * The module a best-effort reading runs over: the parts joined, and no claim that every
+     * declaration came out.
      *
-     * <p>A recursive helper cannot be inlined — it would expand forever — so it is emitted as one of
-     * this module's methods. That holds whoever declared it: a prelude {@code List.foldFrom}, and a
-     * helper another module published or published something else that calls. The declaring module is
-     * the helper's identity and not where the method goes; the method goes on the {@code $Fns} of
-     * whichever module is being compiled, which is what keeps that class package-private and leaves no
-     * new way to reach a construction from Java. Only the reached ones are added; a module that never
-     * folds gets none.
+     * <p>What a diagnostic or a measurement is given. A module one of whose declarations has no
+     * representation still has definitions of its own, and what is wrong with the one costs the
+     * readers that name it and no others — so this is answered where {@link Prepared} is not, and
+     * the reading goes on.
+     *
+     * <p>Its declarations are every one the module writes, each in the form the derived stage writes
+     * one in ({@code Derived.normalized}), so a declaration that could not be derived is here in the
+     * same spelling as the ones beside it.
+     */
+    public record CheckSurface(String name) implements Key<souther.compiler.check.CheckSurface> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<souther.compiler.check.CheckSurface> compute(Db db) {
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
+            Answer<ResolvedSymbols> resolved = Names.resolvedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+            Answer<Map<String, souther.compiler.check.Desugared.Fn>> fns =
+                    db.ask(new DesugaredFns(name));
+            Answer<Map<souther.compiler.types.ValueName.Behavior, souther.compiler.check.Sig>>
+                    signatures = db.ask(new Bodies.Reachable(name));
+            if (!settling.present() || !resolved.present() || !scope.present() || !fns.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(souther.compiler.check.CheckSurface.assemble(
+                        settling.value(), resolved.value(), fns.value(), scope.value(),
+                        signatures.present() ? signatures.value() : Map.of()));
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+        }
+    }
+
+    /**
+     * The module a codegen and everything that needs a whole one run over: the same assembly a
+     * check reads, beside the witness that every declaration the module writes came out.
+     *
+     * <p>Absent where one did not. There is nothing to emit for a module holding a declaration with
+     * no boundary representation, and an example run over it would be running against classes that
+     * were never written — while the diagnostics and the measurements that read
+     * {@link CheckSurface} go on saying what they can.
      */
     public record Prepared(String name) implements Key<souther.compiler.check.Prepared> {
         @Override
@@ -377,27 +422,12 @@ public final class Shapes {
         @Override
         public Answer<souther.compiler.check.Prepared> compute(Db db) {
             Answer<souther.compiler.check.Desugared.Module> desugared = db.ask(new Desugared(name));
-            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            // What each behavior takes and answers with, from the one place that settles it: a
-            // composition's shape is worked out there and nowhere else, and a dependency another
-            // module declares is in it too. Where they could not be made, a row's positions
-            // contribute nothing rather than being guessed at from the forms written here.
-            Answer<Map<souther.compiler.types.ValueName.Behavior, souther.compiler.check.Sig>>
-                    signatures = db.ask(new Bodies.Reachable(name));
-            if (!desugared.present() || !scope.present()) {
+            Answer<souther.compiler.check.CheckSurface> surface = db.ask(new CheckSurface(name));
+            if (!desugared.present() || !surface.present()) {
                 return Answer.absent();
             }
-            // A module whose imports form a cycle takes nothing from them — the cycle is reported
-            // where it is found, and this module is not compiled either way.
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
-            try {
-                return Answer.of(souther.compiler.check.Prepared.prepare(
-                        desugared.value(), scope.value(), published,
-                        signatures.present() ? signatures.value() : Map.of()));
-            } catch (CompileException e) {
-                return Answer.absent(e);
-            }
+            return Answer.of(souther.compiler.check.Prepared.prepare(
+                    desugared.value(), surface.value()));
         }
     }
 

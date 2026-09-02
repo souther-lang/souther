@@ -305,8 +305,17 @@ public final class TypeChecker {
             }
             collect(errors, abandoned, () -> {
                 switch (def) {
-                    case Hir.Data data -> DataChecker.checkData(
-                            symbols.derived(data), CheckContext.of(symbols).forData(data));
+                    // The declarations that came out, which is what the derived world has. One that
+                    // did not was reported where it was derived, and a check over it would find
+                    // that mistake again from further down — against a line the author has no
+                    // reason to look at.
+                    case Hir.Data data -> {
+                        if (symbols.declarations().declaration(data.declares())
+                                instanceof Derived.Data derived) {
+                            DataChecker.checkData(derived,
+                                    CheckContext.of(symbols).forData(data));
+                        }
+                    }
                     case Hir.SumData sum -> DataChecker.checkSum(sum, symbols);
                     case Hir.UnitData _ -> { }
                 }
