@@ -63,7 +63,8 @@ public final class FieldDomains {
      * those is a reading that found no rules.
      */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
+            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(),
+                    List.of(), Map.of(),
                     Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
                     Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
@@ -78,6 +79,9 @@ public final class FieldDomains {
     /** The rules saying where a coordinate's values stop that no end came out of — see
      * {@link #noLineAt}. */
     private final List<NoLine> noLines;
+    /** The conjuncts this reading got no end out of, for whoever reads them next — see
+     * {@link #withoutAnEnd}. */
+    private final List<WithoutAnEnd> withoutAnEnd;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
     /** The same per part of each clause. A reader that found one conjunct wanting names what that
@@ -153,6 +157,7 @@ public final class FieldDomains {
                          Map<RuleKey, List<UnreadReason>> unreadByName,
                          Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
+                         List<WithoutAnEnd> withoutAnEnd,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
                          Map<BoundaryQuestion, BoundaryStanding> standing, ReadingEvidence took,
@@ -173,6 +178,7 @@ public final class FieldDomains {
         this.notSeparatedByName = notSeparatedByName;
         this.directs = directs;
         this.noLines = noLines;
+        this.withoutAnEnd = List.copyOf(withoutAnEnd);
         this.raised = raised;
         this.raisedByPart = raisedByPart;
         this.standing = standing;
@@ -416,6 +422,7 @@ public final class FieldDomains {
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
+                seeded.reading().withoutAnEnd(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(),
                 seeded.reading().standing(), seeded.took(),
                 seeded.reading().narrowers(),
@@ -450,6 +457,41 @@ public final class FieldDomains {
          *  {@link #at}, and reading one off the other is what the pair exists to stop. */
         public RuleKey path() {
             return at.path();
+        }
+    }
+
+    /**
+     * One conjunct this reading recognised as a comparison and got no end out of, handed on for
+     * another reading to make what it can of.
+     *
+     * <p><b>Not {@link NoLine}, and neither one implies the other.</b> That is a finding: this
+     * reading owed a line, could not draw one, and says so to an author. This is a hand-over: a
+     * conjunct leaves here with nothing settled about it, and what it comes to is the next
+     * reading's answer. A rule that names a value is the case that tells them apart — an equality
+     * and a disequality place no end and are no failure of anything, so they are handed on and
+     * nothing is reported. Built from the findings, the hand-over carried whatever the report
+     * happened to have a sentence for, and a rule this reading owes nothing about could not be
+     * passed along at all.
+     *
+     * <p>The conjunct as it was written. Which number it is about, and what it does to that
+     * number, are the next reading's to establish in its own vocabulary — said here, this would be
+     * the reading that placed no end answering the question it just failed to answer.
+     *
+     * @param from     the clause it is a conjunct of
+     * @param conjunct which of that clause's conjuncts it is, counted as every other reading of the
+     *                 clause counts them
+     * @param part     the conjunct itself
+     */
+    public record WithoutAnEnd(RuleRef.Invariant from, int conjunct, Core part) {
+
+        public WithoutAnEnd {
+            if (from == null || part == null) {
+                throw new IllegalArgumentException("a conjunct handed on is some clause's text");
+            }
+            if (conjunct < 0) {
+                throw new IllegalArgumentException(
+                        "a conjunct of a clause is counted from zero: " + conjunct);
+            }
         }
     }
 
@@ -957,6 +999,17 @@ public final class FieldDomains {
      */
     public List<NoLine> noLines() {
         return List.copyOf(noLines);
+    }
+
+    /**
+     * The conjuncts this reading got no end out of, in the order they were read.
+     *
+     * <p>What is handed on, and not what is reported. Which of these the next reading makes
+     * something of is its answer and no part of this list: a rule naming a value is here because
+     * nothing about it was settled, not because anything about it fell short.
+     */
+    public List<WithoutAnEnd> withoutAnEnd() {
+        return withoutAnEnd;
     }
 
     /**

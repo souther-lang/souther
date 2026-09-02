@@ -466,7 +466,8 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of()),
+                    new Reading(List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of(),
+                            Map.of()),
                     new ReadingEvidence(),
                     false, Map.of(RuleKey.THE_VALUE,
                             Set.of(new RulesMissed.ReadingFellOver())),
@@ -1243,6 +1244,7 @@ public final class InvariantChecker {
      *                  name the positions of the conjunct written beside it as well
      */
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
+                   List<FieldDomains.WithoutAnEnd> withoutAnEnd,
                    Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -1271,17 +1273,20 @@ public final class InvariantChecker {
                         Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
+        List<FieldDomains.WithoutAnEnd> withoutAnEnd = new ArrayList<>();
         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
         Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing =
                 new LinkedHashMap<>();
         stated.forEach(each ->
-                direct(each.clause(), each.from(), new int[1], at, byName, out, noLines, narrowers, raised,
+                direct(each.clause(), each.from(), new int[1], at, byName, out, noLines,
+                        withoutAnEnd, narrowers, raised,
                         took, typeAt, parts, raisedByPart, standing));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
-        return new Reading(List.copyOf(out), List.copyOf(noLines), Map.copyOf(narrowers),
+        return new Reading(List.copyOf(out), List.copyOf(noLines), List.copyOf(withoutAnEnd),
+                Map.copyOf(narrowers),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
@@ -1379,6 +1384,7 @@ public final class InvariantChecker {
     private void direct(Core clause, RuleRef.Invariant from, int[] conjunct, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
+                        List<FieldDomains.WithoutAnEnd> withoutAnEnd,
                         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<RuleKey, Type> typeAt,
@@ -1393,10 +1399,10 @@ public final class InvariantChecker {
             // {@code ClauseHelpers.conjunctsOf} reads it in: the two readings of one clause number
             // its conjuncts alike, which is what lets a line drawn here be recognised as the line
             // the declaration's own reading drew (issue #1062).
-            direct(and.left(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
-                    typeAt, parts, raisedByPart, standing);
-            direct(and.right(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
-                    typeAt, parts, raisedByPart, standing);
+            direct(and.left(), from, conjunct, at, byName, out, noLines, withoutAnEnd, narrowers,
+                    raised, took, typeAt, parts, raisedByPart, standing);
+            direct(and.right(), from, conjunct, at, byName, out, noLines, withoutAnEnd, narrowers,
+                    raised, took, typeAt, parts, raisedByPart, standing);
             return;
         }
         // Which conjunct of the clause this is, taken here so that every one of them is numbered —
@@ -1451,6 +1457,13 @@ public final class InvariantChecker {
             settle(bin, from, states(bin, at, byName, read),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
+            // And handed on where it is a comparison, which is not the same as being reported.
+            // A rule that rules one value out places no end and is no failure of this reading, so
+            // there is nothing here for an author to lift and there is a conjunct for the reading
+            // that draws lines to make what it can of.
+            if (asWritten != null) {
+                withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
+            }
             return;
         }
         // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
@@ -1527,6 +1540,10 @@ public final class InvariantChecker {
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
             noLineDrawn(read, from, part, at, byName, noLines);
+            // The hand-over beside the finding, and not read off it. Both come of this conjunct
+            // having no end, and they answer different questions: what an author is owed a word
+            // about, and what the next reading is given to read.
+            withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
