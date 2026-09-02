@@ -258,6 +258,9 @@ class AMeasureWithNoNumberSaysWhyTest {
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: undetermined
+                  what keeps it open
+                    may change in a wider run     0
+                    unaffected by a wider run     5
                 """, human());
     }
 

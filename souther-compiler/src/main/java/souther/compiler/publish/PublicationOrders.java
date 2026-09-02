@@ -40,15 +40,16 @@ public final class PublicationOrders {
      * What an observation met instead of a value, from what was nearest an answer to what never
      * started.
      *
-     * <p>A value in hand that could not be read comes first, then the row that would have held one,
-     * then what the row was to be run against, then the run itself, and last the two that say
-     * nothing was observed at all. So the reasons a wider budget would change are said before the
-     * ones nothing about this compiler's own limits would.
+     * <p>A value in hand that could not be read comes first, then the two about the row that would
+     * have held one, then what the row was to be run against, then the run itself, and last the two
+     * that say nothing was observed at all. So the reasons a wider budget would change are said
+     * before the ones nothing about this compiler's own limits would.
      */
     private static final List<Incompleteness.Code> OBSERVATION_CODES_IN_ORDER = List.of(
             Incompleteness.Code.VALUE_UNREADABLE,
             Incompleteness.Code.VALUE_TRUNCATED,
             Incompleteness.Code.ROW_UNDECIDED,
+            Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED,
             Incompleteness.Code.ANSWERER_NOT_ESTABLISHED,
             Incompleteness.Code.LINKAGE_FAILED,
             Incompleteness.Code.OBSERVATION_ABSENT,

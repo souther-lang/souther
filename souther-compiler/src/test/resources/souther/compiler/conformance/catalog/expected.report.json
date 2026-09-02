@@ -4,6 +4,7 @@
   "status" : "partial",
   "weakening" : [ "rule_unread" ],
   "adequacy" : "not_satisfied",
+  "keptOpenBy" : [ ],
   "modules" : [ {
     "module" : "conformance.catalog",
     "status" : "partial",

@@ -64,7 +64,8 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
-                    Map.of(), Map.of(), new ReadingEvidence(), Map.of(), Set.of(RuleKey.THE_VALUE), Set.of(),
+                    Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
+                    Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
                     ConstraintState.<FactSubject>top(), null, null, null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
@@ -109,8 +110,8 @@ public final class FieldDomains {
      *  over them, and a name a lost correlation never reached keeps its own answer. */
     private final Set<RuleKey> notSeparatedByName;
     /** Where a clause of this value did not reach the readings at all, as the names the stops
-     * happened at — see {@link #admits}. */
-    private final Set<RuleKey> notGathered;
+     * happened at and what stopped there — see {@link #admits}. */
+    private final Map<RuleKey, Set<RulesMissed>> notGathered;
     /** Where this reading ended with a declaration still to be read under the name, which is an
      * obligation on whoever walks them rather than anything wrong here — see
      * {@link #handedOn()}. */
@@ -156,7 +157,7 @@ public final class FieldDomains {
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
                          Map<BoundaryQuestion, BoundaryStanding> standing, ReadingEvidence took,
                          Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
-                         Set<RuleKey> notGathered, Set<RuleKey> handedOn,
+                         Map<RuleKey, Set<RulesMissed>> notGathered, Set<RuleKey> handedOn,
                          SequencedMap<FactSubject, RuleKey> namedBy,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
@@ -1089,7 +1090,7 @@ public final class FieldDomains {
         // would settle this reading's completeness by a reading that is not this one.
         if (!everyRuleReachedAt(path)) {
             return AdmissibleSet.wider(values, with(spread,
-                    List.of(new AdmissibleSet.Widening.RuleUnread(UnreadReason.NOT_REACHED))));
+                    List.of(new AdmissibleSet.Widening.RuleUnread(whyNothingReached(path)))));
         }
         return spread.isEmpty() ? AdmissibleSet.complete(values)
                 : AdmissibleSet.wider(values, spread);
@@ -1125,7 +1126,61 @@ public final class FieldDomains {
      * whether anything is out of sight wants this.
      */
     public boolean everyRuleReachedAt(RuleKey path) {
-        return reaches(notGathered, path);
+        return reaches(notGathered.keySet(), path);
+    }
+
+    /**
+     * Which of the two ways of never reaching a position's rules this one is.
+     *
+     * <p>Every stop that reaches the position is read and not the first of them. A stop past the
+     * depth this reading could afford is one a run allowed to read further would go past; every
+     * other stop is met again however much a run allows — so a position two stops reach is short
+     * after the depth is raised, and saying otherwise would send a person to measure the same thing
+     * twice. Which makes the depth answer the one that has to hold of all of them.
+     *
+     * <p>Asked only where {@link #everyRuleReachedAt} has already said something stopped, so the
+     * set walked here is never empty and the answer is never the depth by vacuity.
+     */
+    private UnreadReason whyNothingReached(RuleKey path) {
+        Set<RulesMissed> reaching = new LinkedHashSet<>();
+        notGathered.forEach((stopped, why) -> {
+            if (path.isAtOrUnder(stopped)) {
+                reaching.addAll(why);
+            }
+        });
+        return whyNothingReached(reaching);
+    }
+
+    /**
+     * The same, of the stops themselves, which is where the answer is decided.
+     *
+     * <p>Taken apart from the walk over the paths so that what the coarsening is can be held to a
+     * table. Which stops reach a position is arithmetic on paths; which reason a set of stops comes
+     * to is the decision, and it is the one worth writing down.
+     *
+     * <p>Two switches and no {@code default} on either, rather than one figure picked out and
+     * everything else falling past it. A way of going ungathered added later, or a fourth way for
+     * the walk to stop, would otherwise be answered here as one no allowance changes — silently,
+     * and by the arm nobody wrote.
+     */
+    static UnreadReason whyNothingReached(Set<RulesMissed> stops) {
+        boolean depth = false;
+        for (RulesMissed why : stops) {
+            boolean afford = switch (why) {
+                case RulesMissed.WalkStopped(GuaranteeWalk.Stop stop) -> switch (stop) {
+                    case PAST_THE_DEPTH -> true;
+                    case ASKED_TO_STOP, ALREADY_ENTERED -> false;
+                };
+                case RulesMissed.ClauseNotTyped _, RulesMissed.ClauseLost _,
+                     RulesMissed.PositionNotOpened _, RulesMissed.ClauseNotAsked _,
+                     RulesMissed.NoReadingWasMade _, RulesMissed.ReadingFellOver _ -> false;
+            };
+            if (!afford) {
+                return UnreadReason.NOT_REACHED;
+            }
+            depth = true;
+        }
+        return depth ? UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT : UnreadReason.NOT_REACHED;
     }
 
     /**
