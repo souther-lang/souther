@@ -334,7 +334,8 @@ final class ReadQuantities implements Quantities {
         }
         List<Assumed> both = new ArrayList<>(assumed);
         both.add(taking);
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleSource, policy,both);
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleSource, policy,
+                both);
     }
 
     /**
@@ -815,7 +816,8 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleSource, policy,assumed);
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleSource, policy,
+                assumed);
     }
 
     /**

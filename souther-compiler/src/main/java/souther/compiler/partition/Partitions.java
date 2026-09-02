@@ -926,8 +926,10 @@ public final class Partitions {
     }
 
     /** A count written at a position, wearing every name that position declares. */
-    private static FixtureTemplate standing(Type type, Carrier carrier, Place at, RuleReadingSource ruleSource) {
-        return Witnesses.wrapped(type,FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
+    private static FixtureTemplate standing(Type type, Carrier carrier, Place at,
+            RuleReadingSource ruleSource) {
+        return Witnesses.wrapped(type,
+                FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
     }
 
     /** A class that reads the count of the number {@code on} is of out of a row, and answers about
@@ -1401,7 +1403,7 @@ public final class Partitions {
         // The value itself, under every name the position wears. A newtype around a number is the
         // number as it is written there, and putting the names on is the one reader that does it.
         if (under.isEmpty()) {
-            return Witnesses.wrapped(type,value, ruleSource);
+            return Witnesses.wrapped(type, value, ruleSource);
         }
         if (!(under.getFirst() instanceof TermPath.Step.Field(String name))) {
             return null;
@@ -1419,7 +1421,7 @@ public final class Partitions {
         }
         List<FixtureTemplate> whole =
                 composed(named, ruleSource, policy, java.util.Set.of(), Map.of(name, inner));
-        return whole.isEmpty() ? null : Witnesses.wrapped(type,whole.getFirst(), ruleSource);
+        return whole.isEmpty() ? null : Witnesses.wrapped(type, whole.getFirst(), ruleSource);
     }
 
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules
@@ -1520,7 +1522,7 @@ public final class Partitions {
         // inside that newtype's own name.
         for (FixtureTemplate bare : Witnesses.holding(TypeOps.base(type, ruleSource.symbols()),
                 leastHeld(type, ruleSource, held), ruleSource, policy, expanding)) {
-            candidates.add(Witnesses.wrapped(type,bare, ruleSource));
+            candidates.add(Witnesses.wrapped(type, bare, ruleSource));
         }
         candidates.addAll(representativesOf(type, ruleSource, policy, within, expanding));
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();
