@@ -18,10 +18,11 @@ import souther.compiler.inputs.TermPath;
  *
  * <p>The other two are the two ways of not being that, and they are opposite sentences about this
  * compiler. {@link Why.CannotDerive} says the readings did not get far enough for anything about
- * the model to follow: the walk did not reach into what the position holds, or a question one of
- * its rules raises is one nothing answered. {@link Why.StatedWithoutALine} says the other thing —
- * a rule is filed here and came to no line, with nothing outstanding about it, so a reader sent
- * after a limit would be looking for one that is not there.
+ * the model to follow; what leaves a position in that state is enumerated where the verdict is
+ * made ({@link PendingPosition#complete}) and is not counted again here.
+ * {@link Why.StatedWithoutALine} says the other thing — a rule is filed here and came to no line,
+ * with nothing outstanding about it, so a reader sent after a limit would be looking for one that
+ * is not there.
  *
  * <p><b>All three are a projection and none is a reading's own account of itself.</b> Whether a
  * question stands is asked of the accounting that holds every question a rule raises against
@@ -74,9 +75,10 @@ public record UndividedPosition(TermPath at, Why why) {
         /**
          * The readings did not get far enough for anything about the model to follow.
          *
-         * <p>Two ways of that being so and one word: the walk did not reach into what the position
-         * holds, or a question one of its rules raises is one nothing answered. Which of them, and
-         * what was short of it, is not here. A verdict says whether anything divides the position;
+         * <p>However many ways there are of that being so, one word. Which of them, and what was
+         * short of it, is not here — the list is where the verdict is made
+         * ({@link PendingPosition#complete}), so that a way added is added in one place rather than
+         * in every sentence that describes this one. A verdict says whether anything divides the position;
          * the findings beside it say what was not read and by whose account, and each of those is
          * made by the reader that has the fact — with the rule where there is one. Carried here
          * too, a report read the cause back off the verdict, which is where the rule had already

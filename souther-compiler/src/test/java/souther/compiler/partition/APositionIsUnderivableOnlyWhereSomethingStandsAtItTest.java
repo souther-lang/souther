@@ -28,11 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 /**
  * A position comes back underivable exactly where something at it is still standing.
  *
- * <p>Two ways for that to be so, and no third. The reading did not reach into what the position
- * holds, so nothing was read there at all; or a question the rules of the position raise is one
- * nothing answered. Both are facts kept where they are made — the first by the structural reading,
- * the second by the accounting that holds every question a rule raises against whatever answered
- * it — and a verdict that says this compiler could not read a position is a projection of them.
+ * <p>What leaves it standing is enumerated where the verdict is made
+ * ({@code PendingPosition.complete}) and is read from there rather than counted again here: the
+ * walk did not get to the position's rules, a question one of those rules raises went unanswered,
+ * or a rule filed at it is one a reading did not get through. Each is kept by whoever found it,
+ * and the verdict is a projection of them.
  *
  * <p><b>Neither direction is the interesting one on its own.</b> A verdict said over a position
  * whose questions were all answered sends a reader after a limit that is not there; a position with
@@ -43,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p>What this does not read is the findings a report is written from. A verdict recovered from
  * what happens to have been published, or a publication recovered from a verdict, is the
  * reconstruction the accounting exists to take away — so the population here is the positions
- * themselves and the two accounts that answer for them.
+ * themselves and the accounts that answer for them.
  */
 class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
 

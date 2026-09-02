@@ -140,17 +140,33 @@ sealed interface PendingPosition {
      * reason beside it. What makes it the phase's answer is where it is produced, not this
      * signature: a caller inside this package can still build one out of half a reading.
      *
-     * <p><b>A projection of two accounts, and neither of them is a reading's own reach.</b> Whether
-     * the walk reached into the position is the structural reading's, and whether a question its
-     * rules raise is standing is the accounting's — asked of every reading at once, so a rule one
-     * of them was short of and another took in leaves nothing standing. Decided from what a single
-     * reading was left with instead, a rule read to the end by the reading of ends and left by the
-     * reading of values came out as a position nothing could read, over an accounting that had
-     * already answered every question about it.
+     * <p><b>The one place what leaves a position underivable is enumerated.</b> Three things do,
+     * each kept where it is made and none of them a reading's own account of how far it got:
      *
-     * <p>The structural stop comes first for the reason it always did: where the walk could not
-     * reach into what the position holds, what is written under it is whatever it is, and a
-     * question about it is a second description of that same stop.
+     * <ul>
+     *   <li>the walk did not get to the rules of the position ({@link PositionAccount#notReachedInto});
+     *   <li>a question a rule of the position raises is one nothing answered
+     *       ({@link PositionAccount#standing}), which is asked of every reading at once, so a rule
+     *       one of them was short of and another took in leaves nothing standing;
+     *   <li>a rule filed at the position is one a reading did not get through
+     *       ({@link BodyCutInspection.NoLine#aReadingStopped}). A comparison a body writes raises
+     *       what it asks and answers it in one breath, so no question of one ever stands and the
+     *       accounting above has nothing to say about it.
+     * </ul>
+     *
+     * <p>Written out again wherever a verdict is described, the list drifts: a way added reaches
+     * the code here and none of the sentences elsewhere, and the next reader is told there are
+     * fewer. So this is the list, and what describes {@link UndividedPosition.Why.CannotDerive}
+     * points at it.
+     *
+     * <p>Read instead from what a single reading was left with, a rule read to the end by the
+     * reading of ends and left by the reading of values came out as a position nothing could read;
+     * read as whether any rule is filed at all, a comparison no reading got through came out as
+     * the model stating something.
+     *
+     * <p>Not a precedence between them. Each says the position is short of something, and a verdict
+     * is one word — so what is asked is whether anything is, and what each of them found is kept
+     * whichever way that comes out.
      */
     default UndividedPosition complete(BodyCutInspection body) {
         if (body instanceof BodyCutInspection.Evidence) {

@@ -250,10 +250,10 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                 new PendingPosition.Leaf(AT)
                         .complete(new BodyCutInspection.NoLine(true, true)).why());
         assertEquals(new UndividedPosition.Why.CannotDerive(),
-                new PendingPosition.Leaf(AT).complete(BodyCutInspection.outranking(
+                new PendingPosition.Leaf(AT).complete(BodyCutInspection.combined(
                         READ_TO_THE_END_AND_NO_LINE, A_READING_STOPPED)).why());
         assertEquals(new UndividedPosition.Why.CannotDerive(),
-                new PendingPosition.Leaf(AT).complete(BodyCutInspection.outranking(
+                new PendingPosition.Leaf(AT).complete(BodyCutInspection.combined(
                         A_READING_STOPPED, READ_TO_THE_END_AND_NO_LINE)).why());
     }
 

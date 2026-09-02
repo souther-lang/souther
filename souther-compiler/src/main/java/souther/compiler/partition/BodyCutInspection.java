@@ -85,12 +85,15 @@ public sealed interface BodyCutInspection {
      * put together here rather than printed one apiece — a position is not divided no way twice
      * over.
      *
-     * <p>A line anywhere outranks everything: the position is divided, whichever of its numbers the
-     * line is on. Between the other two nothing outranks anything — what each of them found is
-     * taken together, because a rule filed at one number of a location is filed at the location and
-     * a reading that stopped on one is not answered for by another that finished.
+     * <p><b>What both of them found, and not whichever of them won.</b> A line anywhere means the
+     * position is divided, whichever of its numbers the line is on; short of that, a rule filed at
+     * one number of a location is filed at the location, and a reading that stopped on one is not
+     * answered for by another that finished. So the answers are taken together and nothing is
+     * chosen between them — which is what the name says, and what a precedence here would take
+     * away. Written as one, a stop at one number and a rule read to the end at another came out as
+     * whichever the walk met first.
      */
-    static BodyCutInspection outranking(BodyCutInspection first, BodyCutInspection second) {
+    static BodyCutInspection combined(BodyCutInspection first, BodyCutInspection second) {
         if (first == null) {
             return second;
         }

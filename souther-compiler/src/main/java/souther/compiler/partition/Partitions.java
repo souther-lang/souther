@@ -366,7 +366,7 @@ public final class Partitions {
         for (Drawn at : drawn) {
             BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
-                came = BodyCutInspection.outranking(came,
+                came = BodyCutInspection.combined(came,
                         cameTo(axis.term(), axis.path(), rulesWithoutALine));
             }
             if (came == null) {
@@ -785,7 +785,7 @@ public final class Partitions {
             // What the rules came to about the location, folded as its numbers are measured. One
             // sentence for the location: a number the rules divide and a number they say nothing
             // about are both measures of it, and which of the two answers a report is owed is
-            // `outranking`'s to settle rather than the order this happens to walk them in.
+            // taken together rather than chosen between by the order this happens to walk them in.
             BodyCutInspection came = null;
             List<NumericTerm.FromOnePosition> numbers = numbersMeasuring(at, evidence, account);
             for (NumericTerm.FromOnePosition term : numbers) {
@@ -794,7 +794,7 @@ public final class Partitions {
                 // the location is, which is where this reads it from.
                 Axis measured = at.axes().stream()
                         .filter(each -> each.term().equals(term)).findFirst().orElse(null);
-                came = BodyCutInspection.outranking(came,
+                came = BodyCutInspection.combined(came,
                         measureAt(here, at, measured, term, evidence, reading,
                                 symbols, policy, rules, account));
             }
@@ -805,7 +805,7 @@ public final class Partitions {
                     continue;
                 }
                 here.add(axis);
-                came = BodyCutInspection.outranking(came,
+                came = BodyCutInspection.combined(came,
                         cameTo(axis.term(), axis.path(), rules));
             }
             if (came == null) {

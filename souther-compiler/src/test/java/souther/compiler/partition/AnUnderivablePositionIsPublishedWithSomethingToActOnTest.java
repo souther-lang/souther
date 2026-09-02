@@ -20,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 /**
  * A position reported as one this compiler could not read is published with what it was short of.
  *
- * <p>The end of the chain the verdict is a projection of. A verdict is derived from whether the
- * reading got to the position's rules and whether a question those rules raise is standing; the
- * findings a document is written from are made by the readers that hold those same facts. So the
- * two agree by both coming from there, and this is what says they do.
+ * <p>The end of the chain the verdict is a projection of. What leaves a position short is
+ * enumerated where the verdict is made ({@code PendingPosition.complete}); the findings a document
+ * is written from are made by the readers that hold those same facts. So the two agree by both
+ * coming from there, and this is what says they do.
  *
  * <p><b>Not how the verdict is worked out.</b> Nothing here is an input to it, and nothing here is
  * read to produce it — a report built from a verdict, or a verdict recovered from what happened to
