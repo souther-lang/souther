@@ -3,6 +3,7 @@ package souther.compiler.report;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
@@ -12,14 +13,17 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAccount;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferItem;
+import souther.compiler.query.OfferedRow;
 import souther.compiler.query.Offering;
 import souther.compiler.query.OfferingRequest;
+import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -58,7 +62,7 @@ public final class GeneratedRows {
     public record Block(String text, int rowCount) {
 
         public Block {
-            java.util.Objects.requireNonNull(text, "a block is of something, even if it is empty");
+            Objects.requireNonNull(text, "a block is of something, even if it is empty");
             if (rowCount < 0) {
                 throw new IllegalArgumentException(
                         "a block offering fewer than no rows: " + rowCount);
@@ -127,8 +131,8 @@ public final class GeneratedRows {
      */
     private static void declarations(StringBuilder out, Offering offering) {
         BorderAccount account = offering.account();
-        java.util.Set<String> said = new java.util.LinkedHashSet<>();
-        for (Map.Entry<souther.compiler.partition.BorderObligationPoint, BorderAccount.Unmet> each
+        Set<String> said = new LinkedHashSet<>();
+        for (Map.Entry<BorderObligationPoint, BorderAccount.Unmet> each
                 : account.unmet().entrySet()) {
             // Nothing about a point one of the rows above stands at. What is left to write is what
             // this says, and a line telling a person no row was composed for something they are
@@ -360,7 +364,7 @@ public final class GeneratedRows {
         offering.rowsByBehavior().forEach((behavior, rows) -> {
             Map<Integer, String> arms = armNames(offering.searched().get(behavior));
             List<Offered> here = new ArrayList<>();
-            for (souther.compiler.query.OfferedRow row : rows) {
+            for (OfferedRow row : rows) {
                 Offered offered = new Offered(row.key().inputs(), List.of());
                 for (String name : named(row.namedFor(), arms)) {
                     offered = offered.and(name);
@@ -638,7 +642,7 @@ public final class GeneratedRows {
             // the role: a point away from the line was written as the value the line is at, which
             // is the one place in reach that such a point is not.
             case About.APointOfABorder(var point) ->
-                    point.said(souther.compiler.source.SourceId::value, null);
+                    point.said(SourceId::value, null);
             // The same words on what the declaration wrote. Nothing composes a row for one of
             // these yet — the search walks one behavior's inputs and this line is owed once over
             // all of them — so what is printed beside it is that, in its own sentence.

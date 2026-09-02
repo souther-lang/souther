@@ -5,6 +5,7 @@ import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.Locale;
 
 /**
@@ -45,7 +46,7 @@ public final class ArmVocabulary {
 
     private static String namesOf(List<TypeSymbol> cases) {
         return cases.stream().map(TypeSymbol::name)
-                .collect(java.util.stream.Collectors.joining(" | "));
+                .collect(Collectors.joining(" | "));
     }
 
     private ArmVocabulary() {}
