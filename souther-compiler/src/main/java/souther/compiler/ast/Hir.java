@@ -1869,18 +1869,6 @@ public interface Hir {
                 return reachedAs().rendered();
             }
 
-            /**
-             * The same name, standing where it stood, as {@code reference} reaches it.
-             *
-             * <p>The one way what a name means is changed. A pass with a different declaration in
-             * hand — a construction's origin restated, a binding copied into an expansion — works
-             * out how this module reaches that declaration and replaces the whole reference, so
-             * there is no operation here that puts a new denotation beside the old route.
-             */
-            public Var withReachedAs(ReachName reference) {
-                return new Denoting(written(), reference, region());
-            }
-
             @Override
             public String toString() {
                 return name();
