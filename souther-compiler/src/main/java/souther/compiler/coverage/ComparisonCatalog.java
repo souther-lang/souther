@@ -111,7 +111,7 @@ public final class ComparisonCatalog {
      * the first is a comparison of this module that no run reaches, and the second is somebody
      * asking this module about another module's comparison.
      */
-    public boolean holds(ComparisonOccurrence which) {
+    boolean holds(ComparisonOccurrence which) {
         return byOccurrence.containsKey(which);
     }
 
@@ -180,8 +180,10 @@ public final class ComparisonCatalog {
         return occurrenceAt(node).map(byOccurrence::get);
     }
 
-    /** Every comparison the module holds, in the order the bodies were walked. */
-    public List<Catalogued> all() {
+    /** Every comparison the module holds, in the order the bodies were walked. Kept to this
+     *  package: what a reader outside asks is about one comparison it was handed, and a list to
+     *  walk is how a reader comes to have its own idea of which comparisons there are. */
+    List<Catalogued> all() {
         return List.copyOf(byOccurrence.values());
     }
 }
