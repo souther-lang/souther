@@ -66,9 +66,11 @@ public record ExecutableIdentity(Kind kind, List<Object> settled,
      *
      * <p>A node several ways lead to says the same thing however it was arrived at, so it is written
      * once and the one value stands wherever it is reached. Written out per arrival instead, a body
-     * whose shared subtrees nest would be a value larger than the body — and every comparison of two
-     * of them would walk all of it, where sharing lets the halves be found the same by being the
-     * same.
+     * whose shared subtrees nest would come to a value larger than the body it is of.
+     *
+     * <p>What that buys is the size of the value and not the cost of comparing two. Two of these
+     * built by two compiles share nothing with each other, so a shared subtree is walked once per
+     * place it stands in when they are held against each other, however few times it was written.
      */
     private static ExecutableIdentity of(Core body, Binders binders,
                                          Map<Core, ExecutableIdentity> said) {
