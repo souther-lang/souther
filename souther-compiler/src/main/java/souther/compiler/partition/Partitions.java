@@ -1682,7 +1682,7 @@ public final class Partitions {
                     // has no word for proposed no value, and a position an author had written a
                     // rule for was offered `"x"` and refused (issue #1249).
                     souther.compiler.regex.PatternSyntax admits =
-                            souther.compiler.check.StringPredicates.statedBy(each, symbols);
+                            souther.compiler.check.StringPredicates.statedByWritten(each, symbols);
                     String written = admits == null ? null : writtenFor(admits);
                     if (written != null) {
                         candidates.add(FixtureTemplate.string(written));

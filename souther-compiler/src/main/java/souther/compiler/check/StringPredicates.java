@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.regex.PatternSyntax;
 
@@ -20,7 +21,7 @@ import java.util.List;
  * <p><b>Keyed by what the operation means and not by how a rule is written.</b> Each entry says
  * which argument carries the position, which carries the text, and what the strings around that
  * text may be. A predicate added to the library is a row here or is named as one this does not
- * answer for ({@code EveryStringPredicateIsReadAsASetOfStringsTest}), so a new one does not become
+ * answer for ({@code EveryPredicateOverAStringIsReadAsASetOfStringsTest}), so a new one does not become
  * a rule that quietly says nothing.
  *
  * <p>{@code String.isEmpty} is not here, and is not missing. It is written in the library as
@@ -131,7 +132,8 @@ public enum StringPredicates {
      * the clauses of one declaration, where {@code value} is what the rule is about, so which
      * argument carries the subject is checked and nothing is resolved through it.
      */
-    public static souther.compiler.regex.PatternSyntax statedBy(Hir.Expr clause, Symbols symbols) {
+    public static souther.compiler.regex.PatternSyntax statedByWritten(Hir.Expr clause,
+                                                                     Symbols symbols) {
         if (!(clause instanceof Hir.Apply call) || call.answered() == null) {
             return null;
         }
@@ -151,5 +153,78 @@ public enum StringPredicates {
         }
         return souther.compiler.regex.PatternParser.read(written)
                 instanceof souther.compiler.regex.PatternRead.Read read ? read.syntax() : null;
+    }
+
+    /**
+     * What one checked clause says, and about which of its arguments.
+     *
+     * @param subject the argument the rule is about, for a caller that resolves it to a position
+     * @param accepts the strings the predicate admits there, or null where the pattern it states is
+     *                one this compiler reads no further into
+     */
+    public record Stated(Core subject, souther.compiler.regex.PatternSyntax accepts) {}
+
+    /**
+     * The same off a checked clause, or null where it is no predicate of this kind.
+     *
+     * <p>Beside {@link #statedByWritten} and in the same file on purpose. One question —
+     * which operations say which strings stand at a position — and two trees to ask it of: a
+     * declaration's rules are walked before a body is checked and hold no {@link Core}, and the
+     * reading of what a position admits holds nothing else. Two entry points and one table, so a
+     * predicate learned is learned by both.
+     *
+     * <p><b>Two folds, and that is the part to watch.</b> What the author wrote is read through the
+     * folder each tree has, and they are not the same code — so a written argument one of them folds
+     * and the other does not is a rule one reader takes in and the other passes over, which is the
+     * shape this whole arrangement exists to stop. They are adjacent here so that the next person to
+     * change one sees the other.
+     */
+    public static Stated statedByChecked(Core clause, Symbols symbols) {
+        if (!(clause instanceof Core.PreservedCall call)
+                || !(call.operation() instanceof souther.compiler.types.ValueName.Stdlib.Operation
+                        operation)) {
+            return null;
+        }
+        StringPredicates predicate = of(symbols.kernelOf(operation));
+        if (predicate == null || call.args().size() != predicate.arity()) {
+            return null;
+        }
+        if (!(Terms.folded(call.args().get(predicate.written()), symbols) instanceof String written)) {
+            return null;
+        }
+        Core subject = call.args().get(predicate.subject());
+        if (!predicate.takesAPattern()) {
+            return new Stated(subject, predicate.accepting(written));
+        }
+        // A pattern written more deeply than this reads is a limit of the reading and not a shape it
+        // has no word for, so the caller is handed the subject with nothing accepted and says that
+        // as itself. Left to look like no predicate at all, an author would go looking for the
+        // construct that was the trouble, when every construct in it is one this reads.
+        souther.compiler.regex.PatternRead said =
+                souther.compiler.regex.PatternParser.read(written);
+        return new Stated(subject, said instanceof souther.compiler.regex.PatternRead.Read read
+                ? read.syntax() : null);
+    }
+
+    /**
+     * Whether a pattern this could not take apart is one it read too little of rather than one it
+     * has no word for.
+     *
+     * <p>Asked of the same reading the caller's {@link Stated} came from, so that the two answers
+     * are one reading of one pattern.
+     */
+    public static boolean readTooLittleOf(Core clause, Symbols symbols) {
+        if (!(clause instanceof Core.PreservedCall call)
+                || !(call.operation() instanceof souther.compiler.types.ValueName.Stdlib.Operation
+                        operation)) {
+            return false;
+        }
+        StringPredicates predicate = of(symbols.kernelOf(operation));
+        return predicate != null && predicate.takesAPattern()
+                && call.args().size() == predicate.arity()
+                && Terms.folded(call.args().get(predicate.written()), symbols) instanceof String it
+                && souther.compiler.regex.PatternParser.read(it)
+                        instanceof souther.compiler.regex.PatternRead.NotRead why
+                && why.why() == souther.compiler.regex.PatternRead.Unsupported.NESTED_TOO_DEEPLY;
     }
 }

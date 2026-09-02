@@ -504,9 +504,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
         if (!debts.isEmpty()) {
-            out.append(String.format("  declarations   obligations %d/%d%s%n",
-                    account.met().size(), account.counted(),
-                    ""));
+            out.append(String.format("  declarations   obligations %d/%d%n",
+                    account.met().size(), account.counted()));
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
@@ -1258,9 +1257,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The points the model's own rules discharged are not on this line. They are not
             // obligations, so a count of them beside the obligations would be two units in one
             // sentence; each is said under the block, by the reading it is a point of.
-            out.append(String.format("    border      borders %d   obligations %d/%d%s%s%n",
+            out.append(String.format("    border      borders %d   obligations %d/%d%s%n",
                     lines.size(), owed.met().size(), owed.counted(),
-                    "", inFull(bounded.status())));
+                    inFull(bounded.status())));
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
