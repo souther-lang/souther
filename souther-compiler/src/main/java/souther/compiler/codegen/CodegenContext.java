@@ -7,7 +7,7 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
 import souther.compiler.core.ValueShape;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -38,7 +38,7 @@ import static souther.compiler.codegen.Descriptors.*;
 final class CodegenContext {
 
     final String pkg;
-    final Symbols symbols;
+    final DerivedSymbols symbols;
 
     /**
      * What the language declares of its kernels: what each takes and answers, as the compilation
@@ -359,7 +359,7 @@ final class CodegenContext {
         return r != null ? r.descriptorString() : null;
     }
 
-    CodegenContext(String pkg, Symbols symbols, KernelSignatures kernels,
+    CodegenContext(String pkg, DerivedSymbols symbols, KernelSignatures kernels,
                    Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
                    Map<String, Type> standingCalls) {

@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.TypeKey;
 
@@ -20,8 +19,7 @@ import java.util.Map;
  *       call it would have to expand to find out;</li>
  *   <li>a name in a clause that denotes another module's definition is written qualified, which is
  *       the spelling every table that reads a clause is keyed by;</li>
- *   <li>a helper's parameter types are settled, since a clause is read through them;</li>
- *   <li>the codecs the declarations need are derived, which the settling reads through.</li>
+ *   <li>a helper's parameter types are settled, since a clause is read through them.</li>
  * </ul>
  *
  * <p>What is <em>not</em> settled is what a declaration takes in by a spread. A clause of the type
@@ -30,16 +28,13 @@ import java.util.Map;
  * mean the spreads had been flattened into each declaration would find a declaration's own clauses
  * where it expected every clause that governs it.
  *
- * <p>The name is the part a reader cannot see for itself. A derived codec is in the tree — a decoder
- * node is there or it is not — and a clause that has been expanded is not: it reads like one the
- * author wrote that way, and what this says is that nothing in it is left to expand. A pass that
- * read a declaration before this would read the same shape meaning something weaker.
+ * <p>The name is the part a reader cannot see for itself. A clause that has been expanded reads like
+ * one the author wrote that way, and what this says is that nothing in it is left to expand. A pass
+ * that read a declaration before this would read the same shape meaning something weaker.
  *
  * <p>{@link #settle} owns the rewrites rather than taking their result. Handed a finished tree
  * instead, this would be somewhere to make the claim about anything — which is what a wrapper with a
  * {@code with} operation is, and what the claim being carried by nothing looked like the first time.
- * The derive and the settling go together in one step because a clause is expanded through the
- * symbols the derive produced.
  *
  * <p>What it hands out is what its consumers ask of it: the declarations, the definitions, and the
  * tree with each declaration replaced by what that declaration came to. Not the tree itself — a
@@ -57,19 +52,17 @@ public final class InvariantSettled {
     }
 
     /**
-     * {@code expandable} with its codecs derived and its clauses expanded.
+     * {@code expandable} with its clauses expanded.
      *
      * <p>{@code published} is what the modules this one imports offer it: an invariant names what is
      * in scope where it is written, and an imported definition is in scope there as it is in a body.
      *
-     * @throws CompileException where a declaration of the module cannot be derived or a clause it
-     *     spreads cannot be read
+     * @throws CompileException where a clause the module spreads cannot be read
      */
     public static InvariantSettled settle(Expandable expandable, Symbols scope,
                                           Map<String, Hir.FnDef> published) {
-        Hir.Module derived = Deriver.derive(expandable.module(), scope);
         return new InvariantSettled(
-                ClauseHelpers.withSettledInvariants(derived, scope, published));
+                ClauseHelpers.withSettledInvariants(expandable.module(), scope, published));
     }
 
     /**

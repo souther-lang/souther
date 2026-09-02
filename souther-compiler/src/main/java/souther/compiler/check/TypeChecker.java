@@ -75,7 +75,8 @@ public final class TypeChecker {
      * <p>{@code reqSigs} and {@code recursiveHelperFns} are handed over rather than worked out here,
      * because the body check reads the same two and they must be the same two.
      */
-    public static Reported checkModule(Hir.Module module, Symbols symbols, ReadingPolicy policy,
+    public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
+                                       ReadingPolicy policy,
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
@@ -199,7 +200,7 @@ public final class TypeChecker {
      * phase reads (the {@code fns} map, the {@code exposed} set, {@code reqSigs}, {@code sigs}) may
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
-    static void checkRecovering(Hir.Module module, Symbols symbols, ReadingPolicy policy,
+    static void checkRecovering(Hir.Module module, DerivedSymbols symbols, ReadingPolicy policy,
                                         Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
@@ -304,8 +305,8 @@ public final class TypeChecker {
             }
             collect(errors, abandoned, () -> {
                 switch (def) {
-                    case Hir.Data data ->
-                            DataChecker.checkData(CheckContext.of(symbols).forData(data));
+                    case Hir.Data data -> DataChecker.checkData(
+                            symbols.derived(data), CheckContext.of(symbols).forData(data));
                     case Hir.SumData sum -> DataChecker.checkSum(sum, symbols);
                     case Hir.UnitData _ -> { }
                 }

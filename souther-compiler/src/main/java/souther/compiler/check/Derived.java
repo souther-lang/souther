@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.TypeKey;
 
@@ -12,10 +13,16 @@ import java.util.Map;
  * A declaration in the form every later stage resolves a type against, and the module where every
  * one of them is in it.
  *
- * <p>What is established here is that a newtype construction written {@code 金額(500)} is the
- * construction it is, wherever it is written in what the declaration says about itself. A reader
- * below this compares a construction against what a declaration declares; one that met the
- * application form instead would be reading a call to something no module declares.
+ * <p>What is established here: the constructions in what a declaration says about itself are
+ * resolved to the constructions they denote, and a product data has the decoder and encoder derived
+ * from its declared shape. A reader below this compares a construction against what a declaration
+ * declares; one that met the application form instead would be reading a call to something no module
+ * declares — and one asking how a value of a product crosses is answered rather than left to find
+ * out that nothing had worked it out yet.
+ *
+ * <p>Not the boundary representation in general. What a sum's alternatives are called as they cross
+ * is derived where it is read ({@code check.Boundary}) and a unit has none, so the two of them are
+ * carried here as the declarations they are and nothing more.
  *
  * <p>Two members and they say different things. {@link Def} is one declaration's answer, and a
  * declaration that has no answer costs the readers that name it and no others. {@link Module} is
@@ -47,13 +54,18 @@ public final class Derived {
     public sealed interface Def extends Hir.Declared permits Data, Sum, Unit {
 
         /**
-         * {@code settled} with its constructions written as constructions.
+         * {@code settled} with its constructions written as constructions and, where it is a
+         * product, the boundary representation derived for it — or null where a field of it does
+         * not name a type, which is a declaration nothing below can be told anything about.
          *
          * @throws CompileException where what the declaration says cannot be read that way
          */
         static Def derive(InvariantSettled.Def settled, ResolvedSymbols scope) {
             return switch (NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope)) {
-                case Hir.Data d -> new Data(d);
+                case Hir.Data d -> {
+                    Deriver.Codecs codecs = Deriver.derive(d, scope);
+                    yield codecs == null ? null : new Data(d, codecs);
+                }
                 case Hir.SumData s -> new Sum(s);
                 case Hir.UnitData u -> new Unit(u);
             };
@@ -111,13 +123,33 @@ public final class Derived {
         }
     }
 
-    /** A product declaration that came out. */
+    /**
+     * A product declaration that came out, and the boundary representation derived for it.
+     *
+     * <p>Both, and never one without the other. What a reader below the derivation asks of a product
+     * is how a value of it is read and written, and the answer is here because deriving it is what
+     * made one of these — there is no state in which a product has reached this stage and has none.
+     */
     public static final class Data implements Def {
 
         private final Hir.Data declared;
+        private final Hir.DecoderDef decoder;
+        private final Hir.EncoderDef encoder;
 
-        private Data(Hir.Data declared) {
+        private Data(Hir.Data declared, Deriver.Codecs codecs) {
             this.declared = declared;
+            this.decoder = codecs.decoder();
+            this.encoder = codecs.encoder();
+        }
+
+        /** How a value of it is read at the boundary. */
+        public Hir.DecoderDef decoder() {
+            return decoder;
+        }
+
+        /** And how one is written. */
+        public Hir.EncoderDef encoder() {
+            return encoder;
         }
 
         @Override
@@ -125,14 +157,18 @@ public final class Derived {
             return declared;
         }
 
+        /** Both of what it holds. The representation is derived from the declaration, so two of
+         * these over equal declarations hold equal representations — compared all the same, because
+         * what makes them equal is what they say and not how they were made. */
         @Override
         public boolean equals(Object o) {
-            return o instanceof Data other && declared.equals(other.declared);
+            return o instanceof Data other && declared.equals(other.declared)
+                    && decoder.equals(other.decoder) && encoder.equals(other.encoder);
         }
 
         @Override
         public int hashCode() {
-            return declared.hashCode();
+            return declared.hashCode() * 31 + decoder.hashCode();
         }
     }
 

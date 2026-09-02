@@ -3,7 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.query.Bodies;
 
 import souther.compiler.check.Boundary;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -65,7 +65,7 @@ public final class Backend {
     /** Aliases of {@link CodegenContext#pkg}/{@link CodegenContext#symbols}, read as bare names by
      * the code still living here. */
     private final String pkg;
-    private final Symbols symbols;
+    private final DerivedSymbols symbols;
 
     private final CodecGen codec;
     private final ValueClassGen value;
@@ -140,7 +140,7 @@ public final class Backend {
      * what a value of each declared data is made of and what must hold of one, which is what a
      * construction is refused by and is the checker's answer rather than this emitter's
      * (issue #1080). */
-    public static Emissions generate(Hir.Module module, Symbols symbols,
+    public static Emissions generate(Hir.Module module, DerivedSymbols symbols,
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
@@ -172,7 +172,7 @@ public final class Backend {
      * and refuses to emit a body it cannot find an arm for, rather than emit one arm short and report
      * the arm that ran as one nothing reaches.
      */
-    public static Emissions generate(Hir.Module module, Symbols symbols,
+    public static Emissions generate(Hir.Module module, DerivedSymbols symbols,
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
@@ -199,7 +199,7 @@ public final class Backend {
         }
     }
 
-    private static Emissions generating(Hir.Module module, Symbols symbols,
+    private static Emissions generating(Hir.Module module, DerivedSymbols symbols,
                                         KernelSignatures kernels,
                                                   Map<String, String> typePackage,
                                                   Map<ValueName.Behavior, Sig> sigs,

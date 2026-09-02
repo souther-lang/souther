@@ -54,6 +54,28 @@ public final class DerivedSymbols implements Symbols {
         return table.reachable();
     }
 
+    /**
+     * What the derivation answered for {@code data}.
+     *
+     * <p>For a reader below the derivation that is holding the node — a checker walking a module, an
+     * emitter writing a class — and needs what was derived for it. A product that got as far as
+     * either came out, so the answer is here.
+     *
+     * <p>Refused rather than answered with nothing where it is not. A reader that met an absence
+     * would have to decide what a product with no boundary representation means, and that is the
+     * question this stage exists to have already answered; what it would be looking at is a module
+     * the derivation did not answer for, handed to it by mistake.
+     *
+     * @throws IllegalStateException where nothing derived declares it
+     */
+    public Derived.Data derived(Hir.Data data) {
+        if (table.declarations().declaration(data.declares()) instanceof Derived.Data answered) {
+            return answered;
+        }
+        throw new IllegalStateException("`" + data.name()
+                + "` is being read below the derivation, which did not answer for it");
+    }
+
     @Override
     public TypeScope scope() {
         return table.scope();

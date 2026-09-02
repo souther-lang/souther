@@ -81,7 +81,7 @@ public final class NewtypeDesugar {
         if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
             return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
                     Hir.mapClauses(d.invariants(), inv -> go(inv, symbols)),
-                    d.decoder(), d.encoder(), d.pos());
+                    d.pos());
         }
         return def;
     }

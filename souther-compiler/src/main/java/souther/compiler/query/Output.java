@@ -21,7 +21,6 @@ import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
 import souther.compiler.check.DerivedSymbols;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.codegen.Backend;
@@ -121,7 +120,7 @@ public final class Output {
          * ran. Two copies of this would be two chances for the measured classes and the shipped ones to
          * stop being the same program, which is the one thing a measurement of them may not do.
          */
-        record Inputs(Hir.Module lowered, Symbols scope, Map<String, String> typePackages,
+        record Inputs(Hir.Module lowered, DerivedSymbols scope, Map<String, String> typePackages,
                       Map<ValueName.Behavior, Sig> sigs, Map<ValueName.Behavior, Sig> imported,
                       Set<ValueName.Behavior> injected,
                       Map<ValueName.Behavior, ReqSig> callees,
