@@ -197,12 +197,18 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(Set.of("settle(Expandable, Symbols, Map)"), waysInto(InvariantSettled.class));
         assertEquals(Set.of(), waysInto(InvariantSettled.Def.class),
                 "a settled declaration is projected from the module it is one of");
+        assertEquals(Set.of("of(Def, ResolvedSymbols)", "ofLanguage(Def)"),
+                waysInto(Normalized.Def.class),
+                "the second is for what the language declares, whose clauses hold no construction "
+                        + "left to write as one. Every kind of declaration goes through it, a "
+                        + "product among them: what a product needs derived is a representation, "
+                        + "which is the rung below and not this one");
         assertEquals(Set.of("derive(Def, ResolvedSymbols)", "ofLanguage(Def)"),
                 waysInto(Derived.Def.class),
-                "the second is for what the language declares, where there is nothing to derive: a "
-                        + "sum and a unit write no clause to expand and carry no boundary "
-                        + "representation, so the propositions hold of the node as it stands. It "
-                        + "refuses a product, which would need deriving like any other");
+                "the second is for what the language declares, where there is no representation to "
+                        + "derive: a sum's is worked out where it is read and a unit has none, so "
+                        + "the proposition holds of the declaration as it stands. It refuses a "
+                        + "product, which would need one derived like any other");
         assertEquals(Set.of("assemble(InvariantSettled, Map)"), waysInto(Derived.Module.class));
         assertEquals(Set.of("desugar(FnDef, Symbols)", "reestablish(FnDef, Symbols)"),
                 waysInto(Desugared.Fn.class),
@@ -677,10 +683,16 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      * <p>What can be read exactly is who is in a position to call it at all. Java has it down to this
      * package; within it, a class that can reach a projection is one that holds a state or is handed
      * one. The states themselves are governed by the routes they answer with; what is left is the
-     * boundary where the module leaves the ladder, and there is one — {@code CheckSurface.assemble},
-     * which is handed the settled module and joins its parts into a payload claiming nothing about
-     * them. What is done with that payload afterwards drops no claim, because there was none on it
-     * to drop.
+     * boundary where the module leaves the ladder, and there is one class it is in —
+     * {@code CheckSurface}, which is handed the settling, keeps it as what it was joined over, and
+     * projects a tree from it. Three entries and one place: taking it, holding it, and the field it
+     * is held in. What is done with the payload afterwards drops no claim, because there was none on
+     * it to drop.
+     *
+     * <p>It keeps the settling rather than the tree because of what it is compared against.
+     * {@code Prepared} pairs this assembly with the witness that the module is whole, and the two
+     * belong together when they were made from one settling — which a tree does not say, two
+     * settlings that left different recursive calls standing having the same one.
      *
      * <p>Of the states that say something about a part, because those are the ones with something to
      * lose. {@code Expandable} answers whether a body of the module may be expanded and claims
@@ -721,7 +733,9 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 }
             }
         }
-        assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map, Symbols, Map)"),
+        assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map, Symbols, Map)",
+                        "CheckSurface.<init>(InvariantSettled, List, List, List, List, List, Map)",
+                        "CheckSurface.settling"),
                 handling,
                 "a class here that is handed a state can reach its projection, and taking a part "
                         + "off that is the claim thrown away with nothing saying so");

@@ -33,8 +33,10 @@ import java.util.Map;
  */
 public final class CheckSurface implements Assembly {
 
-    private final Hir.Module settled;
-    private final List<Hir.Def> declarations;
+    /** The settling the parts were joined over, kept rather than its tree: what a pass reads off
+     *  this is the tree, and what says which module it is an assembly of is the state. */
+    private final InvariantSettled settling;
+    private final List<Normalized.Def> declarations;
     private final List<Desugared.Fn> fns;
     private final List<Hir.Example> examples;
     private final List<Hir.Fake> fakes;
@@ -43,10 +45,11 @@ public final class CheckSurface implements Assembly {
     /** Worked out once, as the rungs beside this work theirs out. */
     private volatile Hir.Module projected;
 
-    private CheckSurface(Hir.Module settled, List<Hir.Def> declarations, List<Desugared.Fn> fns,
+    private CheckSurface(InvariantSettled settling, List<Normalized.Def> declarations,
+                         List<Desugared.Fn> fns,
                          List<Hir.Example> examples, List<Hir.Fake> fakes,
                          List<Hir.FnDef> rowDefs, Map<Hir.Expr, String> operandMethods) {
-        this.settled = settled;
+        this.settling = settling;
         this.declarations = List.copyOf(declarations);
         this.fns = List.copyOf(fns);
         this.examples = List.copyOf(examples);
@@ -69,11 +72,12 @@ public final class CheckSurface implements Assembly {
      * to after it is rewritten; {@code signatures} is what each behavior takes and answers with,
      * which says where a row's values stand.
      *
-     * <p>Null where a declaration the module writes was not normalized. What this carries is the
-     * module, and a module short of a declaration it writes is read as one that does not declare it
-     * — which is how a name a module exposes came back as a name it must have imported. That a
-     * representation could not be derived for a declaration is the other thing entirely, and costs
-     * this nothing: the declaration is here, and what it says about itself is read from it.
+     * <p>Null where a part the module writes is not among what was handed in — a declaration that
+     * was not normalized, a definition that did not desugar. What this carries is the module, and a
+     * module short of something it writes is read as one that does not write it, which is how a name
+     * a module exposes came back as a name it must have imported. That a representation could not be
+     * derived for a declaration is the other thing entirely, and costs this nothing: the declaration
+     * is here, and what it says about itself is read from it.
      *
      * @throws CompileException where a definition cannot be held to what it was rewritten to
      */
@@ -82,13 +86,13 @@ public final class CheckSurface implements Assembly {
                                         Map<String, Desugared.Fn> desugared, Symbols scope,
                                         Map<ValueName.Behavior, Sig> signatures) {
         Hir.Module settled = settling.module();
-        List<Hir.Def> declarations = new ArrayList<>();
+        List<Normalized.Def> declarations = new ArrayList<>();
         for (InvariantSettled.Def def : settling.defs()) {
             Normalized.Def came = normalized.get(def.name());
             if (came == null) {
                 return null;
             }
-            declarations.add(came.node());
+            declarations.add(came);
         }
         // An imported definition is written here bare and denotes the module that declares it.
         // Spelling it out, once, settles the name this module reaches it by, which is what the table
@@ -100,10 +104,11 @@ public final class CheckSurface implements Assembly {
         List<Desugared.Fn> fns = new ArrayList<>();
         for (Hir.FnDef wrote : settled.fns()) {
             Desugared.Fn came = desugared.get(wrote.name());
-            if (came != null) {
-                fns.add(Desugared.Fn.reestablish(
-                        HelperNames.qualifyImportsIn(came.read(), self), scope));
+            if (came == null) {
+                return null;
             }
+            fns.add(Desugared.Fn.reestablish(
+                    HelperNames.qualifyImportsIn(came.read(), self), scope));
         }
         List<Hir.Example> examples = new ArrayList<>();
         for (Hir.Example block : settled.examples()) {
@@ -113,36 +118,41 @@ public final class CheckSurface implements Assembly {
         for (Hir.Fake table : settled.fakes()) {
             fakes.add(HelperNames.qualifyImportsIn(table, self));
         }
-        CheckSurface written = new CheckSurface(settled, declarations, fns, examples, fakes,
+        CheckSurface written = new CheckSurface(settling, declarations, fns, examples, fakes,
                 List.of(), Map.of());
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the assembly: it is decided here and read wherever a row is run, never counted out again.
         RowFixtures.Emitted rows = RowFixtures.emitted(written.module(), scope, signatures);
         return rows.defs().isEmpty() ? written
-                : new CheckSurface(settled, declarations, fns, examples, fakes,
+                : new CheckSurface(settling, declarations, fns, examples, fakes,
                         List.copyOf(rows.defs().values()), rows.methods());
     }
 
     /** What the module is called. */
     public String name() {
-        return settled.name();
+        return settling.name();
     }
 
-    /** The settled module the parts were joined over — which module this is an assembly of, where a
-     *  name says only what it is called. */
-    Hir.Module settledModule() {
-        return settled;
+    /** The settling the parts were joined over — the state and not its tree, so that what a caller
+     *  compares this against is what a settling answered rather than half of it. */
+    InvariantSettled settling() {
+        return settling;
+    }
+
+    /** The declarations joined here, as the one producer of that form answered for them. */
+    List<Normalized.Def> declarations() {
+        return declarations;
     }
 
     /** The behaviors it declares, which no rung at or below this rewrites. */
     public List<Hir.BehaviorDef> behaviors() {
-        return settled.behaviors();
+        return settling.module().behaviors();
     }
 
     /** The names it exposes. */
     public List<String> exposing() {
-        return settled.exposing();
+        return settling.module().exposing();
     }
 
     /** Whether {@code behavior}'s body is written here as a {@code let} of its own name, which a
@@ -158,10 +168,6 @@ public final class CheckSurface implements Assembly {
         return Requirements.implementationOf(module(), behavior);
     }
 
-    /** Its declarations, each written in the form the derived stage writes one in. */
-    public List<Hir.Def> declarations() {
-        return declarations;
-    }
 
     /** Its definitions, as they came out. */
     public List<Desugared.Fn> fns() {
@@ -191,7 +197,7 @@ public final class CheckSurface implements Assembly {
     /** Which module each imported name was written out to. */
     public Map<String, String> importedFrom() {
         Map<String, String> from = new LinkedHashMap<>();
-        for (Hir.Import imp : settled.imports()) {
+        for (Hir.Import imp : settling.module().imports()) {
             for (String name : imp.names()) {
                 from.put(name, imp.module());
             }
@@ -215,7 +221,11 @@ public final class CheckSurface implements Assembly {
         for (Desugared.Fn fn : fns) {
             definitions.add(fn.read());
         }
-        projected = built = settled.withDefs(declarations).withFns(definitions)
+        List<Hir.Def> nodes = new ArrayList<>();
+        for (Normalized.Def declared : declarations) {
+            nodes.add(declared.node());
+        }
+        projected = built = settling.module().withDefs(nodes).withFns(definitions)
                 .withExamples(examples).withFakes(fakes);
         return built;
     }

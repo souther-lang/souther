@@ -2,10 +2,18 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -57,6 +65,58 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
     @Test
     void theTwoBuiltFromOneModuleDoPair() {
         assertNotNull(Prepared.prepare(declarationsOf(ONE), assemblyOf(ONE)));
+    }
+
+    /**
+     * One settling, and declarations read against two sets of names, do not pair either.
+     *
+     * <p>The case a tree cannot tell apart. Normalizing reads what a name denotes — whether the
+     * applied name is a newtype, and so whether what was written is a construction — so one settled
+     * declaration read against two scopes is two declarations while the settled tree stays the one
+     * tree. A pairing proved from that tree would put a witness about the first beside an assembly
+     * of the second, and the constructions a reader below finds would be the ones the other reading
+     * made.
+     */
+    @Test
+    void oneSettlingReadAgainstTwoSetsOfNamesDoesNotPair() {
+        Desugared.Module declarations = declarationsOf(WITH_A_CONSTRUCTION);
+        InvariantSettled settling = assemblyOf(WITH_A_CONSTRUCTION).settling();
+
+        Map<String, Normalized.Def> elsewhere = new LinkedHashMap<>();
+        for (InvariantSettled.Def def : settling.defs()) {
+            elsewhere.put(def.name(),
+                    Normalized.Def.of(def, ResolvedSymbols.none(DefaultStdlib.get())));
+        }
+
+        assertNotEquals(normalizedIn(declarations), List.copyOf(elsewhere.values()),
+                "the two readings are two declarations, or this says nothing");
+
+        CheckSurface read = CheckSurface.assemble(settling, elsewhere, Map.of(),
+                Scopes.derived(Compilation.ofSource(WITH_A_CONSTRUCTION, "Main").db(), "m").value(),
+                Map.of());
+        assertNotNull(read, "the assembly is made, so the refusal below is about the pairing");
+
+        assertThrows(IllegalArgumentException.class, () -> Prepared.prepare(declarations, read),
+                "a witness about one reading of the declarations was paired with an assembly of"
+                        + " another, and the settled tree they share says nothing about it");
+    }
+
+    /** A module whose clause writes a construction, so that what a name denotes decides what the
+     *  normalized declaration is. */
+    private static final String WITH_A_CONSTRUCTION = """
+            module m exposing ( Wrapped, Amount )
+
+            data Wrapped = Int
+            data Amount = Int
+                invariant ok = Wrapped(value) == Wrapped(0)
+            """;
+
+    private static List<Normalized.Def> normalizedIn(Desugared.Module module) {
+        List<Normalized.Def> out = new ArrayList<>();
+        for (Derived.Def def : module.defs()) {
+            out.add(def.declaration());
+        }
+        return out;
     }
 
     private static Desugared.Module declarationsOf(String source) {

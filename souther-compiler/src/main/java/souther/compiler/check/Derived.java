@@ -71,12 +71,11 @@ public final class Derived {
         /**
          * What the language itself declares, for which there is nothing to derive.
          *
-         * <p>A second way in, and it is one because the propositions this state carries are empty of
-         * a sum and of a unit. What deriving establishes is that the newtype constructions in a
-         * declaration's clauses are constructions — a sum and a unit write no clause — and, of a
-         * product, the boundary representation read off its shape; a sum's is worked out where it is
-         * read ({@code check.Boundary}) and a unit has none to carry. So the two cases hold of the
-         * node as it stands, and there is nothing for a pass to have done to it.
+         * <p>A second way in, and it is one because the proposition this state carries is empty of a
+         * sum and of a unit. What deriving establishes is the boundary representation read off a
+         * product's shape; a sum's is worked out where it is read ({@code check.Boundary}) and a
+         * unit has none to carry. So the two cases hold of the declaration as it stands, and there
+         * is nothing for a pass to have done to it.
          *
          * <p>Which is why a product is refused rather than admitted the same way. The library
          * declares none today, and one written tomorrow would need its codec derived like any other
@@ -272,10 +271,21 @@ public final class Derived {
             return new Module(settled, defs);
         }
 
-        /** The settled module every declaration here was derived from — what says which module this
-         *  is a claim about, where a name says only what it is called. */
-        Hir.Module settled() {
-            return settled.module();
+        /**
+         * Whether this was derived from {@code settling}.
+         *
+         * <p>Asked rather than answered with the settling itself. What a rung was made from is its
+         * provenance and not a value on offer: handed it, a reader could read the declarations as
+         * they were before this rung, and the two are the same type so nothing would say which it
+         * got.
+         *
+         * <p>The state and not its tree, because a settling answers a module beside the recursive
+         * calls its clauses left standing and says so itself. Two settlings over one tree that left
+         * different calls standing are two answers, and a caller comparing the trees would be
+         * comparing the half they share.
+         */
+        boolean settledFrom(InvariantSettled settling) {
+            return settled.equals(settling);
         }
 
         /** What the module is called. */

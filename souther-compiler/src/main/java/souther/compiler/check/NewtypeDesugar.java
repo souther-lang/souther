@@ -97,12 +97,8 @@ public final class NewtypeDesugar {
                 TypeSymbol built = call.answered() != null
                         && call.answered().denotes() instanceof ValueName.OfType named
                         ? named.type() : null;
-                if (built != null && symbols.declaredNode(built) instanceof Hir.Data nt && nt.newtype()) {
-                    if (args.size() != 1) {
-                        throw CompileException.of(Diagnostic
-                                        .at(call.appliedAt())
-                                        .say(new DataMessage.ANewtypeWrapsOneValue(call.written(), String.valueOf(args.size()))).build());
-                    }
+                if (built != null && symbols.declaredNode(built) instanceof Hir.Data nt
+                        && nt.newtype() && args.size() == 1) {
                     // `T(v)` is what the author wrote and a construction is what it means, so the
                     // node that replaces the application stands over the same characters.
                     yield new Hir.NewData(
@@ -172,6 +168,61 @@ public final class NewtypeDesugar {
             }
             default -> e;   // literals, Var — no child expressions to rewrite
         };
+    }
+
+    /**
+     * Refuses a newtype applied to something other than one value, in what {@code def} says about
+     * itself.
+     *
+     * <p>Its own reading, beside the rewrite rather than inside it. A pass that refuses is a pass
+     * that fails, and everything reached through it inherits the failure — which is how a
+     * declaration whose clause held one of these came to have no form to be read in at all, while
+     * resolution went on saying the module declares it. The rewrite answers for every declaration
+     * now, and this says what is wrong with the ones it could not turn into constructions.
+     *
+     * <p>What it refuses is what the rewrite declines to rewrite, so the two read the same question
+     * off the same node: a name the module resolved to a newtype, applied. A count other than one is
+     * not a construction of it, and it is left as the application it is.
+     *
+     * @throws CompileException at the first such application, where there is one
+     */
+    public static void refuseMalformedIn(Hir.Def def, Symbols symbols) {
+        if (def instanceof Hir.Data d) {
+            for (Hir.InvariantClause clause : d.invariants()) {
+                refuseMalformedIn(clause.expr(), symbols);
+            }
+        }
+    }
+
+    /** The same, of what a definition's body says. */
+    public static void refuseMalformedIn(Hir.FnDef fn, Symbols symbols) {
+        if (fn.body() instanceof Hir.FnBody.Written written) {
+            refuseMalformedIn(written.expr(), symbols);
+        }
+    }
+
+    /**
+     * The same, of one expression and everything written inside it.
+     *
+     * <p>Over {@link Hir#forEachChild} rather than over a walk written here. Which slots a node
+     * holds is the node's own answer, so a node that gains one is read by this without being added
+     * to it — a walk of its own would be a copy of that shape kept in step by hand, and a slot
+     * missing from the copy is an application nothing refuses.
+     */
+    private static void refuseMalformedIn(Hir.Expr e, Symbols symbols) {
+        if (e == null) {
+            return;
+        }
+        if (e instanceof Hir.Apply call && call.answered() != null
+                && call.answered().denotes() instanceof ValueName.OfType named
+                && symbols.declaredNode(named.type()) instanceof Hir.Data nt && nt.newtype()
+                && call.args().size() != 1) {
+            throw CompileException.of(Diagnostic.at(call.appliedAt())
+                    .say(new DataMessage.ANewtypeWrapsOneValue(
+                            call.written(), String.valueOf(call.args().size())))
+                    .build());
+        }
+        Hir.forEachChild(e, child -> refuseMalformedIn(child, symbols));
     }
 
     private static List<Hir.Expr> mapExprs(List<Hir.Expr> es, Symbols symbols) {

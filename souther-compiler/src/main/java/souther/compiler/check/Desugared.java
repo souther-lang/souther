@@ -46,6 +46,11 @@ public final class Desugared {
          * @throws CompileException where a construction written in the body cannot be read as one
          */
         public static Fn desugar(Hir.FnDef fn, Symbols scope) {
+            // Refused before it is rewritten, and refused rather than reported beside the answer.
+            // A definition is the unit the desugaring answers in — a module is assembled from all
+            // of them and is there only when each one is — so a body that cannot be read this way
+            // costs this definition its answer and costs the ones beside it nothing.
+            NewtypeDesugar.refuseMalformedIn(fn, scope);
             return new Fn(NewtypeDesugar.rewriteOf(fn, scope));
         }
 
@@ -156,9 +161,10 @@ public final class Desugared {
             return derived.name();
         }
 
-        /** The settled module this was built over, handed on from the rung below. */
-        Hir.Module settled() {
-            return derived.settled();
+        /** Whether this was built over {@code settling}, asked of the rung below for the reason
+         *  {@link Derived.Module#settledFrom} gives. */
+        boolean settledFrom(InvariantSettled settling) {
+            return derived.settledFrom(settling);
         }
 
         /** Its declarations, which the rung below answered for and this one does not touch. */

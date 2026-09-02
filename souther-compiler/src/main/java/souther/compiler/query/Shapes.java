@@ -198,16 +198,10 @@ public final class Shapes {
                 return Answer.absent();
             }
             Map<String, souther.compiler.check.Normalized.Def> out = new LinkedHashMap<>();
-            List<Report> reports = new ArrayList<>();
             for (InvariantSettled.Def def : settling.value().defs()) {
-                try {
-                    out.put(def.name(),
-                            souther.compiler.check.Normalized.Def.of(def, scope.value()));
-                } catch (CompileException e) {
-                    reports.addAll(Report.of(e));
-                }
+                out.put(def.name(), souther.compiler.check.Normalized.Def.of(def, scope.value()));
             }
-            return Answer.of(Map.copyOf(out), reports);
+            return Answer.of(Map.copyOf(out));
         }
     }
 
@@ -393,24 +387,30 @@ public final class Shapes {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
             Answer<Map<String, souther.compiler.check.Normalized.Def>> normalized =
                     db.ask(new NormalizedDeclarations(name));
+            Answer<ResolvedSymbols> resolved = Names.resolvedSymbols(db, name);
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, souther.compiler.check.Desugared.Fn>> fns =
                     db.ask(new DesugaredFns(name));
             Answer<Map<souther.compiler.types.ValueName.Behavior, souther.compiler.check.Sig>>
                     signatures = db.ask(new Bodies.Reachable(name));
-            if (!settling.present() || !normalized.present() || !scope.present()
-                    || !fns.present()) {
+            if (!settling.present() || !normalized.present() || !resolved.present()
+                    || !scope.present() || !fns.present()) {
                 return Answer.absent();
             }
             try {
+                // A clause holding a newtype applied to anything but one value is refused here and
+                // said once. The declaration it was written on is normalized either way and is read
+                // by whoever names it; what stops is the checking of this module, because a clause
+                // nobody could read is a rule nobody can be held to.
+                for (InvariantSettled.Def def : settling.value().defs()) {
+                    souther.compiler.check.Normalized.Def.refuseMalformedIn(def, resolved.value());
+                }
                 souther.compiler.check.CheckSurface assembled =
                         souther.compiler.check.CheckSurface.assemble(
                                 settling.value(), normalized.value(), fns.value(), scope.value(),
                                 signatures.present() ? signatures.value() : Map.of());
-                // A declaration whose clauses could not be read is missing from the normalized
-                // declarations, and a surface without it would be this module read as one that does
-                // not declare it. Said where the clause is written, and nothing further is said
-                // about the module.
+                // A definition that did not desugar is missing from what was handed in, and a
+                // surface without it would be this module read as one that does not write it.
                 return assembled == null ? Answer.absent() : Answer.of(assembled);
             } catch (CompileException e) {
                 return Answer.absent(e);

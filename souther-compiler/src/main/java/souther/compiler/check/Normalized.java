@@ -35,10 +35,29 @@ public final class Normalized {
         /**
          * {@code settled} with the constructions in its clauses written as constructions.
          *
-         * @throws CompileException where what the declaration says cannot be read that way
+         * <p>Answered for every declaration, and that is what makes this a rung a reader can be
+         * answered from. A newtype applied to something other than one value is not a construction
+         * of it and is left the application it is; what is wrong with it is said by the reading that
+         * refuses it ({@link NewtypeDesugar#refuseMalformedIn}) rather than by this coming back with
+         * nothing. Refusing here, this would be a producer whose failure decides what a declaration
+         * means to every reader below — which is the shape it is written to stop.
          */
         static Def of(InvariantSettled.Def settled, ResolvedSymbols scope) {
             return over(NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope));
+        }
+
+        /**
+         * What {@link #of} could not write as a construction, of the same declaration.
+         *
+         * <p>Beside the answer and not instead of it. The two read one question off one node — a
+         * name this module resolved to a newtype, applied — and they part on the count: applied to
+         * one value it is a construction and is written as one, applied to anything else it is not
+         * one and is wrong where it was written.
+         *
+         * @throws CompileException at the first such application, where there is one
+         */
+        static void refuseMalformedIn(InvariantSettled.Def settled, ResolvedSymbols scope) {
+            NewtypeDesugar.refuseMalformedIn(settled.def(), scope);
         }
 
         /**

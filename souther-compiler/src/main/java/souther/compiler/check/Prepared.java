@@ -76,19 +76,35 @@ public final class Prepared {
      * does not make, and it is what everything reached from here rests on: a module one of whose
      * declarations has no representation is one there is nothing to emit for.
      *
-     * <p>Refused where the two were not built over one module. What makes them a pair is the
-     * settled module both were made from, and that is what is compared — a name is what a module is
-     * called and not which module it is, so two compilations each writing a {@code module m} would
-     * pair the fields of one module's declarations with the claim made about another's, and every
-     * reader below would be told something true of a module it is not looking at.
+     * <p>Refused where the two were not made from one antecedent, and the antecedent is compared
+     * rather than anything read off it. Two of them, because one is not enough. The settling both
+     * were built over is compared as the state and not as its tree — a settling answers a module
+     * beside the recursive calls its clauses left standing, and two that left different calls
+     * standing share the tree. The normalized declarations are compared as themselves, because
+     * normalizing reads the names a module was resolved against and two readings of one tree against
+     * two scopes are two declarations.
      *
-     * @throws IllegalArgumentException where the witness and the assembly were built over different
-     *     modules
+     * <p>A name is what a module is called and not which module it is, so without this two
+     * compilations each writing a {@code module m} pair: the fields of one module's declarations
+     * beside the claim made about another's, and every reader below told something true of a module
+     * it is not looking at.
+     *
+     * @throws IllegalArgumentException where the witness and the assembly were not made from one
+     *     settling and one reading of its declarations
      */
     public static Prepared prepare(Desugared.Module desugared, CheckSurface surface) {
-        if (!desugared.settled().equals(surface.settledModule())) {
+        if (!desugared.settledFrom(surface.settling())) {
             throw new IllegalArgumentException("the declarations of `" + desugared.name()
-                    + "` were not derived from the module `" + surface.name()
+                    + "` were not derived from the settling `" + surface.name()
+                    + "` was assembled over");
+        }
+        List<Normalized.Def> derived = new ArrayList<>();
+        for (Derived.Def def : desugared.defs()) {
+            derived.add(def.declaration());
+        }
+        if (!derived.equals(surface.declarations())) {
+            throw new IllegalArgumentException("the declarations `" + desugared.name()
+                    + "` had a representation derived for are not the ones `" + surface.name()
                     + "` was assembled from");
         }
         return new Prepared(desugared, surface);
