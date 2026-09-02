@@ -37,8 +37,8 @@ import java.util.Set;
  *
  * <p><b>And neither of them is what holds a measure of coverage open.</b> That is a question about
  * a rule, which the reading that classifies the rule raises; this is what a report says about what
- * became of a rule here. Read as the first, a rule read completely was counted as one nobody could
- * read.
+ * became of a rule here. Counted as the first, a rule this compiler read completely is one nobody
+ * could read.
  *
  * @param fact  which rule, at which position, and why there is no line — the whole of what makes
  *              two of these one finding ({@link Fact})

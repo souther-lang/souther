@@ -20,11 +20,10 @@ import java.util.Set;
  * position stands is told which position and what about it, and one told that a rule's reading did
  * not finish is told to go and look at the rule.
  *
- * <p>Written as one, the second had to wear the first's clothes — a subject it does not have and an
- * obligation nobody worked out — or travel outside the questions altogether, which is what it did:
- * a flag on the reason for stopping said which measures were thereby short of something, and the
- * measure read that beside the questions. That flag was the same fact this type carries, computed
- * from a reason that never decided it.
+ * <p>Written as one, the second would have to wear the first's clothes — a subject it does not have
+ * and an obligation nobody worked out — or travel outside the questions altogether, as a flag on
+ * why a reading stopped that says which measures are thereby short of something. Either way what
+ * holds a measure open is decided somewhere other than by a question about a rule.
  */
 public sealed interface StandingQuestion {
 

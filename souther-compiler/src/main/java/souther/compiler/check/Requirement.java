@@ -40,9 +40,9 @@ public sealed interface Requirement {
      * A place this reading met and did not work out what the rule raises at.
      *
      * <p>Not "raises nothing", which is a conclusion about the rule and is {@link Required
-     * .Irrelevant}'s to draw. Read as either of the two, a rule nobody could interpret was reported
-     * as one the model says nothing with, or as one raising a question that could never be
-     * answered — and both are claims about a model this compiler did not read.
+     * .Irrelevant}'s to draw. Read as either of the two, a rule nobody could interpret is one the
+     * model says nothing with, or one raising a question that could never be answered — and both
+     * are claims about a model this compiler did not read.
      *
      * <p><b>Which question it is undecided about, and not merely that something is.</b> A rule can
      * be read far enough to say which values may stand somewhere and not far enough to say whether

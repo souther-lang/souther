@@ -3732,9 +3732,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         WeakeningWord.POSITION_NOT_READ;
                 // Two words for the one gap, because a reader acts on them differently: a question
                 // about a subject wants an answer to that question, and a rule nothing classified
-                // wants this compiler to read further. The two used to be two gaps, and the
-                // difference travels here as what the question is rather than as which list it
-                // arrived in.
+                // wants this compiler to read further. Which of the two it is, is what the question
+                // is, asked of it here rather than read off which list it arrived in.
                 case ClosureGap.QuestionUnanswered one -> switch (one.question()) {
                     case StandingQuestion.Exact _ ->
                             WeakeningWord.QUESTION_UNANSWERED;

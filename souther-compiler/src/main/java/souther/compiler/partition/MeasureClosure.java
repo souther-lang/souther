@@ -63,9 +63,8 @@ import java.util.Set;
  * <p><b>A comparison leaves what any other rule leaves.</b> Where the reading of one reached a line,
  * that line is the answer and the comparison leaves nothing; where it did not, what the comparison
  * raises is the part that was not read, and it stands here as that. Which is the same sentence a
- * clause of a declaration gets, and it used to be two: a comparison reached this measure through a
- * flag on the reason its reading stopped, so what held the measure open was decided by a word about
- * the model rather than by a question about it.
+ * clause of a declaration gets: what holds a measure open is a question about a rule, and never a
+ * word about the model that something read a flag off.
  */
 public final class MeasureClosure {
 
