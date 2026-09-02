@@ -391,9 +391,10 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             case ValueOf _ -> NumericDomain.Bounds.OPEN;
             case TakenOf taken -> ResultRange.of(taken.operation(), ConstantArguments.NONE);
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
-            // itself non-negative is not among the answers: it follows from what the elements are
-            // bounded by and from how many there may be, which is a statement about the run and
-            // not about the operation. Declared here as a range of the operation, it would be
+            // itself non-negative is not among the answers: it follows from what the values the run
+            // walks guarantee, together with the value the operation starts from and the step it
+            // repeats. That is a statement about the run and not about the operation, and it is the
+            // run's own reading to make. Declared here as a range of the operation, it would be
             // wrong for a run whose elements may be negative.
             case TakenOver over -> ResultRange.of(over.operation(), ConstantArguments.NONE);
         };

@@ -284,8 +284,7 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(1, clauses.singled().size(), clauses.singled().toString());
         Border singled = Border.at(BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(
-                                new AxisId("findTodo", "id"), AT_ID,
+                        new BorderQuantity.OfACoordinate("findTodo", AT_ID,
                                 souther.compiler.inputs.TermOrdersFixtures
                                         .itself(AT_ID, new Carrier.Whole())),
                         new Level.OnACarrier(new Carrier.Whole(),

@@ -185,7 +185,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));
         MeasuredInput subject =
-                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning.axes());
+                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning);
 
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();

@@ -76,6 +76,7 @@
           "rules_not_reached",
           "bodies_not_elaborated",
           "behavior_boundary_not_derived",
+          "behavior_input_not_read",
           "pair_space_truncated",
           "proof_contradicted",
           "arms_unsettled"

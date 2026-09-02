@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
+import souther.compiler.numeric.NumericDomain.Rel;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -116,6 +117,32 @@ public final class ConstEval {
                     ? Optional.of(x + y) : Optional.empty();
             // `/` is left to the run-time check (it aborts on a zero divisor, and Decimal `/` rounds).
             case DIV -> Optional.empty();
+        };
+    }
+
+    /**
+     * Whether {@code rel} holds between two folded constants, or {@code null} where these two
+     * cannot answer it.
+     *
+     * <p>What a comparison of written values comes to, asked by a relation rather than by the
+     * operator one was written with. A reading that composed a comparison out of what the rules
+     * proved has no operator and no node — it has what the comparison places and its two sides — and
+     * this is where such a statement is folded, over the same order and the same equality the
+     * operators fold through.
+     *
+     * <p>An ordering answers where the two are of one ordered kind, and an equality answers of any
+     * two constants at all: {@code true == true} is decided where {@code true < true} is not
+     * something to decide.
+     */
+    static Boolean stands(Rel rel, Object a, Object b) {
+        Integer c = order(a, b);
+        if (c != null) {
+            return rel.holds(c);
+        }
+        return switch (rel) {
+            case EQ -> equal(a, b);
+            case NE -> !equal(a, b);
+            case GE, GT, LE, LT -> null;
         };
     }
 

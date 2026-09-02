@@ -28,6 +28,13 @@ import java.util.Map;
  * takes are two chances to read a position differently, which is the shape of every defect this
  * package has been fixing: a {@link MeasuredInput} is these inputs and the axes derived at them,
  * both taken from the one reading they were made from.
+ *
+ * <p><b>The walk itself does not leave this package.</b> What a behavior takes can be said from a
+ * signature and is a fact about the declaration, so this is built wherever that is what is wanted.
+ * Walking a row with it is the other thing, and it is only ever right beside geometry measured
+ * against the same reading — a walk from one reading and classes from another place a row in
+ * classes nothing measured at the position it was read by. So {@link #valuesAt} and
+ * {@link #occurrencesAt} are this package's, and a reader outside it asks whatever holds both.
  */
 public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols symbols,
                              souther.compiler.check.ReadingPolicy policy) {
@@ -90,7 +97,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * the field named next, or a position whose type is not a record at all. The path and the type
      * disagree, and no observation says why because nothing went wrong with one.
      */
-    public List<ObservedValue> valuesAt(List<ObservedValue> inputs, TermPath path) {
+    List<ObservedValue> valuesAt(List<ObservedValue> inputs, TermPath path) {
         List<Occurrence> found = occurrencesAt(inputs, path);
         return found == null ? null : found.stream().map(Occurrence::value).toList();
     }
@@ -150,7 +157,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * candidate this package composed are both read at these positions, and both have to be read
      * the way a written row is or the classes they land in are two readings rather than one.
      */
-    public List<Occurrence> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
+    List<Occurrence> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
         int at = indexOf(path);
         if (at < 0 || at >= inputs.size()) {
             return null;

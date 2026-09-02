@@ -63,7 +63,12 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
                 | (FeedQuery { limit = Limit(2) }) -> Page
             """;
 
-    private record Read(BehaviorInputs inputs, List<Axis> axes, List<RowOutcome> rows) {}
+    private record Read(MeasuredInput subject, List<RowOutcome> rows) {
+
+        BehaviorInputs inputs() {
+            return subject.inputs();
+        }
+    }
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
@@ -80,13 +85,17 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        Partitions.Partitioning partitioning = Partitions.of(spec.name(),
-                souther.compiler.inputs.InputDomain.of(spec, sigs.get("read"), symbols,
-                        ReadAs.THE_COMPILATION_DOES),
+        souther.compiler.inputs.InputDomain domain = souther.compiler.inputs.InputDomain.of(
+                spec, sigs.get("read"), symbols, ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain,
                 symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Read(new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                sigs.get("read").inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                partitioning.axes(), observed.rows());
+        return new Read(MeasuredInput.of("read", domain.reading(symbols), partitioning),
+                observed.rows());
+    }
+
+    /** The measurement narrowed to {@code axis}, which is one of its own. */
+    private static MeasuredInput.MeasuredAxes only(Read read, Axis axis) {
+        return read.subject().axes().where(each -> each.id().equals(axis.id()));
     }
 
     private static TermPath under(String module, String leaf, String field) {
@@ -144,12 +153,12 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
         Axis tag = axisAt(read, under("example.q", "GlobalQuery", "tag"));
 
         Classification atTheCase = InputClassifications
-                .of(read.rows().get(0).inputs(), read.inputs(), List.of(tag)).get(tag.id());
+                .of(read.rows().get(0).inputs(), only(read, tag)).get(tag.id());
         assertEquals(List.of("Some"),
                 assertInstanceOf(Classification.Classified.class, atTheCase).classIds());
 
         Classification elsewhere = InputClassifications
-                .of(read.rows().get(1).inputs(), read.inputs(), List.of(tag)).get(tag.id());
+                .of(read.rows().get(1).inputs(), only(read, tag)).get(tag.id());
         assertTrue(elsewhere instanceof Classification.Classified in && in.classIds().isEmpty(),
                 () -> "a row at another case is in no class there: " + elsewhere);
         assertNull(elsewhere.stopped(),
@@ -157,8 +166,8 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
     }
 
     private static Axis axisAt(Read read, TermPath path) {
-        return read.axes().stream().filter(each -> each.path().equals(path)).findFirst()
+        return read.subject().axes().axes().stream().filter(each -> each.path().equals(path)).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path
-                        + "; the reading has " + read.axes().stream().map(Axis::path).toList()));
+                        + "; the reading has " + read.subject().axes().axes().stream().map(Axis::path).toList()));
     }
 }

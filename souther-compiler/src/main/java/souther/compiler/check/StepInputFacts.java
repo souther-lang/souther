@@ -139,7 +139,7 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
         if (root == null) {
             return;
         }
-        UniversalElementFacts.guaranteed(handed, symbols, policy).forEach(
+        ValueGuarantees.of(handed, symbols, policy).forEach(
                 (path, bounds) -> gathering.holds(terms.under(root, path), bounds));
     }
 

@@ -248,6 +248,41 @@ public final class Partitions {
         public List<Axis> partitionAxes() {
             return measurements.stream().flatMap(each -> each.partitionAxes().stream()).toList();
         }
+
+        /**
+         * This reading's own line where it read {@code asked}, or null where it read none.
+         *
+         * <p><b>The line back, and not whether there is one.</b> A caller holding a border holds
+         * whatever was written beside it wherever it came from, and what the readers of a line go
+         * on to ask — what it demands of a row, where a run below it stops — is answered off the
+         * value they were handed. Given a yes, a caller would read its own copy; given this, it
+         * reads the one this reading made.
+         *
+         * <p>Which is also what makes asking here worth anything. Whether a border is one of this
+         * reading's is what its behavior, its numbers, the position it is on and the orders it is
+         * measured on were each being compared for, one attribute at a time and one more of them
+         * each time somebody found a way past. A line is a value with an identity, and the reading
+         * that drew it is holding it.
+         *
+         * <p>Asked by {@link Border#sameReadingAs} and not by the record's own equality, which is
+         * what that method exists for: the same border met in the same place owing the same things
+         * is one line, whatever a level was spelled as or what order a run's ends were listed in.
+         */
+        public Border held(Border asked) {
+            for (Border each : between) {
+                if (each.sameReadingAs(asked)) {
+                    return each;
+                }
+            }
+            for (List<Border> lines : along.values()) {
+                for (Border each : lines) {
+                    if (each.sameReadingAs(asked)) {
+                        return each;
+                    }
+                }
+            }
+            return null;
+        }
     }
 
 
@@ -1001,7 +1036,7 @@ public final class Partitions {
         List<Parting> parted = new ArrayList<>(axis.parted());
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), orders),
+                    new BorderQuantity.OfACoordinate(axis.id().behavior(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // Every rule that drew a line here, as it was read. Which of them fall in one place
@@ -1016,7 +1051,7 @@ public final class Partitions {
             // drawn on a count taken of a position would otherwise be written back as a value of
             // the position.
             BoundaryTarget target = BoundaryTarget.at(
-                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), orders),
+                    new BorderQuantity.OfACoordinate(axis.id().behavior(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // One cut, one border. Whether the quantity reaches the line is settled where the

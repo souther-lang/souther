@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.SizeAgainstItsSource;
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.numeric.Count;
@@ -12,7 +11,6 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -83,7 +81,8 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
         Core container = given.value();
         Map<RuleKey, Bounds> held = new LinkedHashMap<>();
         Type element = Terms.elementType(container.type());
-        guaranteed(element, symbols, policy).forEach((path, bounds) -> holds(held, path, bounds));
+        ValueGuarantees.of(element, symbols, policy)
+                .forEach((path, bounds) -> holds(held, path, bounds));
         writtenOut(container, element, symbols, held);
         transferred(container, given.at(), terms, symbols, policy, held);
         return held.isEmpty() ? NONE : new UniversalElementFacts(held);
@@ -105,51 +104,6 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
             }
         });
         return instantiated;
-    }
-
-    /**
-     * What a value of {@code type} guarantees, by the path under it each bound is about.
-     *
-     * <p>{@link InvariantChecker#seedFields} is what decides it and this reads that answer: a
-     * record's own invariant bounds its fields, and a reading of the declarations is what has that.
-     * Shared with {@link StepInputFacts}, which asks it of a parameter that is not an element — a
-     * key a {@code Map.fold} hands its step is bounded by its own declaration and by nothing about
-     * the container's elements.
-     */
-    static Map<RuleKey, Bounds> guaranteed(Type type, Symbols symbols, ReadingPolicy policy) {
-        // Whose clauses hold of a value of this type is the one reading's answer. Asked here from
-        // the declaration instead, an element that is a sum is an element nothing is known about,
-        // while the same value read as a field of a record carries the shared part's bounds.
-        List<ValueReading.Owner> owners = ValueReading.of(type, symbols).owners();
-        Map<RuleKey, Bounds> guaranteed = new LinkedHashMap<>();
-        for (ValueReading.Owner owner : owners) {
-            InvariantChecker.Seeded seeded =
-                    seededOf(owner.named(), owner.data(), symbols, policy);
-            if (seeded == null) {
-                // All of them or none, which is what leaves an element unbounded rather than bounded
-                // by half of what the declarations say.
-                return Map.of();
-            }
-            seeded.atoms().forEach((path, atom) -> {
-                Bounds bounds = seeded.numbers().boundsOf(atom);
-                if (bounds != null && !bounds.saysNothing()) {
-                    // A shared part reached through two of its own ancestors is read twice and reads
-                    // alike both times, since a declaration's clauses are what it writes and what it
-                    // spreads.
-                    guaranteed.putIfAbsent(path, bounds);
-                }
-            });
-        }
-        return guaranteed;
-    }
-
-    /** The reading of {@code named}, or null where it fell over. A reading that fell over is one
-     * this says nothing from, which leaves an element unbounded rather than bounded by half of what
-     * a declaration says. */
-    private static InvariantChecker.Seeded seededOf(TypeSymbol.AtModule named, Hir.Data data,
-                                                    Symbols symbols, ReadingPolicy policy) {
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, policy);
-        return seeded.everyClauseRead() && !seeded.constraints().isBottom() ? seeded : null;
     }
 
     /**

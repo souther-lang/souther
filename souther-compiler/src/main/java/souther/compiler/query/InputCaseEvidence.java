@@ -79,12 +79,12 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
                 new Measure.NotApplicable<>(NotASum.NOT_A_SUM));
     }
 
-    /** The boundary this is read off was not worked out, so what the position's type has was never
-     *  seen. Empty here says nothing, for the reason {@link OutputCaseEvidence#boundaryNotDerived}
-     *  gives. */
-    public static InputCaseEvidence boundaryNotDerived(int at, String behavior) {
-        return new InputCaseEvidence(at, Set.of(), Set.of(),
-                BoundaryForMeasurement.failed(behavior));
+    /** Something the boundary this is read off is made of was missing, so what the position's type
+     *  has was never seen. Empty here says nothing, for the reason
+     *  {@link OutputCaseEvidence#notMeasurable} gives. */
+    public static InputCaseEvidence notMeasurable(int at, BoundaryForMeasurement.NotDerived why,
+                                                  String behavior) {
+        return new InputCaseEvidence(at, Set.of(), Set.of(), why.failed(behavior));
     }
 
     /** The same for one input, and for the reason {@link OutputCaseEvidence#notAsked} gives. */

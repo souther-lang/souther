@@ -268,7 +268,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             Partitions.Partitioning partitioning =
                     Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
-                    partitioning.axes()),
+                    partitioning),
                     CoverageRead.of(spec.name(), body, plan, inputs, symbols));
         }
     }

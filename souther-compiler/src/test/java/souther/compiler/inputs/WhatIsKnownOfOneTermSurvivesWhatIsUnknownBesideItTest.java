@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * What is known of one term is not given up for what is unknown beside it.
  *
  * <p>Three things say where a term's values run, and they are not one thing. What the declarations
- * relate it to is one; what its own position was read to hold is another; what the term guarantees
+ * relate it to is one; where the values it is answered from leave it is another; what the term guarantees
  * of itself is a third, and a value a caller has fixed it at is a fourth. Asked as one question of
  * the reading that relates positions, the other three are answered only where that reading happens
  * to have a name for the coordinate — and where it does not, an answer that was in hand is dropped.
